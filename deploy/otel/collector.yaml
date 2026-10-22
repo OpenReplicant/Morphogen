@@ -13,7 +13,7 @@ processors:
 exporters:
   # Traces to the trace ingestor (step 7), which turns spans into observed couplings.
   otlphttp/ingestor:
-    endpoint: http://intake:8080/otlp
+    endpoint: http://intake:8080/otlp  # posts to /otlp/v1/traces
   # Raw archive. Swap for a time-series store / object store exporter.
   file/archive:
     path: /tmp/otel-archive.jsonl

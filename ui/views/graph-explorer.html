@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graph explorer</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.5"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <style>
+    html, body { height: 100%; }
+    #graph { position: absolute; inset: 0; }
+  </style>
+</head>
+<!--
+  Slots and couplings from the read API (PostgREST over api.slots / api.couplings).
+  One node per slot name and one edge per slot pair, merged across claim statuses:
+    matched     expected (hypothetical or intended) and observed
+    expected    blueprinted or intended, not observed yet
+    unexpected  observed, not in any blueprint or intent
+  ?api=<base> overrides the read API base (default: /api).
+-->
+<body class="bg-base-100 text-sm" x-data="explorer()" x-init="load()">
+  <div class="flex flex-wrap items-center gap-3 p-2 border-b border-base-300">
+    <select class="select select-bordered select-xs" x-model="env" @change="load()">
+      <option>sandbox</option><option>staging</option><option>production</option>
+    </select>
+    <template x-for="k in Object.keys(show)" :key="k">
+      <label class="label cursor-pointer gap-1">
+        <input type="checkbox" class="checkbox checkbox-xs" x-model="show[k]" @change="render()">
+        <span class="badge badge-sm" :style="`border-color:${color[k]};color:${color[k]}`" x-text="k"></span>
+      </label>
+    </template>
+    <button class="btn btn-xs" @click="load()">Refresh</button>
+    <span class="opacity-60" x-text="summary"></span>
+    <span class="text-error" x-text="error"></span>
+  </div>
+  <div class="relative" style="height: calc(100% - 2.75rem)">
+    <div id="graph"></div>
+    <div class="absolute right-2 top-2 w-72 card bg-base-200 shadow" x-show="selected" x-cloak>
+      <div class="card-body p-3 gap-1">
+        <div class="flex justify-between"><b x-text="selected?.label"></b>
+          <button class="btn btn-ghost btn-xs" @click="selected=null">✕</button></div>
+        <template x-for="c in selected?.claims || []" :key="c.key + c.status">
+          <div class="text-xs border-t border-base-300 pt-1">
+            <div><span class="badge badge-xs" x-text="c.status"></span> <span class="font-mono" x-text="c.key"></span></div>
+            <div class="opacity-70" x-text="[c.role || c.coupling_type, c.provenance, 'conf ' + c.confidence,
+              c.last_seen ? 'seen ' + new Date(c.last_seen).toLocaleTimeString() : ''].filter(Boolean).join(' · ')"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const EXPECTED = ['hypothetical', 'intended'];
+    function state(claims) {
+      const obs = claims.some(c => c.status === 'observed');
+      const exp = claims.some(c => EXPECTED.includes(c.status));
+      return obs && exp ? 'matched' : exp ? 'expected' : 'unexpected';
+    }
+    function explorer() {
+      return {
+        env: 'sandbox', slots: [], couplings: [], error: '', summary: '', selected: null, cy: null,
+        show: { matched: true, expected: true, unexpected: true },
+        color: { matched: '#4ade80', expected: '#fbbf24', unexpected: '#60a5fa' },
+        api: new URLSearchParams(location.search).get('api') || '/api',
+        async load() {
+          this.error = '';
+          try {
+            const get = async (p) => { const r = await fetch(`${this.api}/${p}?environment=eq.${this.env}`);
+                                       if (!r.ok) throw new Error(`${p}: HTTP ${r.status}`); return r.json(); };
+            [this.slots, this.couplings] = await Promise.all([get('slots'), get('couplings')]);
+          } catch (e) { this.error = String(e); this.slots = []; this.couplings = []; }
+          this.render();
+        },
+        render() {
+          const nodes = new Map(), edges = new Map();
+          for (const s of this.slots) (nodes.get(s.name) || nodes.set(s.name, []).get(s.name)).push(s);
+          for (const c of this.couplings) {
+            const id = `${c.source_slot}->${c.target_slot}`;
+            (edges.get(id) || edges.set(id, []).get(id)).push(c);
+            for (const n of [c.source_slot, c.target_slot]) if (!nodes.has(n)) nodes.set(n, []);
+          }
+          const els = [];
+          const nodeState = new Map([...nodes].map(([n, cs]) => [n, cs.length ? state(cs) : 'unexpected']));
+          for (const [n, cs] of nodes) {
+            const st = nodeState.get(n);
+            if (this.show[st]) els.push({ data: { id: n, label: n, st, claims: cs } });
+          }
+          for (const [id, cs] of edges) {
+            const st = state(cs), [s, t] = id.split('->');
+            if (this.show[st] && this.show[nodeState.get(s)] && this.show[nodeState.get(t)])
+              els.push({ data: { id, source: s, target: t, st, label: cs[0].coupling_type, claims: cs } });
+          }
+          const count = (m) => Object.fromEntries(Object.keys(this.show).map(k =>
+            [k, [...m.values()].filter(cs => (cs.length ? state(cs) : 'unexpected') === k).length]));
+          const e = count(edges);
+          this.summary = `${nodes.size} slots · ${edges.size} couplings (${e.matched} matched, ` +
+                         `${e.expected} not observed, ${e.unexpected} unexpected)`;
+          this.draw(els);
+        },
+        draw(els) {
+          const col = (k) => this.color[k];
+          this.cy?.destroy();
+          this.cy = cytoscape({
+            container: document.getElementById('graph'), elements: els, wheelSensitivity: 0.2,
+            minZoom: 0.2, maxZoom: 1.2,
+            layout: { name: 'cose', animate: false, padding: 40, randomize: true, nodeRepulsion: 400000,
+                      idealEdgeLength: 120, nodeOverlap: 40, componentSpacing: 120 },
+            style: [
+              { selector: 'node', style: { label: 'data(label)', color: '#ddd', 'font-size': 11,
+                'text-valign': 'bottom', 'text-margin-y': 4, width: 22, height: 22,
+                'background-color': (n) => col(n.data('st')), 'border-width': 2,
+                'border-color': (n) => col(n.data('st')) } },
+              { selector: 'node[st = "expected"]', style: { 'background-opacity': 0.15, 'border-style': 'dashed' } },
+              { selector: 'edge', style: { width: 2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle',
+                'line-color': (e) => col(e.data('st')), 'target-arrow-color': (e) => col(e.data('st')),
+                label: 'data(label)', 'font-size': 9, color: '#999', 'text-rotation': 'autorotate' } },
+              { selector: 'edge[st = "expected"]', style: { 'line-style': 'dashed' } },
+            ],
+          });
+          this.cy.on('tap', 'node, edge', (ev) => {
+            this.selected = { label: ev.target.data('label') === ev.target.data('id') ? ev.target.id()
+                                     : `${ev.target.id()} (${ev.target.data('label')})`,
+                              claims: ev.target.data('claims') };
+          });
+        },
+      };
+    }
+  </script>
+</body>
+</html>

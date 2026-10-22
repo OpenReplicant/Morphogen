@@ -17,6 +17,7 @@
         "properties": {
           "id": { "type": "string" },
           "role": { "type": "string" },
+          "service": { "type": "string", "description": "name the slot is observed as: OTel service.name or span attribute morphogen.slot; defaults to id" },
           "parent": { "type": "string", "description": "enclosing slot for nested slot graphs" },
           "cardinality": { "enum": ["exclusive", "pipeline", "multi"] },
           "scope": { "type": "string" },

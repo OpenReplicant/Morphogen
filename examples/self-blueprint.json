@@ -26,7 +26,11 @@
         { "name": "mcp", "direction": "inout" }, { "name": "db_read", "direction": "out" },
         { "name": "proposals_out", "direction": "out" } ] },
       { "id": "promoter", "role": "review", "ports": [
-        { "name": "proposals_in", "direction": "in" }, { "name": "intent_out", "direction": "out" } ] }
+        { "name": "proposals_in", "direction": "in" }, { "name": "intent_out", "direction": "out" },
+        { "name": "db_read", "direction": "out" }, { "name": "events_out", "direction": "out" } ] },
+      { "id": "drift_watcher", "role": "analyze", "service": "drift-watcher", "ports": [
+        { "name": "completions_in", "direction": "in" }, { "name": "db_read", "direction": "out" },
+        { "name": "findings_out", "direction": "out" } ] }
     ],
     "couplings": [
       { "id": "c1", "type": "stream", "from": "collector.traces_out", "to": "intake.otlp_in" },
@@ -34,7 +38,12 @@
       { "id": "c3", "type": "call", "from": "ingestor.db_out", "to": "postgres.sql" },
       { "id": "c4", "type": "call", "from": "map_mcp.db_read", "to": "postgres.sql" },
       { "id": "c5", "type": "event", "from": "map_mcp.proposals_out", "to": "intake.events_in" },
-      { "id": "c6", "type": "event", "from": "intake.dispatch_out", "to": "promoter.proposals_in" }
+      { "id": "c6", "type": "event", "from": "intake.dispatch_out", "to": "promoter.proposals_in" },
+      { "id": "c7", "type": "event", "from": "ingestor.completions_out", "to": "drift_watcher.completions_in" },
+      { "id": "c8", "type": "call", "from": "drift_watcher.db_read", "to": "postgres.sql" },
+      { "id": "c9", "type": "event", "from": "drift_watcher.findings_out", "to": "intake.events_in" },
+      { "id": "c10", "type": "call", "from": "promoter.db_read", "to": "postgres.sql" },
+      { "id": "c11", "type": "event", "from": "promoter.events_out", "to": "intake.events_in" }
     ]
   }
 }

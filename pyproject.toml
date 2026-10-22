@@ -7,21 +7,33 @@ license = "Apache-2.0"
 requires-python = ">=3.12"
 authors = [{ name = "OpenReplicant" }]
 dependencies = [
-  "cognee[postgres]",
+  "psycopg2-binary>=2.9",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "httpx>=0.27",
   "jsonschema>=4.23",
   "cloudevents>=1.11",
-  "mcp>=1.2",
+  "mcp>=2.3,<3",
   "pydantic>=2.8",
   "opentelemetry-sdk>=1.27",
   "opentelemetry-exporter-otlp>=1.27",
-  "opentelemetry-instrumentation-fastapi>=0.48b0",
+  "pyyaml>=6",
 ]
+
+[project.optional-dependencies]
+# Knowledge extraction and search over the map (decision 0011); not needed by the claim store.
+cognee = ["cognee[postgres]>=1.6"]
+
+[project.scripts]
+morphogen-report = "morphogen.report:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[tool.uv]
+# cognee[postgres] pulls psycopg2, which needs libpq headers to build. psycopg2-binary
+# ships the same module as a wheel, so the slim image and dev machines need no toolchain.
+override-dependencies = ["psycopg2; sys_platform == 'never'"]
 
 [build-system]
 requires = ["hatchling"]
@@ -33,6 +45,11 @@ packages = ["src/morphogen"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["postgres: needs MORPHOGEN_TEST_DATABASE_URL"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+# dict(...) keeps shared claim fields readable; nested `with` mirrors span trees.
+ignore = ["C408", "SIM117"]

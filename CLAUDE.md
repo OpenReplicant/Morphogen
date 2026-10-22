@@ -1,6 +1,6 @@
 # Morphogen
 
-Morphogen (OpenReplicant) is a system that maps any system as **slots and couplings**, holds what it knows in one knowledge store (cognee over Postgres), and adapts what it maps through a **MAPE-K loop** whose changes are tested as hypotheses before promotion. It starts by designing and mapping itself.
+Morphogen (OpenReplicant) is a system that maps any system as **slots and couplings**, holds what it knows in one knowledge store (bitemporal claims in Postgres), and adapts what it maps through a **MAPE-K loop** whose changes are tested as hypotheses before promotion. It starts by designing and mapping itself.
 
 Full architecture: @docs/architecture.md
 Plan and acceptance tests: @docs/plan.md
@@ -33,21 +33,38 @@ Agent rules (any harness): @AGENTS.md
 
 ## Stack (decided)
 
-Python 3.12 + uv · cognee (SDK for ingestors) · Postgres 17 with pgvector + Apache AGE · OTel Collector · Caddy · Alpine.js + daisyUI shell · PostgREST (read-only role) · Docker Compose for local. License: Apache-2.0.
+Python 3.12 + uv · map store: bitemporal claim tables in Postgres behind `MapStore` (decision 0011) · Postgres 16 with pgvector + Apache AGE · cognee optional (`--extra cognee`, search/extraction later) · MCP Python SDK 2.x · OTel Collector · Caddy · Alpine.js + daisyUI shell · PostgREST (read-only role) · Docker Compose for local. License: Apache-2.0.
 
 Decision records live in `docs/decisions/`. Do not reopen a decided record without writing a new one that supersedes it.
 
-## Two cognee datasets
+## Map and agent memory
 
-- `map`: written **only** by ingestors.
-- `agent-memory-*`: per agent or harness, written by the harness (cognee-memory plugin or `remember`). Agents read `map`, never write it.
+- The map (`map.claims`, read views in `api.*`): written **only** by ingestors, as the `morphogen_ingestor` role. Watchers, the promoter and the MCP server read it as `morphogen_reader`.
+- `agent-memory-*`: per agent or harness, written by the harness (cognee-memory plugin or `remember`). Agents read the map, never write it.
+
+## Code map
+
+| Path | Slot |
+| --- | --- |
+| `src/morphogen/intake/` | CloudEvents + OTLP endpoints, router (fan-out), raw archive |
+| `src/morphogen/ingest/` | Ingestors: blueprint, traces, proposals, intent (the only map writers) |
+| `src/morphogen/store/` | `MapStore` interface; Postgres and memory providers; `schema.sql` |
+| `src/morphogen/queries.py` | Read-only: drift, blast radius, map-quality metrics |
+| `src/morphogen/watchers/` | Drift watcher (event-driven + sweep); emits findings |
+| `src/morphogen/promoter/` | Policy × risk, guards, governance state, writes and commits `intent/` |
+| `src/morphogen/mcp/server.py` | `morphogen-map` MCP server |
+| `src/morphogen/telemetry.py` | Spans carry `morphogen.slot` / `morphogen.peer.slot` so the system maps itself |
 
 ## Commands
 
 ```
 uv sync                         # install
 docker compose -f deploy/docker-compose.yml up -d
-uv run pytest                   # tests
+scripts/smoke.sh                # milestone 1 smoke test against the stack
+uv run pytest                   # tests (memory store)
+MORPHOGEN_TEST_DATABASE_URL=postgresql://... uv run pytest   # also against Postgres
+uv run ruff check src tests     # lint
+uv run morphogen-report         # map quality: coverage, precision, freshness, drift
 uv run python -m morphogen.mcp.server   # map MCP server (stdio)
 ```
 

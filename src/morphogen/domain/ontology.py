@@ -1,19 +1,20 @@
-"""Core ontology: slots and couplings, as cognee DataPoints.
+"""Core ontology: slots and couplings.
 
 Every node is a claim: it carries status, level, bitemporal times, provenance,
 confidence and environment (decision records 0001 and 0007).
 
-Spike note: field names follow our model; verify against the installed cognee
-DataPoint base (import path, metadata/index_fields) during week 1.
+The types are plain pydantic models. References between claims are identity
+keys, so a claim maps to one stored row and the store stays swappable
+(decision 0011).
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Optional
+from typing import Any, ClassVar
 
-from cognee.low_level import DataPoint
+from pydantic import BaseModel, ConfigDict
 
 
 class Status(StrEnum):
@@ -48,11 +49,21 @@ class CouplingType(StrEnum):
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-class Claim(DataPoint):
+# Fields every claim carries; the rest of a claim's fields are its content.
+CLAIM_FIELDS = (
+    "key", "status", "level", "environment", "provenance", "confidence",
+    "source_event_id", "valid_from", "valid_to", "recorded_at", "retracted",
+)
+
+
+class Claim(BaseModel):
     """Fields every map node carries."""
+
+    model_config = ConfigDict(use_enum_values=True)
+    kind: ClassVar[str] = "Claim"
 
     key: str  # stable identity key (OTel resource attrs first, else source-scoped id)
     status: Status
@@ -62,20 +73,36 @@ class Claim(DataPoint):
     confidence: float = 0.5
     source_event_id: str
     valid_from: datetime
-    valid_to: Optional[datetime] = None  # open interval = currently valid
+    valid_to: datetime | None = None  # open interval = currently valid
     recorded_at: datetime
     retracted: bool = False
+
+    def __init_subclass__(cls, **kw: Any) -> None:
+        super().__init_subclass__(**kw)
+        cls.kind = cls.__name__
+
+    def content(self) -> dict:
+        """Everything except the claim fields; equal content means no change."""
+        return self.model_dump(mode="json", exclude=set(CLAIM_FIELDS))
+
+    def refs(self) -> list[tuple[str, str]]:
+        """Outgoing references as (relation, target key): the graph edges of this node."""
+        return []
 
 
 class Contract(Claim):
     uri: str
-    kind: str  # asyncapi | openapi | mcp | jsonschema
+    contract_kind: str  # asyncapi | openapi | mcp | jsonschema
 
 
 class Port(Claim):
+    slot: str  # owning slot key
     name: str
     direction: str  # in | out | inout
-    contract: Optional[Contract] = None
+    contract: str | None = None  # contract URI
+
+    def refs(self) -> list[tuple[str, str]]:
+        return [("port_of", self.slot)]
 
 
 class Requirement(Claim):
@@ -88,32 +115,49 @@ class Capability(Claim):
 
 class Slot(Claim):
     role: str
+    name: str  # name the slot is observed as: OTel service.name or span attr morphogen.slot
     cardinality: str = "exclusive"
-    scope: Optional[str] = None
-    parent: Optional["Slot"] = None
-    ports: list[Port] = []
-    requirements: list[Requirement] = []
+    scope: str | None = None
+    parent: str | None = None
+    requirements: list[str] = []
+    provider_hint: str | None = None
+
+    def refs(self) -> list[tuple[str, str]]:
+        return [("child_of", self.parent)] if self.parent else []
 
 
 class Provider(Claim):
     """Fills a slot. level=type for catalog entries, instance for deployments."""
 
     name: str
-    fills: Optional[Slot] = None
-    capabilities: list[Capability] = []
-    catalog_entry: Optional["Provider"] = None  # instance -> type
+    fills: str | None = None
+    capabilities: list[str] = []
+    catalog_entry: str | None = None  # instance -> type
     catalog_kinds: list[str] = []  # provider | transport | contract | pattern | ...
-    trust: Optional[str] = None
+    trust: str | None = None
+
+    def refs(self) -> list[tuple[str, str]]:
+        return [("fills", self.fills)] if self.fills else []
 
 
 class Coupling(Claim):
-    """A node, not an edge (decision 0001)."""
+    """A node, not an edge (decision 0001).
 
-    type: CouplingType
-    source_port: Port
-    target_port: Port
-    contract: Optional[Contract] = None
-    realization: Optional[Slot] = None  # optional transport slot graph
+    `source_slot`/`target_slot` are the slot names the coupling joins; drift
+    compares couplings across statuses by these names because ports are not
+    visible in traces.
+    """
+
+    coupling_type: CouplingType
+    source_port: str | None = None
+    target_port: str | None = None
+    source_slot: str
+    target_slot: str
+    contract: str | None = None
+    realization: str | None = None  # optional transport slot graph
+
+    def refs(self) -> list[tuple[str, str]]:
+        return [(r, k) for r, k in (("from", self.source_port), ("to", self.target_port)) if k]
 
 
 class Hypothesis(Claim):
@@ -122,15 +166,29 @@ class Hypothesis(Claim):
 
 
 class Prediction(Claim):
-    hypothesis: Hypothesis
+    hypothesis: str
     observation: str
     comparison: str
-    value: str
+    value: Any = None
     window: str
+
+    def refs(self) -> list[tuple[str, str]]:
+        return [("predicts", self.hypothesis)]
 
 
 class Experiment(Claim):
-    hypothesis: Hypothesis
-    control: Optional[str] = None
-    commit: Optional[str] = None
-    verdict: Optional[str] = None  # supported | refuted | inconclusive
+    hypothesis: str
+    control: str | None = None
+    commit: str | None = None
+    verdict: str | None = None  # supported | refuted | inconclusive
+
+
+KINDS: dict[str, type[Claim]] = {
+    c.__name__: c
+    for c in (Contract, Port, Requirement, Capability, Slot, Provider, Coupling,
+              Hypothesis, Prediction, Experiment)
+}
+
+
+def from_row(kind: str, row: dict) -> Claim:
+    return KINDS[kind].model_validate(row)

@@ -1,6 +1,6 @@
 # 0004 cognee as the knowledge provider, two kinds of dataset
 
-Status: accepted, pending spike · 2026-10-22
+Status: superseded by 0011 · 2026-10-22
 
 **Decision.** cognee is the knowledge provider, behind a thin domain layer (`src/morphogen/domain/`). Ingestors use the SDK and end in `add_data_points`. Two kinds of dataset:
 

@@ -23,6 +23,13 @@ channels:
         $ref: '#/components/messages/findingCreated'
       assertionCreated:
         $ref: '#/components/messages/assertionCreated'
+      proposalDecided:
+        $ref: '#/components/messages/proposalDecided'
+      intentCommitted:
+        $ref: '#/components/messages/intentCommitted'
+  otlp:
+    address: /otlp/v1/traces
+    description: OTLP/HTTP traces (protobuf or JSON) from the OTel Collector only; the trace ingestor turns spans into observed slots and couplings.
   completions:
     address: /completions
     description: Published by ingestors after every pipeline run; watchers subscribe.
@@ -51,20 +58,21 @@ components:
     findingCreated:
       name: org.openreplicant.morphogen.finding.created
       payload:
-        type: object
-        required: [summary, severity, evidence]
-        properties:
-          summary: { type: string }
-          severity: { enum: [info, warning, critical] }
-          evidence: { type: array, items: { type: string } }
+        $ref: '../schemas/events/finding-created.schema.json'
     assertionCreated:
       name: org.openreplicant.morphogen.assertion.created
       payload:
-        type: object
-        required: [statement, about]
-        properties:
-          statement: { type: string }
-          about: { type: array, items: { type: string } }
+        $ref: '../schemas/events/assertion-created.schema.json'
+    proposalDecided:
+      name: org.openreplicant.morphogen.proposal.decided
+      description: A reviewer's decision. Not accepted at /events; sent as POST /review/decisions behind forward_auth, which sets source person:<Remote-User>.
+      payload:
+        $ref: '../schemas/events/proposal-decided.schema.json'
+    intentCommitted:
+      name: org.openreplicant.morphogen.intent.committed
+      description: Published in-process by the promoter after writing approved files to intent/. Not accepted from outside.
+      payload:
+        $ref: '../schemas/events/intent-committed.schema.json'
     pipelineCompleted:
       name: org.openreplicant.morphogen.pipeline.completed
       payload:

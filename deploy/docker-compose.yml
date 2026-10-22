@@ -1,9 +1,23 @@
-# Local stack for Milestone 1. Verify image tags during the spike.
+# Local stack for Milestone 1.
 name: morphogen
+
+x-intake-env: &intake-env
+  # Map writes use the ingestor role; watchers and the promoter read with the reader role.
+  MORPHOGEN_DATABASE_URL: postgresql://morphogen_ingestor:change-me@postgres:5432/morphogen
+  MORPHOGEN_READ_DATABASE_URL: postgresql://morphogen_reader:change-me@postgres:5432/morphogen
+  MORPHOGEN_PROMOTER_DATABASE_URL: postgresql://morphogen_promoter:change-me@postgres:5432/morphogen
+  MORPHOGEN_INTENT_DIR: /intent
+  MORPHOGEN_ARCHIVE_DIR: /data/archive
+  MORPHOGEN_TARGET: morphogen-self
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_SERVICE_NAME: intake
+  # Set to "1" only once Caddy's (sso) forward_auth is configured and 8080 is not published:
+  # /review/decisions then takes the reviewer from Remote-User.
+  MORPHOGEN_TRUST_REMOTE_USER: "0"
 
 services:
   postgres:
-    # Needs pgvector + Apache AGE. Build deploy/postgres/Dockerfile or swap for an image that has both.
+    # pgvector + Apache AGE (decision 0005). The claim store needs neither (decision 0011).
     build: ./postgres
     environment:
       POSTGRES_USER: morphogen
@@ -19,7 +33,7 @@ services:
       retries: 20
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.110.0
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
       - ./otel/collector.yaml:/etc/otelcol/config.yaml:ro
@@ -27,31 +41,33 @@ services:
 
   intake:
     build: ..
-    command: ["uv", "run", "uvicorn", "morphogen.intake.app:app", "--host", "0.0.0.0", "--port", "8080"]
-    environment:
-      DB_PROVIDER: postgres
-      DB_HOST: postgres
-      DB_NAME: morphogen
-      DB_USERNAME: morphogen_ingestor
-      DB_PASSWORD: change-me
-      VECTOR_DB_PROVIDER: pgvector
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_SERVICE_NAME: morphogen-intake
+    command: ["uv", "run", "--no-dev", "uvicorn", "morphogen.intake.app:app", "--host", "0.0.0.0", "--port", "8080"]
+    environment: *intake-env
+    volumes:
+      # The promoter writes intent/; policies stay read-only even for it.
+      - ../intent:/intent
+      - ../intent/policies:/intent/policies:ro
+      - archive:/data/archive
     depends_on:
       postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 5s
+      retries: 20
     ports: ["8080:8080"]
 
   postgrest:
-    image: postgrest/postgrest:latest
+    image: postgrest/postgrest:v12.2.3
     environment:
       PGRST_DB_URI: postgres://morphogen_reader:change-me@postgres:5432/morphogen
       PGRST_DB_SCHEMAS: api
       PGRST_DB_ANON_ROLE: morphogen_reader
     depends_on:
-      postgres: { condition: service_healthy }
+      intake: { condition: service_healthy }  # the intake creates the map views
+    ports: ["3000:3000"]
 
   caddy:
-    image: caddy:2
+    image: caddy:2.8
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ../ui:/srv/ui:ro
@@ -60,3 +76,4 @@ services:
 
 volumes:
   pgdata:
+  archive:

@@ -21,9 +21,9 @@ Install the plugin from this repo:
 claude plugin marketplace add OpenReplicant/morphogen
 claude plugin install morphogen@morphogen
 ```
-Set `MORPHOGEN_HOME` (repo path or installed package), `MORPHOGEN_INTAKE_URL`, `MORPHOGEN_TARGET`, `MORPHOGEN_AGENT_ID`. The plugin brings the designer, analyzer, planner and verifier subagents, five skills, the guard hooks and the `morphogen-map` MCP server. Add cognee-memory pointed at `agent-memory-<agent-id>`.
+Set `MORPHOGEN_HOME` (repo path or installed package), `MORPHOGEN_INTAKE_URL`, `MORPHOGEN_READ_DATABASE_URL` (reader role; read tools return nothing without it), `MORPHOGEN_TARGET`, `MORPHOGEN_AGENT_ID`. The plugin brings the designer, analyzer, planner and verifier subagents, five skills, the guard hooks and the `morphogen-map` MCP server. Add cognee-memory pointed at `agent-memory-<agent-id>`.
 
-A marketplace manifest (`.claude-plugin/marketplace.json` at the repo root) is needed for the install command above; add it when publishing.
+The marketplace manifest for the install command above is `.claude-plugin/marketplace.json` at the repo root.
 
 ## Other harnesses (Codex, Cursor, Agent SDK, …)
 

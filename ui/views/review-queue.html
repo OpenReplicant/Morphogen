@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review queue</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.5"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<!--
+  Read-only for Milestone 1: proposals and what the promoter decided. A person approves by
+  sending proposal.decided to the intake (source person:<id>); who may do that from the UI is
+  an open decision (architecture.md, "Authority").
+-->
+<body class="bg-base-100 text-sm p-3" x-data="queue()" x-init="load()">
+  <div class="flex items-center gap-2 mb-2">
+    <select class="select select-bordered select-xs" x-model="state" @change="load()">
+      <option value="">all</option><option>pending</option><option>committed</option>
+      <option>rejected</option><option>expired</option>
+    </select>
+    <button class="btn btn-xs" @click="load()">Refresh</button>
+    <span class="text-error" x-text="error"></span>
+  </div>
+  <table class="table table-xs">
+    <thead><tr><th>Received</th><th>Target</th><th>Risk</th><th>Policy</th><th>State</th><th>Note</th><th>Commit</th><th>Id</th></tr></thead>
+    <tbody>
+      <template x-for="p in items" :key="p.id">
+        <tr>
+          <td x-text="new Date(p.received_at).toLocaleString()"></td>
+          <td x-text="p.target"></td>
+          <td><span class="badge badge-sm" :class="{'badge-error': p.risk==='irreversible', 'badge-warning': p.risk==='high'}" x-text="p.risk"></span></td>
+          <td x-text="p.decision"></td>
+          <td><span class="badge badge-sm" :class="{'badge-success': p.state==='committed', 'badge-ghost': p.state!=='committed'}" x-text="p.state"></span></td>
+          <td x-text="p.note || ''"></td>
+          <td class="font-mono" x-text="(p.commit_sha || '').slice(0, 8)"></td>
+          <td class="font-mono opacity-60" x-text="p.id.slice(0, 8)"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  <script>
+    function queue() {
+      return {
+        items: [], state: 'pending', error: '',
+        async load() {
+          this.error = '';
+          try {
+            const r = await fetch('/review/proposals' + (this.state ? `?state=${this.state}` : ''));
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            this.items = (await r.json()).reverse();
+          } catch (e) { this.error = String(e); this.items = []; }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

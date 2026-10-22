@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/intent-committed.schema.json",
+  "title": "org.openreplicant.morphogen.intent.committed (data)",
+  "description": "Published by the promoter after committing an approved proposal to intent/. The intent ingestor records the affected slots as intended claims.",
+  "type": "object",
+  "required": ["proposal_id", "target", "environment", "commit", "files", "affected_slots"],
+  "properties": {
+    "proposal_id": { "type": "string" },
+    "target": { "type": "string" },
+    "environment": { "enum": ["sandbox", "staging", "production"] },
+    "commit": { "type": ["string", "null"], "description": "git sha, null when intent/ is not a git work tree" },
+    "files": { "type": "array", "items": { "type": "string" } },
+    "affected_slots": { "type": "array", "items": { "type": "string" } },
+    "decided_by": { "type": "string" }
+  }
+}

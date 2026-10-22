@@ -25,3 +25,5 @@ These rules apply to Claude Code, Codex, Cursor, Agent SDK agents and any other 
 
 `proposal.created`, `finding.created`, `blueprint.submitted`, `assertion.created` (a statement of fact from a person or agent; recorded as provenance `asserted`, low confidence).
 Schemas: `schemas/events/`.
+
+`proposal.decided`, `intent.committed` and `pipeline.completed` are rejected at the intake: people decide through the authenticated review route, and the promoter and ingestors publish the other two in-process.

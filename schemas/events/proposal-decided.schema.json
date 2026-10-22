@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/proposal-decided.schema.json",
+  "title": "org.openreplicant.morphogen.proposal.decided (data)",
+  "description": "A reviewer's decision on a pending proposal. The event source is the reviewer (person:<id> when policy requires a person).",
+  "type": "object",
+  "required": ["proposal_id", "decision"],
+  "properties": {
+    "proposal_id": { "type": "string" },
+    "decision": { "enum": ["approve", "reject"] },
+    "reason": { "type": "string" }
+  }
+}

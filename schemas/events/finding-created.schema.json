@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/finding-created.schema.json",
+  "title": "org.openreplicant.morphogen.finding.created (data)",
+  "description": "An analysis result from a watcher, agent or person. Findings never change anything.",
+  "type": "object",
+  "required": ["summary", "severity", "evidence"],
+  "properties": {
+    "target": { "type": "string" },
+    "kind": { "type": "string", "description": "e.g. drift, coverage, verification" },
+    "summary": { "type": "string" },
+    "severity": { "enum": ["info", "warning", "critical"] },
+    "evidence": { "type": "array", "items": { "type": "string", "description": "claim keys or event ids" } },
+    "details": { "type": "object" }
+  }
+}

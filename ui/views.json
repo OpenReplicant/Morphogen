@@ -1,6 +1,6 @@
 [
-  { "id": "graph-explorer", "title": "Graph explorer", "url": "/views/graph-explorer.html", "kind": "panel", "status": "todo" },
-  { "id": "review-queue", "title": "Review queue", "url": "/views/review-queue.html", "kind": "panel", "status": "todo" },
+  { "id": "graph-explorer", "title": "Graph explorer", "url": "/views/graph-explorer.html", "kind": "panel" },
+  { "id": "review-queue", "title": "Review queue", "url": "/views/review-queue.html", "kind": "panel", "status": "read-only" },
   { "id": "blueprint", "title": "Blueprint", "url": "/views/blueprint.html", "kind": "panel", "status": "todo" },
   { "id": "experiments", "title": "Experiments", "url": "/views/experiments.html", "kind": "panel", "status": "todo" },
   { "id": "api", "title": "Read API", "url": "https://api.localhost/", "kind": "third-party" },

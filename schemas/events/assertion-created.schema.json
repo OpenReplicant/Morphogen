@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/assertion-created.schema.json",
+  "title": "org.openreplicant.morphogen.assertion.created (data)",
+  "description": "A statement of fact from a person or agent; recorded as provenance asserted, low confidence.",
+  "type": "object",
+  "required": ["statement", "about"],
+  "properties": {
+    "statement": { "type": "string" },
+    "about": { "type": "array", "items": { "type": "string", "description": "claim keys" } }
+  }
+}

@@ -5,6 +5,7 @@
       "args": ["run", "python", "-m", "morphogen.mcp.server"],
       "env": {
         "MORPHOGEN_INTAKE_URL": "http://localhost:8080/events",
+        "MORPHOGEN_READ_DATABASE_URL": "postgresql://morphogen_reader:change-me@localhost:5432/morphogen",
         "MORPHOGEN_AGENT_ID": "agent:claude-code-dev"
       }
     }

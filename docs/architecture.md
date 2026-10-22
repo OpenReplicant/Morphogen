@@ -13,7 +13,7 @@ Invariants: see `CLAUDE.md`.
 ## Architecture
 
 ```
- World ──► Sources (OTel, events) ──► Intake (OTLP, CloudEvents) ──► Ingestors (cognee pipelines) ──► Knowledge (map)
+ World ──► Sources (OTel, events) ──► Intake (OTLP, CloudEvents) ──► Ingestors (pipelines) ─────────► Knowledge (map)
    ▲                                        │                                                          │
    │                                   Raw archive                                               Watchers (match, then query)
    │                                                                                                   │
@@ -28,7 +28,7 @@ Invariants: see `CLAUDE.md`.
 | Analyze | Event watchers, sweep watchers | Read-only; output is findings and alerts as events |
 | Plan | Proposal authors (agents, people), blueprint and hypothesis tooling | Output is a proposal event, never a change |
 | Execute | Promoter, intent repo, orchestrator adapters | Only approved proposals become commits; only orchestrators act |
-| Knowledge | cognee + slots-and-couplings ontology; raw archive | Claims carry provenance, confidence, environment, status, level |
+| Knowledge | Map store (bitemporal claims) + slots-and-couplings ontology; raw archive | Claims carry provenance, confidence, environment, status, level |
 | Verify | Observation of the result vs predictions | Success is decided by observation |
 
 Timescales: goal reasoning slow (agents, review), change planning medium (watchers, proposals), component control fast (orchestrators, components). Agents stay out of the hot path.
@@ -49,7 +49,7 @@ Timescales: goal reasoning slow (agents, review), change planning medium (watche
 
 ## Ontology and knowledge
 
-Core concepts: Slot, Provider, Port, Coupling (a node), Requirement, Capability, Realization, Scope, Environment, Hypothesis, Prediction, Experiment. Slots/providers align with BFO roles/bearers; requirement/capability from TOSCA; first-class connectors from Acme. Aligned standards: OTel semantic conventions, SOSA/SSN, PROV-O; AsyncAPI/OpenAPI/MCP manifests as port contracts. Types are cognee DataPoint subclasses (`src/morphogen/domain/ontology.py`).
+Core concepts: Slot, Provider, Port, Coupling (a node), Requirement, Capability, Realization, Scope, Environment, Hypothesis, Prediction, Experiment. Slots/providers align with BFO roles/bearers; requirement/capability from TOSCA; first-class connectors from Acme. Aligned standards: OTel semantic conventions, SOSA/SSN, PROV-O; AsyncAPI/OpenAPI/MCP manifests as port contracts. Types are pydantic models (`src/morphogen/domain/ontology.py`) stored as rows of a bitemporal claim table (decision 0011).
 
 ### Claims
 
@@ -71,12 +71,12 @@ Confidence is a pluggable function of supporting/contradicting observations, sou
 
 ### Where data lives
 
-Knowledge: cognee (`map` dataset) over Postgres + pgvector + AGE. Raw history: time-series and object stores via Collector exporters and the event archiver. The graph holds claims about raw data, never raw data.
+Knowledge: the map store (`map.claims` in Postgres, behind `MapStore`; decision 0011); cognee optional for extraction and search, pgvector + AGE available for search and the graph tier. Raw history: time-series and object stores via Collector exporters and the event archiver. The graph holds claims about raw data, never raw data.
 
 ## Write path and reaction
 
 - **Intake**: OTLP receiver + CloudEvents HTTP endpoint; a small router fans out to ingestors, the raw archive and subscribed watchers.
-- **Ingestors** (only map writers): validate against contract → map to DataPoints → attach provenance/confidence/environment/status/level → resolve identity (OTel resource attrs first), dedupe → `add_data_points` → publish a **completion event** with IDs created/changed/retired.
+- **Ingestors** (only map writers): validate against contract → map to claims → attach provenance/confidence/environment/status/level → resolve identity (`morphogen.slot` span attribute, then OTel `service.name`), dedupe → `MapStore.upsert`/`retire` → publish a **completion event** with IDs created/changed/retired.
 - Writes originating elsewhere (belief, promotion, retraction, catalog notes) are events an ingestor writes.
 - **Event watchers**: cheap match, then graph query anchored on changed IDs. **Sweep watchers**: scheduled structural checks (unobserved slots, drift, coverage gaps, couplings without contracts, hypotheses without predictions). Watchers emit findings/alerts/proposals with `causationid`; never write, never act.
 

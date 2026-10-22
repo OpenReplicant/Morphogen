@@ -5,6 +5,7 @@
       "args": ["run", "--project", "${MORPHOGEN_HOME}", "python", "-m", "morphogen.mcp.server"],
       "env": {
         "MORPHOGEN_INTAKE_URL": "${MORPHOGEN_INTAKE_URL:-http://localhost:8080/events}",
+        "MORPHOGEN_READ_DATABASE_URL": "${MORPHOGEN_READ_DATABASE_URL:-}",
         "MORPHOGEN_AGENT_ID": "${MORPHOGEN_AGENT_ID:-agent:claude-code}"
       }
     }

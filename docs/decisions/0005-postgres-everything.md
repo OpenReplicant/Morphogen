@@ -1,8 +1,8 @@
 # 0005 Postgres for everything
 
-Status: accepted, pending spike · 2026-10-22
+Status: accepted · 2026-10-22 (spike: see 0011 and docs/spike-results.md)
 
-**Decision.** One Postgres: relational (cognee metadata, approvals, catalog index), vectors (pgvector), graph (Apache AGE). PostgREST serves the UI through a read-only role over curated views. Row-level security is the intended mechanism for authority.
+**Decision.** One Postgres: relational (map claims per 0011, approvals, catalog index), vectors (pgvector), graph (Apache AGE). PostgREST serves the UI through a read-only role over curated views. Row-level security is the intended mechanism for authority.
 
 **Why.** One operational footprint, extensions, RLS, LISTEN/NOTIFY for live UI updates.
 
