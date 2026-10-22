@@ -34,6 +34,10 @@ morphogen.localhost {
 }
 
 intake.localhost {
+	# Decisions arrive only via morphogen.localhost/review/*, where Remote-User is stripped first.
+	@decisions path /review/decisions
+	respond @decisions 403
+	request_header -Remote-User
 	import sso
 	reverse_proxy intake:8080
 }
