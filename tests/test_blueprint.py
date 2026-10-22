@@ -7,15 +7,16 @@ EXPECTED_COUPLINGS = {
     ("map_mcp", "postgres"), ("map_mcp", "intake"), ("intake", "promoter"),
     ("ingestor", "drift-watcher"), ("drift-watcher", "postgres"), ("drift-watcher", "intake"),
     ("promoter", "postgres"), ("promoter", "intake"),
+    ("promoter", "orchestrator"), ("orchestrator", "docker"),
 }
 
 
 def test_blueprint_maps_to_slots_and_couplings(blueprint):
     points = to_datapoints(blueprint)
     kinds = [p.kind for p in points]
-    assert kinds.count("Slot") == 7
-    assert kinds.count("Coupling") == 11
-    assert kinds.count("Port") == 19
+    assert kinds.count("Slot") == 9
+    assert kinds.count("Coupling") == 13
+    assert kinds.count("Port") == 22
     assert all(p.status == "hypothetical" and p.provenance == "asserted" for p in points)
     pairs = {(p.source_slot, p.target_slot) for p in points if p.kind == "Coupling"}
     assert pairs == EXPECTED_COUPLINGS
@@ -24,8 +25,9 @@ def test_blueprint_maps_to_slots_and_couplings(blueprint):
 def test_submitting_blueprint_writes_the_map(client, rt, blueprint):
     assert client.post("/events", json=blueprint).status_code == 202
     slots = rt.store.query(kind="Slot", status="hypothetical")
-    assert sorted(s.name for s in slots) == ["collector", "drift-watcher", "ingestor", "intake",
-                                             "map_mcp", "postgres", "promoter"]
+    assert sorted(s.name for s in slots) == ["collector", "docker", "drift-watcher", "ingestor",
+                                             "intake", "map_mcp", "orchestrator", "postgres",
+                                             "promoter"]
     pairs = {(c.source_slot, c.target_slot) for c in rt.store.query(kind="Coupling")}
     assert pairs == EXPECTED_COUPLINGS
     port = next(p for p in rt.store.query(kind="Port") if p.key == "morphogen-self/intake.events_in")

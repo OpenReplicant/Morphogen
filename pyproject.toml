@@ -26,6 +26,7 @@ cognee = ["cognee[postgres]>=1.6"]
 
 [project.scripts]
 morphogen-report = "morphogen.report:main"
+morphogen-compose = "morphogen.orchestrators.compose:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]

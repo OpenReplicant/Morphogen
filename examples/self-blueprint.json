@@ -30,7 +30,11 @@
         { "name": "db_read", "direction": "out" }, { "name": "events_out", "direction": "out" } ] },
       { "id": "drift_watcher", "role": "analyze", "service": "drift-watcher", "ports": [
         { "name": "completions_in", "direction": "in" }, { "name": "db_read", "direction": "out" },
-        { "name": "findings_out", "direction": "out" } ] }
+        { "name": "findings_out", "direction": "out" } ] },
+      { "id": "orchestrator", "role": "execute", "provider_hint": "docker-compose", "ports": [
+        { "name": "intent_in", "direction": "in" }, { "name": "runtime_out", "direction": "out" } ] },
+      { "id": "container_runtime", "role": "runtime", "service": "docker", "ports": [
+        { "name": "api", "direction": "in" } ] }
     ],
     "couplings": [
       { "id": "c1", "type": "stream", "from": "collector.traces_out", "to": "intake.otlp_in" },
@@ -43,7 +47,9 @@
       { "id": "c8", "type": "call", "from": "drift_watcher.db_read", "to": "postgres.sql" },
       { "id": "c9", "type": "event", "from": "drift_watcher.findings_out", "to": "intake.events_in" },
       { "id": "c10", "type": "call", "from": "promoter.db_read", "to": "postgres.sql" },
-      { "id": "c11", "type": "event", "from": "promoter.events_out", "to": "intake.events_in" }
+      { "id": "c11", "type": "event", "from": "promoter.events_out", "to": "intake.events_in" },
+      { "id": "c12", "type": "shared_state", "from": "promoter.intent_out", "to": "orchestrator.intent_in" },
+      { "id": "c13", "type": "call", "from": "orchestrator.runtime_out", "to": "container_runtime.api" }
     ]
   }
 }

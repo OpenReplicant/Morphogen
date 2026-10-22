@@ -52,6 +52,7 @@ Decision records live in `docs/decisions/`. Do not reopen a decided record witho
 | `src/morphogen/queries.py` | Read-only: drift, blast radius, map-quality metrics |
 | `src/morphogen/watchers/` | Drift watcher (event-driven + sweep); emits findings |
 | `src/morphogen/promoter/` | Policy × risk, guards, governance state, writes and commits `intent/` |
+| `src/morphogen/orchestrators/` | Orchestrator adapters (Docker Compose): reconcile `intent/environments/<env>/` |
 | `src/morphogen/mcp/server.py` | `morphogen-map` MCP server |
 | `src/morphogen/telemetry.py` | Spans carry `morphogen.slot` / `morphogen.peer.slot` so the system maps itself |
 
@@ -65,6 +66,7 @@ uv run pytest                   # tests (memory store)
 MORPHOGEN_TEST_DATABASE_URL=postgresql://... uv run pytest   # also against Postgres
 uv run ruff check src tests     # lint
 uv run morphogen-report         # map quality: coverage, precision, freshness, drift
+uv run morphogen-compose --environment sandbox [--once] [--dry-run]   # orchestrator (needs Docker)
 uv run python -m morphogen.mcp.server   # map MCP server (stdio)
 ```
 

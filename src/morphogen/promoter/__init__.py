@@ -14,7 +14,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from morphogen import queries
+from morphogen import queries, telemetry
 from morphogen.domain.ontology import now
 from morphogen.events import make, parse_time
 from morphogen.promoter.policy import Policy
@@ -142,7 +142,11 @@ class Promoter:
         env = change.get("environment", "sandbox")
         try:
             paths = self._write_files(change["files"])
-            sha = self._git_commit(paths, f"proposal:{p.id} {p.event['data']['summary']}")
+            message = f"proposal:{p.id} {p.event['data']['summary']}"
+            traceparent = telemetry.inject({}).get("traceparent")
+            if traceparent:  # orchestrators continue this trace, so promoter -> orchestrator is observed
+                message += f"\n\nTraceparent: {traceparent}"
+            sha = self._git_commit(paths, message)
         except Exception as e:
             log.exception("commit failed for %s", p.id)
             p.state, p.note = "rejected", f"commit failed: {e}"

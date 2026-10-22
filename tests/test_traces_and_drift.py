@@ -99,6 +99,9 @@ def test_drift_lists_unobserved_blueprint_couplings_and_clears(client, rt, bluep
                     pass
                 with telemetry.span("intake", "intake", SpanKind.CONSUMER):
                     pass
+                with telemetry.span("reconcile", "orchestrator", SpanKind.CONSUMER):
+                    with telemetry.client_span("compose up", "orchestrator", "docker"):
+                        pass
     send(client, otlp(spans))
 
     d = queries.drift(rt.store)
@@ -107,7 +110,7 @@ def test_drift_lists_unobserved_blueprint_couplings_and_clears(client, rt, bluep
                   if i["what"] == "coupling"}
     assert ("collector", "intake") not in unexpected
     m = queries.metrics(rt.store)
-    assert m["coverage"] == 1.0 and m["expected_couplings"] == 11
+    assert m["coverage"] == 1.0 and m["expected_couplings"] == 13
 
 
 def test_drift_watcher_emits_findings_on_change(client, rt, blueprint, spans):

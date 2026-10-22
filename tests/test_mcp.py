@@ -38,7 +38,7 @@ async def test_list_blueprint_and_propose(live_intake, blueprint):
     rt.submit(blueprint)
 
     slots = await server.slots("morphogen-self", status="hypothetical")
-    assert len(slots) == 7
+    assert len(slots) == 9
     couplings = await server.couplings("morphogen-self", slot="postgres")
     assert {c["source_slot"] for c in couplings} == {"ingestor", "map_mcp", "drift-watcher", "promoter"}
     radius = await server.blast_radius(["promoter"])

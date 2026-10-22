@@ -23,7 +23,9 @@ Thinnest slice, in order. Each step ends with a runnable check.
 
 Done when step 10 passes and map-quality metrics (coverage, freshness, precision, drift) are reported for the self-map (`uv run morphogen-report`).
 
-Open for Milestone 1: run step 1 under Docker (Collector → intake coupling `c1` is the only drift left in the live run, see `spike-results.md`); orchestrator adapter (Docker Compose) reconciling `intent/environments/sandbox/`.
+Orchestrator: `morphogen-compose` reconciles `intent/environments/sandbox/` (decision 0012; `tests/test_orchestrator.py`, with a stubbed runner).
+
+Open for Milestone 1: run step 1 and the orchestrator under Docker (Collector → intake coupling `c1` is the only drift left in the live run, see `spike-results.md`).
 
 ## Milestone 2 (sketch)
 
