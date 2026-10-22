@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Morphogen</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+  <style>
+    .win { position: absolute; resize: both; overflow: hidden; min-width: 320px; min-height: 200px; }
+    .win iframe { width: 100%; height: calc(100% - 2.25rem); border: 0; }
+  </style>
+</head>
+<body class="h-screen overflow-hidden bg-base-300" x-data="shell()" x-init="load()">
+  <!-- Menu: views come from the catalog (views.json for now). -->
+  <div class="navbar bg-base-100 gap-2">
+    <span class="font-semibold px-2">Morphogen</span>
+    <div class="dropdown">
+      <div tabindex="0" role="button" class="btn btn-sm">Views</div>
+      <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-50 w-56 p-2 shadow">
+        <template x-for="v in views" :key="v.id">
+          <li><a @click="open(v)" x-text="v.title"></a></li>
+        </template>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Desktop: windows are iframes; views talk to the shell via postMessage. -->
+  <main class="relative h-[calc(100vh-4rem)]">
+    <template x-for="w in windows" :key="w.key">
+      <div class="win card bg-base-100 shadow-xl" :style="`left:${w.x}px;top:${w.y}px;width:${w.w}px;height:${w.h}px;z-index:${w.z}`"
+           @mousedown="focus(w)">
+        <div class="flex items-center justify-between px-3 h-9 bg-base-200 cursor-move" @mousedown="drag($event, w)">
+          <span class="text-sm" x-text="w.view.title"></span>
+          <button class="btn btn-ghost btn-xs" @click.stop="close(w)">✕</button>
+        </div>
+        <iframe :src="w.view.url" :title="w.view.title"></iframe>
+      </div>
+    </template>
+  </main>
+
+  <script>
+    function shell() {
+      return {
+        views: [], windows: [], top: 1, n: 0,
+        async load() {
+          this.views = await (await fetch('views.json')).json();
+          // Shell message bus (keep it small and versioned): {v:1, type, payload}
+          window.addEventListener('message', (e) => {
+            if (!e.data || e.data.v !== 1) return;
+            for (const w of this.windows) w.el?.postMessage?.(e.data, '*'); // TODO: target-origin allowlist
+          });
+        },
+        open(view) { this.n++; this.windows.push({ key: this.n, view, x: 40 * this.n, y: 30 * this.n, w: 720, h: 480, z: ++this.top }); },
+        close(w) { this.windows = this.windows.filter(x => x !== w); },
+        focus(w) { w.z = ++this.top; },
+        drag(ev, w) {
+          const sx = ev.clientX - w.x, sy = ev.clientY - w.y;
+          const mv = (e) => { w.x = e.clientX - sx; w.y = e.clientY - sy; };
+          const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); };
+          addEventListener('mousemove', mv); addEventListener('mouseup', up);
+        },
+      };
+    }
+  </script>
+</body>
+</html>

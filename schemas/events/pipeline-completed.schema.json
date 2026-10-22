@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/pipeline-completed.schema.json",
+  "title": "org.openreplicant.morphogen.pipeline.completed (data)",
+  "type": "object",
+  "required": ["pipeline", "run_id", "dataset", "status", "created", "changed", "retired"],
+  "properties": {
+    "pipeline": { "type": "string" },
+    "run_id": { "type": "string" },
+    "dataset": { "type": "string" },
+    "source_event_ids": { "type": "array", "items": { "type": "string" } },
+    "status": { "enum": ["succeeded", "failed", "partial"] },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "created": { "$ref": "#/$defs/ids" },
+    "changed": { "$ref": "#/$defs/ids" },
+    "retired": { "$ref": "#/$defs/ids" },
+    "labels": { "type": "array", "items": { "type": "string" }, "description": "ontology types touched, for cheap watcher gates" },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "ids": {
+      "type": "object",
+      "properties": {
+        "nodes": { "type": "array", "items": { "type": "string" } },
+        "edges": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

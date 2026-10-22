@@ -1,0 +1,11 @@
+{
+  "name": "morphogen",
+  "owner": { "name": "OpenReplicant" },
+  "plugins": [
+    {
+      "name": "morphogen",
+      "source": "./plugins/morphogen",
+      "description": "Operate on Morphogen targets: read the map, design systems, propose changes as testable hypotheses."
+    }
+  ]
+}

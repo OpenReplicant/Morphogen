@@ -1,0 +1,8 @@
+{
+  "name": "morphogen",
+  "version": "0.0.1",
+  "description": "Operate on Morphogen targets: read the map, design systems, propose changes as testable hypotheses. Never acts on the world directly.",
+  "author": { "name": "OpenReplicant" },
+  "license": "Apache-2.0",
+  "keywords": ["mape-k", "system-mapping", "self-adaptive", "cognee"]
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/proposal-created.schema.json",
+  "title": "org.openreplicant.morphogen.proposal.created (data)",
+  "type": "object",
+  "required": ["target", "summary", "change", "risk", "hypothesis", "predictions", "evidence", "expires_at"],
+  "properties": {
+    "target": { "type": "string", "description": "target id from the map" },
+    "summary": { "type": "string", "maxLength": 280 },
+    "change": {
+      "type": "object",
+      "required": ["kind", "files"],
+      "properties": {
+        "kind": { "enum": ["add_provider", "replace_provider", "remove_provider", "config", "coupling", "other"] },
+        "environment": { "enum": ["sandbox", "staging", "production"], "default": "sandbox" },
+        "files": {
+          "type": "array",
+          "description": "declarative files to write under intent/, relative paths",
+          "items": {
+            "type": "object",
+            "required": ["path", "content"],
+            "properties": { "path": { "type": "string", "pattern": "^(base|environments|experiments)/" }, "content": { "type": "string" } }
+          }
+        },
+        "affected_slots": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "risk": { "enum": ["low", "medium", "high", "irreversible"] },
+    "hypothesis": { "type": "string" },
+    "predictions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["observation", "comparison", "value", "window"],
+        "properties": {
+          "observation": { "type": "string", "description": "metric or claim query identifier" },
+          "comparison": { "enum": ["lt", "le", "eq", "ge", "gt", "exists", "absent", "delta_lt", "delta_gt"] },
+          "value": {},
+          "window": { "type": "string", "description": "ISO 8601 duration over which to evaluate" },
+          "min_samples": { "type": "integer", "minimum": 1 },
+          "control": { "type": "string", "description": "baseline to compare against" }
+        }
+      }
+    },
+    "evidence": { "type": "array", "items": { "type": "string", "description": "claim ids or event ids" } },
+    "rollback": { "type": "string" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  }
+}

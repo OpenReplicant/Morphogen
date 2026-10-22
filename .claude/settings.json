@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": ["Bash(uv run pytest:*)", "Bash(uv sync:*)", "Bash(uv run ruff:*)"],
+    "deny": ["Read(./.env)", "Read(./**/secrets/**)"]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [ { "type": "command", "command": "bash .claude/hooks/check_schemas.sh" } ]
+      }
+    ]
+  },
+  "env": {
+    "OTEL_SERVICE_NAME": "claude-code-dev",
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
+  }
+}

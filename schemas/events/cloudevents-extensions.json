@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/cloudevents-extensions.json",
+  "title": "Morphogen CloudEvent envelope",
+  "description": "CloudEvents 1.0 attributes required by the intake, plus Morphogen extension attributes.",
+  "type": "object",
+  "required": ["specversion", "id", "source", "type", "time", "datacontenttype", "environment"],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "format": "uri-reference" },
+    "type": { "type": "string", "pattern": "^org\\.openreplicant\\.morphogen\\.[a-z_.]+$" },
+    "time": { "type": "string", "format": "date-time" },
+    "datacontenttype": { "type": "string" },
+    "dataschema": { "type": "string", "format": "uri" },
+    "subject": { "type": "string" },
+    "causationid": { "type": "string", "description": "id of the event that caused this one; used for loop detection" },
+    "correlationid": { "type": "string", "description": "groups events of one proposal, experiment or run" },
+    "environment": { "enum": ["sandbox", "staging", "production"] },
+    "claimstatus": { "enum": ["observed", "intended", "hypothetical"] },
+    "validtime": { "type": "string", "format": "date-time", "description": "when the content was true in the world; defaults to time" },
+    "data": {}
+  }
+}

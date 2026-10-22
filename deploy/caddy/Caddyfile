@@ -1,0 +1,37 @@
+# Gateway for the window-manager shell and its views.
+# Each view gets a subdomain; forward_auth gives SSO across all of them.
+# Replace the auth placeholder with Authelia, Authentik or oauth2-proxy.
+
+(sso) {
+	# forward_auth authelia:9091 {
+	# 	uri /api/authz/forward-auth
+	# 	copy_headers Remote-User Remote-Groups Remote-Email
+	# }
+}
+
+(frameable) {
+	# Allow views to be framed by the shell only.
+	header -X-Frame-Options
+	header Content-Security-Policy "frame-ancestors https://morphogen.localhost"
+}
+
+morphogen.localhost {
+	import sso
+	root * /srv/ui
+	file_server
+}
+
+intake.localhost {
+	import sso
+	reverse_proxy intake:8080
+}
+
+api.localhost {
+	import sso
+	import frameable
+	reverse_proxy postgrest:3000
+}
+
+# Third-party views (add when their services are in compose):
+# cognee.localhost { import sso; import frameable; reverse_proxy cognee-ui:3000 }
+# grafana.localhost { import sso; import frameable; reverse_proxy grafana:3000 }

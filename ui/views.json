@@ -1,0 +1,8 @@
+[
+  { "id": "graph-explorer", "title": "Graph explorer", "url": "/views/graph-explorer.html", "kind": "panel", "status": "todo" },
+  { "id": "review-queue", "title": "Review queue", "url": "/views/review-queue.html", "kind": "panel", "status": "todo" },
+  { "id": "blueprint", "title": "Blueprint", "url": "/views/blueprint.html", "kind": "panel", "status": "todo" },
+  { "id": "experiments", "title": "Experiments", "url": "/views/experiments.html", "kind": "panel", "status": "todo" },
+  { "id": "api", "title": "Read API", "url": "https://api.localhost/", "kind": "third-party" },
+  { "id": "cognee", "title": "cognee", "url": "https://cognee.localhost/", "kind": "third-party", "status": "not-in-compose" }
+]

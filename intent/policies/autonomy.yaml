@@ -1,0 +1,22 @@
+# Autonomy level x risk class -> decision (decision 0009).
+# The irreversible column is fixed: always a person.
+matrix:
+  L0: { low: report,        medium: report,        high: report,        irreversible: approve }
+  L1: { low: approve,       medium: approve,       high: approve,       irreversible: approve }
+  L2: { low: auto_notify,   medium: approve,       high: approve,       irreversible: approve }
+  L3: { low: auto,          medium: auto_notify,   high: approve,       irreversible: approve }
+  L4: { low: auto,          medium: auto,          high: auto_notify,   irreversible: approve }
+
+promotion:
+  verified_changes_required: 20   # at current level, zero rollbacks
+demotion:
+  on: [verification_failed, rollback]
+  levels: 1
+
+guards:
+  kill_switch_file: policies/KILL     # presence stops all promotion
+  max_changes_per_hour_per_target: 3
+  cooldown_per_slot: PT15M
+  blast_radius_budget_slots: 5
+  proposal_default_ttl: PT24H
+  recheck_preconditions_before_commit: true

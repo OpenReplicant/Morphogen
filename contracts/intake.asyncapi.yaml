@@ -1,0 +1,71 @@
+asyncapi: 3.0.0
+info:
+  title: Morphogen intake
+  version: 0.1.0
+  description: CloudEvents accepted by the Morphogen intake (HTTP binary or structured mode). Telemetry uses OTLP via the OTel Collector and is not listed here.
+  license:
+    name: Apache-2.0
+defaultContentType: application/cloudevents+json
+servers:
+  local:
+    host: intake.localhost
+    protocol: http
+    pathname: /events
+channels:
+  events:
+    address: /events
+    messages:
+      blueprintSubmitted:
+        $ref: '#/components/messages/blueprintSubmitted'
+      proposalCreated:
+        $ref: '#/components/messages/proposalCreated'
+      findingCreated:
+        $ref: '#/components/messages/findingCreated'
+      assertionCreated:
+        $ref: '#/components/messages/assertionCreated'
+  completions:
+    address: /completions
+    description: Published by ingestors after every pipeline run; watchers subscribe.
+    messages:
+      pipelineCompleted:
+        $ref: '#/components/messages/pipelineCompleted'
+operations:
+  submitEvent:
+    action: receive
+    channel:
+      $ref: '#/channels/events'
+  publishCompletion:
+    action: send
+    channel:
+      $ref: '#/channels/completions'
+components:
+  messages:
+    blueprintSubmitted:
+      name: org.openreplicant.morphogen.blueprint.submitted
+      payload:
+        $ref: '../schemas/events/blueprint-submitted.schema.json'
+    proposalCreated:
+      name: org.openreplicant.morphogen.proposal.created
+      payload:
+        $ref: '../schemas/events/proposal-created.schema.json'
+    findingCreated:
+      name: org.openreplicant.morphogen.finding.created
+      payload:
+        type: object
+        required: [summary, severity, evidence]
+        properties:
+          summary: { type: string }
+          severity: { enum: [info, warning, critical] }
+          evidence: { type: array, items: { type: string } }
+    assertionCreated:
+      name: org.openreplicant.morphogen.assertion.created
+      payload:
+        type: object
+        required: [statement, about]
+        properties:
+          statement: { type: string }
+          about: { type: array, items: { type: string } }
+    pipelineCompleted:
+      name: org.openreplicant.morphogen.pipeline.completed
+      payload:
+        $ref: '../schemas/events/pipeline-completed.schema.json'

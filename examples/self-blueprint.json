@@ -1,0 +1,40 @@
+{
+  "specversion": "1.0",
+  "id": "bp-self-0001",
+  "source": "person:openreplicant",
+  "type": "org.openreplicant.morphogen.blueprint.submitted",
+  "time": "2026-10-22T20:00:00Z",
+  "datacontenttype": "application/json",
+  "environment": "sandbox",
+  "claimstatus": "hypothetical",
+  "data": {
+    "blueprint_id": "morphogen-self",
+    "name": "Morphogen (self)",
+    "vocabulary": ["infra"],
+    "slots": [
+      { "id": "collector", "role": "telemetry-intake", "ports": [
+        { "name": "otlp_in", "direction": "in" }, { "name": "traces_out", "direction": "out" } ] },
+      { "id": "intake", "role": "event-intake", "ports": [
+        { "name": "events_in", "direction": "in", "contract": "contracts/intake.asyncapi.yaml" },
+        { "name": "otlp_in", "direction": "in" },
+        { "name": "dispatch_out", "direction": "out" } ] },
+      { "id": "ingestor", "role": "map-writer", "requirements": ["write access to map dataset"], "ports": [
+        { "name": "items_in", "direction": "in" }, { "name": "db_out", "direction": "out" },
+        { "name": "completions_out", "direction": "out" } ] },
+      { "id": "postgres", "role": "knowledge-store", "ports": [ { "name": "sql", "direction": "inout" } ] },
+      { "id": "map_mcp", "role": "agent-read-api", "ports": [
+        { "name": "mcp", "direction": "inout" }, { "name": "db_read", "direction": "out" },
+        { "name": "proposals_out", "direction": "out" } ] },
+      { "id": "promoter", "role": "review", "ports": [
+        { "name": "proposals_in", "direction": "in" }, { "name": "intent_out", "direction": "out" } ] }
+    ],
+    "couplings": [
+      { "id": "c1", "type": "stream", "from": "collector.traces_out", "to": "intake.otlp_in" },
+      { "id": "c2", "type": "event", "from": "intake.dispatch_out", "to": "ingestor.items_in" },
+      { "id": "c3", "type": "call", "from": "ingestor.db_out", "to": "postgres.sql" },
+      { "id": "c4", "type": "call", "from": "map_mcp.db_read", "to": "postgres.sql" },
+      { "id": "c5", "type": "event", "from": "map_mcp.proposals_out", "to": "intake.events_in" },
+      { "id": "c6", "type": "event", "from": "intake.dispatch_out", "to": "promoter.proposals_in" }
+    ]
+  }
+}

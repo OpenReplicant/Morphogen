@@ -1,0 +1,36 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - { key: morphogen.environment, value: sandbox, action: upsert }
+
+exporters:
+  # Traces to the trace ingestor (step 7), which turns spans into observed couplings.
+  otlphttp/ingestor:
+    endpoint: http://intake:8080/otlp
+  # Raw archive. Swap for a time-series store / object store exporter.
+  file/archive:
+    path: /tmp/otel-archive.jsonl
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/ingestor, file/archive]
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [file/archive]
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [file/archive]

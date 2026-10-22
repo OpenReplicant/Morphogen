@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openreplicant.org/morphogen/schemas/events/blueprint-submitted.schema.json",
+  "title": "org.openreplicant.morphogen.blueprint.submitted (data)",
+  "description": "A described system as hypothetical slots, ports and couplings.",
+  "type": "object",
+  "required": ["blueprint_id", "name", "slots", "couplings"],
+  "properties": {
+    "blueprint_id": { "type": "string" },
+    "name": { "type": "string" },
+    "vocabulary": { "type": "array", "items": { "type": "string" }, "description": "domain vocabularies used, e.g. infra, agent" },
+    "slots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "role"],
+        "properties": {
+          "id": { "type": "string" },
+          "role": { "type": "string" },
+          "parent": { "type": "string", "description": "enclosing slot for nested slot graphs" },
+          "cardinality": { "enum": ["exclusive", "pipeline", "multi"] },
+          "scope": { "type": "string" },
+          "requirements": { "type": "array", "items": { "type": "string" } },
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "direction"],
+              "properties": {
+                "name": { "type": "string" },
+                "direction": { "enum": ["in", "out", "inout"] },
+                "contract": { "type": "string", "description": "URI of AsyncAPI/OpenAPI/MCP manifest or schema" }
+              }
+            }
+          },
+          "provider_hint": { "type": "string" }
+        }
+      }
+    },
+    "couplings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "from", "to"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["call", "event", "stream", "shared_state", "request_reply"] },
+          "from": { "type": "string", "description": "slot.port" },
+          "to": { "type": "string", "description": "slot.port" },
+          "contract": { "type": "string" }
+        }
+      }
+    }
+  }
+}
