@@ -185,6 +185,7 @@ create table kernel.claim (
   check (valid_to is null or valid_from is null or valid_to > valid_from)
 );
 create index on kernel.claim (subject, predicate);
+create index on kernel.claim (predicate);
 create index on kernel.claim (object_entity) where object_entity is not null;
 create index on kernel.claim (statement_key);
 create index on kernel.claim (scope);
@@ -201,6 +202,7 @@ create table kernel.claim_reference (         -- source of a claim; quote/span f
   check (artifact is not null or source_uri is not null)
 );
 create index on kernel.claim_reference (claim_id);
+create index on kernel.claim_reference (artifact) where artifact is not null;   -- redaction, and api.feed for it
 
 create table kernel.claim_derivation (        -- prov:wasDerivedFrom between claims
   claim_id     uuid not null references kernel.claim,
@@ -819,15 +821,23 @@ alter table kernel.run              enable row level security;
 alter table kernel.redaction        enable row level security;
 alter table kernel.feed             enable row level security;
 
+-- A row about a claim is visible when the claim is. One primary-key lookup per row: written as a function
+-- with its own search path so it is never inlined, since an inlined `exists (select 1 from kernel.claim
+-- ...)` lets the planner hash every visible claim instead, and reads slow down as the record grows.
+create function kernel.claim_visible(p_claim uuid) returns boolean
+language sql stable set search_path = kernel, pg_catalog as $$   -- invoker rights: the claim's own policy applies
+  select exists (select 1 from kernel.claim c where c.id = p_claim)
+$$;
+
 create policy read_by_scope on kernel.claim for select using (kernel.can_read(scope));
 create policy read_by_scope on kernel.artifact for select using (kernel.can_read(scope));
 create policy read_by_scope on kernel.feed for select using (kernel.can_read(scope));
 -- Dependent rows are visible when their claim is (the subquery is itself filtered by RLS).
-create policy read_with_claim on kernel.claim_reference  for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.claim_derivation for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.claim_status     for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.belief           for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.verification     for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
+create policy read_with_claim on kernel.claim_reference  for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.claim_derivation for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.claim_status     for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.belief           for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.verification     for select using (kernel.claim_visible(claim_id));
 
 -- Validators and reviewers only see change sets for scopes they are cleared to read.
 create policy own_or_control on kernel.change_set for select using (
@@ -978,7 +988,8 @@ returns table (seq bigint, kind text, change_set_id uuid, scope text, applied_at
 language sql stable as $$
   select f.seq, case when f.redaction is null then 'change_set' else 'redaction' end,
          f.change_set, f.scope, f.applied_at, t.ids,
-         coalesce(array(select distinct c.predicate from kernel.claim c where c.id = any(t.ids)
+         -- a join on unnest, not id = any(ids): under row-level security that form scans every claim
+         coalesce(array(select distinct c.predicate from unnest(t.ids) u(id) join kernel.claim c on c.id = u.id
                         order by 1), '{}'),
          f.target_kind, f.target_id
   from kernel.feed f

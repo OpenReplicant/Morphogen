@@ -1,0 +1,11 @@
+id: urn:kk:provider:planner
+name: 'Planner: fixed actions with predictions'
+version: 0.1.0
+license: Apache-2.0
+slots: [planner]
+origin: rewrite of rebuild 4 modules/skill-adaptation-planning (a skill for an agent) as a deterministic provider; plans carry a prediction and a risk class
+requires: Python 3.12+, psycopg, PyYAML
+migration: migration.sql
+service: python3 -m planner
+tests: [python3 tests/test_plan.py]
+note: plans only from the fixed action list (morphogen/intent/policies/actions.yaml); a model-driven planner is a candidate provider of the same slot, scored by the evaluator

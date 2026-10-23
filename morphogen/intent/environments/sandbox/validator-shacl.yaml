@@ -1,0 +1,8 @@
+# Desired state of one provider's service in the sandbox. Written only by the intent actuator after a
+# person approves a plan (commit message: change-set:<id> plan-step:<iri>); morphogen/deploy/reconcile.py
+# runs the service with this environment and restarts it when the file changes.
+provider: validator-shacl
+service: python3 -m validator
+cwd: kernel/providers/validator-shacl
+env:
+  KK_SWEEP_SECONDS: "30"

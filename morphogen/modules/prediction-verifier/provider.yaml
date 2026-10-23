@@ -1,0 +1,11 @@
+id: urn:kk:provider:prediction-verifier
+name: Prediction verifier
+version: 0.1.0
+license: Apache-2.0
+slots: [outcome-verifier]
+origin: new (T5)
+requires: Python 3.12+, psycopg
+migration: migration.sql
+service: python3 -m prediction_verifier
+tests: [python3 tests/test_verify.py]
+note: compares the observations after a plan step was carried out with the plan's prediction and records a verdict; never the planner (invariant 5)

@@ -63,6 +63,7 @@ pip install -r kernel/contract/requirements.txt                       # once, in
 PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 62 record + 13 validator + 17 belief cases
 PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (36 today)
 PGHOST=... PGUSER=... python3 kernel/providers/test.py                  # each provider's tests + services end to end
+PGHOST=... PGUSER=... python3 morphogen/modules/test.py                 # each Morphogen module's tests + the full loop (T5)
 KK_EVAL_CACHE=... python3 kernel/evals/scifact/run.py fetch|setup DB|retrieval DB   # recall floor (not in CI)
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
 ```

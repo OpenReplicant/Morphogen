@@ -1,0 +1,11 @@
+id: urn:kk:provider:observer-otel
+name: 'Observer: OpenTelemetry metrics'
+version: 0.1.0
+license: Apache-2.0
+slots: [observer]
+origin: new (T5); the observation shape is rebuild 4 modules/observer-prometheus's (D-52)
+requires: Python 3.12+, psycopg, PyYAML; opentelemetry-proto and protobuf for protobuf payloads (requirements.txt)
+migration: migration.sql
+service: python3 -m observer_otel
+tests: [python3 tests/test_observe.py]
+note: an OTLP/HTTP receiver (POST /v1/metrics, JSON or protobuf); each window becomes one change set of SOSA observations

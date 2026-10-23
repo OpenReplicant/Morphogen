@@ -6,6 +6,9 @@
   with run(cur, MODULE) as (run_id, outputs):   # a recorded run; failed if the block raises
       submit(cur, change_set, run_id)           # the only way a provider writes (api.submit_change_set)
 
+With OpenTelemetry configured (kk.telemetry: the standard OTEL_EXPORTER_OTLP_* variables), `follow` reports
+each consumer's feed lag and step time, which is how Morphogen observes its own providers (R5-20).
+
 The kernel enforces everything (roles, scopes, lanes); this library only removes the boilerplate.
 Ported from rebuild 4 kk/lib.py. Changed: `follow` (R5-04) wakes feed consumers from the change feed
 (api.feed) instead of NOTIFY; trigger patterns (D-79) and the ingest filter are not ported yet.
@@ -15,11 +18,14 @@ from __future__ import annotations
 import os
 import time
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Callable, Iterator, Optional
 
 import psycopg
 from psycopg import sql
 from psycopg.types.json import Jsonb
+
+from kk.telemetry import metrics
 
 CHANNEL = "kernel_change_set"
 
@@ -72,21 +78,28 @@ def feed_after(conn: psycopg.Connection, cursor: int, limit: int = 1000) -> list
 
 
 def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object],
-           wake: Optional[Callable[[dict], bool]] = None, poll: float = 1.0, sweep: Optional[float] = None,
-           once: bool = False, channels: tuple[str, ...] = ()) -> None:
+           wake: Optional[Callable[[dict], bool]] = None, poll: Optional[float] = None,
+           sweep: Optional[float] = None, once: bool = False, channels: tuple[str, ...] = ()) -> None:
     """For consumers after the commit (R5-04). Run step(conn) now, then again whenever the change feed has
     an entry after the cursor (an applied change set or a redaction, R5-O3) that passes `wake` (any, by
     default), and at least every `sweep` seconds. A
     consumer woken by its own change set runs a step that finds nothing new and submits nothing, which
     ends the round. The feed is read every `poll` seconds; nothing is
     missed while the consumer is down, since each step re-reads the record from its own watermark.
-    `channels` also wake it on NOTIFY between polls (e.g. kernel_redaction); the feed alone misses nothing."""
+    `channels` also wake it on NOTIFY between polls (e.g. kernel_redaction); the feed alone misses nothing.
+    `poll` defaults to KK_POLL_SECONDS (default 1). With OpenTelemetry configured (kk.telemetry) it
+    reports kk.feed.lag, the seconds from an entry's commit to this consumer reading it, and
+    kk.step.duration."""
     sweep = sweep_seconds(sweep)
+    poll = poll if poll is not None else float(os.environ.get("KK_POLL_SECONDS", "1"))
+    m = metrics(conn.execute("select current_user").fetchone()[0])
     for channel in channels:
         conn.execute(sql.SQL("listen {}").format(sql.Identifier(channel)))
     cursor = feed_head(conn)
     while True:
+        started = time.monotonic()
         step(conn)
+        m.record("kk.step.duration", time.monotonic() - started, "s")
         if once:
             return
         deadline = time.monotonic() + sweep
@@ -94,6 +107,9 @@ def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
             entries = feed_after(conn, cursor)
             if entries:
                 cursor = entries[-1]["seq"]
+                now = datetime.now(timezone.utc)
+                for e in entries:
+                    m.record("kk.feed.lag", max(0.0, (now - e["applied_at"]).total_seconds()), "s")
                 if wake is None or any(wake(e) for e in entries):
                     break
                 continue

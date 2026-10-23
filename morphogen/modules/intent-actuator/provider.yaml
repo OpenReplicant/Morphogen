@@ -1,0 +1,11 @@
+id: urn:kk:provider:intent-actuator
+name: 'Actuator: commits to intent'
+version: 0.1.0
+license: Apache-2.0
+slots: [actuator]
+origin: rewrite of rebuild 4 modules/actuator-compose (R5-07); the approval rules and api.review_decisions are ported, Docker calls are replaced by a git commit to intent/
+requires: Python 3.12+, psycopg, PyYAML, git
+migration: migration.sql
+service: python3 -m intent_actuator
+tests: [python3 tests/test_actuate.py]
+note: never writes claims; each step it carries out or refuses is a run with plan_step and used; a reconciler makes the running system match intent, and the observer records the effect
