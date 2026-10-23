@@ -109,8 +109,10 @@ def main() -> None:
 
     stop = threading.Event()
     try:
+        token = os.urandom(16).hex()
         service("observer", "observer_otel", MODULES / "observer-otel",
-                {"KK_WINDOW_SECONDS": str(WINDOW), "KK_OTLP_PORT": str(port), "KK_OTLP_SOURCE": f"http://observer:{port}/v1/metrics"})
+                {"KK_WINDOW_SECONDS": str(WINDOW), "KK_OTLP_PORT": str(port), "KK_OTLP_SOURCE": f"http://observer:{port}/v1/metrics",
+                 "KK_OTLP_TOKEN": token, "KK_OTLP_SERVICES": "belief-corroboration,validator-shacl"})
         for name, module in (("anomaly", "anomaly"), ("planner", "planner"), ("actuator", "intent_actuator"),
                              ("verifier", "prediction_verifier")):
             service(name, module, MODULES / {"actuator": "intent-actuator", "verifier": "prediction-verifier"}.get(name, name), {})
@@ -118,6 +120,7 @@ def main() -> None:
         rec = subprocess.Popen([sys.executable, str(ROOT / "morphogen" / "deploy" / "reconcile.py"), "--intent", str(intent),
                                 "--env", "sandbox", "--repo", str(ROOT)],
                                env={**base_env, "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}",
+                                    "OTEL_EXPORTER_OTLP_HEADERS": f"Authorization=Bearer%20{token}",
                                     "OTEL_METRIC_EXPORT_INTERVAL": "1000"}, stdout=log, stderr=subprocess.STDOUT)
         procs.append(("reconcile", rec))
 
@@ -150,7 +153,7 @@ def main() -> None:
                   "a person's documented limit: the belief model's feed lag stays within 1 s")
             obs = wait("an observation of the belief model's lag", lambda: q(
                 "select id, (object_value->>'@value')::float from api.claims where subject = %s and predicate = %s "
-                "and attributed_to = 'urn:kk:agent:observer-otel' and qualifiers->>%s = %s", BELIEF, SOSA + "hasSimpleResult",
+                "and attributed_to = 'urn:kk:agent:observer-otel' and qualifiers->>%s = %s order by valid_from", BELIEF, SOSA + "hasSimpleResult",
                 SOSA + "observedProperty", LAG))
             check(obs[0][1] > 1.0, f"monitor: the observer records the lag from OpenTelemetry ({obs[0][1]:g} s)")
             anomaly = wait("an anomaly", lambda: q("select subject from api.claims where predicate = %s and object_entity = %s "

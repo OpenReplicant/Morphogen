@@ -39,4 +39,6 @@ MUTANTS = [
   ("redaction of a missing target takes a number", SQL, [("  if v_scope is not null then\n    update kernel.feed_head",
                                                        "  v_scope := coalesce(v_scope, 'urn:kk:scope:default');\n  if true then\n    update kernel.feed_head")]),
   ("a redacted artifact may be quoted again", SQL, [("            if v_art.redacted_at is not null then", "            if false then")]),
+  ("rows about a claim visible without it", SQL, [("  select exists (select 1 from kernel.claim c where c.id = p_claim)\n$$;", "  select true\n$$;")]),
+  ("review decisions without a person", SQL, [("join kernel.agent a on a.db_role = c.decided_by and a.kind = 'person'\n", "")]),
 ]

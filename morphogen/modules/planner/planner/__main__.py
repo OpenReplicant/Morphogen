@@ -30,7 +30,7 @@ from .plan import DCT_TYPE, MAX, OA, PPLAN, RESULT, SOSA, change_set, choose, pr
 MODULE = "urn:kk:module:planner"
 AGENT = "urn:kk:agent:planner"
 SCOPE = "urn:kk:scope:default"
-COLUMNS = "id, subject, predicate, object_entity, object_value, qualifiers, valid_from, valid_to, recorded_at"
+COLUMNS = "id, subject, predicate, object_entity, object_value, qualifiers, valid_from, valid_to, recorded_at, scope"
 
 
 def rows(cur, q: str, args=()) -> list[dict]:
@@ -61,7 +61,7 @@ def one_pass(conn, intent: Path, env: str) -> dict:
         anomalies: dict[str, dict] = {}
         for c in claims:
             a = anomalies.setdefault(c["subject"], {"iri": c["subject"], "claim_ids": [], "kind": None,
-                                                    "target": None, "valid_from": c["valid_from"]})
+                                                    "target": None, "valid_from": c["valid_from"], "scope": c["scope"]})
             a["claim_ids"].append(str(c["id"]))
             if c["predicate"] == DCT_TYPE:
                 a["kind"] = c["object_entity"]
@@ -73,14 +73,21 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                              where s.predicate = %s and p.predicate = %s and s.attributed_to = %s
                                and s.status <> 'deprecated' and p.status <> 'deprecated'""",
                      (SOSA + "hasFeatureOfInterest", PPLAN + "isStepOfPlan", AGENT))
-        # Plans still on their way (submitted, validated, waiting for a person): the run names the target.
-        pending = {r["target"] for r in rows(cur, """select r.info->>'target' as target from api.change_sets c
-                    join kernel.run r on r.id = c.generated_by where c.attributed_to = %s
-                     and c.status in ('submitted', 'valid', 'awaiting_review', 'approved')""", (AGENT,))}
+        # This planner's plan change sets: those on their way (submitted, validated, waiting for a person)
+        # hold their target; any plan already proposed for an anomaly, whatever became of it (rejected,
+        # invalid), is not proposed again: the person who rejected it gets a new plan only from a new anomaly.
+        mine_sets = rows(cur, """select c.status, r.info->>'target' as target, r.info->>'anomaly' as anomaly
+                                 from api.change_sets c join kernel.run r on r.id = c.generated_by
+                                 where c.attributed_to = %s and c.idempotency_key like 'plan:%%'""", (AGENT,))
+        pending = {r["target"] for r in mine_sets if r["status"] in ("submitted", "valid", "awaiting_review", "approved")}
+        proposed = {r["anomaly"] for r in mine_sets}
         closed = {r["object_entity"] for r in rows(cur, """select object_entity from api.claims
                     where predicate = %s and subject like 'urn:kk:verdict:%%' and status <> 'deprecated'""", (OA + "hasTarget",))}
         for a in sorted(anomalies.values(), key=lambda a: (a["valid_from"] is None, a["valid_from"])):
-            if not a["target"] or not a["kind"]:
+            if not a["target"] or not a["kind"] or a["iri"] in proposed:
+                continue
+            if a["scope"] != SCOPE:
+                report[a["iri"]] = {"none": f"the anomaly is in {a['scope']}; this planner plans in {SCOPE} only"}
                 continue
             mine = [p for p in plans if p["target"] == a["target"]]
             if a["target"] in pending or any(p["plan"] not in closed for p in mine):
@@ -94,6 +101,9 @@ def one_pass(conn, intent: Path, env: str) -> dict:
             lim = next((c for c in premises if c["predicate"] == MAX), None)
             if obs is None or lim is None:
                 continue                                 # a z-score anomaly: no limit to plan against
+            if {obs["scope"], lim["scope"]} != {SCOPE}:
+                report[a["iri"]] = {"none": f"its premises are not all in {SCOPE}"}
+                continue
             chosen = choose(acts, (obs["qualifiers"] or {}).get(SOSA + "observedProperty"))
             current = setting(intent, env, a["target"], chosen[1]["setting"]) if chosen else None
             got = proposal(a, obs, lim, current, acts)

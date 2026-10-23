@@ -893,6 +893,18 @@ select id, idempotency_key, submitted_by, attributed_to, generated_by, target_sc
        jsonb_array_length(ops) as op_count
 from kernel.change_set;
 
+-- Who approved what (D-53; rebuild 4 had it in actuator-compose): applied change sets that went through
+-- the review lane and were decided by a person (a kernel.agent of kind person) other than the submitter,
+-- for scopes the caller may read. Change sets stay visible only to their submitter, validators and
+-- reviewers; an actuator needs to know that a person approved, and no more. Owner rights by design, with
+-- the caller's clearance applied by can_read.
+create view api.review_decisions as
+select c.id, c.target_scope, c.submitted_by, c.decided_by, c.decided_at
+from kernel.change_set c
+join kernel.agent a on a.db_role = c.decided_by and a.kind = 'person'
+where c.lane = 'review' and c.status = 'applied' and c.decided_by is not null
+  and c.decided_by <> c.submitted_by and kernel.can_read(c.target_scope);
+
 create view api.review_queue with (security_invoker = true) as
 select id, attributed_to, target_scope, ops, validation_report, submitted_at
 from kernel.change_set where status = 'awaiting_review';
@@ -1035,6 +1047,7 @@ $$;
 grant usage on schema api to kk_agent;
 grant select on api.claims, api.change_sets to kk_agent;
 grant select on api.review_queue to kk_reviewer;
+grant select on api.review_decisions to kk_agent;
 grant execute on function api.start_run(text, text, jsonb, jsonb), api.finish_run(uuid, text, jsonb),
                           api.submit_change_set(jsonb), api.explain(uuid),
                           api.feed(bigint, int), api.claims_as_of(timestamptz, timestamptz) to kk_agent;

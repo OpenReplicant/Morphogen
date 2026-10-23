@@ -3,7 +3,7 @@ name: 'Actuator: commits to intent'
 version: 0.1.0
 license: Apache-2.0
 slots: [actuator]
-origin: rewrite of rebuild 4 modules/actuator-compose (R5-07); the approval rules and api.review_decisions are ported, Docker calls are replaced by a git commit to intent/
+origin: rewrite of rebuild 4 modules/actuator-compose (R5-07); the approval rule is ported (api.review_decisions now lives in record-postgres), Docker calls are replaced by a git commit to intent/
 requires: Python 3.12+, psycopg, PyYAML, git
 migration: migration.sql
 service: python3 -m intent_actuator

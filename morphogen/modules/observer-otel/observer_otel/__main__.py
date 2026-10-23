@@ -7,13 +7,20 @@ Each window (KK_WINDOW_SECONDS, default 60, aligned to the clock) gives one chan
 receiver and the window end, so a restart never records a window twice; points arriving after their
 window was recorded are dropped. Providers send to it with the standard OpenTelemetry variables
 (OTEL_EXPORTER_OTLP_ENDPOINT=http://<host>:<port>; kk.telemetry, or any OpenTelemetry SDK).
+What it records is attributed to it, so it accepts only what it was configured for: it listens on
+KK_OTLP_HOST (default 127.0.0.1), requires `Authorization: Bearer <KK_OTLP_TOKEN>` when that is set
+(senders set OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>), records only the resources named
+in KK_OTLP_SERVICES when that is set (service.name values, comma-separated), reads at most
+KK_OTLP_MAX_BYTES per request (default 4 MB), and drops points stamped before the window in progress
+or more than 60 seconds ahead of its clock.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_observer_otel),
-KK_WINDOW_SECONDS, KK_OTLP_PORT (default 4318), KK_OTLP_SOURCE (the receiver's URL as cited; default
-http://<hostname>:<port>/v1/metrics).
+KK_WINDOW_SECONDS, KK_OTLP_HOST, KK_OTLP_PORT (default 4318), KK_OTLP_TOKEN, KK_OTLP_SERVICES,
+KK_OTLP_MAX_BYTES, KK_OTLP_SOURCE (the receiver's URL as cited; default http://<hostname>:<port>/v1/metrics).
 """
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
 import socket
@@ -34,6 +41,7 @@ AGENT = "urn:kk:agent:observer-otel"
 SCOPE = "urn:kk:scope:default"
 CONFIG = Path(__file__).resolve().parents[1] / "metrics.yaml"
 GRACE = 1.0          # seconds after a window ends before it is recorded, for exports in flight
+SKEW = 60.0          # seconds a point may be stamped ahead of this clock
 
 
 def decode(content_type: str, data: bytes) -> dict:
@@ -54,9 +62,10 @@ class Buffer:
         self.points: list[dict] = []
         self.recorded_until = 0.0
 
-    def add(self, pts: list[dict]) -> None:
+    def add(self, pts: list[dict], now: float | None = None) -> None:
+        ahead = (time.time() if now is None else now) + SKEW
         with self.lock:
-            self.points += [p for p in pts if p["t"] >= self.recorded_until]
+            self.points += [p for p in pts if self.recorded_until <= p["t"] <= ahead]
 
     def take(self, end: float) -> list[dict]:
         with self.lock:
@@ -66,15 +75,25 @@ class Buffer:
         return taken
 
 
-def handler(buffer: Buffer):
+def handler(buffer: Buffer, token: str | None = None, services: set[str] | None = None, max_bytes: int = 4 << 20):
     class Receiver(BaseHTTPRequestHandler):
         def do_POST(self):
             if self.path.rstrip("/") != "/v1/metrics":
                 self.send_error(404)
                 return
+            if token and not hmac.compare_digest(self.headers.get("Authorization", ""), f"Bearer {token}"):
+                self.send_error(401)
+                return
+            size = int(self.headers.get("Content-Length") or 0)
+            if size > max_bytes:
+                self.send_error(413)
+                return
             try:
-                body = decode(self.headers.get("Content-Type", ""), self.rfile.read(int(self.headers.get("Content-Length", 0))))
-                buffer.add(points(body))
+                body = decode(self.headers.get("Content-Type", ""), self.rfile.read(size))
+                pts = points(body)
+                if services is not None:
+                    pts = [p for p in pts if p["attrs"].get("service.name") in services]
+                buffer.add(pts)
             except Exception as e:           # a malformed request is the sender's problem: 400, keep serving
                 self.send_error(400, str(e)[:200])
                 return
@@ -110,7 +129,10 @@ def main(argv=None) -> int:
     conn = connect(os.environ.get("KK_ROLE", "kkm_observer_otel"))
     buffer = Buffer()
     buffer.recorded_until = window(time.time(), seconds)[1]     # the window in progress is the first recorded
-    server = ThreadingHTTPServer(("0.0.0.0", a.port), handler(buffer))
+    services = {x.strip() for x in os.environ.get("KK_OTLP_SERVICES", "").split(",") if x.strip()} or None
+    server = ThreadingHTTPServer((os.environ.get("KK_OTLP_HOST", "127.0.0.1"), a.port),
+                                 handler(buffer, os.environ.get("KK_OTLP_TOKEN") or None, services,
+                                         int(os.environ.get("KK_OTLP_MAX_BYTES", str(4 << 20)))))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(json.dumps({"listening": a.port, "window_seconds": seconds}), flush=True)
     while True:

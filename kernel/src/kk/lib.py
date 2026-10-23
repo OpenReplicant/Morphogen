@@ -7,7 +7,7 @@
       submit(cur, change_set, run_id)           # the only way a provider writes (api.submit_change_set)
 
 With OpenTelemetry configured (kk.telemetry: the standard OTEL_EXPORTER_OTLP_* variables), `follow` reports
-each consumer's feed lag and step time, which is how Morphogen observes its own providers (R5-20).
+each consumer's feed lag and step time, so a distribution can observe its own providers (R5-20).
 
 The kernel enforces everything (roles, scopes, lanes); this library only removes the boilerplate.
 Ported from rebuild 4 kk/lib.py. Changed: `follow` (R5-04) wakes feed consumers from the change feed

@@ -48,6 +48,11 @@ check("fixed list" in refusal({**s, "action": "urn:kk:action:drop-database"}, AC
 check("intent file" in refusal({**s, "target": "urn:kk:provider:../../etc"}, ACTS, intent, "sandbox")
       and "intent file" in refusal({**s, "target": "urn:kk:provider:nothing-here"}, ACTS, intent, "sandbox"),
       "a target without an intent file (or a path in disguise) is refused")
+twice = steps(claims + [c("6", SOSA + "hasSimpleResult", v={"@value": 9.0})], person)[0]
+check("more than one" in refusal(twice, ACTS, intent, "sandbox"), "a step naming two values is refused")
+two_sets = steps(claims + [{**c("7", SOSA + "hasSimpleResult", v={"@value": 9.0}), "change_set": "cs2"}],
+                 {**person, "cs2": person["cs1"]})[0]
+check("more than one" in refusal(two_sets, ACTS, intent, "sandbox"), "a step recorded by two change sets is refused")
 check("from 0.1 to 30" in refusal({**s, "value": 0.0}, ACTS, intent, "sandbox")
       and "from 0.1 to 30" in refusal({**s, "value": True}, ACTS, intent, "sandbox"), "a value out of bounds is refused")
 
@@ -62,4 +67,10 @@ check(len(sha) == 40 and msg.startswith(f"change-set:cs1 plan-step:{STEP}") and 
       "one commit, its message naming the change set and the plan step")
 check(subprocess.run(["git", "-C", str(intent), "status", "--porcelain"], capture_output=True, text=True).stdout == "",
       "nothing else is changed")
+from intent_actuator.__main__ import restore  # noqa: E402
+set_env(f, "KK_POLL_SECONDS", 7.0)
+subprocess.run(["git", "-C", str(intent), "add", "--", str(f.relative_to(intent))], check=True)
+restore(intent, f)                                # as after a commit that failed once the file was staged
+check(subprocess.run(["git", "-C", str(intent), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
+      and 'KK_POLL_SECONDS: "0.5"' in f.read_text(), "a failed commit leaves the file as committed, index and work tree")
 shutil.rmtree(tmp)

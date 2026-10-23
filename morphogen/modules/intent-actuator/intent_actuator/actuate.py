@@ -4,7 +4,8 @@ A plan step is a sosa:Actuation that is p-plan:isStepOfPlan a plan, with dcterms
 fixed list (intent/policies/actions.yaml), sosa:hasFeatureOfInterest a provider (urn:kk:provider:<name>)
 and the new value as sosa:hasSimpleResult. A step is carried out only if
   every change set that recorded it went through the review lane and a person other than its submitter
-  approved it (rebuild 4 actuator-compose's rule); the action is on the list; the provider has an intent
+  approved it (rebuild 4 actuator-compose's rule; api.review_decisions lists only people's decisions);
+  one change set recorded it, with one value per predicate; the action is on the list; the provider has an intent
   file in this environment; the value is within the action's bounds; and this actuator has not run the
   step before.
 Carrying it out sets the action's setting in the provider's intent file; the caller commits the file.
@@ -33,12 +34,15 @@ def steps(claims: list[dict], change_sets: dict[str, dict]) -> list[dict]:
         if not part or not any(c["predicate"] == RDF_TYPE and c["object_entity"] == SOSA + "Actuation" for c in cs):
             continue
         action, target, result = get(DCT_TYPE), get(SOSA + "hasFeatureOfInterest"), get(SOSA + "hasSimpleResult")
+        preds = [c["predicate"] for c in cs]
+        ambiguous = len({str(c["change_set"]) for c in cs}) > 1 or len(preds) != len(set(preds))
         approvals = [change_sets.get(str(c["change_set"]), {}) for c in cs]
         out.append({"step": step, "plan": part["object_entity"], "claims": sorted(str(c["id"]) for c in cs),
                     "change_sets": sorted({str(c["change_set"]) for c in cs}),
                     "action": action["object_entity"] if action else None,
                     "target": target["object_entity"] if target else None,
                     "value": (result["object_value"] or {}).get("@value") if result else None,
+                    "ambiguous": ambiguous,
                     "approved": bool(approvals) and all(a.get("lane") == "review" and a.get("decided_by")
                                                         and a["decided_by"] != a.get("submitted_by")
                                                         and a.get("status") == "applied" for a in approvals)})
@@ -59,6 +63,8 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
     """Why the actuator will not carry out step s, or None."""
     if not s["approved"]:
         return "not approved by a person in the review lane"
+    if s.get("ambiguous"):
+        return "the step is recorded by more than one change set, or names a predicate twice"
     a = actions.get(s["action"])
     if a is None:
         return f"the action {s['action']!r} is not on the fixed list"

@@ -4,7 +4,7 @@
 #
 # Cases are named exactly as the record-postgres provider reports them ("ok: <case>"), so the
 # runner can check that every case ran. A new provider adds its own runner and reports the same names.
-version: 0.3.0
+version: 0.4.0
 
 # The cases below apply to providers of these slots. Other slots have their own case sets in
 # slots/<slot>/ (validator, belief-model); kernel/contract/run.py runs whichever apply.
@@ -42,6 +42,10 @@ invariants:
       - cleared agent sees the secret claim
       - uncleared agent cannot see the secret claim
       - uncleared agent cannot see its references either
+      - the secret claim has references and a belief
+      - uncleared agent reads no references, derivations, statuses, beliefs or verifications of the secret claim
+      - review decisions show a person's approval
+      - a decision by a software role is not a person's approval
   I5:
     text: No method verifies its own output.
     cases:

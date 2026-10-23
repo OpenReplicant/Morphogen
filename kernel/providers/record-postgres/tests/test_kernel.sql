@@ -588,5 +588,45 @@ reset role;
 select public.check(true, 'an agent cannot attach a trigger to a kernel table');
 
 
+-- ---------------------------------------------------------------- 12. review decisions and rows about claims
+-- A software role with the reviewer role can decide, but its decision is not a person's approval.
+create role t_bot_reviewer nologin; grant kk_reviewer to t_bot_reviewer;
+insert into kernel.agent(iri, db_role, kind, label) values ('urn:kk:agent:bot-reviewer', 't_bot_reviewer', 'software', 'Test bot reviewer');
+set role t_extractor;
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:review-bot','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default','lane','review',
+  'ops','[{"op":"add_entity","iri":"ex:review/bot"}]'::jsonb))->>'id' as cs_bot \gset
+reset role;
+set role t_validator;
+select api.record_validation(:'cs_bot'::uuid, true);
+reset role;
+set role t_bot_reviewer;
+select api.review(:'cs_bot'::uuid, true, 'automatic');
+reset role;
+set role t_verifier;
+select public.check(exists (select 1 from api.review_decisions where id = current_setting('t.cs_newprop')::uuid and decided_by = 't_reviewer'),
+                    'review decisions show a person''s approval');
+select not exists (select 1 from api.review_decisions where id = :'cs_bot'::uuid) as bot_unlisted \gset
+reset role;
+select public.check(:'bot_unlisted'::boolean and (select status from kernel.change_set where id = :'cs_bot'::uuid) = 'applied',
+                    'a decision by a software role is not a person''s approval');
+-- Rows about the secret claim exist (its references, and a belief written here as the owner) but an
+-- uncleared agent reads none of them.
+insert into kernel.entity(iri) values ('urn:kk:module:test-belief') on conflict do nothing;
+insert into kernel.belief(claim_id, model, value, computed_by, change_set)
+select current_setting('t.secret_claim')::uuid, 'urn:kk:module:test-belief', 0.5, current_setting('t.run1')::uuid, :'cs_secret'::uuid;
+select public.check((select count(*) from kernel.claim_reference where claim_id = current_setting('t.secret_claim')::uuid) > 0
+                    and (select count(*) from kernel.belief where claim_id = current_setting('t.secret_claim')::uuid) > 0,
+                    'the secret claim has references and a belief');
+set role t_verifier;
+select public.check(
+  (select count(*) from kernel.claim_reference where claim_id = current_setting('t.secret_claim')::uuid)
+  + (select count(*) from kernel.claim_derivation where claim_id = current_setting('t.secret_claim')::uuid or derived_from = current_setting('t.secret_claim')::uuid)
+  + (select count(*) from kernel.claim_status where claim_id = current_setting('t.secret_claim')::uuid)
+  + (select count(*) from kernel.belief where claim_id = current_setting('t.secret_claim')::uuid)
+  + (select count(*) from kernel.verification where claim_id = current_setting('t.secret_claim')::uuid) = 0,
+  'uncleared agent reads no references, derivations, statuses, beliefs or verifications of the secret claim');
+reset role;
+
 \o
 select 'ALL KERNEL TESTS PASSED' as result;

@@ -10,7 +10,7 @@ HERE = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(HERE), str(HERE.parents[2] / "kernel" / "src")]
 import yaml  # noqa: E402
 
-from observer_otel.__main__ import Buffer, decode  # noqa: E402
+from observer_otel.__main__ import Buffer, decode, handler  # noqa: E402
 from observer_otel.observe import SOSA, ops, points, subject, window  # noqa: E402
 
 CONFIG = yaml.safe_load((HERE / "metrics.yaml").read_text())
@@ -59,6 +59,38 @@ b.add(pts)
 taken = b.take(960)
 b.add(points(request("belief-corroboration", "kk.feed.lag", 950, 1, 1.0)))
 check(len(taken) == 4 and all(p["t"] >= 960 for p in b.points), "a recorded window takes its points; late ones are dropped")
+
+import json  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+from http.server import ThreadingHTTPServer  # noqa: E402
+
+buf = Buffer()
+srv = ThreadingHTTPServer(("127.0.0.1", 0), handler(buf, "s3cret", {"belief-corroboration"}, max_bytes=10_000))
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+
+def post(body, auth="Bearer s3cret"):
+    req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/v1/metrics", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json", **({"Authorization": auth} if auth else {})})
+    try:
+        return urllib.request.urlopen(req, timeout=5).status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+now = time.time()
+check(post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0), auth=None) == 401
+      and post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0), auth="Bearer wrong") == 401 and not buf.points,
+      "no token, or the wrong one: refused, nothing kept")
+check(post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0)) == 200 and len(buf.points) == 1, "the token: accepted")
+post(request("someone-else", "kk.feed.lag", now, 1, 1.0))
+post(request("belief-corroboration", "kk.feed.lag", now + 3600, 1, 1.0))
+check(len(buf.points) == 1, "resources not on the list, and points stamped far ahead, are dropped")
+check(post({"resourceMetrics": [], "pad": "x" * 20_000}) == 413, "a request over the size limit is refused")
+srv.shutdown()
 
 try:
     from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest

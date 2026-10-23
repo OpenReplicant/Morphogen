@@ -41,6 +41,11 @@ def git(intent: Path, *args: str) -> str:
     return out.stdout.strip()
 
 
+def restore(intent: Path, f: Path) -> None:
+    """Put the file back as committed, in the index and the work tree: a failed step changes nothing."""
+    git(intent, "checkout", "HEAD", "--", str(f.relative_to(intent)))
+
+
 def commit(intent: Path, f: Path, s: dict, label: str) -> str:
     rel = str(f.relative_to(intent))
     git(intent, "add", "--", rel)
@@ -84,7 +89,7 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                     try:
                         sha = commit(intent, f, s, labels.get(s["plan"], s["plan"]))
                     except Exception:
-                        git(intent, "checkout", "--", str(f.relative_to(intent)))   # leave intent as it was
+                        restore(intent, f)
                         raise
                     outputs.update(file=str(f.relative_to(intent)), setting=setting, before=before, after=after, commit=sha)
                 report[s["step"]] = {"status": "succeeded", **outputs}

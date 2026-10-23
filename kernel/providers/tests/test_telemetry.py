@@ -10,14 +10,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from kk.telemetry import Metrics  # noqa: E402
+from kk.telemetry import Metrics, headers  # noqa: E402
 
 got = []
 
 
 class Receiver(BaseHTTPRequestHandler):
     def do_POST(self):
-        got.append((self.path, self.headers["Content-Type"], json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
+        got.append((self.path, self.headers["Content-Type"], self.headers.get("Authorization"), json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
         self.send_response(200)
         self.end_headers()
 
@@ -33,13 +33,17 @@ def check(cond, msg):
 
 server = HTTPServer(("127.0.0.1", 0), Receiver)
 threading.Thread(target=server.serve_forever, daemon=True).start()
-m = Metrics(f"http://127.0.0.1:{server.server_port}/v1/metrics", "belief-corroboration", interval=3600)
+check(headers("Authorization=Bearer%20abc, x-team = kk") == {"Authorization": "Bearer abc", "x-team": "kk"},
+      "the standard header list, values URL-encoded")
+m = Metrics(f"http://127.0.0.1:{server.server_port}/v1/metrics", "belief-corroboration", interval=3600,
+            headers={"Authorization": "Bearer abc"})
 for v in (0.5, 1.5, 4.0):
     m.record("kk.feed.lag", v, "s")
 m.record("kk.step.duration", 0.25, "s")
 m.flush()
-check(len(got) == 1 and got[0][0] == "/v1/metrics" and got[0][1] == "application/json", "one OTLP/HTTP JSON request")
-rm = got[0][2]["resourceMetrics"][0]
+check(len(got) == 1 and got[0][0] == "/v1/metrics" and got[0][1] == "application/json" and got[0][2] == "Bearer abc",
+      "one OTLP/HTTP JSON request, with the configured headers")
+rm = got[0][3]["resourceMetrics"][0]
 check(rm["resource"]["attributes"] == [{"key": "service.name", "value": {"stringValue": "belief-corroboration"}}],
       "the resource names the service")
 lag = next(x for x in rm["scopeMetrics"][0]["metrics"] if x["name"] == "kk.feed.lag")

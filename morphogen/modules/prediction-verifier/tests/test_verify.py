@@ -35,7 +35,7 @@ v = verdict(pred, ran, series)
 check(v["verdict"] == "holds" and v["premises"] == ["P", "o5", "o6", "o7"],
       "holds: windows 5-7 (window 4 settles), derived from the prediction and those observations")
 check(verdict(pred, ran, series[:7] + [obs(7, 1.4)])["verdict"] == "fails", "one window over the limit: fails")
-check(verdict(pred, [{"status": "failed", "ended_at": T0, "reason": "not approved"}], series)["verdict"] == "untested",
+check(verdict(pred, [{"status": "failed", "ended_at": T0, "reason": "the action is not on the fixed list"}], series)["verdict"] == "untested",
       "the step failed or was refused: untested")
 check(verdict(pred, [{"status": "running", "ended_at": None}], series).get("wait"), "a run still going: wait")
 other = [{**o, "qualifiers": {PROP: "urn:kk:property:step-seconds-mean"}} for o in series]
