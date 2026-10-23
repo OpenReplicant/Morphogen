@@ -10,6 +10,8 @@
 # hook        = where in the write pipeline or read path the slot attaches
 # cardinality = one (one active provider; alternatives run in shadow until the evaluator promotes one) | many
 # interface   = kernel/src/kk/interfaces.py
+# default     = the provider installed by default; none = declared but unfilled (`why` says what the slot is
+#               for and when a distribution would fill it). Nothing depends on an unfilled slot.
 version: 0.1.0
 
 slots:
@@ -70,8 +72,14 @@ slots:
     hook: feed
     cardinality: one
     interface: FeedConsumer
-    default: truth-maintenance
-    status: to-port
+    default: none
+    status: unfilled
+    why: >-
+      Marks claims derived from a premise that was later superseded, refuted, retracted or redacted, so belief
+      can cap them (rebuild 4 D-89, modules/truth-maintenance). Morphogen's loop does not reason over chains of
+      inferred claims: plans cite observations and predictions are checked by the outcome verifier, so no
+      Morphogen use case needs it yet. Without it the belief model's premise cap never applies. Fill it (port
+      rebuild 4's module) when a distribution keeps inferred claims whose premises change.
 
   # ---- read path
   - id: recall
@@ -90,8 +98,13 @@ slots:
     hook: read
     cardinality: one
     interface: ContextAssembler
-    default: kernel-mcp briefing
-    status: to-port
+    default: none
+    status: unfilled
+    why: >-
+      Builds a session briefing for an agent from the record (rebuild 4 kernel-mcp briefing, M6-T7, for the
+      agent-memory use). Morphogen's agents work from explicit queries (slots, couplings, drift, plans) through
+      the agent interface and recall, so no Morphogen use case needs a briefing. Fill it when a distribution
+      serves agent memory.
 
   # ---- maintenance
   - id: vocabulary-pack

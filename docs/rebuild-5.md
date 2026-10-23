@@ -88,7 +88,8 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 | --- | --- | --- |
 | kernel-mcp | Port | `kernel/providers/` (agent-interface slot) |
 | validator-shacl | Rewrite | `kernel/providers/` (validator candidate) |
-| belief-corroboration, verifier-quotes, truth-maintenance | Port | `kernel/providers/` |
+| belief-corroboration, verifier-quotes | Port | `kernel/providers/` |
+| truth-maintenance, kernel-mcp briefing | Park: their slots stay unfilled (R5-12) | — |
 | recall-index, recall-dense | Port | `kernel/providers/` |
 | evaluator | Port, central | `kernel/providers/` |
 | self-encoder | Rewrite | `kernel/providers/` (encodes blueprint, providers, packs) |

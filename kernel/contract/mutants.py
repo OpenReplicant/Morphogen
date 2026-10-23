@@ -21,6 +21,14 @@ def contract(name: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(HERE / "run.py"), name], capture_output=True, text=True)
 
 
+def has_cases(name: str) -> bool:
+    spec = importlib.util.spec_from_file_location("contract_run", HERE / "run.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+    meta = run.yaml.safe_load((PROVIDERS / name / "provider.yaml").read_text())
+    return bool(run.expected(meta["slots"]))
+
+
 def mutants_of(name: str) -> list:
     path = PROVIDERS / name / "tests" / "mutants.py"
     if not path.exists():
@@ -35,6 +43,8 @@ def main(names: list[str], pattern: str) -> int:
     survivors, total = [], 0
     for name in names:
         listed = mutants_of(name)
+        if not has_cases(name):
+            continue   # nothing in the contract to kill a mutant with; the provider's own tests cover it
         if not listed and not pattern:
             print(f"{name}: FAIL: no tests/mutants.py; every provider with contract cases needs mutants")
             return 2

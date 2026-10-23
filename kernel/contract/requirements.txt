@@ -1,5 +1,7 @@
-# Contract runner and the Python providers' runners (validator-shacl, belief-corroboration).
+# Contract runner, the Python providers and their services (see also kernel/providers/requirements.txt).
 PyYAML==6.0.3
 jsonschema==4.26.0
 pyshacl==0.40.1
 rdflib==7.6.0
+psycopg==3.3.6
+psycopg-binary==3.3.6

@@ -13,9 +13,9 @@ case; each provider's `tests/mutants.py` lists the mutants `../contract/mutants.
 | validator-shacl | validator | Ported from rebuild 4 `modules/validator-shacl` (core) and `shapes/` (T2); 13/13 contract cases plus the shape tests; 8 mutants, all fail. Default until a JSON Schema validator passes the same set (R5-11, R5-O1). Service: T3 |
 | belief-corroboration | belief-model | Scoring model ported from rebuild 4 unchanged (T2); 17/17 contract cases; 8 mutants, all fail. Feed consumer: T3 |
 | verifier-quotes | verifier | To port |
-| truth-maintenance | truth-maintenance | To port |
+| (none) | truth-maintenance | Unfilled: Morphogen does not need it (`why` in `../blueprint/slots.yaml`, R5-12) |
 | recall-bm25 (+ dense, re-rank opt-in) | recall | To port (`recall-index`, `recall-dense`) |
-| kernel-mcp | agent-interface, context-assembler | To port |
+| kernel-mcp | agent-interface | To port (briefing not ported: context-assembler is unfilled, R5-12) |
 | pack-loader | vocabulary-pack | To port |
 | self-encoder | self-encoder | To rewrite |
 | evaluator | evaluator | To port |
