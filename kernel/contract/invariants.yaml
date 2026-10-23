@@ -1,0 +1,71 @@
+# The conformance contract. Guarantees live here, not in any provider.
+# A provider of a core slot (record store, write pipeline) conforms when every case below passes
+# against it, and the suite fails when any check is disabled (mutation check, rebuild 4 lesson).
+#
+# Cases are named exactly as the record-postgres provider reports them ("ok: <case>"), so the
+# runner can check that every case ran. A new provider adds its own runner and reports the same names.
+version: 0.1.0
+
+invariants:
+  I1:
+    text: Every claim is attributed (agent + run) and referenced; extracted claims carry the supporting quote.
+    cases:
+      - claim keeps its reference and quote
+      - claim is attributed to the submitting agent
+      - extracted claim without a quote is rejected
+      - "reason recorded: missing quote"
+      - agent finishes its own run with cost
+  I2:
+    text: Nothing is deleted. Supersede, refute or retract by status; redaction removes content but keeps identity, attribution and lineage, and is itself recorded.
+    cases:
+      - supersession applied
+      - old claim deprecated, not deleted
+      - explain shows what replaced it
+      - redaction removes the value but keeps the claim
+      - redaction removes the quote
+      - lineage and attribution survive redaction
+  I3:
+    text: A claim's scope is at least as restrictive as everything it was made from.
+    cases:
+      - deriving into a less restrictive scope is rejected
+      - "reason recorded: scope leak"
+  I4:
+    text: Clearance is granted by people and enforced by the store, never by a model's judgment.
+    cases:
+      - secret-scope claim applied
+      - a reviewer without clearance cannot see secret change sets
+      - cleared agent sees the secret claim
+      - uncleared agent cannot see the secret claim
+      - uncleared agent cannot see its references either
+  I5:
+    text: No method verifies its own output.
+    cases:
+      - self-verification is rejected
+      - independent verification and belief are applied
+  I6:
+    text: Every answer cites claim ids and shows their belief.
+    note: Not enforceable in the store; checked by the read-path providers (MCP, recall) and the eval gate.
+    cases:
+      - api.claims shows the active model's belief
+
+pipeline:
+  text: One write path. Change sets start submitted, are validated, routed to a lane, and committed atomically or not at all. No extension code in the commit.
+  cases:
+    - change set starts as submitted
+    - resubmitting the same idempotency key returns the same change set
+    - validated auto-lane change set is applied
+    - claim with an unapproved predicate is rejected
+    - typing a new property is forced into the review lane
+    - valid review-lane change set waits for a reviewer
+    - reviewer approval applies it
+    - the new property is now approved
+    - stale expect_status is a conflict, not an overwrite
+
+# To add (decided in rebuild 4, not yet in the suite):
+pending:
+  - id: feed-cursor
+    text: Every applied change set gets a monotonically increasing sequence number; a consumer reading after seq N sees every later commit exactly once (D-86, D-87).
+  - id: bitemporal-as-of
+    text: A query as of valid time T and record time R returns what was believed then (D-09).
+  - id: no-extension-in-commit
+    text: Applying a change set runs no module or extension code.

@@ -1,0 +1,5 @@
+Morphogen and the Knowledge Kernel
+Copyright 2026 OpenReplicant
+
+Licensed under the Apache License, Version 2.0.
+kernel/providers/record-postgres and kernel/packs are carried over from OpenReplicant/kernel (rebuild 4).

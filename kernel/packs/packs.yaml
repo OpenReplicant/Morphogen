@@ -1,0 +1,219 @@
+# Vocabulary packs and formats — "one concept, one home".
+#
+# Tier rules (docs/spec.md §6):
+#   core    — owns a concept nothing else owns; always installed
+#   profile — loaded only for a domain or capability
+#   format  — an encoder source or decoder target; reached through mappings, never mixed into core terms
+# A new vocabulary is added only with an entry here naming the concept it owns. If another entry
+# already owns that concept, the newcomer is a format (or rejected), not a second home.
+#
+# pin: the pack loader fetches the upstream file once, stores it as an artifact (sha256), and
+# records the pinned version. "pin at install" = choose and record the version when first loaded.
+
+version: 0.4.0
+
+core:
+  - id: kk-core          # first: it types the annotation properties the other pack files use
+    owns: the module contract only — module, slot, fills, slot contract, cardinality, module kind, runs-as, protected (D-40)
+    note: claim status, statement key, belief, evidence type and redaction are kernel columns, not terms
+    iri: https://w3id.org/knowledge-kernel/ns#
+    file: kk-core.ttl
+    license: Apache-2.0
+  - id: rdf-rdfs
+    owns: identity, types, labels, sub-class/sub-property
+    iri: http://www.w3.org/2000/01/rdf-schema#
+    license: W3C Software and Document License
+    pin: pin at install
+  - id: owl
+    owns: property kinds, equivalence, deprecation flag
+    iri: http://www.w3.org/2002/07/owl#
+    license: W3C Software and Document License
+    pin: pin at install
+    note: used for annotations and property kinds only; no OWL reasoning in the kernel
+  - id: skos
+    owns: concept schemes, preferred/alt labels, definitions, mapping relations (exact/close/broad/narrow/related)
+    iri: http://www.w3.org/2004/02/skos/core#
+    license: W3C Software and Document License
+    pin: pin at install
+  - id: dcterms
+    owns: source, part-of, replaced-by, license, version links, access rights (scopes), type; a work's title and abstract
+    iri: http://purl.org/dc/terms/
+    file: dcterms.ttl
+    license: CC BY 4.0 (DCMI)
+    pin: DCMI Metadata Terms 2020-01-20, subset (title, abstract, hasPart, isPartOf, subject, type; revision in owl:versionInfo) cut by scripts/vocab_subset.py; kk-core types the terms the module contract uses
+  - id: prov-o
+    owns: provenance — agents, activities (runs), derivation, attribution, generation time, invalidation
+    iri: http://www.w3.org/ns/prov#
+    file: prov.ttl
+    license: W3C Software and Document License
+    pin: PROV-O 2013-04-30 (W3C Recommendation), subset (activities, entities, agents, persons, used, generated, associated, start and end) cut by scripts/vocab_subset.py; upstream sha256 in the file header (D-81, D-82). Runs, attribution and derivation stay kernel columns
+  - id: p-plan
+    owns: plans and steps, and links from runs to the steps they carried out
+    iri: http://purl.org/net/p-plan#
+    license: check at install (published by the P-Plan authors)
+    pin: pin at install
+  - id: web-annotation
+    owns: quotes and spans in sources (TextQuoteSelector, TextPositionSelector); annotations about things — a conformance discrepancy is an oa:Annotation targeting the steps it concerns (D-50)
+    iri: http://www.w3.org/ns/oa#
+    file: oa.ttl
+    license: W3C Software and Document License
+    pin: 2016-11-12 (W3C Recommendation 2017-02-23), subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py
+  - id: shacl
+    owns: constraints (shapes) used by the validator
+    iri: http://www.w3.org/ns/shacl#
+    license: W3C Software and Document License
+    pin: pin at install
+  - id: sssom
+    owns: mapping metadata (justification, confidence) — stored as skos:*Match claims with qualifiers
+    iri: https://w3id.org/sssom/
+    license: CC0 / BSD-3 (check at install)
+    pin: pin at install
+
+profile:
+  - id: kk-tosca
+    owns: system structure — node types/templates, requirements (slots), capabilities, fulfillment, relationships, substitution
+    iri: https://w3id.org/knowledge-kernel/tosca#
+    file: kk-tosca.ttl
+    license: Apache-2.0
+    note: RDF mirror of the OASIS TOSCA 2.0 metamodel; TOSCA YAML itself is a format. Carries the
+      alignment of the module contract (kk:Module ⊂ kkt:NodeType, kk:Slot ⊂ kkt:RequirementDefinition)
+    load_when: systems are modeled (the self-encoder's self-model uses it)
+  - id: wot-td
+    owns: runtime interfaces (properties, actions, events) and transport bindings (forms), security schemes
+    iri: https://www.w3.org/2019/wot/td#
+    license: W3C Software and Document License
+    pin: TD 1.1 Recommendation; track TD 2.0 drafts
+    load_when: runtime interfaces are modeled (kk-tosca affordances)
+  - id: kk-profile
+    owns: agent profiles and skills
+    iri: https://w3id.org/knowledge-kernel/profile#
+    file: kk-profile.ttl
+    license: Apache-2.0
+    load_when: agent profiles are modeled
+  - id: bbo
+    owns: BPMN process models — processes, tasks, gateways, events, sequence (next/previous flow node), roles (D-47)
+    iri: https://www.irit.fr/recherches/MELODI/ontologies/BBO#
+    file: bbo.ttl
+    license: CC BY 4.0 (MELODI, IRIT)
+    pin: BBO 1.0.0 (2019-05-22), subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: the documented process; P-Plan stays the home of plans in general (mappings.ttl)
+    load_when: always (milestone 2)
+  - id: sosa
+    owns: observations and actuations — feature of interest, observed property, simple result, sensor, actuator (D-47)
+    iri: http://www.w3.org/ns/sosa/
+    file: sosa.ttl
+    license: W3C Software and Document License
+    pin: 2017-10-19 (W3C Recommendation), subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: an observation is one observed claim (subject = feature of interest, predicate = sosa:hasSimpleResult,
+      qualifier sosa:observedProperty, valid time = the window), not a node per observation (D-47)
+    load_when: always (milestone 2 — event logs, metrics)
+  - id: observables
+    owns: nothing new — the sosa:ObservableProperty individuals our modules observe (urn:kk:property:*)
+    iri: https://w3id.org/knowledge-kernel/observables
+    file: observables.ttl
+    license: Apache-2.0
+  - id: conformance
+    owns: nothing new — SKOS schemes of discrepancy kinds, anomaly kinds and actions (urn:kk:discrepancy-kind:*, urn:kk:anomaly-kind:*, urn:kk:action:*) (D-50, D-53)
+    iri: https://w3id.org/knowledge-kernel/conformance
+    file: conformance.ttl
+    license: Apache-2.0
+  - id: fabio
+    owns: kinds of scholarly works — research paper, journal article (D-59)
+    iri: http://purl.org/spar/fabio/
+    file: fabio.ttl
+    license: CC BY 4.0 (SPAR Ontologies)
+    pin: FaBiO 2026-09-03, subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: a paper is `urn:kk:paper:<source>:<id>` a fabio:ResearchPaper (or a sub-class), with dcterms:title and dcterms:abstract
+    load_when: always (milestone 3 — papers)
+  - id: cito
+    owns: how a work bears on a statement — supports, refutes, disputes, confirms (D-59)
+    iri: http://purl.org/spar/cito/
+    file: cito.ttl
+    license: CC BY 4.0 (SPAR Ontologies)
+    pin: CiTO 2.9.0 (2026-09-03), subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: the object may be a proposition (`urn:kk:proposition:<hash>`, rdfs:label its text), not only another work;
+      evidence `extracted` with the sentences that bear on it as quotes
+    load_when: always (milestone 3 — papers)
+  - id: codemeta
+    owns: software packages and their dependencies — source code, requirements, suggestions, programming language (D-68)
+    iri: http://schema.org/
+    file: codemeta.ttl
+    license: Apache-2.0 (term IRIs only; schema.org text is not copied)
+    pin: CodeMeta v3 terms (https://codemeta.github.io/terms/), the schema.org subset it uses
+    note: a package is its Package URL (pkg:pypi/..., pkg:npm/..., pkg:golang/..., pkg:cargo/...); version as owl:versionInfo,
+      name as rdfs:label, the repository it is in as dcterms:isPartOf
+    load_when: always (milestone 3 — repositories)
+  - id: dqv
+    owns: measurements of quality — a metric, the value measured, what it was computed on (D-71); eval scores (spec §12)
+    iri: http://www.w3.org/ns/dqv#
+    file: dqv.ttl
+    license: W3C Software and Document License
+    pin: DQV 2016-12-15 (W3C Working Group Note), subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: a measurement is one observed claim (subject = the eval run, predicate = dqv:value, qualifiers dqv:isMeasurementOf
+      the metric and dqv:computedOn the eval set), not a node per measurement (as for SOSA, D-47)
+    load_when: always (milestone 3 — evaluation)
+  - id: activitystreams
+    owns: messages and the actions of people and agents in an interaction — a message (as:Note) with its
+      author, conversation, reply and time; who acted with which tool (D-80, M5-T3)
+    iri: https://www.w3.org/ns/activitystreams#
+    file: activitystreams.ttl
+    license: W3C Software and Document License
+    pin: Activity Streams 2.0 (W3C Recommendation 2017-05-23), subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: a tool call or a file or API action is a prov:Activity (PROV-O owns activities) with as:actor and as:instrument;
+      schema.org Message and SIOC are mappings only
+    load_when: always (milestone 5 — interactions)
+  - id: org
+    owns: organisations — an organisation, its units, posts and who holds them, memberships and roles, who
+      reports to whom (D-80, M5-T4); people are prov:Person
+    iri: http://www.w3.org/ns/org#
+    file: org.ttl
+    license: W3C Software and Document License
+    pin: The Organization Ontology 2014-01-16 (W3C Recommendation), subset (revision in owl:versionInfo) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: a process step's performer (bbo:has_resource) is the org:Post that does it, so the process and the
+      organisation maps meet; schema.org Organization and Role are mappings only (CC BY-SA)
+    load_when: always (milestone 5 — interviews)
+  - id: mappings
+    owns: nothing new — the skos:*Match links between packs that name the same concept
+    iri: https://w3id.org/knowledge-kernel/mappings
+    file: mappings.ttl
+    license: Apache-2.0
+  - id: wfprov-wfdesc
+    owns: nothing new — CWL provenance traces
+    load_when: CWL pipelines are used; mapped to P-Plan/PROV-O via skos:*Match claims
+
+format:
+  - {id: tosca-yaml,       direction: both,   note: TOSCA 2.0 service templates}
+  - {id: bpmn-xml,         direction: both,   note: milestone 2; SpiffWorkflow actuator}
+  - {id: ocel-2,           direction: encode, note: object-centric event logs from runs and CI}
+  - {id: openapi,          direction: both}
+  - {id: asyncapi,         direction: both}
+  - {id: mcp-tool-schema,  direction: both}
+  - {id: a2a-agent-card,   direction: decode, note: from kkp:AgentProfile}
+  - {id: agent-skills,     direction: both,   note: SKILL.md folders}
+  - {id: harness-config,   direction: decode, note: e.g. Claude Code agent files and hooks}
+  - {id: compose-yaml,     direction: both,   note: orchestrator driver}
+  - {id: cytoscape-json,   direction: decode, note: graph view}
+  - {id: mermaid,          direction: decode}
+  - {id: n-quads,          direction: both,   note: canonical export, scopes as named graphs}
+
+rejected_or_deferred:
+  - {id: kk-chain,         decision: retired (D-41); automations stay in their runners' native formats, read into P-Plan by encoders when needed}
+  - {id: wikidata-pids,      decision: link target only (skos:exactMatch to Wikidata items); never our own identifiers}
+  - {id: legacy-software-properties, decision: replaced by kk-tosca relationship types (dependsOn, hostedOn, connectsTo)}
+  - {id: sosa-in-core,       decision: rejected; profile only}
+  - {id: bpmn-fbk-ontology,  decision: not used; BBO is maintained with a stated license and covers the BPMN fragment we need (D-47)}
+  - {id: pm4py,              decision: AGPL-3.0; optional module only, never in the default distribution (milestone 2)}
+  - {id: tosca-workflows,    decision: unused; P-Plan owns plans}
+  - {id: uvl,                decision: deferred; cross-slot constraints are SHACL shapes for now}
+  - {id: shex,               decision: not used; SHACL only}
+
+# Where to look before minting a term (D-47). Search these, in order, for an existing vocabulary that
+# owns the concept; pick one with a stated license and a stable namespace; add it here as a pack
+# (cut a subset with scripts/vocab_subset.py) or as a format. Only the module contract is ours (D-40).
+catalogs:
+  - {id: lov,          url: https://lov.linkeddata.es/dataset/lov/,  covers: general Linked Open Vocabularies (search by term)}
+  - {id: w3c-tr,       url: https://www.w3.org/TR/,                  covers: W3C Recommendations (PROV, SOSA, ORG, DCAT, ODRL, Time, ...)}
+  - {id: schema-org,   url: https://schema.org/,                     covers: everyday entities — organisations, people, products, events, places}
+  - {id: obo-foundry,  url: https://obofoundry.org/,                 covers: biomedical and life-science ontologies}
+  - {id: bioportal,    url: https://bioportal.bioontology.org/,      covers: biomedical ontologies (search across many)}
+  - {id: wikidata,     url: https://www.wikidata.org/,               covers: link targets for real-world items (skos:exactMatch only, never our identifiers)}

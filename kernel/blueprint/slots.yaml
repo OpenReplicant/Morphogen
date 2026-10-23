@@ -1,0 +1,127 @@
+# The kernel's self-blueprint: its own slots, couplings and default providers.
+# Encoded into the record as claims by the self-encoder, so the kernel can reason about itself and
+# changes to it go through the same governed path as anything else.
+#
+# Only kernel slots live here. Application slots (observe, plan, act, design, ...) are declared by
+# distributions (morphogen/distribution.yaml). Rebuild 4's 42-slot catalog is kept for reference in
+# docs/slots-rebuild4.yaml.
+#
+# core: true  = swappable only by a provider that passes kernel/contract/
+# hook        = where in the write pipeline or read path the slot attaches
+# cardinality = one (one active provider; alternatives run in shadow until the evaluator promotes one) | many
+# interface   = kernel/src/kk/interfaces.py
+version: 0.1.0
+
+slots:
+  # ---- core
+  - id: record-store
+    core: true
+    cardinality: one
+    interface: RecordStore
+    default: record-postgres
+    status: ported
+  - id: write-pipeline
+    core: true
+    cardinality: one
+    interface: WritePipeline
+    default: record-postgres          # change sets, lanes and atomic apply live in the same schema today
+    status: ported
+
+  # ---- before the commit
+  - id: intake-filter
+    hook: intake
+    cardinality: many
+    interface: IntakeFilter
+    default: filter-gitleaks          # rebuild 4: modules/ingest-filter-gitleaks
+    status: to-port
+  - id: validator
+    hook: validation
+    cardinality: many
+    interface: Validator
+    default: validator-schema         # JSON Schema; SHACL becomes another candidate
+    status: to-write
+  - id: lane-policy
+    hook: lane
+    cardinality: one
+    interface: LanePolicy
+    default: review-rules             # rebuild 4: settings review_predicates / review_types
+    status: ported-in-schema
+
+  # ---- after the commit
+  - id: change-feed
+    hook: feed
+    cardinality: one
+    interface: RecordStore.feed
+    default: record-postgres          # needs the applied-sequence cursor (contract: pending feed-cursor)
+    status: to-write
+  - id: belief-model
+    hook: feed
+    cardinality: one
+    interface: BeliefModel
+    default: belief-corroboration
+    status: to-port
+  - id: verifier
+    hook: feed
+    cardinality: many
+    interface: Verifier
+    default: verifier-quotes
+    status: to-port
+  - id: truth-maintenance
+    hook: feed
+    cardinality: one
+    interface: FeedConsumer
+    default: truth-maintenance
+    status: to-port
+
+  # ---- read path
+  - id: recall
+    hook: read
+    cardinality: many
+    interface: Recall
+    default: recall-bm25              # dense fusion and re-ranking opt-in (rebuild 4: D-61, D-66)
+    status: to-port
+  - id: agent-interface
+    hook: read
+    cardinality: many
+    interface: MCP tools (read + propose)
+    default: kernel-mcp
+    status: to-port
+  - id: context-assembler
+    hook: read
+    cardinality: one
+    interface: ContextAssembler
+    default: kernel-mcp briefing
+    status: to-port
+
+  # ---- maintenance
+  - id: vocabulary-pack
+    cardinality: many
+    interface: pack (kernel/packs/packs.yaml)
+    default: pack-loader
+    status: to-port
+  - id: self-encoder
+    cardinality: one
+    interface: Encoder
+    default: self-encoder             # encodes this file, installed providers and packs as claims
+    status: to-rewrite
+  - id: evaluator
+    cardinality: one
+    interface: Evaluator
+    default: evaluator
+    status: to-port
+  - id: harness-adapter
+    cardinality: many
+    interface: HarnessAdapter
+    default: claude-code
+    status: to-port
+
+couplings:
+  # who feeds whom; every coupling's contract is the change-set schema or an interface above
+  - {from: intake-filter, to: validator, contract: change_set.schema.json}
+  - {from: validator, to: lane-policy, contract: ValidationResult}
+  - {from: lane-policy, to: write-pipeline, contract: Lane}
+  - {from: write-pipeline, to: record-store, contract: atomic commit (no extension code)}
+  - {from: record-store, to: change-feed, contract: Applied}
+  - {from: change-feed, to: [belief-model, verifier, truth-maintenance], contract: Applied}
+  - {from: [belief-model, verifier, truth-maintenance], to: intake-filter, contract: change_set.schema.json}
+  - {from: record-store, to: [recall, agent-interface, context-assembler], contract: RecordStore, note: reader's clearance}
