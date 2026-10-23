@@ -168,7 +168,7 @@ after it has failed with the logic broken.
 | ID | Task | Check |
 | --- | --- | --- |
 | T1 | Add the three pending contract cases (feed cursor, bitemporal as-of, no extension in commit) to `invariants.yaml` and the record-postgres suite, with the applied-sequence cursor from D-86 | `kernel/contract/run.sh` passes; mutation check fails. **Done** (R5-10): 54/54; all 14 mutants in `tests/mutants.py` fail |
-| T2 | Port `eval/validator` and `eval/belief-v0` into the contract | Same. **Done** (R5-11): 13/13 and 17/17 on validator-shacl and belief-corroboration; 29/29 mutants fail across providers |
+| T2 | Port `eval/validator` and `eval/belief-v0` into the contract | Same. **Done** (R5-11): 13/13 and 17/17 on validator-shacl and belief-corroboration; 30/30 mutants fail across providers |
 | T3 | Port kernel-mcp, recall-bm25, belief-corroboration, verifier-quotes, evaluator into `kernel/providers/` against `kk.interfaces` | Each module's tests; recall matches rebuild 4 on SciFact |
 | T4 | Rewrite the self-encoder: encode `kernel/blueprint/slots.yaml` and `morphogen/distribution.yaml` as claims | The record answers "which provider fills each slot" with citations |
 | T5 | Morphogen bootstrap: OTel observer, anomaly, planner with predictions, intent actuator, prediction verifier, lane policy | One full loop on Morphogen's own stack |

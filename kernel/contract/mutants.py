@@ -34,7 +34,11 @@ def mutants_of(name: str) -> list:
 def main(names: list[str], pattern: str) -> int:
     survivors, total = [], 0
     for name in names:
-        mutants = [m for m in mutants_of(name) if pattern in m[0]]
+        listed = mutants_of(name)
+        if not listed and not pattern:
+            print(f"{name}: FAIL: no tests/mutants.py; every provider with contract cases needs mutants")
+            return 2
+        mutants = [m for m in listed if pattern in m[0]]
         if not mutants:
             continue
         # A mutant "fails" for any reason, including no database: the unmutated provider must pass first.
@@ -65,6 +69,9 @@ def main(names: list[str], pattern: str) -> int:
     if MUT.exists():
         shutil.rmtree(MUT)
     print(f"{total - len(survivors)}/{total} mutants fail the contract")
+    if not total:
+        print("FAIL: no mutant ran")
+        return 1
     return 1 if survivors else 0
 
 

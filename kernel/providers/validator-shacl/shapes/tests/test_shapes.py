@@ -17,6 +17,7 @@ EXPECTED_VIOLATIONS = {
     EX.noQuote,
     EX.unattributed,
     EX.noPremises,
+    EX.noReference,
     "urn:kk:module:orphan",
 }
 

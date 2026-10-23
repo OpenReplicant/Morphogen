@@ -27,7 +27,12 @@ def main() -> int:
                         frozenset(c["sources"]), when(c.get("valid_from")), when(c.get("valid_to")),
                         c.get("deprecated", False), c.get("entity"), tuple(c.get("refuted_by", ())),
                         c.get("undermined", False)) for c in case["input"]["claims"]]
-        got = {k: v for k, (v, _) in score(claims, set(case["input"]["functional"])).items()}
+        try:
+            got = {k: v for k, (v, _) in score(claims, set(case["input"]["functional"])).items()}
+        except Exception as e:  # a crash is a failed case, and the other cases still run
+            failed += 1
+            print(f"FAIL: {case['id']}: {type(e).__name__}: {e}")
+            continue
         if got == case["expect"]["beliefs"]:
             print(f"ok: {case['id']}")
         else:

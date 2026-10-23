@@ -31,6 +31,11 @@ ex:noPremises a rdf:Statement ;
     prov:wasAttributedTo ex:agent ; prov:wasGeneratedBy ex:run ;
     dcterms:accessRights ex:scope ; dcterms:type <urn:kk:evidence:inferred> ; prov:generatedAtTime "2026-10-15T00:00:00Z"^^xsd:dateTime .
 
+# deterministic claim with neither a source nor a premise
+ex:noReference a rdf:Statement ;
+    rdf:subject ex:a ; rdf:predicate rdfs:label ; rdf:object "A" ;
+    prov:wasAttributedTo ex:agent ; prov:wasGeneratedBy ex:run ;
+    dcterms:accessRights ex:scope ; dcterms:type <urn:kk:evidence:deterministic> ; prov:generatedAtTime "2026-10-15T00:00:00Z"^^xsd:dateTime .
 
 # module that fills no slot
 <urn:kk:module:orphan> a kk:Module ;

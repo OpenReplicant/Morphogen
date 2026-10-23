@@ -8,7 +8,7 @@ version: 0.2.0
 
 # The cases below apply to providers of these slots. Other slots have their own case sets in
 # slots/<slot>/ (validator, belief-model); kernel/contract/run.py runs whichever apply.
-applies_to: [record-store, write-pipeline]
+applies_to: [record-store, write-pipeline, change-feed]
 
 invariants:
   I1:

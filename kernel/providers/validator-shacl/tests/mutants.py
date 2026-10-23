@@ -1,8 +1,8 @@
 """Mutants for the validator-shacl provider (run by kernel/contract/mutants.py).
 
-Not a mutant: dropping the shape that a claim has a reference or a premise. The JSON Schema rejects such a
-claim first (anyOf references / derived_from), so the validator's verdict does not change; the shape is
-there for exported data checked against the shapes alone.
+The reference-or-premise shape never decides the validator's verdict (the JSON Schema rejects such claims
+first); it is there for exported data checked against the shapes alone, so its mutant is killed by the
+shape tests the runner also runs.
 """
 
 CORE = "validator/core.py"
@@ -16,6 +16,9 @@ MUTANTS = [
   ("premises are not checked", SHAPES, [
     ("              $this dcterms:type <urn:kk:evidence:inferred> .\n              FILTER NOT EXISTS",
      "              $this dcterms:type <urn:kk:evidence:none> .\n              FILTER NOT EXISTS")]),
+  ("a claim needs no reference", SHAPES, [
+    ("        [ sh:path dcterms:source ; sh:minCount 1 ]\n        [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ]",
+     "        [ sh:path dcterms:source ; sh:minCount 0 ]\n        [ sh:path prov:wasDerivedFrom ; sh:minCount 0 ]")]),
   ("premises are not carried into the RDF form", CORE, [
     ("            g.add((c, PROV.wasDerivedFrom, refs.get(d) or URIRef(f\"urn:kk:claim:{d}\")))", "            pass")]),
   ("modules need not fill a slot", SHAPES, [

@@ -12,6 +12,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from validator.core import validate  # noqa: E402
 
+sys.path.insert(0, str(HERE.parent / "shapes" / "tests"))
+import test_shapes  # noqa: E402  the shapes alone, as an export is checked against them
+
 SET = HERE.parents[2] / "contract" / "slots" / "validator"
 
 
@@ -29,7 +32,12 @@ def main() -> int:
     for path in sorted((SET / "cases").glob("*.yaml")):
         case = yaml.safe_load(path.read_text())
         cs = json.loads((SET / case["input"]["change_set"]).read_text())
-        ok, report = validate(cs, [tuple(t) for t in case["input"].get("context", [])])
+        try:
+            ok, report = validate(cs, [tuple(t) for t in case["input"].get("context", [])])
+        except Exception as e:  # a crash is a failed case, and the other cases still run
+            failed += 1
+            print(f"FAIL: {case['id']}: {type(e).__name__}: {e}")
+            continue
         want = case["expect"]
         got = "valid" if ok else "invalid"
         if got != want["outcome"]:
@@ -40,6 +48,12 @@ def main() -> int:
             print(f"FAIL: {case['id']}: reason {want['reason']!r} not in report: {json.dumps(report)}")
         else:
             print(f"ok: {case['id']}")
+    for test in (test_shapes.test_valid_fixture_conforms, test_shapes.test_every_invalid_node_is_reported):
+        try:
+            test()
+        except AssertionError as e:
+            failed += 1
+            print(f"FAIL: shapes: {test.__name__}: {e}")
     return 1 if failed else 0
 
 
