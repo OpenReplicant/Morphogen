@@ -6,6 +6,7 @@ Creates the database when missing, applies record-postgres's schema if the kerne
 each provider's migration.sql (each is idempotent). Uses the PG* environment, like psql.
 Rebuild 4 did this with `kk init` and `kk module install`; the smaller `kk` command is still to write.
 """
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,8 @@ def providers_with_migrations() -> list[str]:
 
 
 def install(db: str, names: list[str]) -> None:
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", db):
+        raise SystemExit(f"database name {db!r}: use lower-case letters, digits and underscores")
     if not psql("postgres", "-c", f"select 1 from pg_database where datname = '{db}'"):
         subprocess.run(["createdb", db], check=True)
     if not psql(db, "-c", "select 1 from pg_namespace where nspname = 'kernel'"):

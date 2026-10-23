@@ -101,7 +101,13 @@ def database_url() -> str:
     return url
 
 
-SWITCHING_LOGIN = """select rolsuper or rolname = 'kk_authenticator' from pg_roles where rolname = current_user"""
+# A login that could act as someone else: a superuser, one that can create roles or bypass row-level
+# security, or a member of another agent's role (kk_authenticator is one: it holds every kkm_* role).
+# Rebuild 4 checked only the first and kk_authenticator by name.
+SWITCHING_LOGIN = """select r.rolsuper or r.rolcreaterole or r.rolbypassrls or exists (
+                       select 1 from kernel.agent a
+                       where a.db_role <> current_user and pg_has_role(current_user, a.db_role, 'member'))
+                     from pg_roles r where r.rolname = current_user"""
 
 
 @asynccontextmanager
@@ -115,7 +121,8 @@ async def connection(ctx: Context):
                     await conn.execute(sql.SQL("set local role {}").format(sql.Identifier(role)))
                 elif (await (await conn.execute(SWITCHING_LOGIN)).fetchone())[0]:
                     raise KernelError("stdio needs the agent's own login in DATABASE_URL, not one that can "
-                                      "switch roles (kk_authenticator or a superuser)")
+                                      "act as another agent (kk_authenticator, a superuser, or a member of "
+                                      "another agent's role)")
                 yield conn
     except psycopg.Error as e:
         raise KernelError(f"kernel refused: {(e.diag.message_primary or str(e))[:500]}") from None
@@ -278,7 +285,7 @@ async def whoami(ctx: Context) -> dict:
             'claims_visible', (select count(*) from api.claims where status <> 'deprecated'))""")
         # api.review_queue is readable by reviewers only, and Postgres checks a whole statement's
         # privileges before running it, so the count is a second statement (rebuild 4 failed here).
-        if await one(conn, "select pg_has_role(current_user, 'kk_reviewer', 'member')"):
+        if await one(conn, "select has_table_privilege('api.review_queue', 'select')"):
             me["awaiting_review"] = await one(conn, "select count(*) from api.review_queue")
         return me
 

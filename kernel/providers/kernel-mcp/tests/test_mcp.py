@@ -96,13 +96,18 @@ async def agent_session(login: str) -> None:
         await call(s, "finish_run", {"run_id": run_id})
 
 
-async def superuser_session() -> None:
-    login = f"dbname={DB} user={os.environ.get('PGUSER', 'postgres')}" + (
-        f" password={os.environ['PGPASSWORD']}" if os.environ.get("PGPASSWORD") else "")
+async def refused(login: str, what: str) -> None:
     async with stdio_client(server(login)) as (r, w), ClientSession(r, w) as s:
         await s.initialize()
         res = await call(s, "whoami")
-        check("error" in res and "own login" in res["error"], "a login that can switch roles is refused")
+        check("error" in res and "own login" in res["error"], f"{what} is refused")
+
+
+async def reviewer_session(login: str) -> None:
+    async with stdio_client(server(login)) as (r, w), ClientSession(r, w) as s:
+        await s.initialize()
+        me = await call(s, "whoami")
+        check(me.get("awaiting_review") == 0, "whoami shows a reviewer what waits for review")
 
 
 def main() -> None:
@@ -112,11 +117,22 @@ def main() -> None:
         su.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{ROLE}') then "
                    f"create role {ROLE} login password '{AGENT_PASSWORD}'; end if; end $$")
         su.execute(f"grant kk_agent to {ROLE}")
+        for role, member_of in (("t_mcp_switcher", "kkm_validator"), ("t_mcp_reviewer", "kk_reviewer")):
+            su.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{role}') then "
+                       f"create role {role} login password '{role}'; end if; end $$")
+            su.execute(f"grant {member_of} to {role}")
         su.execute("set role kk_owner")
-        su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, %s, 'software', 'MCP test agent')"
+        su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, %s, 'software', 'MCP test agent'),"
+                   " ('urn:kk:agent:test-mcp-switcher', 't_mcp_switcher', 'software', 'switcher'),"
+                   " ('urn:kk:agent:test-mcp-reviewer', 't_mcp_reviewer', 'person', 'reviewer')"
                    " on conflict do nothing", (AGENT, ROLE))
     asyncio.run(agent_session(f"dbname={DB} user={ROLE} password={AGENT_PASSWORD}"))
-    asyncio.run(superuser_session())
+    superuser = f"dbname={DB} user={os.environ.get('PGUSER', 'postgres')}" + (
+        f" password={os.environ['PGPASSWORD']}" if os.environ.get("PGPASSWORD") else "")
+    asyncio.run(refused(superuser, "a superuser login"))
+    asyncio.run(refused(f"dbname={DB} user=t_mcp_switcher password=t_mcp_switcher",
+                        "a login that holds another agent's role"))
+    asyncio.run(reviewer_session(f"dbname={DB} user=t_mcp_reviewer password=t_mcp_reviewer"))
     subprocess.run(["dropdb", "--force", DB], check=True)
     print("ALL MCP TESTS PASSED")
 

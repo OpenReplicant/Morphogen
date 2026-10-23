@@ -56,7 +56,9 @@ def listen(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
 
 
 def feed_head(conn: psycopg.Connection) -> int:
-    """The last feed number this connection's role can see (0 when the feed is empty to it)."""
+    """The last feed number this connection's role can see (0 when the feed is empty to it). Reads
+    kernel.feed itself (granted to agents, under the same row-level security as api.feed): api.feed would
+    assemble every entry's claims just to find the last number."""
     return conn.execute("select coalesce(max(seq), 0) from kernel.feed").fetchone()[0]
 
 
@@ -72,8 +74,9 @@ def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
            wake: Optional[Callable[[dict], bool]] = None, poll: float = 1.0, sweep: Optional[float] = None,
            once: bool = False, channels: tuple[str, ...] = ()) -> None:
     """For consumers after the commit (R5-04). Run step(conn) now, then again whenever the change feed has
-    an entry after the cursor that passes `wake` (any, by default; a consumer usually skips its own
-    change sets), and at least every `sweep` seconds. The feed is read every `poll` seconds; nothing is
+    an entry after the cursor that passes `wake` (any, by default), and at least every `sweep` seconds. A
+    consumer woken by its own change set runs a step that finds nothing new and submits nothing, which
+    ends the round. The feed is read every `poll` seconds; nothing is
     missed while the consumer is down, since each step re-reads the record from its own watermark.
     `channels` also wake it on NOTIFY: redactions are not in the feed (R5-O3), so a consumer holding
     claim text (an index) listens on kernel_redaction to drop it at once."""
