@@ -7,7 +7,9 @@ outside `models` (how many answers each model gave, not a score), is one measure
       {dqv:isMeasurementOf: urn:kk:metric:<suite>:<path>, dqv:computedOn: urn:kk:dataset:<suite>[:<split>]}
 
 observed, referencing the run file (an artifact) and the number by JSON pointer (RFC 6901). The run is
-labelled with its file name and the models that answered. Lists are left out (per-case detail).
+labelled with its file name and the models that answered. Lists are left out (per-case detail). A run
+that names the provider it measured (`"provider": "<IRI>"`) says so (dcterms:subject), so scores of a
+candidate and an incumbent on the same suite can be compared (G2).
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ import re
 DQV = "http://www.w3.org/ns/dqv#"
 XSD = "http://www.w3.org/2001/XMLSchema#"
 LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+SUBJECT = "http://purl.org/dc/terms/subject"
 SKIP = {"models"}
 
 
@@ -47,6 +50,11 @@ def measurements(run: dict, suite: str, name: str, sha256: str) -> list[dict]:
     ops = [{"op": "add_claim", "subject": subject, "predicate": LABEL,
             "object": {"value": {"@value": f"{suite} eval run {name}" + (f" ({models})" if models else "")}},
             "evidence_type": "deterministic", "references": [{"artifact": sha256}]}]
+    if isinstance(run.get("provider"), str) and run["provider"].startswith(("urn:", "http://", "https://")):
+        ops.append({"op": "add_claim", "subject": subject, "predicate": SUBJECT, "object": {"entity": run["provider"]},
+                    "evidence_type": "deterministic",
+                    "references": [{"artifact": sha256, "span": {"type": "FragmentSelector", "value": "/provider",
+                                                                 "conformsTo": "https://www.rfc-editor.org/rfc/rfc6901"}}]})
     for path, value in numbers(run):
         ops.append({"op": "add_claim", "subject": subject, "predicate": DQV + "value",
                     "object": {"value": {"@value": value, "@type": XSD + ("integer" if isinstance(value, int) else "decimal")}},

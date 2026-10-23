@@ -1,6 +1,7 @@
 """Runs the analyser slot contract (morphogen/contract/slots/analyser) against this provider.
 Prints "ok: <case id>" per passing case, as every provider runner does. No database needed.
 """
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,7 +12,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from anomaly.detect import MAX, PROP, anomalies  # noqa: E402
 
-SET = HERE.parents[2] / "contract" / "slots" / "analyser"
+SET = Path(os.environ.get("KK_CASES") or HERE.parents[2] / "contract" / "slots" / "analyser")   # run.py sets KK_CASES
 T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
 
@@ -37,7 +38,11 @@ def summary(found: list[dict], limit_ids: set) -> list[dict]:
 
 def main() -> int:
     failed = 0
-    for path in sorted((SET / "cases").glob("*.yaml")):
+    paths = sorted((SET / "cases").glob("*.yaml"))
+    if not paths:
+        print(f"FAIL: no cases in {SET}")
+        return 1
+    for path in paths:
         case = yaml.safe_load(path.read_text())
         obs, limits = claims(case)
         want = sorted(case["expect"]["anomalies"], key=lambda r: (r["target"], r["observation"], r["kind"]))

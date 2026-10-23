@@ -12,12 +12,14 @@ Paths are relative to the blueprint file. Usage:
 
 Defaults: the kernel's blueprint and kernel/providers. A distribution passes its own as well, e.g.
 `--blueprint kernel/blueprint/slots.yaml --blueprint <distribution>.yaml --providers <its modules>`.
-A provider's runner (provider.yaml `runner`, run in its directory) prints "ok: <case>" at the start of a
-line (or after a psql NOTICE prefix) per passing case. Fails on a provider slot no blueprint declares, a
+A provider's runner (provider.yaml `runner`, run in its directory, with KK_CASES naming the slot's case
+set directory when there is one) prints "ok: <case>" at the start of a line (or after a psql NOTICE
+prefix) per passing case. Fails on a provider slot no blueprint declares, a
 slot with no `contract:`, a contract path that does not exist, a case set with no cases, a provider whose
 slot has cases but no runner, or no providers at all. Lists the slots whose contract is provider-tests.
 """
 import argparse
+import os
 import re
 import shlex
 import subprocess
@@ -98,7 +100,9 @@ def check(d: Path, blueprints: list[Path]) -> bool:
     cmd = shlex.split(meta["runner"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable   # the interpreter that has the contract requirements
-    out = subprocess.run(cmd, cwd=d, capture_output=True, text=True)
+    sets = [c for c in (table[s] for s in meta["slots"]) if isinstance(c, Path) and c.is_dir()]
+    env = {**os.environ, **({"KK_CASES": str(sets[0])} if len(sets) == 1 else {})}
+    out = subprocess.run(cmd, cwd=d, capture_output=True, text=True, env=env)
     log = out.stdout + out.stderr
     passed = set(OK.findall(log))
     missing = [c for c in cases if c not in passed]

@@ -14,7 +14,7 @@ _spec = importlib.util.spec_from_file_location("kernel_install", HERE.parents[1]
 kernel = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(kernel)
 
-KERNEL_PROVIDERS = ["pack-loader", "validator-shacl", "belief-corroboration"]
+KERNEL_PROVIDERS = ["pack-loader", "validator-shacl", "belief-corroboration", "evaluator"]
 
 
 def modules() -> list[str]:

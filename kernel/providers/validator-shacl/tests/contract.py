@@ -3,6 +3,7 @@ Prints "ok: <case id>" per passing case, as every provider runner does. No datab
 Ported from rebuild 4 modules/validator-shacl/tests/test_eval.py.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from validator.core import validate  # noqa: E402
 sys.path.insert(0, str(HERE.parent / "shapes" / "tests"))
 import test_shapes  # noqa: E402  the shapes alone, as an export is checked against them
 
-SET = HERE.parents[2] / "contract" / "slots" / "validator"
+SET = Path(os.environ.get("KK_CASES") or HERE.parents[2] / "contract" / "slots" / "validator")   # run.py sets KK_CASES
 
 
 def reason_found(reason: str, report: dict) -> bool:

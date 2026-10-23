@@ -60,6 +60,11 @@ slots:
     default: prediction-verifier               # compares observations with plan predictions; not the planner
     contract: provider-tests
     status: written
+  - id: sandbox
+    phase: plan
+    default: sandbox                           # a candidate and the incumbent: the slot's contract, then measured on a copy of the record
+    contract: provider-tests
+    status: written
   - id: catalog-lookup
     phase: plan
     cardinality: many
