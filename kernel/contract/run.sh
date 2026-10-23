@@ -12,7 +12,8 @@ spec, log = sys.argv[1], open(sys.argv[2]).read()
 try:
     import yaml
     data = yaml.safe_load(open(spec))
-    cases = [c for inv in data["invariants"].values() for c in inv["cases"]] + data["pipeline"]["cases"]
+    cases = [c for inv in data["invariants"].values() for c in inv["cases"]]
+    cases += [c for k, sec in data.items() if k != "invariants" and isinstance(sec, dict) for c in sec.get("cases", [])]
 except ImportError:  # no PyYAML: read case lines directly
     cases = [l.strip()[2:].strip('"') for l in open(spec) if l.strip().startswith("- ") and "id:" not in l]
 passed = set(re.findall(r"ok: (.*)", log))

@@ -60,12 +60,32 @@ pipeline:
     - reviewer approval applies it
     - the new property is now approved
     - stale expect_status is a conflict, not an overwrite
+    # no extension code in the commit (R5-04, D-86)
+    - every trigger on a kernel table runs a kernel-owned kernel function
+    - kernel functions are owned by the kernel and written in SQL or PL/pgSQL
+    - security definer kernel functions pin their search path
+    - no extension owns anything in the kernel schema
+    - only the kernel owner can create objects in the kernel schema
+    - an agent cannot attach a trigger to a kernel table
 
-# To add (decided in rebuild 4, not yet in the suite):
-pending:
-  - id: feed-cursor
-    text: Every applied change set gets a monotonically increasing sequence number; a consumer reading after seq N sees every later commit exactly once (D-86, D-87).
-  - id: bitemporal-as-of
-    text: A query as of valid time T and record time R returns what was believed then (D-09).
-  - id: no-extension-in-commit
-    text: Applying a change set runs no module or extension code.
+feed:
+  text: Every applied change set gets a sequence number in commit order; a consumer reading after its cursor sees every later commit exactly once, within its clearance (D-86, D-87).
+  cases:
+    - every applied change set has one feed number
+    - feed numbers are consecutive
+    - a failed apply takes no feed number
+    - the feed lists the claims a change set added or recorded on
+    - the feed returns what comes after the cursor, in order
+    - cleared agent sees secret change sets in the feed
+    - uncleared agent does not see secret change sets in the feed
+    - a cursor skips no change set that commits concurrently
+
+history:
+  text: A query as of valid time T and record time R returns what was believed then (D-09); redaction holds at every time and clearance applies.
+  cases:
+    - as of an earlier record time, later claims are not yet known
+    - as of an earlier record time, status and belief are what was recorded then
+    - a claim is returned only at valid times inside its interval
+    - redacted content stays removed at earlier record times
+    - cleared agent sees the secret claim as of now
+    - uncleared agent cannot see the secret claim as of any time

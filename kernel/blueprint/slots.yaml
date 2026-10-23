@@ -52,8 +52,8 @@ slots:
     hook: feed
     cardinality: one
     interface: RecordStore.feed
-    default: record-postgres          # needs the applied-sequence cursor (contract: pending feed-cursor)
-    status: to-write
+    default: record-postgres          # kernel.feed + api.feed(after_seq, max_rows); contract section feed
+    status: written
   - id: belief-model
     hook: feed
     cardinality: one

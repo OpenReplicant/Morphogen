@@ -79,7 +79,7 @@ class Submitted:
 @dataclass
 class Applied:
     """One entry of the change feed: a change set that was committed."""
-    seq: int                                # monotonically increasing; consumers keep a cursor
+    seq: int                                # commit order, no gaps within a reader's clearance; consumers keep a cursor
     change_set_id: str
     scope: str
     claim_ids: Sequence[str]
@@ -93,6 +93,8 @@ class RecordStore(Protocol):
     Enforces clearance on every read. Default provider: kernel/providers/record-postgres."""
 
     def claims(self, **filters: str) -> list[JSON]: ...
+    def claims_as_of(self, valid_at: Optional[str] = None, known_at: Optional[str] = None,
+                     **filters: str) -> list[JSON]: ...           # bitemporal: true at valid_at, as recorded by known_at
     def explain(self, claim_id: str) -> JSON: ...
     def feed(self, after_seq: int, limit: int = 100) -> list[Applied]: ...   # change feed, cursor based
 

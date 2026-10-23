@@ -59,7 +59,8 @@ Reference implementation (read-only): `OpenReplicant/kernel` (rebuild 4). Port f
 ## Checks
 
 ```sh
-PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 30 cases today
+PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 50 cases today
+PGHOST=... PGUSER=... python3 kernel/providers/record-postgres/tests/mutants.py   # every mutant must fail
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
 ```
 

@@ -15,6 +15,6 @@ description: Set up the environment and run every check for this repo (Postgres 
    (`/tmp` may not be writable by the postgres user; `/var/tmp` is.)
 2. `sh kernel/contract/run.sh` → every case passes.
 3. `python3 scripts/check_boundary.py` → boundary ok.
-4. Mutation check when you add or change a contract case: disable the check in a copy of the provider (`kernel/providers/_mutant`), run `sh kernel/contract/run.sh _mutant`, confirm it fails, delete the copy.
+4. Mutation check when you add or change a contract case: add a mutant to `kernel/providers/record-postgres/tests/mutants.py` (it breaks the check in a copy, `kernel/providers/_mutant`, runs the contract and deletes the copy) and run it: every mutant must fail.
 5. Run the `invariant-reviewer` agent before committing.
 6. CI (`.github/workflows/ci.yml`) runs steps 2 and 3 on every push.

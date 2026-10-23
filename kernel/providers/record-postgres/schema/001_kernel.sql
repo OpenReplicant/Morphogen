@@ -122,6 +122,26 @@ create table kernel.change_set (
   applied_at       timestamptz
 );
 
+-- The change feed (D-86): one row per applied change set, numbered in commit order. Consumers keep a
+-- cursor (the last seq they read) and read what comes after it. A failed apply takes no number.
+-- Numbers come from feed_head, not a sequence: apply locks its one row until the transaction commits,
+-- so a change set that commits later always gets a larger number, and a reader that has seen N has
+-- already seen every number below it (a sequence can hand out N+1 to a transaction that commits
+-- before N's, and a cursor at N+1 then skips N for good). The lock is held only from the end of
+-- apply to the commit. Readers see the rows of scopes they may read; numbers in other scopes are gaps.
+create table kernel.feed_head (
+  one boolean primary key default true check (one),
+  seq bigint not null
+);
+insert into kernel.feed_head values (true, 0);
+
+create table kernel.feed (
+  seq        bigint primary key,
+  change_set uuid not null unique references kernel.change_set,
+  scope      text not null references kernel.scope,
+  applied_at timestamptz not null default now()
+);
+
 create table kernel.artifact (                -- prov:Entity with content; immutable, content-addressed
   sha256        text primary key check (sha256 ~ '^[0-9a-f]{64}$'),
   media_type    text not null,
@@ -161,6 +181,7 @@ create index on kernel.claim (subject, predicate);
 create index on kernel.claim (object_entity) where object_entity is not null;
 create index on kernel.claim (statement_key);
 create index on kernel.claim (scope);
+create index on kernel.claim (change_set);
 
 create table kernel.claim_reference (         -- source of a claim; quote/span follow Web Annotation selectors
   claim_id      uuid not null references kernel.claim,
@@ -191,6 +212,7 @@ create table kernel.claim_status (            -- append-only rank history; lates
   recorded_at        timestamptz not null default now()
 );
 create index on kernel.claim_status (claim_id, recorded_at desc);
+create index on kernel.claim_status (change_set);
 
 create table kernel.belief (                  -- append-only; one model may score a claim many times
   claim_id    uuid not null references kernel.claim,
@@ -202,6 +224,7 @@ create table kernel.belief (                  -- append-only; one model may scor
   computed_at timestamptz not null default now()
 );
 create index on kernel.belief (claim_id, model, computed_at desc);
+create index on kernel.belief (change_set);
 
 create table kernel.verification (
   claim_id    uuid not null references kernel.claim,
@@ -213,6 +236,7 @@ create table kernel.verification (
   recorded_at timestamptz not null default now()
 );
 create index on kernel.verification (claim_id);
+create index on kernel.verification (change_set);
 
 create table kernel.redaction (               -- erasure requests; the only path that alters stored content
   id          uuid primary key default gen_random_uuid(),
@@ -296,7 +320,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['claim','claim_reference','claim_derivation','claim_status',
-                           'belief','verification','artifact','redaction','entity'] loop
+                           'belief','verification','artifact','redaction','entity','feed'] loop
     execute format('create trigger %I before update or delete on kernel.%I
                     for each row execute function kernel.forbid_mutation()', t || '_immutable', t);
   end loop;
@@ -458,6 +482,7 @@ declare
   v_input   uuid;
   r         jsonb;
   v_art     kernel.artifact;
+  v_seq     bigint;
   v_gen_run kernel.run;
   v_cs_run  kernel.run;
   v_state   text;
@@ -616,6 +641,9 @@ begin
     end loop;
 
     update kernel.change_set set status = 'applied', applied_at = now() where id = p_id;
+    -- Last step of apply: number it for the feed. The feed_head row stays locked until commit.
+    update kernel.feed_head set seq = seq + 1 returning seq into v_seq;
+    insert into kernel.feed(seq, change_set, scope) values (v_seq, p_id, cs.target_scope);
     v_state := 'applied';
   exception when others then
     update kernel.change_set
@@ -753,9 +781,11 @@ alter table kernel.artifact         enable row level security;
 alter table kernel.change_set       enable row level security;
 alter table kernel.run              enable row level security;
 alter table kernel.redaction        enable row level security;
+alter table kernel.feed             enable row level security;
 
 create policy read_by_scope on kernel.claim for select using (kernel.can_read(scope));
 create policy read_by_scope on kernel.artifact for select using (kernel.can_read(scope));
+create policy read_by_scope on kernel.feed for select using (kernel.can_read(scope));
 -- Dependent rows are visible when their claim is (the subquery is itself filtered by RLS).
 create policy read_with_claim on kernel.claim_reference  for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
 create policy read_with_claim on kernel.claim_derivation for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
@@ -789,7 +819,7 @@ grant usage on schema kernel to kk_agent;
 grant select on kernel.prefix, kernel.setting, kernel.agent, kernel.scope, kernel.scope_grant,
                 kernel.entity, kernel.run, kernel.claim, kernel.claim_reference, kernel.claim_derivation,
                 kernel.claim_status, kernel.belief, kernel.verification, kernel.artifact,
-                kernel.change_set to kk_agent;
+                kernel.change_set, kernel.feed to kk_agent;
 grant insert (iri) on kernel.entity to kk_agent;     -- identifiers only; meaning comes from claims
 grant insert (module, plan_step, used, info) on kernel.run to kk_agent;
 grant update (status, ended_at, cost, info) on kernel.run to kk_agent;
@@ -901,11 +931,58 @@ language sql stable as $$
     'run',          (select to_jsonb(r) from kernel.run r join kernel.claim c on c.generated_by = r.id where c.id = explain.claim_id))
 $$;
 
+-- The change feed after a cursor, in commit order. claim_ids are the claims the change set added or
+-- whose status, belief or verification it recorded; predicates let a consumer gate before querying.
+-- Invoker rights: the caller sees the change sets and claims of scopes it may read.
+create function api.feed(after_seq bigint default 0, max_rows int default 100)
+returns table (seq bigint, change_set_id uuid, scope text, applied_at timestamptz,
+               claim_ids uuid[], predicates text[])
+language sql stable as $$
+  select f.seq, f.change_set, f.scope, f.applied_at, t.ids,
+         coalesce(array(select distinct c.predicate from kernel.claim c where c.id = any(t.ids)
+                        order by 1), '{}')
+  from kernel.feed f
+  cross join lateral (
+    select coalesce(array(
+      select x.id from (
+        select c.id from kernel.claim c where c.change_set = f.change_set
+        union select s.claim_id from kernel.claim_status s where s.change_set = f.change_set
+        union select b.claim_id from kernel.belief b where b.change_set = f.change_set
+        union select v.claim_id from kernel.verification v where v.change_set = f.change_set) x
+      order by x.id), '{}') as ids) t
+  where f.seq > after_seq
+  order by f.seq
+  limit max_rows
+$$;
+
+-- Claims as the record stood at record time known_at, restricted to those true at valid time
+-- valid_at (D-09): only claims recorded by then, with the status and belief recorded by then.
+-- Redacted content stays removed at every time. Invoker rights: clearance applies as in api.claims.
+create function api.claims_as_of(valid_at timestamptz default now(), known_at timestamptz default now())
+returns setof api.claims
+language sql stable as $$
+  select c.id, c.subject, c.predicate, c.object_entity, c.object_value, c.qualifiers,
+         c.valid_from, c.valid_to, c.scope, c.evidence_type, c.attributed_to, c.generated_by,
+         c.change_set, c.statement_key, c.recorded_at, c.redacted_at,
+         coalesce((select s.status from kernel.claim_status s
+                   where s.claim_id = c.id and s.recorded_at <= known_at
+                   order by s.recorded_at desc limit 1), 'normal'),
+         (select b.value from kernel.belief b
+           where b.claim_id = c.id and b.computed_at <= known_at
+             and b.model = kernel.expand((select value #>> '{}' from kernel.setting where key = 'active_belief_model'))
+           order by b.computed_at desc limit 1)
+  from kernel.claim c
+  where c.recorded_at <= known_at
+    and (c.valid_from is null or c.valid_from <= valid_at)
+    and (c.valid_to is null or c.valid_to > valid_at)
+$$;
+
 grant usage on schema api to kk_agent;
 grant select on api.claims, api.change_sets to kk_agent;
 grant select on api.review_queue to kk_reviewer;
 grant execute on function api.start_run(text, text, jsonb, jsonb), api.finish_run(uuid, text, jsonb),
-                          api.submit_change_set(jsonb), api.explain(uuid) to kk_agent;
+                          api.submit_change_set(jsonb), api.explain(uuid),
+                          api.feed(bigint, int), api.claims_as_of(timestamptz, timestamptz) to kk_agent;
 grant execute on function api.record_validation(uuid, boolean, jsonb) to kk_validator;
 grant execute on function api.review(uuid, boolean, text) to kk_reviewer;
 grant execute on function api.redact(text, text, text, uuid) to kk_steward;

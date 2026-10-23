@@ -90,6 +90,10 @@ set role t_validator;
 select public.check(api.record_validation(current_setting('t.cs1')::uuid, true, '{"shapes":"ok"}') = 'applied',
                     'validated auto-lane change set is applied');
 reset role;
+-- record time r0: claim1 known, no belief, no newer label (used by section 10)
+select pg_sleep(0.01);
+select set_config('t.r0', clock_timestamp()::text, false);
+select pg_sleep(0.01);
 
 set role t_extractor;
 select id as claim1 from api.claims where change_set = current_setting('t.cs1')::uuid \gset
@@ -216,6 +220,10 @@ select public.check((select belief from api.claims where id = current_setting('t
 reset role;
 
 -- ---------------------------------------------------------------- 6. optimistic concurrency and supersession
+-- record time r1: claim1 has its belief and is not yet superseded (used by section 10)
+select pg_sleep(0.01);
+select set_config('t.r1', clock_timestamp()::text, false);
+select pg_sleep(0.01);
 set role t_extractor;
 select api.submit_change_set(jsonb_build_object(
   'idempotency_key','test:stale','attributed_to','urn:kk:agent:extractor',
@@ -270,6 +278,153 @@ set role t_extractor;
 select api.finish_run(current_setting('t.run1')::uuid, 'succeeded', '{"tokens": 1200}');
 select public.check((select status = 'succeeded' and ended_at is not null from kernel.run where id = current_setting('t.run1')::uuid), 'agent finishes its own run with cost');
 reset role;
+
+-- ---------------------------------------------------------------- 9. change feed (D-86)
+select public.check(
+  (select count(*) from kernel.change_set where status = 'applied') = (select count(*) from kernel.feed)
+  and not exists (select 1 from kernel.feed f join kernel.change_set c on c.id = f.change_set where c.status <> 'applied'),
+  'every applied change set has one feed number');
+select public.check(
+  (select min(seq) = 1 and max(seq) = count(*) from kernel.feed),
+  'feed numbers are consecutive');
+select public.check(
+  not exists (select 1 from kernel.feed where change_set in (:'cs_noquote'::uuid, :'cs_leak'::uuid, :'cs_stale'::uuid)),
+  'a failed apply takes no feed number');
+
+set role t_extractor;
+select id as claim_new from api.claims where change_set = :'cs_supersede'::uuid \gset
+select public.check(
+  (select claim_ids @> array[current_setting('t.claim1')::uuid, :'claim_new'::uuid]
+          and predicates = array[kernel.expand('rdfs:label')]
+     from api.feed(0, 100000) where change_set_id = :'cs_supersede'::uuid)
+  and (select claim_ids = array[current_setting('t.claim1')::uuid]
+         from api.feed(0, 100000) where change_set_id = :'cs_verify'::uuid),
+  'the feed lists the claims a change set added or recorded on');
+select public.check(
+  (select array_agg(seq order by seq) = array_agg(seq) from api.feed(2, 3))
+  and (select min(seq) = 3 from api.feed(2, 3)) and (select count(*) = 3 from api.feed(2, 3)),
+  'the feed returns what comes after the cursor, in order');
+select public.check(exists (select 1 from api.feed(0, 100000) where scope = 'urn:kk:scope:secret'),
+                    'cleared agent sees secret change sets in the feed');
+reset role;
+set role t_verifier;
+select public.check(not exists (select 1 from api.feed(0, 100000) where scope = 'urn:kk:scope:secret'),
+                    'uncleared agent does not see secret change sets in the feed');
+reset role;
+
+-- Two applies at once. A applies first but commits last; a reader takes its cursor while A is open.
+-- After both commit, reading after that cursor must return both (no commit is skipped).
+set role t_extractor;
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:feed-a','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default',
+  'ops','[{"op":"add_entity","iri":"ex:feed/a"}]'::jsonb))->>'id' as cs_fa \gset
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:feed-b','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default',
+  'ops','[{"op":"add_entity","iri":"ex:feed/b"}]'::jsonb))->>'id' as cs_fb \gset
+reset role;
+create extension if not exists dblink schema public;   -- test harness only; the kernel uses no extensions
+select dblink_connect('a', :'conn');
+select dblink_connect('b', :'conn');
+select dblink_exec('a', 'begin');
+select dblink_exec('a', 'set role t_validator');
+select dblink_exec('b', 'set role t_validator');
+select * from dblink('a', format('select api.record_validation(%L::uuid, true)', :'cs_fa')) as t(state text);
+select dblink_send_query('b', format('select api.record_validation(%L::uuid, true)', :'cs_fb'));
+select pg_sleep(0.3);
+set role t_extractor;
+select coalesce(max(seq), 0) as feed_cursor from api.feed(0, 100000) \gset
+reset role;
+select dblink_exec('a', 'commit');
+select * from dblink_get_result('b') as t(state text);
+select dblink_disconnect('a');
+select dblink_disconnect('b');
+set role t_extractor;
+select public.check(
+  (select count(*) from api.feed(:'feed_cursor'::bigint, 100000) where change_set_id in (:'cs_fa'::uuid, :'cs_fb'::uuid)) = 2,
+  'a cursor skips no change set that commits concurrently');
+reset role;
+
+-- ---------------------------------------------------------------- 10. bitemporal as-of (D-09)
+set role t_extractor;
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:validtime','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default',
+  'ops', jsonb_build_array(jsonb_build_object('op','add_claim','subject','ex:service/billing','predicate','rdfs:comment',
+     'object', jsonb_build_object('value', jsonb_build_object('@value','ran on the old cluster')),
+     'valid_from','2020-01-01T00:00:00Z','valid_to','2021-01-01T00:00:00Z',
+     'evidence_type','deterministic','references', jsonb_build_array(jsonb_build_object('source_uri','https://example.org/history'))))))->>'id' as cs_vt \gset
+reset role;
+set role t_validator;
+select api.record_validation(:'cs_vt'::uuid, true);
+reset role;
+
+set role t_extractor;
+select public.check(
+  exists (select 1 from api.claims_as_of(now(), current_setting('t.r0')::timestamptz) where id = current_setting('t.claim1')::uuid)
+  and not exists (select 1 from api.claims_as_of(now(), current_setting('t.r0')::timestamptz) where id = :'claim_new'::uuid),
+  'as of an earlier record time, later claims are not yet known');
+select public.check(
+  (select status = 'normal' and belief is null from api.claims_as_of(now(), current_setting('t.r0')::timestamptz)
+    where id = current_setting('t.claim1')::uuid)
+  and (select status = 'normal' and belief = 0.75 from api.claims_as_of(now(), current_setting('t.r1')::timestamptz)
+    where id = current_setting('t.claim1')::uuid)
+  and (select status = 'deprecated' from api.claims_as_of() where id = current_setting('t.claim1')::uuid),
+  'as of an earlier record time, status and belief are what was recorded then');
+select public.check(
+  exists (select 1 from api.claims_as_of('2020-06-01', now()) where change_set = :'cs_vt'::uuid)
+  and not exists (select 1 from api.claims_as_of('2022-06-01', now()) where change_set = :'cs_vt'::uuid)
+  and not exists (select 1 from api.claims_as_of('2019-06-01', now()) where change_set = :'cs_vt'::uuid),
+  'a claim is returned only at valid times inside its interval');
+select public.check(
+  (select object_value is null from api.claims_as_of(now(), current_setting('t.r0')::timestamptz)
+    where id = current_setting('t.claim1')::uuid),
+  'redacted content stays removed at earlier record times');
+select public.check(exists (select 1 from api.claims_as_of() where scope = 'urn:kk:scope:secret'),
+                    'cleared agent sees the secret claim as of now');
+reset role;
+set role t_verifier;
+select public.check(not exists (select 1 from api.claims_as_of() where scope = 'urn:kk:scope:secret'),
+                    'uncleared agent cannot see the secret claim as of any time');
+reset role;
+
+-- ---------------------------------------------------------------- 11. no extension code in the commit
+-- Applying runs only what the triggers on kernel tables call. Those must be the kernel's own
+-- functions, in trusted languages, with pinned search paths, in a schema nobody else can write.
+select public.check(not exists (
+  select 1 from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_proc p on p.oid = t.tgfoid
+   where c.relnamespace = 'kernel'::regnamespace and not t.tgisinternal
+     and (p.pronamespace <> 'kernel'::regnamespace or pg_get_userbyid(p.proowner) <> 'kk_owner')),
+  'every trigger on a kernel table runs a kernel-owned kernel function');
+select public.check(not exists (
+  select 1 from pg_proc p join pg_language l on l.oid = p.prolang
+   where p.pronamespace = 'kernel'::regnamespace
+     and (pg_get_userbyid(p.proowner) <> 'kk_owner' or l.lanname not in ('sql', 'plpgsql'))),
+  'kernel functions are owned by the kernel and written in SQL or PL/pgSQL');
+select public.check(not exists (
+  select 1 from pg_proc p
+   where p.pronamespace = 'kernel'::regnamespace and p.prosecdef
+     and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')),
+  'security definer kernel functions pin their search path');
+select public.check(not exists (
+  select 1 from pg_depend d
+   where d.deptype = 'e'
+     and ((d.classid = 'pg_proc'::regclass and d.objid in (select oid from pg_proc where pronamespace = 'kernel'::regnamespace))
+       or (d.classid = 'pg_class'::regclass and d.objid in (select oid from pg_class where relnamespace = 'kernel'::regnamespace)))),
+  'no extension owns anything in the kernel schema');
+select public.check(not exists (
+  select 1 from pg_roles r
+   where r.rolname <> 'kk_owner' and not r.rolsuper
+     and has_schema_privilege(r.oid, 'kernel', 'CREATE')),
+  'only the kernel owner can create objects in the kernel schema');
+create function public.t_hook() returns trigger language plpgsql as $$ begin return new; end $$;
+grant execute on function public.t_hook() to public;
+set role t_extractor;
+select public.expect_error($$create trigger t_hook after insert on kernel.claim
+                              for each row execute function public.t_hook()$$, '42501');
+reset role;
+select public.check(true, 'an agent cannot attach a trigger to a kernel table');
+
 
 \o
 select 'ALL KERNEL TESTS PASSED' as result;
