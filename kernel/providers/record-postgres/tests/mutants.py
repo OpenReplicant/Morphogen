@@ -26,7 +26,18 @@ MUTANTS = [
   ("agents may create in the kernel schema", [("grant usage on schema kernel to kk_agent;", "grant usage, create on schema kernel to kk_agent;")]),
   ("definer function without a search path", [("create function kernel.change_set_after_update() returns trigger\nlanguage plpgsql security definer set search_path = kernel, pg_catalog as $$",
                                                "create function kernel.change_set_after_update() returns trigger\nlanguage plpgsql security definer as $$")]),
+ ("concurrency failure marks the change set invalid", [("    if sqlstate in ('40001', '40P01', '55P03') then\n      raise;\n    end if;\n", "")]),
+  ("non-kernel function in a column default", [("\nreset role;\n", "\nreset role;\n" "create function public.mut_fn() returns text language sql as $m$ select 'x' $m$;\n"
+     "alter table kernel.claim add column mut text default public.mut_fn();\n")]),
+  ("non-kernel function in a policy", [("\nreset role;\n", "\nreset role;\n" "create function public.mut_fn() returns boolean language sql as $m$ select true $m$;\n"
+     "create policy mut on kernel.change_set for update using (public.mut_fn());\n")]),
+  ("apply calls a non-kernel function", [("    v_state := 'applied';\n  exception", "    perform public.mut_fn();\n    v_state := 'applied';\n  exception"),
+     ("\nreset role;\n", "\nreset role;\n" "create function public.mut_fn() returns text language sql as $m$ select 'x' $m$;\n")]),
 ]
+# A mutant "fails" for any reason, including no database: the unmutated provider must pass first.
+base = subprocess.run(["sh", f"{REPO}/kernel/contract/run.sh"], capture_output=True, text=True)
+if base.returncode:
+    sys.exit("the unmutated provider fails the contract; fix that (or the connection) first:\n" + base.stdout[-500:] + base.stderr[-500:])
 survivors = []
 for name, edits in [m for m in MUTANTS if len(sys.argv) < 2 or sys.argv[1] in m[0]]:
     if os.path.exists(MUT): shutil.rmtree(MUT)

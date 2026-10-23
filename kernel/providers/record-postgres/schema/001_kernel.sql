@@ -646,6 +646,11 @@ begin
     insert into kernel.feed(seq, change_set, scope) values (v_seq, p_id, cs.target_scope);
     v_state := 'applied';
   exception when others then
+    -- Concurrency failures (serialization, deadlock, lock timeout, e.g. on feed_head) say nothing
+    -- about the change set: raise them so the caller retries, never mark it invalid for good.
+    if sqlstate in ('40001', '40P01', '55P03') then
+      raise;
+    end if;
     update kernel.change_set
        set status = case when sqlstate = 'KK409' then 'conflict' else 'invalid' end,
            validation_report = coalesce(validation_report, '{}'::jsonb)

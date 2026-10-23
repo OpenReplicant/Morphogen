@@ -29,6 +29,21 @@ begin
   raise notice 'ok: %', p_msg;
 end $$;
 
+-- Waits until a dblink session's query has finished or is waiting on a lock (at most 10 s), so a
+-- concurrency test never depends on how long a sleep takes on a given machine.
+create function public.wait_blocked_or_done(p_conn text, p_pid int) returns text
+language plpgsql as $$
+begin
+  for i in 1..200 loop
+    if dblink_is_busy(p_conn) = 0 then return 'done'; end if;
+    if exists (select 1 from pg_stat_activity where pid = p_pid and wait_event_type = 'Lock') then
+      return 'blocked';
+    end if;
+    perform pg_sleep(0.05);
+  end loop;
+  raise exception 'session % neither finished nor waited on a lock', p_conn;
+end $$;
+
 -- ---------------------------------------------------------------- fixtures
 create role t_extractor nologin;  grant kk_agent to t_extractor;
 create role t_verifier nologin;   grant kk_agent to t_verifier;
@@ -328,21 +343,51 @@ select dblink_connect('b', :'conn');
 select dblink_exec('a', 'begin');
 select dblink_exec('a', 'set role t_validator');
 select dblink_exec('b', 'set role t_validator');
+select pid as pid_b from dblink('b', 'select pg_backend_pid()') as t(pid int) \gset
 select * from dblink('a', format('select api.record_validation(%L::uuid, true)', :'cs_fa')) as t(state text);
 select dblink_send_query('b', format('select api.record_validation(%L::uuid, true)', :'cs_fb'));
-select pg_sleep(0.3);
+select public.wait_blocked_or_done('b', :pid_b);
 set role t_extractor;
 select coalesce(max(seq), 0) as feed_cursor from api.feed(0, 100000) \gset
 reset role;
 select dblink_exec('a', 'commit');
 select * from dblink_get_result('b') as t(state text);
-select dblink_disconnect('a');
-select dblink_disconnect('b');
+select * from dblink_get_result('b') as t(state text);
 set role t_extractor;
 select public.check(
   (select count(*) from api.feed(:'feed_cursor'::bigint, 100000) where change_set_id in (:'cs_fa'::uuid, :'cs_fb'::uuid)) = 2,
   'a cursor skips no change set that commits concurrently');
 reset role;
+
+-- The same race under repeatable read: B cannot take the next number once A commits. That is a
+-- retry for the caller, never a verdict on the change set.
+set role t_extractor;
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:feed-c','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default',
+  'ops','[{"op":"add_entity","iri":"ex:feed/c"}]'::jsonb))->>'id' as cs_fc \gset
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:feed-d','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default',
+  'ops','[{"op":"add_entity","iri":"ex:feed/d"}]'::jsonb))->>'id' as cs_fd \gset
+reset role;
+select dblink_exec('a', 'begin');
+select * from dblink('a', format('select api.record_validation(%L::uuid, true)', :'cs_fc')) as t(state text);
+select dblink_exec('b', 'begin isolation level repeatable read');
+select dblink_send_query('b', format('select api.record_validation(%L::uuid, true)', :'cs_fd'));
+select public.wait_blocked_or_done('b', :pid_b);
+select dblink_exec('a', 'commit');
+select count(*) as rr_rows from dblink_get_result('b', false) as t(state text) \gset
+select dblink_error_message('b') as rr_error \gset
+select count(*) from dblink_get_result('b', false) as t(state text);
+select dblink_exec('b', 'rollback');
+select public.check(
+  (select status from kernel.change_set where id = :'cs_fd'::uuid) = 'submitted'
+  and :rr_rows = 0 and :'rr_error' like '%serialize%',
+  'a concurrent apply that cannot serialize is retried, not marked invalid');
+select * from dblink('b', format('select api.record_validation(%L::uuid, true)', :'cs_fd')) as t(state text);
+select public.check((select status from kernel.change_set where id = :'cs_fd'::uuid) = 'applied',
+                    'the retried apply succeeds');
+select dblink_disconnect('a');
+select dblink_disconnect('b');
 
 -- ---------------------------------------------------------------- 10. bitemporal as-of (D-09)
 set role t_extractor;
@@ -382,7 +427,11 @@ select public.check(exists (select 1 from api.claims_as_of() where scope = 'urn:
                     'cleared agent sees the secret claim as of now');
 reset role;
 set role t_verifier;
-select public.check(not exists (select 1 from api.claims_as_of() where scope = 'urn:kk:scope:secret'),
+select public.check(not exists (select 1 from api.claims_as_of() where scope = 'urn:kk:scope:secret')
+                    and not exists (select 1 from api.claims_as_of(now() - interval '1 day', current_setting('t.r1')::timestamptz)
+                                    where scope = 'urn:kk:scope:secret')
+                    and not exists (select 1 from api.claims_as_of(current_setting('t.r1')::timestamptz, now())
+                                    where scope = 'urn:kk:scope:secret'),
                     'uncleared agent cannot see the secret claim as of any time');
 reset role;
 
@@ -412,6 +461,27 @@ select public.check(not exists (
      and ((d.classid = 'pg_proc'::regclass and d.objid in (select oid from pg_proc where pronamespace = 'kernel'::regnamespace))
        or (d.classid = 'pg_class'::regclass and d.objid in (select oid from pg_class where relnamespace = 'kernel'::regnamespace)))),
   'no extension owns anything in the kernel schema');
+select public.check(not exists (
+  select 1 from pg_depend d
+    join pg_proc p on p.oid = d.refobjid
+   where d.refclassid = 'pg_proc'::regclass
+     and p.pronamespace not in ('kernel'::regnamespace, 'pg_catalog'::regnamespace)
+     and ((d.classid = 'pg_attrdef'::regclass
+           and (select adrelid from pg_attrdef where oid = d.objid) in (select oid from pg_class where relnamespace = 'kernel'::regnamespace))
+       or (d.classid = 'pg_constraint'::regclass
+           and exists (select 1 from pg_constraint k where k.oid = d.objid
+                         and (k.conrelid in (select oid from pg_class where relnamespace = 'kernel'::regnamespace)
+                              or k.contypid in (select a.atttypid from pg_attribute a join pg_class c on c.oid = a.attrelid
+                                                 where c.relnamespace = 'kernel'::regnamespace))))
+       or (d.classid = 'pg_policy'::regclass
+           and (select polrelid from pg_policy where oid = d.objid) in (select oid from pg_class where relnamespace = 'kernel'::regnamespace))
+       or (d.classid = 'pg_rewrite'::regclass
+           and (select ev_class from pg_rewrite where oid = d.objid) in (select oid from pg_class where relnamespace = 'kernel'::regnamespace)))),
+  'defaults, constraints, policies and rules on kernel tables call only kernel functions');
+select public.check(not exists (
+  select 1 from pg_proc p, regexp_matches(p.prosrc, '([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*\(', 'g') m
+   where p.pronamespace = 'kernel'::regnamespace and lower(m[1]) not in ('kernel', 'pg_catalog')),
+  'kernel functions call no function outside the kernel by name');
 select public.check(not exists (
   select 1 from pg_roles r
    where r.rolname <> 'kk_owner' and not r.rolsuper

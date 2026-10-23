@@ -62,6 +62,8 @@ pipeline:
     - stale expect_status is a conflict, not an overwrite
     # no extension code in the commit (R5-04, D-86)
     - every trigger on a kernel table runs a kernel-owned kernel function
+    - defaults, constraints, policies and rules on kernel tables call only kernel functions
+    - kernel functions call no function outside the kernel by name
     - kernel functions are owned by the kernel and written in SQL or PL/pgSQL
     - security definer kernel functions pin their search path
     - no extension owns anything in the kernel schema
@@ -79,6 +81,8 @@ feed:
     - cleared agent sees secret change sets in the feed
     - uncleared agent does not see secret change sets in the feed
     - a cursor skips no change set that commits concurrently
+    - a concurrent apply that cannot serialize is retried, not marked invalid
+    - the retried apply succeeds
 
 history:
   text: A query as of valid time T and record time R returns what was believed then (D-09); redaction holds at every time and clearance applies.

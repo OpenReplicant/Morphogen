@@ -6,7 +6,7 @@ pipeline) must pass `../contract/run.sh <provider>`.
 
 | Provider | Slot(s) | Status |
 | --- | --- | --- |
-| record-postgres | record-store, write-pipeline, lane-policy (review rules), change-feed (applied-sequence cursor), as-of reads | Ported from rebuild 4 `kernel/schema`, plus the feed and `api.claims_as_of` (T1); 50/50 contract cases; `tests/mutants.py` |
+| record-postgres | record-store, write-pipeline, lane-policy (review rules), change-feed (applied-sequence cursor), as-of reads | Ported from rebuild 4 `kernel/schema`, plus the feed and `api.claims_as_of` (T1); 54/54 contract cases; 14 mutants in `tests/mutants.py`, all fail |
 | filter-gitleaks | intake-filter | To port (rebuild 4 `modules/ingest-filter-gitleaks`) |
 | validator-schema | validator | To write; SHACL validator as a candidate |
 | belief-corroboration | belief-model | To port |
