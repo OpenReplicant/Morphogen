@@ -58,7 +58,7 @@ def main() -> None:
     tmp = Path(tempfile.mkdtemp())
     exp = tmp / "exp1"
     exp.mkdir()
-    shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "anomaly-recent", exp / "anomaly-recent",
+    shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", exp / "anomaly-recent",
                     ignore=shutil.ignore_patterns("__pycache__"))
     (exp / "experiment.yaml").write_text("slot: analyser\nincumbent: morphogen/modules/anomaly\ncandidate: anomaly-recent\n")
 
