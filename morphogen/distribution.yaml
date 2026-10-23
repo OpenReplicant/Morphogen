@@ -24,38 +24,47 @@ uses_kernel_slots:
 
 # The MAPE-K loop and design path. status: to-port (from rebuild 4) | to-rewrite | new | ported | written
 # Providers live in modules/<name>/ (provider.yaml); morphogen/tests/test_loop.py runs the loop (T5).
+# contract: a case set every provider of the slot must pass (contract/slots/<slot>), or provider-tests
+# (a declared gap); paths relative to this file (R5-21). morphogen/contract/run.sh checks it.
 slots:
   - id: design-agent
     phase: design
     default: interview-encoder + map-gaps      # rebuild 4: encoder-interaction, skill-interview, map-gaps
+    contract: provider-tests
     status: to-port
   - id: observer
     phase: monitor
     cardinality: many
     default: observer-otel                     # OTLP/HTTP receiver -> SOSA observations; observer-prometheus to port
+    contract: provider-tests
     status: written
   - id: analyser
     phase: analyse
     cardinality: many
     default: anomaly                           # rebuild 4: modules/anomaly (detect.py unchanged)
+    contract: contract/slots/analyser
     status: ported
   - id: planner
     phase: plan
     default: planner                           # fixed action list; plans carry a prediction and a risk class
+    contract: provider-tests
     status: written                            # a model-driven planner is a candidate provider (rebuild 4 skill)
   - id: actuator
     phase: execute
     cardinality: many
     default: intent-actuator                   # approved plan steps become commits; deploy/reconcile.py runs them
+    contract: provider-tests
     status: written
   - id: outcome-verifier
     phase: verify
     default: prediction-verifier               # compares observations with plan predictions; not the planner
+    contract: provider-tests
     status: written
   - id: catalog-lookup
     phase: plan
     cardinality: many
     default: registry-lookup                   # configured registries, matched on slot requirements
+    contract: provider-tests
     status: new
 
 lane_policy:

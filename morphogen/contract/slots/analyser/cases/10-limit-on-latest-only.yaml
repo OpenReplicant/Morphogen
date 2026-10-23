@@ -1,0 +1,36 @@
+id: urn:kk:eval:analyser/limit-on-latest-only
+text: only the latest 3 windows are compared with the limit
+input:
+  observations:
+  - id: h0
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 0
+    value: 0.5
+  - id: h1
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 1
+    value: 0.01
+  - id: h2
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 2
+    value: 0.01
+  - id: h3
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 3
+    value: 0.01
+  - id: h4
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 4
+    value: 0.01
+  limits:
+  - id: L
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    value: 0.2
+expect:
+  anomalies: []

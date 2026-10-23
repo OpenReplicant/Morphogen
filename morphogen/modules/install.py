@@ -18,7 +18,7 @@ KERNEL_PROVIDERS = ["pack-loader", "validator-shacl", "belief-corroboration"]
 
 
 def modules() -> list[str]:
-    return sorted(p.name for p in HERE.iterdir() if (p / "migration.sql").exists())
+    return sorted(p.name for p in HERE.iterdir() if (p / "migration.sql").exists() and not p.name.startswith("_"))
 
 
 def install(db: str, names: list[str]) -> None:

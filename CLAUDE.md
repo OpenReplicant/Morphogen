@@ -63,6 +63,7 @@ pip install -r kernel/contract/requirements.txt                       # once, in
 PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 66 record + 13 validator + 17 belief cases
 PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (38 today)
 PGHOST=... PGUSER=... python3 kernel/providers/test.py                  # each provider's tests + services end to end
+sh morphogen/contract/run.sh [--mutants]                               # Morphogen's slot contracts (analyser: 11 cases, 7 mutants)
 PGHOST=... PGUSER=... python3 morphogen/modules/test.py                 # each Morphogen module's tests + the full loop (T5)
 KK_EVAL_CACHE=... python3 kernel/evals/scifact/run.py fetch|setup DB|retrieval DB   # recall floor (not in CI)
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
@@ -72,7 +73,8 @@ python3 scripts/check_boundary.py                                      # kernel/
 
 ```
 kernel/                    ← becomes its own repository
-  contract/                invariants.yaml (the guarantees as named cases), slots/ (per-slot case sets), run.sh, mutants.py
+  contract/                invariants.yaml (the guarantees as named cases), slots/ (per-slot case sets), run.sh, mutants.py;
+                           every slot in the blueprint names its contract (R5-21)
   blueprint/slots.yaml     the kernel's own slots, couplings and defaults
   schemas/                 change set and module manifest (wire formats)
   src/kk/interfaces.py     slot interfaces
@@ -80,6 +82,7 @@ kernel/                    ← becomes its own repository
   packs/                   vocabulary packs (PROV, SOSA, ORG, DQV, TOSCA mirror, ...)
 morphogen/                 the distribution
   distribution.yaml        kernel slots used, application slots declared, providers chosen
+  contract/slots/          case sets for Morphogen's slots (analyser); run.sh
   modules/                 providers for Morphogen's slots (observer, planner, actuator, verifier, ...)
   intent/                  desired state orchestrators reconcile; policies (autonomy x risk)
   ui/, deploy/

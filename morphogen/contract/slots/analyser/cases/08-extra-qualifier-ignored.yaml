@@ -1,0 +1,68 @@
+id: urn:kk:eval:analyser/extra-qualifier-ignored
+text: an observation qualified by more than its property is not compared
+input:
+  observations:
+  - id: o0
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 0
+    value: 0.012
+  - id: o1
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 1
+    value: 0.013
+  - id: o2
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 2
+    value: 0.014
+  - id: o3
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 3
+    value: 0.012
+  - id: o4
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 4
+    value: 0.013
+  - id: o5
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 5
+    value: 0.014
+  - id: o6
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 6
+    value: 0.012
+  - id: o7
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 7
+    value: 0.013
+  - id: o8
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 8
+    value: 0.014
+  - id: o9
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 9
+    value: 0.012
+  - id: o10
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 10
+    value: 1.8
+    extra:
+      https://www.irit.fr/recherches/MELODI/ontologies/BBO#has_resource: urn:x:r
+  limits:
+  - id: L
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    value: 0.2
+expect:
+  anomalies: []
