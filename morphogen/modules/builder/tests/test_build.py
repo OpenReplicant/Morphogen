@@ -54,17 +54,41 @@ def main() -> None:
     except ValueError:
         check(True, "a candidate with the incumbent's id is refused")
 
-    # The harness strategy with a stand-in harness: it renames the provider, as a real one is asked to.
-    exps = Path(tempfile.mkdtemp())
+    shutil.copytree(ROOT / "morphogen" / "modules" / "anomaly", bad / "grants", ignore=shutil.ignore_patterns("__pycache__"))
+    (bad / "grants" / "provider.yaml").write_text((bad / "grants" / "provider.yaml").read_text().replace("provider:anomaly", "provider:anomaly-g"))
+    (bad / "grants" / "migration.sql").write_text("grant kkm_evaluator to kkm_anomaly;\n")
+    try:
+        check_candidate(bad / "grants", "analyser", "urn:kk:provider:anomaly", ROOT / "morphogen" / "modules" / "anomaly")
+        check(False, "a candidate with a migration of its own is refused")
+    except ValueError:
+        check(True, "a candidate with a migration of its own is refused")
+
+    # The harness strategy with a stand-in harness: it renames the provider, as a real one is asked to, in a
+    # directory outside intent, without the record's credentials.
+    home = Path(tempfile.mkdtemp())
+    subprocess.run(["git", "-C", str(home), "init", "-q"], check=True)
+    exps = home / "experiments"
     script = bad / "harness.py"
-    script.write_text("import sys, pathlib\np = pathlib.Path(sys.argv[1]) / 'provider.yaml'\n"
+    script.write_text("import os, sys, pathlib\np = pathlib.Path(sys.argv[1]) / 'provider.yaml'\n"
                       "p.write_text(p.read_text().replace('urn:kk:provider:anomaly', 'urn:kk:provider:anomaly-h'))\n"
-                      "assert 'analyser' in sys.argv[2]\n")
+                      "assert 'analyser' in sys.argv[2] and 'experiments' not in sys.argv[1]\n"
+                      "assert not any(k == 'DATABASE_URL' or k.startswith(('PG', 'KK_')) for k in os.environ)\n"
+                      "if len(sys.argv) > 3: pathlib.Path(sys.argv[3]).write_text('x')\n")
+    os.environ["DATABASE_URL"] = "dbname=secret"
     got = build({"iri": "urn:kk:request:h", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
                 "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}")
     check(got["provider"] == "urn:kk:provider:anomaly-h" and (got["dir"] / "prompt.md").exists()
-          and "tests/contract.py" in (got["dir"] / "prompt.md").read_text(),
-          "harness: the incumbent copied, the harness run on it with a prompt naming the contract")
+          and "runner.py" in (got["dir"] / "prompt.md").read_text(),
+          "harness: the incumbent copied outside intent, the harness run there without the record's credentials, "
+          "with a prompt naming the slot's runner")
+    try:
+        build({"iri": "urn:kk:request:h2", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
+              "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} {home / 'stray.txt'}")
+        check(False, "a harness that writes outside its workdir fails the build")
+    except RuntimeError as e:
+        check("outside its workdir" in str(e) and not (exps / experiment_id("urn:kk:request:h2")).exists(),
+              "a harness that writes outside its workdir fails the build")
+    del os.environ["DATABASE_URL"]
 
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
     install.install(DB, install.modules())

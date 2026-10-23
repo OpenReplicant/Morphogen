@@ -5,6 +5,8 @@
   provider_dir(provider)          a provider's directory, from its id (Morphogen's modules, then the kernel's)
   provider_slots(provider)        the slots a provider says it fills
   candidate_dir(intent, provider) a candidate's directory in an experiment, from its id
+  tree_hash(dir)                  a provider directory's content hash (the builder records it; the plan
+                                  carries it; the actuator checks it)
 """
 from __future__ import annotations
 
@@ -21,6 +23,13 @@ EXPERIMENT = re.compile(r"x[0-9a-f]{12}")
 
 def experiment_id(request: str) -> str:
     return "x" + hashlib.sha256(request.encode()).hexdigest()[:12]
+
+
+def tree_hash(d: Path) -> str:
+    h = hashlib.sha256()
+    for p in sorted(x for x in d.rglob("*") if x.is_file() and "__pycache__" not in x.parts):
+        h.update(str(p.relative_to(d)).encode() + b"\0" + p.read_bytes() + b"\0")
+    return h.hexdigest()
 
 
 def run_name(exp_id: str, role: str) -> str:

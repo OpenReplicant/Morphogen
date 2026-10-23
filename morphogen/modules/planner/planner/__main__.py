@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -199,7 +200,11 @@ def replace_for(cur, r: dict, lane) -> dict:
                  (cand["provider"], BUILDER))
     if not built:
         return {"wait": f"the builder has not recorded {cand['provider']}"}
-    cand = {**cand, "claim_ids": cand["claim_ids"] + [str(b["id"]) for b in built]}
+    refs = rows(cur, "select source_uri from api.claim_references where claim_id = any(%s::uuid[])", ([str(b["id"]) for b in built],))
+    shas = {m.group(1) for r in refs if (m := re.search(r"#sha256=([0-9a-f]{64})$", r["source_uri"] or ""))}
+    if len(shas) != 1:
+        return {"none": f"the builder recorded {len(shas)} content hashes for {cand['provider']}, not one"}
+    cand = {**cand, "claim_ids": cand["claim_ids"] + [str(b["id"]) for b in built], "sha256": shas.pop()}
     got = replacement(r, inc, cand, r["limit"])
     if "none" in got:
         return got

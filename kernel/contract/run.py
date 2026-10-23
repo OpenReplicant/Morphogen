@@ -14,8 +14,10 @@ Defaults: the kernel's blueprint and kernel/providers. A distribution passes its
 `--blueprint kernel/blueprint/slots.yaml --blueprint <distribution>.yaml --providers <its modules>`.
 A provider's runner (provider.yaml `runner`, run in its directory, with KK_CASES naming the slot's case
 set directory when there is one) prints "ok: <case>" at the start of a line (or after a psql NOTICE
-prefix) per passing case. Fails on a provider slot no blueprint declares, a
-slot with no `contract:`, a contract path that does not exist, a case set with no cases, a provider whose
+prefix) per passing case. A case set may name its own runner (set.yaml `runner:`, relative to the set,
+run with the provider's directory as its argument): then the provider's runner is not used, so a provider
+cannot certify itself (R5-21). Fails on a slot two blueprints declare, a provider slot no blueprint
+declares, a slot with no `contract:`, a contract path that does not exist, a case set with no cases, a provider whose
 slot has cases but no runner, or no providers at all. Lists the slots whose contract is provider-tests.
 """
 import argparse
@@ -42,6 +44,8 @@ def contracts(blueprints: list[Path]) -> dict[str, object]:
             c = s.get("contract")
             if c is None:
                 raise SystemExit(f"{bp}: slot {s['id']} declares no contract (a case set, provider-tests or none)")
+            if s["id"] in out:
+                raise SystemExit(f"{bp}: slot {s['id']} is already declared by another blueprint")
             if c == "none" and s.get("default") not in ("none", None):
                 raise SystemExit(f"{bp}: slot {s['id']} has a default provider but contract none")
             out[s["id"]] = c if c in SPECIAL else (bp.parent / c).resolve()
@@ -94,13 +98,17 @@ def check(d: Path, blueprints: list[Path]) -> bool:
     if not cases:
         print(f"{name}: no contract cases for slots {meta['slots']} (provider-tests)")
         return True
-    if not meta.get("runner"):
+    sets = [c for c in (table[s] for s in meta["slots"]) if isinstance(c, Path) and c.is_dir()]
+    own = [c / r for c in sets if (r := (yaml.safe_load((c / "set.yaml").read_text()) or {}).get("runner"))]
+    if own:
+        cmd = [sys.executable, str(own[0]), str(d.resolve())]
+    elif not meta.get("runner"):
         print(f"{name}: FAIL: slots {meta['slots']} have contract cases but the provider has no runner")
         return False
-    cmd = shlex.split(meta["runner"])
+    else:
+        cmd = shlex.split(meta["runner"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable   # the interpreter that has the contract requirements
-    sets = [c for c in (table[s] for s in meta["slots"]) if isinstance(c, Path) and c.is_dir()]
     env = {**os.environ, **({"KK_CASES": str(sets[0])} if len(sets) == 1 else {})}
     out = subprocess.run(cmd, cwd=d, capture_output=True, text=True, env=env)
     log = out.stdout + out.stderr

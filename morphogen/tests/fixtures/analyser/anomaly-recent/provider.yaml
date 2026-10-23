@@ -5,6 +5,5 @@ license: Apache-2.0
 slots: [analyser]
 origin: candidate for the analyser slot (G2 fixture, the builder CI uses); detect.py as the incumbent's, the query reads only what it compares, and a pass is skipped while the feed has not moved
 requires: Python 3.12+, psycopg
-runner: python3 tests/contract.py
 service: python3 -m anomaly_recent
 note: takes over the analyser's agent and role (urn:kk:agent:anomaly, kkm_anomaly); its runs name its own module

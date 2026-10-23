@@ -50,3 +50,22 @@ check(run.expected(["s", "u"], [d / "gap.yaml"]) == [], "provider-tests and none
 kernel = run.contracts(run.BLUEPRINTS)
 check(all(c is not None for c in kernel.values()) and str(kernel["validator"]).endswith("contract/slots/validator"),
       "every kernel slot declares its contract")
+
+# A slot declared by two blueprints is refused: a distribution cannot redeclare a kernel slot's contract.
+(d / "again.yaml").write_text("slots:\n  - {id: s, default: q, contract: provider-tests}\n")
+try:
+    run.contracts([d / "bp.yaml", d / "again.yaml"])
+    check(False, "a slot two blueprints declare is refused")
+except SystemExit:
+    check(True, "a slot two blueprints declare is refused")
+
+# A case set's own runner is used instead of the provider's: a provider cannot certify itself.
+(d / "set" / "set.yaml").write_text("slot: s\nrunner: runner.py\n")
+(d / "set" / "runner.py").write_text("import sys, pathlib\nprint('ok: urn:x:case/a' if (pathlib.Path(sys.argv[1]) / 'good').exists() else 'FAIL')\n")
+prov = d / "providers" / "p"
+prov.mkdir(parents=True)
+(prov / "provider.yaml").write_text("id: urn:kk:provider:p\nslots: [s]\nrunner: python3 claims.py\n")
+(prov / "claims.py").write_text("print('ok: urn:x:case/a')\n")
+check(not run.check(prov, [d / "bp.yaml"]), "a provider whose own runner prints every case still fails the slot's runner")
+(prov / "good").write_text("")
+check(run.check(prov, [d / "bp.yaml"]), "the slot's runner, given the provider's directory, passes it")

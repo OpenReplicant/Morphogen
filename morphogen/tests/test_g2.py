@@ -19,6 +19,7 @@ prediction. Every step is a separate service on one record; every step cites the
 """
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -89,6 +90,7 @@ def history(targets: int, windows: int) -> list[dict]:
 
 def main() -> None:
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
+    os.environ.setdefault("KK_LOGIN_PASSWORD", secrets.token_hex(16))   # the modules' own logins (R5-22)
     install.install(DB, install.modules())
     url = f"dbname={DB}"
     with connect(url=url) as su:

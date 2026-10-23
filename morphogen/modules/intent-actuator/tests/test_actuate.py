@@ -74,17 +74,24 @@ restore(intent, f)                                # as after a commit that faile
 check(subprocess.run(["git", "-C", str(intent), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
       and 'KK_POLL_SECONDS: "0.5"' in f.read_text(), "a failed commit leaves the file as committed, index and work tree")
 # Replacing a provider with a measured candidate (G2).
-from intent_actuator.actuate import SUBSTITUTED_BY, intent_file, replace  # noqa: E402
+from intent_actuator.actuate import CHECKSUM, SUBSTITUTED_BY, intent_file, replace  # noqa: E402
+from morphogen.experiments import tree_hash  # noqa: E402
 exp = intent / "experiments" / "x0123456789ab"
 shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", exp / "anomaly-recent",
                 ignore=shutil.ignore_patterns("__pycache__"))
 af = intent / "environments" / "sandbox" / "anomaly.yaml"
 af.write_text("provider: anomaly\nservice: python3 -m anomaly\ncwd: morphogen/modules/anomaly\nenv:\n  KK_SWEEP_SECONDS: \"2\"\n")
 rs = [c("1", RDF_TYPE, SOSA + "Actuation"), c("2", PPLAN_STEP_OF, PLAN), c("3", DCT_TYPE, "urn:kk:action:replace-provider"),
-      c("4", SOSA + "hasFeatureOfInterest", "urn:kk:provider:anomaly"), c("5", SUBSTITUTED_BY, "urn:kk:provider:anomaly-recent")]
+      c("4", SOSA + "hasFeatureOfInterest", "urn:kk:provider:anomaly"),
+      {**c("5", SUBSTITUTED_BY, "urn:kk:provider:anomaly-recent"), "qualifiers": {CHECKSUM: tree_hash(exp / "anomaly-recent")}}]
 r = steps(rs, person)[0]
 check(r["candidate"] == "urn:kk:provider:anomaly-recent" and refusal(r, ACTS, intent, "sandbox") is None,
       "a replacement by an experiment's candidate, approved: carried out")
+check("no content hash" in refusal({**r, "sha256": None}, ACTS, intent, "sandbox"), "a replacement naming no content hash is refused")
+(exp / "anomaly-recent" / "anomaly_recent" / "extra.py").write_text("x = 1\n")
+check("not the code that was measured" in refusal(r, ACTS, intent, "sandbox"),
+      "a candidate changed after it was measured is refused")
+(exp / "anomaly-recent" / "anomaly_recent" / "extra.py").unlink()
 check("not one experiment" in refusal({**r, "candidate": "urn:kk:provider:elsewhere"}, ACTS, intent, "sandbox"),
       "a candidate that is not in an experiment is refused")
 change = replace(intent, af, "urn:kk:provider:anomaly-recent")

@@ -1,18 +1,21 @@
-"""Runs the analyser slot contract (morphogen/contract/slots/analyser) against this provider.
-Prints "ok: <case id>" per passing case, as every provider runner does. No database needed.
+"""The analyser slot's own runner (set.yaml `runner:`): runs every case against one provider's
+`<package>.detect.anomalies(observations, limits)`, the package being the one its service runs
+(provider.yaml `service: python3 -m <package>`). Prints "ok: <case id>" per passing case. The slot owns
+it, not the provider, so a candidate cannot certify itself (R5-21). No database needed.
+
+  python3 runner.py <provider directory>
 """
-import os
+import importlib
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-from anomaly_recent.detect import MAX, PROP, anomalies  # noqa: E402
-
-SET = Path(os.environ.get("KK_CASES") or HERE.parents[2] / "contract" / "slots" / "analyser")   # run.py sets KK_CASES
+SET = Path(__file__).resolve().parent
+MAX = "https://www.irit.fr/recherches/MELODI/ontologies/BBO#maxValue"
+PROP = "http://www.w3.org/ns/sosa/observedProperty"
 T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
 
@@ -37,6 +40,15 @@ def summary(found: list[dict], limit_ids: set) -> list[dict]:
 
 
 def main() -> int:
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    provider = Path(sys.argv[1]).resolve()
+    m = re.fullmatch(r"python3 -m ([a-z_][a-z0-9_]*)", str((yaml.safe_load((provider / "provider.yaml").read_text()) or {}).get("service", "")))
+    if not m:
+        print("FAIL: the provider's service must be python3 -m <package>")
+        return 1
+    sys.path.insert(0, str(provider))
+    anomalies = importlib.import_module(f"{m.group(1)}.detect").anomalies
     failed = 0
     paths = sorted((SET / "cases").glob("*.yaml"))
     if not paths:

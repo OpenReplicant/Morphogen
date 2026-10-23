@@ -7,7 +7,8 @@ and the new value as sosa:hasSimpleResult. A step is carried out only if
   approved it (rebuild 4 actuator-compose's rule; api.review_decisions lists only people's decisions);
   one change set recorded it, with one value per predicate; the action is on the list; the provider has an intent
   file in this environment; the value is within the action's bounds; and this actuator has not run the
-  step before.
+  step before. A replacement step must name the candidate's content hash, and the candidate's directory
+  must still have it: what a person approved is what was measured.
 Carrying it out sets the action's setting in the provider's intent file; the caller commits the file.
 """
 from __future__ import annotations
@@ -17,19 +18,20 @@ from pathlib import Path
 
 import yaml
 
-from morphogen.experiments import candidate_dir
+from morphogen.experiments import candidate_dir, tree_hash
 
 PPLAN_STEP_OF = "http://purl.org/net/p-plan#isStepOfPlan"
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 DCT_TYPE = "http://purl.org/dc/terms/type"
 SOSA = "http://www.w3.org/ns/sosa/"
 SUBSTITUTED_BY = "https://w3id.org/knowledge-kernel/tosca#substitutedBy"
+CHECKSUM = "http://spdx.org/rdf/terms#checksumValue"
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
 
 
 def steps(claims: list[dict], change_sets: dict[str, dict]) -> list[dict]:
     """claims: current claims about plan steps (id, subject, predicate, object_entity, object_value,
-    change_set); change_sets: id -> {lane, decided_by, submitted_by, status} (api.review_decisions)."""
+    qualifiers, change_set); change_sets: id -> {lane, decided_by, submitted_by, status} (api.review_decisions)."""
     by: dict[str, list[dict]] = {}
     for c in claims:
         by.setdefault(c["subject"], []).append(c)
@@ -50,6 +52,7 @@ def steps(claims: list[dict], change_sets: dict[str, dict]) -> list[dict]:
                     "target": target["object_entity"] if target else None,
                     "value": (result["object_value"] or {}).get("@value") if result else None,
                     "candidate": substitute["object_entity"] if substitute else None,
+                    "sha256": (substitute.get("qualifiers") or {}).get(CHECKSUM) if substitute else None,
                     "ambiguous": ambiguous,
                     "approved": bool(approvals) and all(a.get("lane") == "review" and a.get("decided_by")
                                                         and a["decided_by"] != a.get("submitted_by")
@@ -91,6 +94,10 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
         meta = yaml.safe_load((d / "provider.yaml").read_text()) or {}
         if not SERVICE.fullmatch(str(meta.get("service", ""))):
             return "the candidate's service must be python3 -m <module>"
+        if not s.get("sha256"):
+            return "the step names no content hash for the candidate"
+        if tree_hash(d) != s["sha256"]:
+            return "the candidate's directory is not the code that was measured and approved"
         return None
     v = s["value"]
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not a["min"] <= v <= a["max"]:

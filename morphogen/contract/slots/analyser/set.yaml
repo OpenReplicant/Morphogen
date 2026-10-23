@@ -1,12 +1,14 @@
 # The analyser slot's contract (R5-21): what any anomaly detector must do with observations and
 # documented limits. From rebuild 4 modules/anomaly/tests/test_detect.py, as data, plus the edges its
-# rules imply. A provider's runner (provider.yaml `runner`) reads every case and prints "ok: <id>".
+# rules imply. The slot's own runner (runner.py) runs every case against a provider's
+# <package>.detect.anomalies(observations, limits) and prints "ok: <id>"; a provider's own runner is not used.
 #
 # input.observations: {id, target, property, window (index; each window is one minute), value, extra?}
 #   extra: further qualifiers (an observation qualified by more than its property is not compared)
 # input.limits:       {id, target, property, value}
 # expect.anomalies:   {kind (limit | zscore), target, observation, limit (for kind limit)}, in any order
 slot: analyser
+runner: runner.py
 version: 0.1.0
 rules: >-
   Per target and property, each of the latest 3 windows is anomalous when its value exceeds the documented

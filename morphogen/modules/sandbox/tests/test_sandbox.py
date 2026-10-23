@@ -5,6 +5,7 @@ A broken candidate fails the contract.
   PGHOST=... PGUSER=<superuser> python3 tests/test_sandbox.py   (about half a minute)
 """
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -47,8 +48,17 @@ def observations(targets: int, windows: int) -> list[dict]:
             for t in range(targets) for w in range(windows)]
 
 
+PROBE = """    import pathlib
+    pathlib.Path({path!r}).write_text(" ".join([
+        conn.execute("select session_user").fetchone()[0],
+        ",".join(sorted(k for k in os.environ if k.startswith("PG") or k == "OTEL_EXPORTER_OTLP_HEADERS")) or "-",
+        str(any(pathlib.Path("../..").rglob("*.json")))]))
+"""
+
+
 def main() -> None:
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
+    os.environ.setdefault("KK_LOGIN_PASSWORD", secrets.token_hex(16))   # the modules' own logins (R5-22)
     install.install(DB, install.modules())
     url = f"dbname={DB}"
     with connect(url=url) as su:
@@ -62,6 +72,12 @@ def main() -> None:
                     ignore=shutil.ignore_patterns("__pycache__"))
     (exp / "experiment.yaml").write_text("slot: analyser\nincumbent: morphogen/modules/anomaly\ncandidate: anomaly-recent\n")
 
+    # A probe in the candidate: who it connects as, what credentials it was given, and whether it can
+    # reach a run file.
+    probe = tmp / "probe.txt"
+    m = exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
+    hook = '    conn = connect(os.environ.get("KK_ROLE", "kkm_anomaly"))\n'
+    m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe)), 1))
     broken = tmp / "broken" / "anomaly-recent"
     shutil.copytree(exp / "anomaly-recent", broken)
     d = broken / "anomaly_recent" / "detect.py"
@@ -92,6 +108,10 @@ def main() -> None:
         check(cand < inc, f"on a copy of the record the candidate's step is faster ({cand:.3f} s against {inc:.3f} s)")
         check(value("urn:kk:provider:anomaly", "inputs") == 4500, "the sandbox copied the record's 4,500 observations")
         check(not q("select 1 from api.claims where attributed_to = 'urn:kk:agent:sandbox'"), "the sandbox wrote no claims")
+    who, creds, sees = probe.read_text().split()
+    check(who == "kkm_anomaly_login" and set(creds.split(",")) <= {"-", "PGHOST", "PGPORT"} and sees == "False",
+          f"the candidate runs as the incumbent's own login ({who}), with no other credentials ({creds}), "
+          "and cannot see the run files")
     left = subprocess.run(["psql", "-d", "postgres", "-qAtc", "select count(*) from pg_database where datname like 'kk_sbx_%'"],
                           capture_output=True, text=True).stdout.strip()
     check(left == "0", "the sandbox databases are dropped")

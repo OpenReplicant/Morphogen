@@ -18,8 +18,10 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -45,11 +47,15 @@ def record(files: list[Path], suite: str) -> str:
 
 def one(conn, exp: Path) -> dict:
     slot = yaml.safe_load((exp / "experiment.yaml").read_text())["slot"]
-    with conn.cursor() as cur, run(cur, MODULE, {"experiment": exp.name, "slot": slot}) as (_, outputs):
-        files = experiment(exp, conn)
+    with conn.cursor() as cur, run(cur, MODULE, {"experiment": exp.name, "slot": slot}) as (_, outputs), \
+            tempfile.TemporaryDirectory(prefix="kk-sbx-") as private:
+        files = experiment(exp, conn, Path(private))
         results = {f.stem: json.loads(f.read_text()) for f in files}
         outputs.update(runs={k: {"contract": v["contract"], "metric": v["metric"]} for k, v in results.items()})
         print(record(files, f"sandbox-{slot}"), end="", flush=True)
+        (exp / "runs").mkdir(exist_ok=True)              # a copy for whoever reads the experiment, once recorded
+        for f in files:
+            shutil.copy(f, exp / "runs" / f.name)
     return outputs["runs"]
 
 

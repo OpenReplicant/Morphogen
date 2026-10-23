@@ -57,7 +57,7 @@ def commit(intent: Path, f: Path, s: dict, label: str) -> str:
 def one_pass(conn, intent: Path, env: str) -> dict:
     acts = actions(intent)
     with conn.cursor() as cur:
-        cur.execute("""select id, subject, predicate, object_entity, object_value, change_set from api.claims
+        cur.execute("""select id, subject, predicate, object_entity, object_value, qualifiers, change_set from api.claims
                        where status <> 'deprecated' and subject in
                          (select subject from api.claims where predicate = %s and status <> 'deprecated')""",
                     (PPLAN_STEP_OF,))

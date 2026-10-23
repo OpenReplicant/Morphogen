@@ -99,6 +99,7 @@ def change_set(p: dict, agent: str, scope: str, lane: str) -> dict:
 
 # ---------------------------------------------------------------- G2: build requests and replacements (R5-21)
 SUBSTITUTED_BY = "https://w3id.org/knowledge-kernel/tosca#substitutedBy"
+CHECKSUM = "http://spdx.org/rdf/terms#checksumValue"        # the candidate's content hash, on the step
 BUILD, REPLACE = "urn:kk:action:build-candidate", "urn:kk:action:replace-provider"
 
 
@@ -139,14 +140,16 @@ def replacement(request: dict, incumbent: dict, candidate: dict, limit: dict) ->
     text = (f"Run {new} instead of {old}: it passed {candidate['passed']}/{candidate['total']} contract cases and took "
             f"{candidate['mean']:g} s a step in the sandbox against {incumbent['mean']:g} s; predicted to stay within {lim:g}.")
     return {"plan": {"iri": plan, "step": f"{plan}:step:1", "action": REPLACE, "risk": "medium", "label": text,
-                     "target": incumbent["provider"], "candidate": candidate["provider"], "property": prop, "limit": lim,
+                     "target": incumbent["provider"], "candidate": candidate["provider"], "sha256": candidate.get("sha256"),
+                     "property": prop, "limit": lim,
                      "premises": sorted(set(request["claim_ids"]) | set(incumbent["claim_ids"]) | set(candidate["claim_ids"])
                                         | {str(limit["id"])})}}
 
 
 def replace_change_set(p: dict, agent: str, scope: str, lane: str) -> dict:
-    """The replace plan: like a setting plan, with kkt:substitutedBy naming the candidate, and the
-    prediction on the candidate (it reports under its own name once it runs)."""
+    """The replace plan: like a setting plan, with kkt:substitutedBy naming the candidate (qualified by the
+    content hash the builder recorded: what was measured is what a person approves), and the prediction
+    on the candidate (it reports under its own name once it runs)."""
     def claim(s, pred, o, q=None):
         c = {"op": "add_claim", "subject": s, "predicate": pred, "object": o, "evidence_type": "inferred",
              "derived_from": p["premises"]}
@@ -161,7 +164,7 @@ def replace_change_set(p: dict, agent: str, scope: str, lane: str) -> dict:
                     claim(p["step"], PPLAN + "isStepOfPlan", ent(p["iri"])),
                     claim(p["step"], DCT_TYPE, ent(p["action"])),
                     claim(p["step"], SOSA + "hasFeatureOfInterest", ent(p["target"])),
-                    claim(p["step"], SUBSTITUTED_BY, ent(p["candidate"])),
+                    claim(p["step"], SUBSTITUTED_BY, ent(p["candidate"]), {CHECKSUM: p["sha256"]} if p.get("sha256") else None),
                     claim(p["candidate"], MAX, {"value": {"@value": p["limit"], "@type": XSD + "decimal"}},
                           {PROP: p["property"], PART_OF: p["iri"]})]}
 

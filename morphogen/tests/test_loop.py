@@ -16,6 +16,7 @@ Then every step is checked to cite the one before it. Takes about a minute.
   PGHOST=... PGUSER=<superuser> python3 morphogen/tests/test_loop.py   (needs psycopg, PyYAML, pyshacl, git)
 """
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -71,6 +72,7 @@ def git(repo: Path, *args: str) -> str:
 
 def main() -> None:
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
+    os.environ.setdefault("KK_LOGIN_PASSWORD", secrets.token_hex(16))   # the modules' own logins (R5-22)
     install.install(DB, install.modules())
     url = f"dbname={DB}"
     with connect(url=url) as su:
