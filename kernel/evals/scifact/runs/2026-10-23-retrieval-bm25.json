@@ -1,0 +1,18 @@
+{
+  "stage": "retrieval",
+  "queries": 300,
+  "ndcg@10": 0.6606,
+  "recall@200claims": 0.9382,
+  "latency_ms": {
+    "p50": 399,
+    "p95": 687,
+    "max": 1095
+  },
+  "baseline": {
+    "bm25_ndcg@10": 0.665,
+    "source": "BEIR (Thakur et al. 2021)",
+    "rebuild4_ndcg@10": 0.6594,
+    "rebuild4_recall@200claims": 0.9349
+  },
+  "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)"
+}

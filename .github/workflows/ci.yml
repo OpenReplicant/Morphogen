@@ -21,11 +21,13 @@ jobs:
       - name: Contract requirements
         run: |
           python3 -m venv /tmp/kk-venv
-          /tmp/kk-venv/bin/pip install -q -r kernel/contract/requirements.txt
+          /tmp/kk-venv/bin/pip install -q -r kernel/contract/requirements.txt -r kernel/providers/kernel-mcp/requirements.txt
           echo "KK_PYTHON=/tmp/kk-venv/bin/python" >> "$GITHUB_ENV"
       - name: Conformance contract
         run: sh kernel/contract/run.sh
       - name: Mutation check (every mutant must fail)
         run: /tmp/kk-venv/bin/python kernel/contract/mutants.py
+      - name: Provider tests (each provider's own, and the services end to end)
+        run: /tmp/kk-venv/bin/python kernel/providers/test.py
       - name: Boundary
         run: python3 scripts/check_boundary.py

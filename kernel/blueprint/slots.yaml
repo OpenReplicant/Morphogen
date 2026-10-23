@@ -60,14 +60,14 @@ slots:
     hook: feed
     cardinality: one
     interface: BeliefModel
-    default: belief-corroboration     # contract slots/belief-model; scoring ported, feed consumer in T3
+    default: belief-corroboration     # contract slots/belief-model; a feed consumer (kk.lib.follow)
     status: ported
   - id: verifier
     hook: feed
     cardinality: many
     interface: Verifier
-    default: verifier-quotes
-    status: to-port
+    default: verifier-quotes          # a feed consumer; its own tests (tests/test_check.py)
+    status: ported
   - id: truth-maintenance
     hook: feed
     cardinality: one
@@ -86,14 +86,14 @@ slots:
     hook: read
     cardinality: many
     interface: Recall
-    default: recall-bm25              # dense fusion and re-ranking opt-in (rebuild 4: D-61, D-66)
-    status: to-port
+    default: recall-bm25              # SciFact nDCG@10 0.6606 (rebuild 4 floor 0.6594); dense and re-ranking opt-in, not ported
+    status: ported
   - id: agent-interface
     hook: read
     cardinality: many
     interface: MCP tools (read + propose)
-    default: kernel-mcp
-    status: to-port
+    default: kernel-mcp               # operator tools; the memory profile is not ported (R5-12)
+    status: ported
   - id: context-assembler
     hook: read
     cardinality: one
@@ -120,8 +120,8 @@ slots:
   - id: evaluator
     cardinality: one
     interface: Evaluator
-    default: evaluator
-    status: to-port
+    default: evaluator                # records eval runs as DQV measurements; candidate vs incumbent in G2
+    status: ported
   - id: harness-adapter
     cardinality: many
     interface: HarnessAdapter

@@ -70,12 +70,16 @@ def feed_after(conn: psycopg.Connection, cursor: int, limit: int = 1000) -> list
 
 def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object],
            wake: Optional[Callable[[dict], bool]] = None, poll: float = 1.0, sweep: Optional[float] = None,
-           once: bool = False) -> None:
+           once: bool = False, channels: tuple[str, ...] = ()) -> None:
     """For consumers after the commit (R5-04). Run step(conn) now, then again whenever the change feed has
     an entry after the cursor that passes `wake` (any, by default; a consumer usually skips its own
     change sets), and at least every `sweep` seconds. The feed is read every `poll` seconds; nothing is
-    missed while the consumer is down, since each step re-reads the record from its own watermark."""
+    missed while the consumer is down, since each step re-reads the record from its own watermark.
+    `channels` also wake it on NOTIFY: redactions are not in the feed (R5-O3), so a consumer holding
+    claim text (an index) listens on kernel_redaction to drop it at once."""
     sweep = sweep_seconds(sweep)
+    for channel in channels:
+        conn.execute(sql.SQL("listen {}").format(sql.Identifier(channel)))
     cursor = feed_head(conn)
     while True:
         step(conn)
@@ -89,7 +93,11 @@ def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
                 if wake is None or any(wake(e) for e in entries):
                     break
                 continue
-            time.sleep(poll)
+            if channels:
+                if list(conn.notifies(timeout=poll, stop_after=1)):
+                    break
+            else:
+                time.sleep(poll)
 
 
 def my_agent(conn: psycopg.Connection) -> str:
