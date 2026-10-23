@@ -1,0 +1,72 @@
+# Morphogen: a system you describe, which builds and manages it, starting with itself.
+# A distribution = kernel slots it uses + application slots it declares + the providers that fill them.
+# Application slots live here until a second distribution needs one; then the slot and its default
+# provider move under kernel/.
+id: morphogen
+version: 0.1.0
+kernel: ">=0.1.0"
+
+uses_kernel_slots:
+  - record-store
+  - write-pipeline
+  - intake-filter
+  - validator
+  - lane-policy
+  - change-feed
+  - belief-model
+  - verifier
+  - recall
+  - agent-interface
+  - vocabulary-pack
+  - self-encoder
+  - evaluator
+  - harness-adapter
+
+# The MAPE-K loop and design path. status: to-port (from rebuild 4) | to-rewrite | new
+slots:
+  - id: design-agent
+    phase: design
+    default: interview-encoder + map-gaps      # rebuild 4: encoder-interaction, skill-interview, map-gaps
+    status: to-port
+  - id: observer
+    phase: monitor
+    cardinality: many
+    default: observer-otel                     # new; observer-prometheus ported alongside
+    status: new
+  - id: analyser
+    phase: analyse
+    cardinality: many
+    default: anomaly                           # rebuild 4: modules/anomaly
+    status: to-port
+  - id: planner
+    phase: plan
+    default: planning-skill                    # plans carry predictions and a risk class
+    status: to-rewrite
+  - id: actuator
+    phase: execute
+    cardinality: many
+    default: intent-actuator                   # approved plans become commits; orchestrators reconcile
+    status: to-rewrite
+  - id: outcome-verifier
+    phase: verify
+    default: prediction-verifier               # compares observations with plan predictions; not the planner
+    status: new
+  - id: catalog-lookup
+    phase: plan
+    cardinality: many
+    default: registry-lookup                   # configured registries, matched on slot requirements
+    status: new
+
+lane_policy:
+  file: intent/policies/autonomy.yaml          # autonomy level x risk class
+
+packs:
+  - prov
+  - sosa
+  - dqv
+  - kk-tosca                                   # system structure: slots, couplings (TOSCA mirror)
+  - org
+
+gates:
+  G2: Morphogen changes one of its own providers through the loop and the observed result matches the prediction.
+  G3: Morphogen maps a small system it did not build and completes one governed change on it.

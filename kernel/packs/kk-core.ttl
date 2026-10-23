@@ -1,0 +1,87 @@
+@prefix kk:      <https://w3id.org/knowledge-kernel/ns#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+
+# Knowledge Kernel core vocabulary (tier: core). D-40.
+# Only the module contract is ours: modules, the slots they fill, their kind, the agent they run as.
+# Everything else uses a standard vocabulary (ontology/packs.yaml):
+#   labels, types        RDFS, SKOS, DCTerms, owl:versionInfo
+#   provenance           PROV-O (attribution, runs, derivation, generation time)
+#   sources and quotes   DCTerms source + Web Annotation selectors
+#   access (scopes)      dcterms:accessRights
+#   constraints          SHACL          mappings  SKOS *Match + SSSOM metadata
+# The kernel's own bookkeeping (claim status, statement key, belief, evidence type, redaction) lives in
+# database columns, not in this vocabulary; validation and export express it with the terms above
+# (docs/decisions.md D-40 has the table). System modeling (TOSCA mirror, kk-tosca.ttl) and agent
+# profiles (kk-profile.ttl) are profile packs, not core.
+# Namespace is a placeholder until a w3id.org redirect is registered (docs/decisions.md O-2).
+
+<https://w3id.org/knowledge-kernel/ns>
+    a owl:Ontology ;
+    rdfs:label "Knowledge Kernel core vocabulary" ;
+    owl:versionInfo "0.4.3" ;
+    dcterms:license <https://www.apache.org/licenses/LICENSE-2.0> ;
+    owl:imports <http://www.w3.org/ns/prov-o> .
+
+# ------------------------------------------------------------------ standard terms the kernel stores
+# Typing them here makes them approved predicates (kernel.is_approved_property).
+owl:versionInfo a owl:AnnotationProperty ; rdfs:label "version" .
+rdfs:isDefinedBy a owl:AnnotationProperty ; rdfs:label "is defined by" .   # profile packs cut from upstream (D-47)
+<http://purl.org/dc/terms/type> a owl:ObjectProperty ; rdfs:label "type" .   # a kind from a SKOS scheme, e.g. a discrepancy kind (D-50)
+
+# ------------------------------------------------------------------ the module contract
+kk:Module a owl:Class ;
+    rdfs:subClassOf prov:SoftwareAgent ;
+    rdfs:label "module" ;
+    skos:definition "A versioned, installable unit that fills one or more slots. Described by module.yaml." .
+
+kk:Slot a owl:Class ;
+    rdfs:label "slot" ;
+    skos:definition "A role in the platform with a contract, filled by modules (ontology/slots.yaml)." .
+
+kk:fills a owl:ObjectProperty ;
+    rdfs:domain kk:Module ; rdfs:range kk:Slot ;
+    rdfs:label "fills" .
+
+kk:slotContract a owl:DatatypeProperty ; rdfs:domain kk:Slot ; rdfs:range xsd:string ; rdfs:label "slot contract" .
+kk:cardinality a owl:DatatypeProperty ; rdfs:domain kk:Slot ; rdfs:range xsd:string ; rdfs:label "cardinality" ;
+    skos:definition "'one' (single active module, others in shadow) or 'many'." .
+
+kk:ModuleKindScheme a skos:ConceptScheme ; rdfs:label "module kinds" .
+kk:moduleKind a owl:ObjectProperty ; rdfs:domain kk:Module ; rdfs:range skos:Concept ; rdfs:label "module kind" .
+kk:Encoder   a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "encoder" ;   skos:definition "Source to change sets." .
+kk:Processor a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "processor" ; skos:definition "Claims or events to change sets." .
+kk:Decoder   a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "decoder" ;   skos:definition "Shaped claims plus mappings to an artifact in a target standard." .
+kk:Actuator  a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "actuator" ;  skos:definition "Artifact to an effect in an external runtime; never writes claims." .
+kk:Interface a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "interface" ; skos:definition "Exposes the kernel to people, agents or other systems." .
+kk:AgentKind a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "agent" ;     skos:definition "Agent harnesses, profiles, skills and harness adapters." .
+kk:Control   a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "control" ;   skos:definition "Runs, schedules, evaluates or installs other modules." .
+kk:Pack      a skos:Concept ; skos:inScheme kk:ModuleKindScheme ; skos:prefLabel "pack" ;      skos:definition "Vocabulary content: terms, shapes, mappings." .
+
+kk:runsAs a owl:ObjectProperty ; rdfs:range prov:Agent ; rdfs:label "runs as" ;
+    skos:definition "The kernel agent (database role) whose identity a module (or a chain) acts under." .
+kk:protected a owl:DatatypeProperty ; rdfs:domain kk:Module ; rdfs:range xsd:boolean ; rdfs:label "protected" ;
+    skos:definition "System component: changes need review and a passing eval." .
+
+# ------------------------------------------------------------------ the recall contract (D-91)
+# When a memory must be recalled whatever the ranking: a contract between whoever writes memories and the
+# recall modules that surface them, so it is ours (no standard vocabulary owns recall cues). The value is a
+# JSON object: always, mentions [terms], on (a date YYYY-MM-DD or a yearly --MM-DD) with before (days),
+# where (a path glob), tool (a permission-rule pattern such as Bash(git push*)). Not a qualifier:
+# qualifiers say when a claim is true, a cue says when to bring it up.
+kk:recallWhen a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "recall when" ;
+    skos:definition "Conditions under which this memory is recalled regardless of ranking (JSON: always, mentions, on, before, where, tool)." .
+
+# ------------------------------------------------------------------ single-valued properties
+# One value per subject at a time. Belief models treat claims with different values and overlapping
+# validity windows as conflicting; non-overlapping windows are changes over time.
+kk:moduleKind a owl:FunctionalProperty .
+kk:runsAs a owl:FunctionalProperty .
+kk:protected a owl:FunctionalProperty .
+kk:slotContract a owl:FunctionalProperty .
+kk:cardinality a owl:FunctionalProperty .
