@@ -1,0 +1,9 @@
+id: urn:kk:provider:record-postgres
+name: Record store and write pipeline on Postgres
+version: 0.1.0
+license: Apache-2.0
+slots: [record-store, write-pipeline, lane-policy, change-feed]
+origin: OpenReplicant/kernel (rebuild 4) kernel/schema, frozen v0
+requires: PostgreSQL 16+, no extensions
+runner: sh tests/run.sh
+note: providers with a migration.sql are installed on top by ../install.py

@@ -296,7 +296,7 @@ reset role;
 
 -- ---------------------------------------------------------------- 9. change feed (D-86)
 select public.check(
-  (select count(*) from kernel.change_set where status = 'applied') = (select count(*) from kernel.feed)
+  (select count(*) from kernel.change_set where status = 'applied') = (select count(*) from kernel.feed where change_set is not null)
   and not exists (select 1 from kernel.feed f join kernel.change_set c on c.id = f.change_set where c.status <> 'applied'),
   'every applied change set has one feed number');
 select public.check(
@@ -388,6 +388,44 @@ select public.check((select status from kernel.change_set where id = :'cs_fd'::u
                     'the retried apply succeeds');
 select dblink_disconnect('a');
 select dblink_disconnect('b');
+
+-- Redactions (R5-O3): numbered in the same feed, so a projection drops redacted content from its cursor.
+set role t_extractor;
+select public.check(
+  (select count(*) = 1 from api.feed(0, 100000)
+    where kind = 'redaction' and target_kind = 'claim' and target_id = current_setting('t.claim1')
+      and claim_ids = array[current_setting('t.claim1')::uuid] and change_set_id is null
+      and scope = (select scope from api.claims where id = current_setting('t.claim1')::uuid)),
+  'a redaction is in the feed with its target and the claims it removed content from');
+select api.submit_change_set(jsonb_build_object(
+  'idempotency_key','test:feed-secret','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:secret',
+  'ops', jsonb_build_array(jsonb_build_object('op','add_claim','ref','s1','subject','ex:service/vault','predicate','ex:dependsOn',
+     'object', jsonb_build_object('entity','ex:service/hsm'),
+     'evidence_type','deterministic','references', jsonb_build_array(jsonb_build_object('source_uri','https://example.org/private.yaml'))))))->>'id' as cs_fs \gset
+reset role;
+set role t_validator;
+select api.record_validation(:'cs_fs'::uuid, true);
+reset role;
+select id as claim_fs from kernel.claim where change_set = :'cs_fs'::uuid \gset
+select max(seq) as seq_before_redaction from kernel.feed \gset
+set role t_steward;
+select api.start_run(null) as run_fs \gset
+select api.redact('claim', :'claim_fs', 'erasure request #2', :'run_fs'::uuid);
+select public.expect_error(format('select api.redact(%L, %L, %L, %L::uuid)', 'claim', gen_random_uuid(), 'nothing there', :'run_fs'), 'KK061');
+reset role;
+select public.check(
+  (select seq = :seq_before_redaction + 1 and scope = 'urn:kk:scope:secret' from kernel.feed where redaction is not null and target_id = :'claim_fs')
+  and (select max(seq) = count(*) from kernel.feed),
+  'a redaction takes the next feed number, in its target''s scope');
+set role t_extractor;
+select public.check(exists (select 1 from api.feed(:seq_before_redaction, 100) where kind = 'redaction' and target_id = :'claim_fs'),
+                    'cleared agent sees redactions of secret claims in the feed');
+reset role;
+set role t_verifier;
+select public.check(not exists (select 1 from api.feed(0, 100000) where kind = 'redaction' and target_id = :'claim_fs'),
+                    'uncleared agent does not see redactions of secret claims in the feed');
+reset role;
 
 -- ---------------------------------------------------------------- 10. bitemporal as-of (D-09)
 set role t_extractor;

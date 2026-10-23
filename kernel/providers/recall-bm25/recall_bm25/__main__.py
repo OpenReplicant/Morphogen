@@ -3,8 +3,8 @@
 A pass indexes the claims recorded since the last pass that this module can read (their text: the
 literal value plus the words of the subject IRI, as recall has always searched), updates the term and
 corpus statistics per scope, and drops the claims redacted since the last pass. Status changes need no
-pass: deprecated claims are left out at query time. It follows the change feed and listens for redactions
-(they are not in the feed, R5-O3), and sweeps every KK_SWEEP_SECONDS. The index is derived: drop schema `recall`'s
+pass: deprecated claims are left out at query time. It follows the change feed, which carries redactions
+too (R5-O3), and sweeps every KK_SWEEP_SECONDS. The index is derived: drop schema `recall`'s
 rows and the next pass rebuilds it.
 
 Runs alone: python -m recall_bm25 (needs kernel/src on PYTHONPATH for kk.lib and kk.recall).
@@ -76,8 +76,8 @@ class Pass:
 
 def main() -> None:
     with connect(os.environ.get("KK_ROLE", "kkm_recall_index")) as conn:
-        print("recall-bm25: following the change feed and kernel_redaction", flush=True)
-        follow(conn, Pass(), channels=("kernel_redaction",))
+        print("recall-bm25: following the change feed", flush=True)
+        follow(conn, Pass())
 
 
 if __name__ == "__main__":

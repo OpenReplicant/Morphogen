@@ -63,9 +63,10 @@ def feed_head(conn: psycopg.Connection) -> int:
 
 
 def feed_after(conn: psycopg.Connection, cursor: int, limit: int = 1000) -> list[dict]:
-    """Applied change sets after `cursor`, in commit order, within the role's clearance (api.feed)."""
-    cur = conn.execute("select seq, change_set_id, scope, applied_at, claim_ids, predicates "
-                       "from api.feed(%s, %s)", (cursor, limit))
+    """Applied change sets and redactions after `cursor`, in commit order, within the role's clearance
+    (api.feed)."""
+    cur = conn.execute("select seq, kind, change_set_id, scope, applied_at, claim_ids, predicates, "
+                       "target_kind, target_id from api.feed(%s, %s)", (cursor, limit))
     cols = [d.name for d in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
@@ -74,12 +75,12 @@ def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
            wake: Optional[Callable[[dict], bool]] = None, poll: float = 1.0, sweep: Optional[float] = None,
            once: bool = False, channels: tuple[str, ...] = ()) -> None:
     """For consumers after the commit (R5-04). Run step(conn) now, then again whenever the change feed has
-    an entry after the cursor that passes `wake` (any, by default), and at least every `sweep` seconds. A
+    an entry after the cursor (an applied change set or a redaction, R5-O3) that passes `wake` (any, by
+    default), and at least every `sweep` seconds. A
     consumer woken by its own change set runs a step that finds nothing new and submits nothing, which
     ends the round. The feed is read every `poll` seconds; nothing is
     missed while the consumer is down, since each step re-reads the record from its own watermark.
-    `channels` also wake it on NOTIFY: redactions are not in the feed (R5-O3), so a consumer holding
-    claim text (an index) listens on kernel_redaction to drop it at once."""
+    `channels` also wake it on NOTIFY between polls (e.g. kernel_redaction); the feed alone misses nothing."""
     sweep = sweep_seconds(sweep)
     for channel in channels:
         conn.execute(sql.SQL("listen {}").format(sql.Identifier(channel)))

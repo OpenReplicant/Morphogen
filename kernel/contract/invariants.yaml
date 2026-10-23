@@ -4,7 +4,7 @@
 #
 # Cases are named exactly as the record-postgres provider reports them ("ok: <case>"), so the
 # runner can check that every case ran. A new provider adds its own runner and reports the same names.
-version: 0.2.0
+version: 0.3.0
 
 # The cases below apply to providers of these slots. Other slots have their own case sets in
 # slots/<slot>/ (validator, belief-model); kernel/contract/run.py runs whichever apply.
@@ -75,7 +75,7 @@ pipeline:
     - an agent cannot attach a trigger to a kernel table
 
 feed:
-  text: Every applied change set gets a sequence number in commit order; a consumer reading after its cursor sees every later commit exactly once, within its clearance (D-86, D-87).
+  text: Every applied change set and every redaction gets a sequence number in commit order; a consumer reading after its cursor sees every later commit exactly once, within its clearance (D-86, D-87, R5-O3).
   cases:
     - every applied change set has one feed number
     - feed numbers are consecutive
@@ -87,6 +87,10 @@ feed:
     - a cursor skips no change set that commits concurrently
     - a concurrent apply that cannot serialize is retried, not marked invalid
     - the retried apply succeeds
+    - a redaction is in the feed with its target and the claims it removed content from
+    - a redaction takes the next feed number, in its target's scope
+    - cleared agent sees redactions of secret claims in the feed
+    - uncleared agent does not see redactions of secret claims in the feed
 
 history:
   text: A query as of valid time T and record time R returns what was believed then (D-09); redaction holds at every time and clearance applies.

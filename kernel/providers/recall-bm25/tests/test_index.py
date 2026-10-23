@@ -76,10 +76,10 @@ def main() -> None:
         check(subjects(r, "ledger") == {"urn:x:ledger"}, "a reader finds the public claim and not the secret one")
         check(subjects(w, "ledger") == {"urn:x:ledger", "urn:x:vault"}, "a cleared reader finds both")
 
-        # The worker running as a service: a redaction wakes it at once (NOTIFY), not at the next sweep.
+        # The worker running as a service: a redaction wakes it from the feed (R5-O3), not at the next sweep.
         def serve() -> None:
             try:
-                follow(idx, index.Pass(), poll=0.1, sweep=3600, channels=("kernel_redaction",))
+                follow(idx, index.Pass(), poll=0.1, sweep=3600)
             except Exception:
                 pass   # the connection closes when the test ends
         threading.Thread(target=serve, daemon=True).start()

@@ -40,7 +40,7 @@ slots:
     hook: validation
     cardinality: many
     interface: Validator
-    default: validator-shacl          # contract slots/validator; a JSON Schema provider is the R5-O1 candidate
+    default: validator-shacl          # contract slots/validator; a JSON Schema provider is a candidate (R5-15)
     status: ported
   - id: lane-policy
     hook: lane

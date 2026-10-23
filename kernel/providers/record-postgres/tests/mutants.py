@@ -28,4 +28,9 @@ MUTANTS = [
      "create policy mut on kernel.change_set for update using (public.mut_fn());\n")]),
   ("apply calls a non-kernel function", SQL, [("    v_state := 'applied';\n  exception", "    perform public.mut_fn();\n    v_state := 'applied';\n  exception"),
      ("\nreset role;\n", "\nreset role;\n" "create function public.mut_fn() returns text language sql as $m$ select 'x' $m$;\n")]),
+  ("redaction not in the feed", SQL, [("  insert into kernel.feed(seq, redaction, target_kind, target_id, scope)\n"
+                                    "  values (v_seq, new.id, new.target_kind, new.target_id, v_scope);\n", "")]),
+  ("redaction in the feed under the default scope", SQL, [("  values (v_seq, new.id, new.target_kind, new.target_id, v_scope);",
+                                                        "  values (v_seq, new.id, new.target_kind, new.target_id, 'urn:kk:scope:default');")]),
+  ("redaction feed entry names no claims", SQL, [("              where f.target_kind = 'claim' and c.id = f.target_id::uuid", "              where false")]),
 ]

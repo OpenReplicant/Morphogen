@@ -78,12 +78,15 @@ class Submitted:
 
 @dataclass
 class Applied:
-    """One entry of the change feed: a change set that was committed."""
-    seq: int                                # commit order, no gaps within a reader's clearance; consumers keep a cursor
-    change_set_id: str
+    """One entry of the change feed: a change set that was committed, or a redaction (R5-O3)."""
+    seq: int                                # commit order; consumers keep a cursor
+    kind: str                               # 'change_set' or 'redaction'
+    change_set_id: Optional[str]            # None for a redaction
     scope: str
-    claim_ids: Sequence[str]
+    claim_ids: Sequence[str]                # for a redaction, the claims whose content it removed
     predicates: Sequence[str]               # for cheap gating before any query
+    target_kind: Optional[str] = None       # a redaction's target: 'claim' or 'artifact'
+    target_id: Optional[str] = None
 
 
 # ================================================================ core slots (conformance suite required)

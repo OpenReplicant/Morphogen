@@ -122,8 +122,10 @@ create table kernel.change_set (
   applied_at       timestamptz
 );
 
--- The change feed (D-86): one row per applied change set, numbered in commit order. Consumers keep a
--- cursor (the last seq they read) and read what comes after it. A failed apply takes no number.
+-- The change feed (D-86): one row per applied change set or redaction (R5-O3), numbered in commit order.
+-- Consumers keep a cursor (the last seq they read) and read what comes after it. A failed apply takes no
+-- number. A redaction row names its target, so a projection built from the feed drops redacted content
+-- from the same cursor (a NOTIFY can be missed); its scope is the target's.
 -- Numbers come from feed_head, not a sequence: apply locks its one row until the transaction commits,
 -- so a change set that commits later always gets a larger number, and a reader that has seen N has
 -- already seen every number below it (a sequence can hand out N+1 to a transaction that commits
@@ -136,10 +138,15 @@ create table kernel.feed_head (
 insert into kernel.feed_head values (true, 0);
 
 create table kernel.feed (
-  seq        bigint primary key,
-  change_set uuid not null unique references kernel.change_set,
-  scope      text not null references kernel.scope,
-  applied_at timestamptz not null default now()
+  seq         bigint primary key,
+  change_set  uuid unique references kernel.change_set,
+  redaction   uuid unique,                   -- references kernel.redaction (added below)
+  target_kind text check (target_kind in ('claim','artifact')),
+  target_id   text,
+  scope       text not null references kernel.scope,
+  applied_at  timestamptz not null default now(),
+  check ((change_set is null) = (redaction is not null)),
+  check ((redaction is null) = (target_kind is null) and (redaction is null) = (target_id is null))
 );
 
 create table kernel.artifact (                -- prov:Entity with content; immutable, content-addressed
@@ -247,6 +254,7 @@ create table kernel.redaction (               -- erasure requests; the only path
   run         uuid not null references kernel.run,
   recorded_at timestamptz not null default now()
 );
+alter table kernel.feed add foreign key (redaction) references kernel.redaction;
 
 -- ---------------------------------------------------------------- helpers
 create function kernel.expand(term text) returns text
@@ -753,7 +761,18 @@ create trigger redaction_rules before insert on kernel.redaction
 -- Keeps structure, identity and lineage; removes content. Recorded as its own run.
 create function kernel.redaction_after_insert() returns trigger
 language plpgsql security definer set search_path = kernel, pg_catalog as $$
+declare
+  v_scope text;
+  v_seq   bigint;
 begin
+  if new.target_kind = 'claim' then
+    select scope into v_scope from kernel.claim where id = new.target_id::uuid;
+  else
+    select scope into v_scope from kernel.artifact where sha256 = new.target_id;
+  end if;
+  if v_scope is null then
+    raise exception 'kernel: no % % to redact', new.target_kind, new.target_id using errcode = 'KK061';
+  end if;
   perform set_config('kernel.redacting', 'on', true);
   if new.target_kind = 'claim' then
     update kernel.claim set object_value = null, object_entity = null, qualifiers = '{}',
@@ -768,6 +787,11 @@ begin
     -- The artifact store must delete the bytes; it listens on this channel.
   end if;
   perform set_config('kernel.redacting', 'off', true);
+  -- In the feed like an applied change set; the feed_head row stays locked until commit.
+  update kernel.feed_head set seq = seq + 1 returning seq into v_seq;
+  insert into kernel.feed(seq, redaction, target_kind, target_id, scope)
+  values (v_seq, new.id, new.target_kind, new.target_id, v_scope);
+  -- Also signalled at once, for listeners that want no poll delay; the feed is the durable record.
   perform pg_notify('kernel_redaction', jsonb_build_object('kind', new.target_kind, 'id', new.target_id)::text);
   return null;
 end $$;
@@ -936,16 +960,20 @@ language sql stable as $$
     'run',          (select to_jsonb(r) from kernel.run r join kernel.claim c on c.generated_by = r.id where c.id = explain.claim_id))
 $$;
 
--- The change feed after a cursor, in commit order. claim_ids are the claims the change set added or
--- whose status, belief or verification it recorded; predicates let a consumer gate before querying.
--- Invoker rights: the caller sees the change sets and claims of scopes it may read.
+-- The change feed after a cursor, in commit order. kind is 'change_set' or 'redaction'. For a change set,
+-- claim_ids are the claims it added or whose status, belief or verification it recorded; for a
+-- redaction, the claims whose content it removed (the claim, or those quoting the artifact), with
+-- target_kind and target_id naming what was redacted. predicates let a consumer gate before querying.
+-- Invoker rights: the caller sees the entries and claims of scopes it may read.
 create function api.feed(after_seq bigint default 0, max_rows int default 100)
-returns table (seq bigint, change_set_id uuid, scope text, applied_at timestamptz,
-               claim_ids uuid[], predicates text[])
+returns table (seq bigint, kind text, change_set_id uuid, scope text, applied_at timestamptz,
+               claim_ids uuid[], predicates text[], target_kind text, target_id text)
 language sql stable as $$
-  select f.seq, f.change_set, f.scope, f.applied_at, t.ids,
+  select f.seq, case when f.redaction is null then 'change_set' else 'redaction' end,
+         f.change_set, f.scope, f.applied_at, t.ids,
          coalesce(array(select distinct c.predicate from kernel.claim c where c.id = any(t.ids)
-                        order by 1), '{}')
+                        order by 1), '{}'),
+         f.target_kind, f.target_id
   from kernel.feed f
   cross join lateral (
     select coalesce(array(
@@ -953,7 +981,11 @@ language sql stable as $$
         select c.id from kernel.claim c where c.change_set = f.change_set
         union select s.claim_id from kernel.claim_status s where s.change_set = f.change_set
         union select b.claim_id from kernel.belief b where b.change_set = f.change_set
-        union select v.claim_id from kernel.verification v where v.change_set = f.change_set) x
+        union select v.claim_id from kernel.verification v where v.change_set = f.change_set
+        union select c.id from kernel.claim c
+              where f.target_kind = 'claim' and c.id = f.target_id::uuid
+        union select r.claim_id from kernel.claim_reference r
+              where f.target_kind = 'artifact' and r.artifact = f.target_id) x
       order by x.id), '{}') as ids) t
   where f.seq > after_seq
   order by f.seq
