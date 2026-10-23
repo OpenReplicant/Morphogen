@@ -412,12 +412,14 @@ select max(seq) as seq_before_redaction from kernel.feed \gset
 set role t_steward;
 select api.start_run(null) as run_fs \gset
 select api.redact('claim', :'claim_fs', 'erasure request #2', :'run_fs'::uuid);
-select public.expect_error(format('select api.redact(%L, %L, %L, %L::uuid)', 'claim', gen_random_uuid(), 'nothing there', :'run_fs'), 'KK061');
+select api.redact('claim', gen_random_uuid()::text, 'nothing there', :'run_fs'::uuid);
 reset role;
 select public.check(
   (select seq = :seq_before_redaction + 1 and scope = 'urn:kk:scope:secret' from kernel.feed where redaction is not null and target_id = :'claim_fs')
   and (select max(seq) = count(*) from kernel.feed),
   'a redaction takes the next feed number, in its target''s scope');
+select public.check((select max(seq) from kernel.feed) = :seq_before_redaction + 1,
+                    'redacting a target that does not exist takes no feed number');
 set role t_extractor;
 select public.check(exists (select 1 from api.feed(:seq_before_redaction, 100) where kind = 'redaction' and target_id = :'claim_fs'),
                     'cleared agent sees redactions of secret claims in the feed');
@@ -426,6 +428,58 @@ set role t_verifier;
 select public.check(not exists (select 1 from api.feed(0, 100000) where kind = 'redaction' and target_id = :'claim_fs'),
                     'uncleared agent does not see redactions of secret claims in the feed');
 reset role;
+
+-- An artifact quoted by a claim in the default scope and one in the secret scope. readers_subset
+-- compares grants by role, so the secret readers' role is also named on the default scope.
+insert into kernel.scope_grant values ('urn:kk:scope:default', 't_secret_readers', true, false) on conflict do nothing;
+set role t_extractor;
+select repeat('ab', 32) as art \gset
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:feed-art','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default',
+  'ops', jsonb_build_array(
+    jsonb_build_object('op','add_artifact','sha256',:'art','media_type','text/plain','byte_size',10,'location','s3://test/a'),
+    jsonb_build_object('op','add_claim','subject','ex:doc/a','predicate','rdfs:label','object',jsonb_build_object('value',jsonb_build_object('@value','Doc A')),
+      'evidence_type','extracted','references', jsonb_build_array(jsonb_build_object('artifact',:'art','quote','Doc A')))))) ->>'id' as cs_art \gset
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:feed-art-secret','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:secret',
+  'ops', jsonb_build_array(
+    jsonb_build_object('op','add_claim','subject','ex:doc/a','predicate','rdfs:label','object',jsonb_build_object('value',jsonb_build_object('@value','Doc A, private')),
+      'evidence_type','extracted','references', jsonb_build_array(jsonb_build_object('artifact',:'art','quote','Doc A')))))) ->>'id' as cs_art_s \gset
+reset role;
+set role t_validator;
+select api.record_validation(:'cs_art'::uuid, true);
+select api.record_validation(:'cs_art_s'::uuid, true);
+reset role;
+select id as claim_art from kernel.claim where change_set = :'cs_art'::uuid \gset
+select id as claim_art_s from kernel.claim where change_set = :'cs_art_s'::uuid \gset
+set role t_steward;
+select api.redact('artifact', :'art', 'erasure request #3', :'run_fs'::uuid);
+reset role;
+set role t_extractor;
+select public.check(
+  (select scope = 'urn:kk:scope:default' and target_kind = 'artifact'
+          and claim_ids @> array[:'claim_art'::uuid, :'claim_art_s'::uuid] and cardinality(claim_ids) = 2
+     from api.feed(:seq_before_redaction, 100) where kind = 'redaction' and target_id = :'art'),
+  'an artifact redaction is in the feed in the artifact''s scope, with the claims that quoted it');
+reset role;
+set role t_verifier;
+select public.check(
+  (select claim_ids = array[:'claim_art'::uuid] from api.feed(:seq_before_redaction, 100)
+    where kind = 'redaction' and target_id = :'art'),
+  'an artifact redaction lists only the quoting claims the reader may see');
+reset role;
+set role t_extractor;
+select api.submit_change_set(jsonb_build_object('idempotency_key','test:feed-art-again','attributed_to','urn:kk:agent:extractor',
+  'generated_by', current_setting('t.run1'),'target_scope','urn:kk:scope:default',
+  'ops', jsonb_build_array(
+    jsonb_build_object('op','add_claim','subject','ex:doc/b','predicate','rdfs:label','object',jsonb_build_object('value',jsonb_build_object('@value','Doc B')),
+      'evidence_type','extracted','references', jsonb_build_array(jsonb_build_object('artifact',:'art','quote','Doc A')))))) ->>'id' as cs_art_again \gset
+reset role;
+set role t_validator;
+select api.record_validation(:'cs_art_again'::uuid, true);
+reset role;
+select public.check((select status = 'invalid' and validation_report->>'sqlstate' = 'KK038' from kernel.change_set where id = :'cs_art_again'::uuid),
+                    'a redacted artifact cannot be quoted again');
 
 -- ---------------------------------------------------------------- 10. bitemporal as-of (D-09)
 set role t_extractor;

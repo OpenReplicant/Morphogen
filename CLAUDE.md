@@ -60,8 +60,8 @@ Reference implementation (read-only): `OpenReplicant/kernel` (rebuild 4). Port f
 
 ```sh
 pip install -r kernel/contract/requirements.txt                       # once, in a virtualenv (KK_PYTHON=<its python>)
-PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 58 record + 13 validator + 17 belief cases
-PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (33 today)
+PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 62 record + 13 validator + 17 belief cases
+PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (36 today)
 PGHOST=... PGUSER=... python3 kernel/providers/test.py                  # each provider's tests + services end to end
 KK_EVAL_CACHE=... python3 kernel/evals/scifact/run.py fetch|setup DB|retrieval DB   # recall floor (not in CI)
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/

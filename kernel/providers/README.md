@@ -11,7 +11,7 @@ end-to-end service test (`tests/test_services.py`). Services share `kk.lib` (`..
 
 | Provider | Slot(s) | Status |
 | --- | --- | --- |
-| record-postgres | record-store, write-pipeline, lane-policy (review rules), change-feed (applied-sequence cursor), as-of reads | Ported from rebuild 4 `kernel/schema`, plus the feed and `api.claims_as_of` (T1) and redactions in the feed (R5-16); 58/58 contract cases; 17 mutants, all fail |
+| record-postgres | record-store, write-pipeline, lane-policy (review rules), change-feed (applied-sequence cursor), as-of reads | Ported from rebuild 4 `kernel/schema`, plus the feed and `api.claims_as_of` (T1) and redactions in the feed (R5-16); 62/62 contract cases; 20 mutants, all fail |
 | filter-gitleaks | intake-filter | To port (rebuild 4 `modules/ingest-filter-gitleaks`) |
 | validator-shacl | validator | Ported from rebuild 4 `modules/validator-shacl` (core, shapes, service) (T2, T3); 13/13 contract cases plus the shape tests; 8 mutants, all fail. Default until a JSON Schema validator passes the same set (R5-11, R5-O1) |
 | belief-corroboration | belief-model | Ported from rebuild 4 (T2, T3): scoring unchanged, the service follows the change feed; 17/17 contract cases; 8 mutants, all fail |

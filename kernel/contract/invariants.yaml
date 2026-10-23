@@ -28,6 +28,7 @@ invariants:
       - redaction removes the value but keeps the claim
       - redaction removes the quote
       - lineage and attribution survive redaction
+      - a redacted artifact cannot be quoted again
   I3:
     text: A claim's scope is at least as restrictive as everything it was made from.
     cases:
@@ -91,6 +92,9 @@ feed:
     - a redaction takes the next feed number, in its target's scope
     - cleared agent sees redactions of secret claims in the feed
     - uncleared agent does not see redactions of secret claims in the feed
+    - redacting a target that does not exist takes no feed number
+    - an artifact redaction is in the feed in the artifact's scope, with the claims that quoted it
+    - an artifact redaction lists only the quoting claims the reader may see
 
 history:
   text: A query as of valid time T and record time R returns what was believed then (D-09); redaction holds at every time and clearance applies.

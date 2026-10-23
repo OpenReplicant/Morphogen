@@ -4,7 +4,8 @@ SQL = "schema/001_kernel.sql"
 
 MUTANTS = [
   ("sequence instead of the locked feed head", SQL, [
-    ("    update kernel.feed_head set seq = seq + 1 returning seq into v_seq;", "    v_seq := nextval('kernel.mut_seq');"),
+    ("until commit.\n    update kernel.feed_head set seq = seq + 1 returning seq into v_seq;",
+     "until commit.\n    v_seq := nextval('kernel.mut_seq');"),
     ("create table kernel.feed_head (", "create sequence kernel.mut_seq;\ncreate table kernel.feed_head (")]),
   ("no feed row", SQL, [("    insert into kernel.feed(seq, change_set, scope) values (v_seq, p_id, cs.target_scope);\n", "")]),
   ("feed without clearance", SQL, [("create policy read_by_scope on kernel.feed for select using (kernel.can_read(scope));",
@@ -28,9 +29,14 @@ MUTANTS = [
      "create policy mut on kernel.change_set for update using (public.mut_fn());\n")]),
   ("apply calls a non-kernel function", SQL, [("    v_state := 'applied';\n  exception", "    perform public.mut_fn();\n    v_state := 'applied';\n  exception"),
      ("\nreset role;\n", "\nreset role;\n" "create function public.mut_fn() returns text language sql as $m$ select 'x' $m$;\n")]),
-  ("redaction not in the feed", SQL, [("  insert into kernel.feed(seq, redaction, target_kind, target_id, scope)\n"
-                                    "  values (v_seq, new.id, new.target_kind, new.target_id, v_scope);\n", "")]),
-  ("redaction in the feed under the default scope", SQL, [("  values (v_seq, new.id, new.target_kind, new.target_id, v_scope);",
-                                                        "  values (v_seq, new.id, new.target_kind, new.target_id, 'urn:kk:scope:default');")]),
+  ("redaction not in the feed", SQL, [("    insert into kernel.feed(seq, redaction, target_kind, target_id, scope)\n"
+                                    "    values (v_seq, new.id, new.target_kind, new.target_id, v_scope);\n", "")]),
+  ("redaction in the feed under the default scope", SQL, [("    values (v_seq, new.id, new.target_kind, new.target_id, v_scope);",
+                                                        "    values (v_seq, new.id, new.target_kind, new.target_id, 'urn:kk:scope:default');")]),
   ("redaction feed entry names no claims", SQL, [("              where f.target_kind = 'claim' and c.id = f.target_id::uuid", "              where false")]),
+  ("artifact redaction names no claims", SQL, [("              where f.target_kind = 'artifact' and r.artifact = f.target_id) x",
+                                             "              where false) x")]),
+  ("redaction of a missing target takes a number", SQL, [("  if v_scope is not null then\n    update kernel.feed_head",
+                                                       "  v_scope := coalesce(v_scope, 'urn:kk:scope:default');\n  if true then\n    update kernel.feed_head")]),
+  ("a redacted artifact may be quoted again", SQL, [("            if v_art.redacted_at is not null then", "            if false then")]),
 ]

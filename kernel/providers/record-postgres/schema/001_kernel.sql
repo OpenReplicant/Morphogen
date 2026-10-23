@@ -567,6 +567,9 @@ begin
             if v_art.sha256 is null then
               raise exception 'op %: unknown artifact %', idx, r->>'artifact' using errcode = 'KK034';
             end if;
+            if v_art.redacted_at is not null then        -- its content was erased; a new quote would bring it back
+              raise exception 'op %: artifact % is redacted', idx, v_art.sha256 using errcode = 'KK038';
+            end if;
             if not kernel.readers_subset(cs.target_scope, v_art.scope) then
               raise exception 'op %: artifact % is in a more restrictive scope than %', idx, v_art.sha256, cs.target_scope
                 using errcode = 'KK035';
@@ -770,9 +773,6 @@ begin
   else
     select scope into v_scope from kernel.artifact where sha256 = new.target_id;
   end if;
-  if v_scope is null then
-    raise exception 'kernel: no % % to redact', new.target_kind, new.target_id using errcode = 'KK061';
-  end if;
   perform set_config('kernel.redacting', 'on', true);
   if new.target_kind = 'claim' then
     update kernel.claim set object_value = null, object_entity = null, qualifiers = '{}',
@@ -787,10 +787,17 @@ begin
     -- The artifact store must delete the bytes; it listens on this channel.
   end if;
   perform set_config('kernel.redacting', 'off', true);
-  -- In the feed like an applied change set; the feed_head row stays locked until commit.
-  update kernel.feed_head set seq = seq + 1 returning seq into v_seq;
-  insert into kernel.feed(seq, redaction, target_kind, target_id, scope)
-  values (v_seq, new.id, new.target_kind, new.target_id, v_scope);
+  -- In the feed like an applied change set, in the target's scope; the feed_head row stays locked until
+  -- commit, so redact in short transactions. A target that does not exist removes nothing and takes no
+  -- number, and the steward is not told whether it exists (that would reveal it across scopes).
+  -- An artifact's row is in the artifact's scope: at apply time every quoting claim's readers could
+  -- read the artifact (KK035); a reader cleared later for a claim's scope but not the artifact's
+  -- misses the row (accepted, R5-16).
+  if v_scope is not null then
+    update kernel.feed_head set seq = seq + 1 returning seq into v_seq;
+    insert into kernel.feed(seq, redaction, target_kind, target_id, scope)
+    values (v_seq, new.id, new.target_kind, new.target_id, v_scope);
+  end if;
   -- Also signalled at once, for listeners that want no poll delay; the feed is the durable record.
   perform pg_notify('kernel_redaction', jsonb_build_object('kind', new.target_kind, 'id', new.target_id)::text);
   return null;

@@ -102,7 +102,7 @@ def main() -> None:
         if conn.execute("select to_regclass('api.verifications')").fetchone()[0] is None:
             sys.exit("verifier-quotes: not installed (its migration adds api.verifications)")
         print(f"quotes: artifacts in {store}, file: sources under {root}; following the change feed", flush=True)
-        follow(conn, Pass(store, root), wake=lambda e: bool(e["claim_ids"]))
+        follow(conn, Pass(store, root), wake=lambda e: e["kind"] == "change_set" and bool(e["claim_ids"]))
 
 
 if __name__ == "__main__":

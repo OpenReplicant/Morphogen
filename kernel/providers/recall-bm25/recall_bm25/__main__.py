@@ -2,7 +2,8 @@
 
 A pass indexes the claims recorded since the last pass that this module can read (their text: the
 literal value plus the words of the subject IRI, as recall has always searched), updates the term and
-corpus statistics per scope, and drops the claims redacted since the last pass. Status changes need no
+corpus statistics per scope, and drops every indexed claim that is redacted (by joining on claim id, not by
+time: redacted_at is a transaction start time, and a redaction can commit long after it). Status changes need no
 pass: deprecated claims are left out at query time. It follows the change feed, which carries redactions
 too (R5-O3), and sweeps every KK_SWEEP_SECONDS. The index is derived: drop schema `recall`'s
 rows and the next pass rebuilds it.
@@ -44,7 +45,6 @@ FORGET = """
 with gone as (
   delete from recall.doc d using api.claims c
   where c.id = d.claim_id and c.redacted_at is not null
-    and (%(since)s::timestamptz is null or c.redacted_at >= %(since)s)
   returning d.scope, d.len, d.tsv),
 terms as (
   update recall.term t set df = t.df - g.n
@@ -61,12 +61,12 @@ class Pass:
     def __call__(self, conn) -> None:
         with conn.transaction():
             state = conn.execute("select recorded_at, redacted_at from recall.state").fetchone()
-            since, redacted_since = state or (None, None)
+            since = state[0] if state else None
             # Claims recorded in a transaction still open now can carry an earlier recorded_at: look
             # back a little; `on conflict do nothing` makes the overlap free.
             now = conn.execute("select now() - interval '5 minutes'").fetchone()[0]
             added = conn.execute(INDEX, {"since": since}).fetchone()[0]
-            dropped = conn.execute(FORGET, {"since": redacted_since}).fetchone()[0]
+            dropped = conn.execute(FORGET).fetchone()[0]
             conn.execute("""insert into recall.state(id, recorded_at, redacted_at) values (true, %s, %s)
                             on conflict (id) do update set recorded_at = excluded.recorded_at,
                                                            redacted_at = excluded.redacted_at""", (now, now))
