@@ -56,5 +56,32 @@ check("a provider fills its slots, citing its `slots:` line; version and SPDX li
       p[encode.KK + "fills"]["object"] == {"entity": "urn:kk:slot:store"} and line(p[encode.KK + "fills"]) == "line=5"
       and p[encode.LICENSE]["object"] == {"entity": "https://spdx.org/licenses/Apache-2.0"}
       and p[encode.VERSION]["object"]["value"]["@value"] == "1.2.3")
+DIST = """id: demo
+version: 0.2.0
+uses_kernel_slots: [store, helper]
+slots:
+  - id: watcher   # an application slot
+    phase: analyse
+    default: watch-one
+"""
+d = encode.distribution("d.yaml", DIST)
+parts = [o for o in d if o["predicate"] == encode.HAS_PART]
+check("a distribution has its kernel slots (an inline list cites its line) and application slots as parts",
+      [o["object"]["entity"] for o in parts] == ["urn:kk:slot:store", "urn:kk:slot:helper", "urn:kk:slot:watcher"]
+      and [line(o) for o in parts] == ["line=3", "line=3", "line=5"])
+w = {o["predicate"]: o for o in d if o["subject"] == "urn:kk:slot:watcher"}
+check("an application slot without an interface takes its phase as contract; `- id` with a comment is found",
+      w[encode.KK + "slotContract"]["object"]["value"]["@value"] == "analyse phase" and line(w[encode.LABEL]) == "line=5"
+      and line(w[encode.COMMENT]) == "line=7")
+try:
+    encode.blueprint("bp.yaml", BLUEPRINT.replace("  - id: helper", "  - id:   helper"))
+    check("a fact whose line cannot be found is an error, not a citation of another line", False)
+except ValueError:
+    check("a fact whose line cannot be found is an error, not a citation of another line", True)
+try:
+    encode.blueprint("bp.yaml", "slots:\n  - id: a\n    interface: A\n  - id: b\n    interface: B\n    default: x\n")
+    check("a note is looked for only within its own slot's block", False)
+except ValueError:
+    check("a note is looked for only within its own slot's block", True)
 print(f"self-encoder checks passed ({sum(checks)}/{len(checks)})" if all(checks) else "self-encoder checks FAILED")
 sys.exit(0 if all(checks) else 1)

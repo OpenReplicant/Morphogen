@@ -46,13 +46,25 @@ class Source:
     def __init__(self, rel: str, text: str):
         self.rel, self.lines = rel, text.splitlines()
 
-    def line(self, pattern: str, after: int = 0) -> int:
-        """The first line at or after `after` (1-based) matching `pattern` (a regex); the file's first line if none."""
+    def line(self, pattern: str, after: int = 0, before: int | None = None) -> int:
+        """The first line in [after, before) (1-based) matching `pattern` (a regex). A fact whose line cannot
+        be found is an error, never a citation of some other line."""
         rx = re.compile(pattern)
         for n, text in enumerate(self.lines[after - 1 if after else 0:], after or 1):
+            if before is not None and n >= before:
+                break
             if rx.search(text):
                 return n
-        return 1
+        raise ValueError(f"{self.rel}: no line matches {pattern!r}")
+
+    def block_end(self, at: int) -> int | None:
+        """The line where the next list item at the same indentation as line `at` starts (None: end of file)."""
+        indent = len(self.lines[at - 1]) - len(self.lines[at - 1].lstrip())
+        for n in range(at + 1, len(self.lines) + 1):
+            text = self.lines[n - 1]
+            if text.strip() and len(text) - len(text.lstrip()) <= indent and not text.lstrip().startswith("#"):
+                return n
+        return None
 
     def ref(self, n: int) -> list[dict]:
         return [{"source_uri": f"file:{self.rel}", "span": {"type": "FragmentSelector", "value": f"line={n}",
@@ -72,6 +84,11 @@ def entity(iri: str) -> dict:
     return {"entity": iri}
 
 
+def item_id(slot: str) -> str:
+    """The `- id: <slot>` line of a list item, with or without a trailing comment."""
+    return rf"^\s+- id: {re.escape(slot)}\s*(#.*)?$"
+
+
 def slot_ops(slot: dict, src: Source, at: int, part_of: str, default_note: str) -> list[dict]:
     s = slot_iri(slot["id"])
     ref = src.ref(at)
@@ -80,7 +97,8 @@ def slot_ops(slot: dict, src: Source, at: int, part_of: str, default_note: str) 
             claim(s, LABEL, value(slot["id"]), ref),
             claim(s, KK + "slotContract", value(contract), ref),
             claim(s, KK + "cardinality", value(slot.get("cardinality", "one")), ref),
-            claim(s, COMMENT, value(default_note), src.ref(src.line(r"^\s+why:" if unfilled(slot) else r"^\s+default:", at))),
+            claim(s, COMMENT, value(default_note),
+                  src.ref(src.line(r"^\s+why:" if unfilled(slot) else r"^\s+default:", at, src.block_end(at)))),
             claim(s, PART_OF, entity(part_of), ref)]
 
 
@@ -99,7 +117,7 @@ def blueprint(rel: str, text: str) -> list[dict]:
     src, doc = Source(rel, text), yaml.safe_load(text)
     ops = []
     for slot in doc["slots"]:
-        at = src.line(rf"^\s+- id: {re.escape(slot['id'])}\s*$")
+        at = src.line(item_id(slot["id"]))
         ops += slot_ops(slot, src, at, BLUEPRINT, default_note(slot))
     return ops
 
@@ -107,7 +125,7 @@ def blueprint(rel: str, text: str) -> list[dict]:
 def provider(rel: str, text: str, name: str) -> list[dict]:
     src, doc = Source(rel, text), yaml.safe_load(text)
     p = provider_iri(name)
-    ops = [claim(p, LABEL, value(doc.get("name", name)), src.ref(src.line(r"^name:"))),
+    ops = [claim(p, LABEL, value(doc.get("name", name)), src.ref(src.line(r"^name:" if "name" in doc else r"^id:"))),
            claim(p, VERSION, value(doc["version"]), src.ref(src.line(r"^version:")))]
     if doc.get("license"):
         ops.append(claim(p, LICENSE, entity(f"https://spdx.org/licenses/{doc['license']}"), src.ref(src.line(r"^license:"))))
@@ -122,10 +140,12 @@ def distribution(rel: str, text: str) -> list[dict]:
     ops = [claim(d, LABEL, value(doc["id"]), src.ref(src.line(r"^id:"))),
            claim(d, VERSION, value(doc["version"]), src.ref(src.line(r"^version:")))]
     uses = src.line(r"^uses_kernel_slots:")
+    inline = "[" in src.lines[uses - 1]          # uses_kernel_slots: [a, b] cites its own line
     for s in doc.get("uses_kernel_slots", []):
-        ops.append(claim(d, HAS_PART, entity(slot_iri(s)), src.ref(src.line(rf"^\s+- {re.escape(s)}\s*$", uses))))
+        n = uses if inline else src.line(rf"^\s+- {re.escape(s)}\s*(#.*)?$", uses)
+        ops.append(claim(d, HAS_PART, entity(slot_iri(s)), src.ref(n)))
     for slot in doc.get("slots", []):
-        at = src.line(rf"^\s+- id: {re.escape(slot['id'])}\s*$")
+        at = src.line(item_id(slot["id"]))
         ops.append(claim(d, HAS_PART, entity(slot_iri(slot["id"])), src.ref(at)))
         ops += slot_ops(slot, src, at, d, default_note(slot))
     return ops

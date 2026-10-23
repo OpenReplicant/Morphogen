@@ -5,15 +5,16 @@ declare
   missing text;
   n int;
 begin
-  -- Every property the self-encoder (T6) writes is approved.
+  -- Every property the self-encoder writes (kernel/providers/self-encoder/self_encoder/encode.py) is approved,
+  -- and the module-contract and TOSCA terms rebuild 4's self-encoder wrote (other encoders will).
   select string_agg(p, ', ') into missing
   from unnest(array[
-    'kk:fills', 'kk:moduleKind', 'owl:versionInfo', 'kk:runsAs', 'kk:protected',
-    'kk:slotContract', 'kk:cardinality',
+    'rdf:type', 'rdfs:label', 'rdfs:comment', 'kk:slotContract', 'kk:cardinality', 'kk:fills', 'owl:versionInfo',
+    'dcterms:license', 'dcterms:isPartOf', 'dcterms:hasPart',
+    'kk:moduleKind', 'kk:runsAs', 'kk:protected',
     'kkt:nodeType', 'kkt:propertyValue', 'kkt:propertyName', 'kkt:memberOf',
     'kkt:dependsOn', 'kkt:hostedOn', 'kkt:connectsTo', 'kkt:hasAffordance', 'kkt:hasRequirement',
-    'kkt:substitutes', 'kkt:substitutedBy',
-    'dcterms:license', 'rdfs:label']) p
+    'kkt:substitutes', 'kkt:substitutedBy']) p
   where not kernel.is_approved_property(kernel.expand(p));
   if missing is not null then
     raise exception 'T3: properties not approved: %', missing;
