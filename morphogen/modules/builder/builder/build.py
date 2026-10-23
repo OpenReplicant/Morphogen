@@ -25,24 +25,15 @@ from pathlib import Path
 
 import yaml
 
+from morphogen.experiments import experiment_id, provider_dir
+
 ROOT = Path(__file__).resolve().parents[4]
 NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
 def incumbent_dir(provider: str) -> Path | None:
     """urn:kk:provider:<name> -> its directory (Morphogen's modules, then the kernel's providers)."""
-    name = provider.removeprefix("urn:kk:provider:")
-    if provider == name or not NAME.fullmatch(name):
-        return None
-    for base in (ROOT / "morphogen" / "modules", ROOT / "kernel" / "providers"):
-        d = base / name
-        if (d / "provider.yaml").exists() and yaml.safe_load((d / "provider.yaml").read_text()).get("id") == provider:
-            return d
-    return None
-
-
-def experiment_id(request: str) -> str:
-    return "x" + hashlib.sha256(request.encode()).hexdigest()[:12]
+    return provider_dir(provider)
 
 
 def prompt(request: dict, slot: str, incumbent: Path, workdir: Path) -> str:

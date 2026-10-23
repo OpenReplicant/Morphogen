@@ -7,5 +7,6 @@ origin: new (T6, R5-21)
 requires: Python 3.12+, psycopg, PyYAML; a superuser login for the sandbox cluster (it creates and drops databases)
 migration: migration.sql
 command: python3 -m sandbox <intent/experiments/<id>>
+service: python3 -m sandbox
 tests: [python3 tests/test_sandbox.py]
 note: writes no claims; the evaluator records the scores of candidate and incumbent, each linked to its provider

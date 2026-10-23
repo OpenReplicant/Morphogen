@@ -1,10 +1,24 @@
-# The fixed action list (D-53, R5-20): what a plan step may ask the intent actuator to change. Anything
-# else is not an action; the planner says so to a person instead. Read-only to agents.
+# The fixed action list (D-53, R5-20, R5-21): what a plan may ask for. Anything else is not an action; the
+# planner says so to a person instead. Read-only to agents.
+#   kind setting  a plan step the intent actuator carries out by changing one setting in intent
+#   kind request  not a plan: a build request (auto lane) that changes nothing running; the builder answers it
+#   kind replace  a plan step the intent actuator carries out by running a measured candidate instead
 actions:
   urn:kk:action:set-poll-seconds:
+    kind: setting
     label: set how often a change feed consumer reads the feed
     setting: KK_POLL_SECONDS          # an environment variable of the provider's service (kk.lib follow)
     min: 0.1
     max: 30
     risk: low                         # reversible by the same action; no data changes
     answers: [urn:kk:property:feed-lag-seconds-mean]
+  urn:kk:action:build-candidate:
+    kind: request
+    label: build a candidate provider for the slot and measure it against the incumbent in the sandbox
+    risk: low                         # sandbox only: nothing running changes
+    answers: [urn:kk:property:step-seconds-mean]
+  urn:kk:action:replace-provider:
+    kind: replace
+    label: run a candidate that passed the slot's contract and measured better than the incumbent instead of it
+    risk: medium                      # new code; reversible by the same action
+    answers: []                       # proposed from measurements, not from an anomaly directly

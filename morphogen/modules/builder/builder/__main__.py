@@ -22,7 +22,9 @@ from pathlib import Path
 
 from kk.lib import connect, follow, run, submit
 
-from .build import ROOT, build, incumbent_dir
+from morphogen.experiments import provider_dir as incumbent_dir
+
+from .build import ROOT, build
 
 MODULE = "urn:kk:module:builder"
 AGENT = "urn:kk:agent:builder"

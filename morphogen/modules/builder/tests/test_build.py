@@ -14,7 +14,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[2]
-sys.path[:0] = [str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "modules"),
+sys.path[:0] = [str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src"), str(ROOT / "morphogen" / "modules"),
                 str(ROOT / "kernel" / "providers" / "validator-shacl")]
 from kk.lib import connect, run, submit  # noqa: E402
 from builder.__main__ import AGENT, BUILD, DCT, OA, one_pass  # noqa: E402

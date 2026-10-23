@@ -1,6 +1,7 @@
 """Anomaly worker, latest windows only (a candidate for the analyser slot): the incumbent's rules
 (detect.py, unchanged), but each pass reads only the windows it compares: per feature of interest and
-property, the latest 23 (3 judged, up to 20 before them). The incumbent reads the 5,000 newest
+property, the latest 23 (3 judged, up to 20 before them; a deprecated one among them is dropped, not
+replaced). The incumbent reads the 5,000 newest
 observations of all series, so its pass grows with the record and, past 5,000, cuts older series short.
 
 Otherwise as the incumbent: whenever the change feed carries observations or
@@ -38,9 +39,8 @@ def one_pass(conn) -> dict:
         cur.execute(f"""select {COLUMNS} from (
                           select c.*, row_number() over (partition by c.subject, c.qualifiers
                                                          order by c.valid_from desc) as rn
-                          from kernel.claim c where c.predicate = %s and c.evidence_type = 'observed'
-                            and kernel.current_status(c.id) <> 'deprecated') x
-                        where rn <= %s""", (RESULT, LATEST + HISTORY))
+                          from kernel.claim c where c.predicate = %s and c.evidence_type = 'observed') x
+                        where rn <= %s and kernel.current_status(id) <> 'deprecated'""", (RESULT, LATEST + HISTORY))
         cols = [d.name for d in cur.description]
         obs = [dict(zip(cols, r)) for r in cur.fetchall()]
         cur.execute(f"""select {COLUMNS} from api.claims where predicate = %s and status <> 'deprecated'""", (MAX,))

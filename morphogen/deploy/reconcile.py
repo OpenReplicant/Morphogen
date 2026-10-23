@@ -13,7 +13,8 @@ KK_RECONCILE_SECONDS (default 1) it re-reads.
 Intent is read from the commit at HEAD, never the work tree: only what was committed (by the intent
 actuator, or a person) runs, and an edit left uncommitted runs nothing. A file is refused unless its
 service is `python3 -m <module>`, its directory is a provider's (kernel/providers/<name> or
-morphogen/modules/<name>), and its environment sets only KK_* settings other than KK_ROLE: a provider's
+morphogen/modules/<name> in the repository, or a candidate's experiments/<id>/<name> in intent, which the
+intent actuator points to when a person approves a replacement), and its environment sets only KK_* settings other than KK_ROLE: a provider's
 identity and database login come from this process, not from intent.
 """
 from __future__ import annotations
@@ -34,7 +35,7 @@ import yaml
 
 
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
-CWD = re.compile(r"(kernel/providers|morphogen/modules)/[a-z0-9][a-z0-9-]*")
+CWD = re.compile(r"(kernel/providers|morphogen/modules)/[a-z0-9][a-z0-9-]*|experiments/x[0-9a-f]{12}/[a-z0-9][a-z0-9-]*")
 SETTING = re.compile(r"KK_[A-Z0-9_]+")
 
 
@@ -71,8 +72,8 @@ def desired(intent: Path, env: str) -> tuple[dict[str, tuple[str, dict]], dict[s
     return out, refused
 
 
-def start(repo: Path, spec: dict) -> subprocess.Popen:
-    cwd = repo / spec.get("cwd", ".")
+def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Popen:
+    cwd = (intent if intent is not None and spec["cwd"].startswith("experiments/") else repo) / spec["cwd"]
     path = os.pathsep.join(filter(None, [str(cwd), str(repo / "kernel" / "src"), str(repo / "morphogen" / "src"),
                                          os.environ.get("PYTHONPATH")]))
     env = {**os.environ, **{k: str(v) for k, v in (spec.get("env") or {}).items()}, "PYTHONPATH": path,
@@ -133,7 +134,7 @@ def main(argv=None) -> int:
             for name, (digest, spec) in want.items():
                 if name not in running and time.monotonic() - exited.get(name, -backoff) >= backoff:
                     try:
-                        running[name] = (digest, start(repo, spec))
+                        running[name] = (digest, start(repo, spec, intent))
                     except OSError as e:          # e.g. the provider's directory is missing: say so, retry later
                         exited[name] = time.monotonic()
                         say(event="failed", provider=name, error=str(e)[:200])
