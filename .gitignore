@@ -7,3 +7,4 @@ __pycache__/
 .cognee_system/
 .data_storage/
 dist/
+kernel/providers/_mutant/
