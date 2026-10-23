@@ -15,6 +15,7 @@ prediction. Every step is a separate service on one record; every step cites the
 
   PGHOST=... PGUSER=<superuser> python3 morphogen/tests/test_g2.py   (about two minutes; KK_LOOP_LOGS=1 keeps the logs)
 """
+import json
 import os
 import shutil
 import socket
@@ -41,7 +42,6 @@ DCT = "http://purl.org/dc/terms/"
 MAX = "https://www.irit.fr/recherches/MELODI/ontologies/BBO#maxValue"
 STEP = "urn:kk:property:step-seconds-mean"
 ANALYSER = "urn:kk:provider:anomaly"
-CANDIDATE = "urn:kk:provider:anomaly-recent"
 PERSON = "urn:kk:agent:g2-person"
 WINDOW = 4
 LIMIT = float(os.environ.get("KK_G2_LIMIT", "0.12"))     # seconds per analyser pass
@@ -123,10 +123,11 @@ def main() -> None:
     try:
         service("observer", "observer_otel", MODULES / "observer-otel",
                 {"KK_WINDOW_SECONDS": str(WINDOW), "KK_OTLP_PORT": str(port), "KK_OTLP_SOURCE": f"http://observer:{port}/v1/metrics",
-                 "KK_OTLP_TOKEN": token, "KK_OTLP_SERVICES": "validator-shacl,anomaly,anomaly-recent"})
+                 "KK_OTLP_TOKEN": token, "KK_OTLP_SERVICES": "validator-shacl,anomaly*"})
         service("planner", "planner", MODULES / "planner", {})
+        builder = os.environ.get("KK_G2_BUILDER", "fixture")    # harness: KK_BUILDER_COMMAND runs an agent harness
         service("builder", "builder", MODULES / "builder",
-                {"KK_BUILDER_STRATEGY": "fixture", "KK_BUILDER_FIXTURES": str(ROOT / "morphogen" / "tests" / "fixtures")})
+                {"KK_BUILDER_STRATEGY": builder, "KK_BUILDER_FIXTURES": str(ROOT / "morphogen" / "tests" / "fixtures")})
         service("sandbox", "sandbox", MODULES / "sandbox", {"KK_BENCH_SECONDS": "6"})
         service("actuator", "intent_actuator", MODULES / "intent-actuator", {})
         service("verifier", "prediction_verifier", MODULES / "prediction-verifier", {})
@@ -158,12 +159,13 @@ def main() -> None:
                                                         "and predicate = %s and object_entity = %s", OA + "hasTarget", ANALYSER))[0][0]
             check(q("select lane from api.change_sets where idempotency_key = %s", f"request:{request}")[0][0] == "auto",
                   "request: the planner asks for a better analyser (auto lane: nothing running changes)")
-            wait("the builder's candidate", lambda: q("select 1 from api.claims where subject = %s and predicate = %s and object_entity = %s",
-                                                      CANDIDATE, DCT + "source", request))
-            check("experiment:" in git(intent, "log", "--format=%s") and any((intent / "experiments").glob("x*/anomaly-recent")),
-                  "build: the candidate is committed to intent/experiments/, citing the request")
+            CANDIDATE = wait("the builder's candidate", lambda: q(
+                "select subject from api.claims where predicate = %s and object_entity = %s and attributed_to = 'urn:kk:agent:builder'",
+                DCT + "source", request), timeout=1800)[0][0]
+            check("experiment:" in git(intent, "log", "--format=%s") and any((intent / "experiments").glob("x*/*/provider.yaml")),
+                  f"build: the candidate {CANDIDATE} is committed to intent/experiments/, citing the request")
             queue = wait("the replacement in the review queue", lambda: q(
-                "select id, ops from api.review_queue where attributed_to = 'urn:kk:agent:planner'"), timeout=240)
+                "select id, ops from api.review_queue where attributed_to = 'urn:kk:agent:planner'"), timeout=300)
             cs_id, ops = queue[0]
             measures = q("""select s.object_entity, v.qualifiers->>%s, (v.object_value->>'@value')::float from api.claims s
                             join api.claims v on v.subject = s.subject and v.predicate = 'http://www.w3.org/ns/dqv#value'
@@ -183,7 +185,7 @@ def main() -> None:
             done = wait("the actuator", lambda: q("select status, cost from kernel.run where agent = 'urn:kk:agent:intent-actuator' "
                                                   "and plan_step = %s and ended_at is not null", step))
             check(done[0][0] == "succeeded" and git(intent, "log", "-1", "--format=%s").startswith(f"change-set:{cs_id}")
-                  and "anomaly-recent" in (intent / "environments" / "sandbox" / "anomaly.yaml").read_text(),
+                  and CANDIDATE.rsplit(":", 1)[-1] in (intent / "environments" / "sandbox" / "anomaly.yaml").read_text(),
                   "execute: the intent actuator commits the switch to the candidate")
             after = wait("the candidate's own observations", lambda: observed(CANDIDATE))
             check(after, f"the reconciler runs the candidate; its step time is observed ({after[0]:.3f} s)")
@@ -203,6 +205,16 @@ def main() -> None:
             check({"urn:kk:agent:anomaly", "urn:kk:agent:observer-otel", PERSON} <= prem(request), "the request cites the anomaly, the observation and the limit")
             check(q("select attributed_to from api.claims where subject = %s limit 1", verdict[0][0])[0][0] == "urn:kk:agent:prediction-verifier",
                   "no method verifies its own output: the verdict is the verifier's, not the planner's")
+            if os.environ.get("KK_G2_RECORD"):           # the gate run's record: scores, verdict, the candidate built
+                out = Path(os.environ["KK_G2_RECORD"])
+                out.mkdir(parents=True, exist_ok=True)
+                exp = next((intent / "experiments").glob("x*"))
+                shutil.copytree(exp, out / exp.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+                (out / "run.json").write_text(json.dumps({
+                    "builder": builder, "limit_seconds": LIMIT, "incumbent": ANALYSER, "candidate": CANDIDATE,
+                    "observed_before": first[0], "observed_after": after,
+                    "sandbox": {k[0].rsplit(":", 1)[-1] + "." + k[1]: v for k, v in score.items()},
+                    "verdict": verdict[0][1], "request": request, "plan": plan, "change_set": str(cs_id)}, indent=2) + "\n")
     finally:
         for name, p in reversed(procs):
             p.terminate()

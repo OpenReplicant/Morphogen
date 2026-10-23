@@ -38,17 +38,23 @@ def incumbent_dir(provider: str) -> Path | None:
 
 def prompt(request: dict, slot: str, incumbent: Path, workdir: Path) -> str:
     cases = ROOT / "morphogen" / "contract" / "slots" / slot
+    bench = cases / "benchmark.yaml"
+    benchmark = bench.read_text() if bench.exists() else "(none)"
     return f"""You are improving one provider of Morphogen's `{slot}` slot.
 
 What is wanted: {request['text']}
 
 The incumbent provider is copied into {workdir}. Change the copy so that:
-- it still passes every case of the slot's contract: the case files in {cases}/cases, which
-  `python3 tests/contract.py` runs (it prints "ok: <case id>" for each passing case);
-- it does better on the slot's benchmark ({cases}/benchmark.yaml) than the incumbent;
-- provider.yaml gets an id of its own (urn:kk:provider:<new-name>), a name, and keeps the slot, the runner
-  and the service, pointing at the renamed package if you rename it.
-Keep the agent and role the incumbent uses. Do not touch anything outside {workdir}.
+- it still passes every case of the slot's contract: the case files in {cases}/cases. Run
+  `KK_CASES={cases} python3 tests/contract.py` in {workdir}: it prints "ok: <case id>" for each passing case
+  and must exit 0;
+- it does better than the incumbent on the slot's benchmark, which measures this:
+{benchmark}
+- provider.yaml gets an id of its own (urn:kk:provider:<new-name>, lower-case letters, digits and hyphens),
+  a name, and keeps the slot, the runner and the service; if you rename the package, the service and the
+  runner's imports must name the new package.
+Keep the agent and role the incumbent uses (AGENT, KK_ROLE). Do not touch anything outside {workdir}.
+When you are done, say in one line what you changed.
 """
 
 
