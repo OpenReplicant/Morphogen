@@ -19,7 +19,7 @@ end-to-end service test (`tests/test_services.py`). Services share `kk.lib` (`..
 | (none) | truth-maintenance | Unfilled: Morphogen does not need it (`why` in `../blueprint/slots.yaml`, R5-12) |
 | recall-bm25 | recall | Ported from rebuild 4 `recall-index` (T3); SciFact retrieval nDCG@10 0.6606, recall@200 0.9382 (floor 0.6594 / 0.9349; `../evals/scifact`). Dense fusion and re-ranking: opt-in, not ported |
 | kernel-mcp | agent-interface | Ported from rebuild 4 (T3): the operator tools; `whoami` fixed for non-reviewers. Not ported: the memory profile and briefing (R5-12) |
-| pack-loader | vocabulary-pack | To port |
-| self-encoder | self-encoder | To rewrite |
+| pack-loader | vocabulary-pack | Ported from rebuild 4 (T4): `packs.sql` identical but for file paths; the pack checks pass |
+| self-encoder | self-encoder | Rewritten (T4): blueprint, provider manifests and a distribution as claims; `answer` says which provider fills each slot, citing file and line |
 | evaluator | evaluator | Ported from rebuild 4 unchanged (T3): eval runs as DQV measurements. Candidate-vs-incumbent scoring comes with G2 |
 | claude-code | harness-adapter | To port (`kernel-mcp/hooks`) |

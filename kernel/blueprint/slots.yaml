@@ -110,13 +110,13 @@ slots:
   - id: vocabulary-pack
     cardinality: many
     interface: pack (kernel/packs/packs.yaml)
-    default: pack-loader
-    status: to-port
+    default: pack-loader              # packs.sql generated from kernel/packs, reviewed as code
+    status: ported
   - id: self-encoder
     cardinality: one
     interface: Encoder
-    default: self-encoder             # encodes this file, installed providers and packs as claims
-    status: to-rewrite
+    default: self-encoder             # encodes this file, provider manifests and a distribution file as claims
+    status: written
   - id: evaluator
     cardinality: one
     interface: Evaluator
