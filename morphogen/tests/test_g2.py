@@ -3,7 +3,9 @@ prediction. Every step is a separate service on one record; every step cites the
 
   monitor    the analyser (anomaly, run by the reconciler from intent) reports its own step time over
              OpenTelemetry; the record holds 4,500 earlier observations, so its pass is slow
-  analyse    the analyser finds its own step time over the limit a person documented
+  analyse    the analyser finds its own step time over the limit a person documented: KK_G2_LIMIT_RATIO
+             (0.7) of the incumbent's second observed window, so the gate does not depend on the machine's
+             speed (the candidates measured so far run at 0.4-0.55 of the incumbent); KK_G2_LIMIT fixes it
   request    the planner asks for a better provider of the analyser slot (a build request, auto lane)
   build      the builder writes a candidate into intent/experiments/ and commits it (CI: a fixture)
   measure    the sandbox runs the analyser contract on candidate and incumbent and measures both on a copy
@@ -44,7 +46,7 @@ STEP = "urn:kk:property:step-seconds-mean"
 ANALYSER = "urn:kk:provider:anomaly"
 PERSON = "urn:kk:agent:g2-person"
 WINDOW = 4
-LIMIT = float(os.environ.get("KK_G2_LIMIT", "0.12"))     # seconds per analyser pass
+RATIO = float(os.environ.get("KK_G2_LIMIT_RATIO", "0.7"))   # the limit, as a share of the incumbent's step time
 
 
 def check(cond, msg):
@@ -140,18 +142,20 @@ def main() -> None:
             stdout=log, stderr=subprocess.STDOUT)))
 
         with connect("t_g2_person", url) as person:
-            with person.cursor() as cur, run(cur, "urn:kk:module:g2-person") as (run_id, _):
-                submit(cur, {"idempotency_key": "g2:limit", "attributed_to": PERSON, "target_scope": "urn:kk:scope:default",
-                             "ops": [{"op": "add_claim", "subject": ANALYSER, "predicate": MAX,
-                                      "object": {"value": {"@value": LIMIT}}, "qualifiers": {SOSA + "observedProperty": STEP},
-                                      "evidence_type": "testimony", "references": [{"source_uri": "urn:kk:test:g2#limit"}]}]}, run_id)
             q = lambda sql, *a: person.execute(sql, a).fetchall()
             observed = lambda subject: [float(v) for (v,) in q(
                 "select object_value->>'@value' from api.claims where subject = %s and predicate = %s and qualifiers->>%s = %s "
                 "and attributed_to = 'urn:kk:agent:observer-otel' order by valid_from", subject, SOSA + "hasSimpleResult",
                 SOSA + "observedProperty", STEP)]
-            first = wait("an observation of the analyser's step time", lambda: observed(ANALYSER))
-            check(first[0] > LIMIT, f"monitor: the analyser's own step time is observed, over its limit ({first[0]:.3f} s > {LIMIT} s)")
+            # The first window is a warm-up; the second is the incumbent's own pace on this machine.
+            first = wait("two observations of the analyser's step time", lambda: (lambda o: o if len(o) >= 2 else None)(observed(ANALYSER)))
+            LIMIT = float(os.environ["KK_G2_LIMIT"]) if os.environ.get("KK_G2_LIMIT") else round(RATIO * first[1], 4)
+            with person.cursor() as cur, run(cur, "urn:kk:module:g2-person") as (run_id, _):
+                submit(cur, {"idempotency_key": "g2:limit", "attributed_to": PERSON, "target_scope": "urn:kk:scope:default",
+                             "ops": [{"op": "add_claim", "subject": ANALYSER, "predicate": MAX,
+                                      "object": {"value": {"@value": LIMIT}}, "qualifiers": {SOSA + "observedProperty": STEP},
+                                      "evidence_type": "testimony", "references": [{"source_uri": "urn:kk:test:g2#limit"}]}]}, run_id)
+            check(first[1] > LIMIT, f"monitor: the analyser's own step time is observed ({first[1]:.3f} s); a person sets its limit at {LIMIT} s")
             anomaly = wait("an anomaly on the analyser", lambda: q("select subject from api.claims where predicate = %s and object_entity = %s",
                                                                 OA + "hasTarget", ANALYSER))[0][0]
             check(anomaly.startswith("urn:kk:anomaly:"), "analyse: the analyser finds its own step time over the limit")
@@ -188,11 +192,13 @@ def main() -> None:
                   and CANDIDATE.rsplit(":", 1)[-1] in (intent / "environments" / "sandbox" / "anomaly.yaml").read_text(),
                   "execute: the intent actuator commits the switch to the candidate")
             after = wait("the candidate's own observations", lambda: observed(CANDIDATE))
-            check(after, f"the reconciler runs the candidate; its step time is observed ({after[0]:.3f} s)")
+            check(after, f"the reconciler runs the candidate; its step time is observed (first window {after[0]:.3f} s, "
+                         "a warm-up the verifier skips)")
             verdict = wait("a verdict", lambda: q("""select v.subject, t.object_entity from api.claims v join api.claims t on t.subject = v.subject
                                                     where v.subject like 'urn:kk:verdict:%%' and v.predicate = %s and t.predicate = %s""",
                                                  OA + "hasTarget", DCT + "type"), timeout=120)
-            check(verdict[0][1] == "urn:kk:verdict:holds", f"verify: the observed result matches the prediction ({verdict[0][1]})")
+            said = q("select object_value->>'@value' from api.claims where subject = %s and predicate = %s", verdict[0][0], OA + "bodyValue")[0][0]
+            check(verdict[0][1] == "urn:kk:verdict:holds", f"verify: the observed result matches the prediction ({said})")
 
             # Every step cites the one before it.
             prem = lambda subject: {r[0] for r in q("""select c2.attributed_to from kernel.claim_derivation d
@@ -212,7 +218,7 @@ def main() -> None:
                 shutil.copytree(exp, out / exp.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
                 (out / "run.json").write_text(json.dumps({
                     "builder": builder, "limit_seconds": LIMIT, "incumbent": ANALYSER, "candidate": CANDIDATE,
-                    "observed_before": first[0], "observed_after": after,
+                    "observed_before": first, "observed_after": observed(CANDIDATE), "verdict_text": said,
                     "sandbox": {k[0].rsplit(":", 1)[-1] + "." + k[1]: v for k, v in score.items()},
                     "verdict": verdict[0][1], "request": request, "plan": plan, "change_set": str(cs_id)}, indent=2) + "\n")
     finally:

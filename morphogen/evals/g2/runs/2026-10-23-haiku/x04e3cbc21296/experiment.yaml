@@ -1,0 +1,5 @@
+slot: analyser
+incumbent: morphogen/modules/anomaly
+candidate: anomaly-x04e3cbc21296
+request: urn:kk:request:3b418d8942d93b30
+strategy: harness

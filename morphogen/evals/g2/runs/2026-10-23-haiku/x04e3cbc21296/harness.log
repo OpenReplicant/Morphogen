@@ -1,0 +1,10 @@
+I changed the service loop in `anomaly/__main__.py` so a pass returns early when the change feed hasn't moved since the last pass. The contract (11/11 ok, exit 0) and the unit checks pass. I did not measure the benchmark: this sandbox has no `psycopg` and no database, so the 8-second `kk.step.duration` run is unverified.
+
+Changed in `/tmp/tmp5wb1m3l8/intent/experiments/x04e3cbc21296/anomaly-x04e3cbc21296`:
+- **`anomaly/__main__.py`**: `one_pass` reads `feed_head` first and skips the claim reads and the anomaly scan if the head is unchanged. The head is recorded only after a successful scan, so a failed pass is retried. The scan body moved to `scan()` unchanged, apart from the returns.
+- **`provider.yaml`**: id `urn:kk:provider:anomaly-feed-head`, name "Anomaly detection (feed-head skip)", version 0.2.1. Slot, runner, service, package, agent and role are unchanged.
+- **`detect.py`, the migration and the tests** are untouched, so the contract and mutant checks still apply.
+
+The gain comes from skipping work between feed changes, not from making a full pass faster. With the benchmark's 1-second sweep, most steps should become a single `feed_head` query, but that is a prediction until someone runs the benchmark.
+
+--- stderr

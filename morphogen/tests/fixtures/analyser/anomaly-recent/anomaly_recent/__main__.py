@@ -3,6 +3,9 @@
 property, the latest 23 (3 judged, up to 20 before them; a deprecated one among them is dropped, not
 replaced). The incumbent reads the 5,000 newest
 observations of all series, so its pass grows with the record and, past 5,000, cuts older series short.
+And a pass is skipped while the change feed has not moved since the last one: observations and limits
+change only through feed entries, so nothing new can be found (the head is read before the claims, so a
+change landing in between is caught by the next pass).
 
 Otherwise as the incumbent: whenever the change feed carries observations or
 documented limits (and every KK_SWEEP_SECONDS) it reads the current observations and limits and submits
@@ -24,7 +27,7 @@ import json
 import os
 import sys
 
-from kk.lib import connect, follow, run, submit
+from kk.lib import connect, feed_head, follow, run, submit
 
 from .detect import HISTORY, LATEST, MAX, RESULT, anomalies, change_set
 
@@ -34,7 +37,17 @@ SCOPE = "urn:kk:scope:default"
 COLUMNS = "id, subject, qualifiers, object_value, valid_from, valid_to"
 
 
-def one_pass(conn) -> dict:
+def one_pass(conn, seen: dict | None = None) -> dict:
+    head = feed_head(conn)
+    if seen is not None and seen.get("head") == head:
+        return {"anomalies": {}}
+    got = scan(conn)
+    if seen is not None:
+        seen["head"] = head
+    return got
+
+
+def scan(conn) -> dict:
     with conn.cursor() as cur:
         cur.execute(f"""select {COLUMNS} from (
                           select c.*, row_number() over (partition by c.subject, c.qualifiers
@@ -69,7 +82,8 @@ def main(argv=None) -> int:
     if a.once:
         print(json.dumps(one_pass(conn)))
         return 0
-    follow(conn, lambda c: print(json.dumps(one_pass(c)), flush=True),
+    seen: dict = {}
+    follow(conn, lambda c: print(json.dumps(one_pass(c, seen)), flush=True),
            wake=lambda e: bool({RESULT, MAX} & set(e["predicates"] or [])))
     return 0
 

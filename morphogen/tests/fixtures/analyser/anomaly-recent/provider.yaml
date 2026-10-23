@@ -3,7 +3,7 @@ name: Anomaly detection, latest windows only
 version: 0.1.0
 license: Apache-2.0
 slots: [analyser]
-origin: candidate for the analyser slot (G2 fixture, the builder CI uses); detect.py as the incumbent's, the query reads only what it compares
+origin: candidate for the analyser slot (G2 fixture, the builder CI uses); detect.py as the incumbent's, the query reads only what it compares, and a pass is skipped while the feed has not moved
 requires: Python 3.12+, psycopg
 runner: python3 tests/contract.py
 service: python3 -m anomaly_recent
