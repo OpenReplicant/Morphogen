@@ -1,0 +1,39 @@
+@prefix kk:      <https://w3id.org/knowledge-kernel/ns#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix pplan:   <http://purl.org/net/p-plan#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix oa:      <http://www.w3.org/ns/oa#> .
+@prefix ex:      <http://example.org/> .
+
+# Each node breaks exactly one rule; the test expects every one of them to be reported.
+
+# extracted claim with no quote
+ex:noQuote a rdf:Statement ;
+    rdf:subject ex:a ; rdf:predicate rdfs:label ; rdf:object "A" ;
+    prov:wasAttributedTo ex:agent ; prov:wasGeneratedBy ex:run ;
+    dcterms:accessRights ex:scope ; dcterms:type <urn:kk:evidence:extracted> ; prov:generatedAtTime "2026-10-15T00:00:00Z"^^xsd:dateTime ;
+    dcterms:source [ a oa:SpecificResource ; oa:hasSource ex:doc ] .
+
+# claim with no attribution
+ex:unattributed a rdf:Statement ;
+    rdf:subject ex:a ; rdf:predicate rdfs:label ; rdf:object "A" ;
+    prov:wasGeneratedBy ex:run ;
+    dcterms:accessRights ex:scope ; dcterms:type <urn:kk:evidence:deterministic> ; prov:generatedAtTime "2026-10-15T00:00:00Z"^^xsd:dateTime ;
+    dcterms:source ex:doc .
+
+# inferred claim with no premises (and therefore no source either)
+ex:noPremises a rdf:Statement ;
+    rdf:subject ex:a ; rdf:predicate rdfs:label ; rdf:object "A" ;
+    prov:wasAttributedTo ex:agent ; prov:wasGeneratedBy ex:run ;
+    dcterms:accessRights ex:scope ; dcterms:type <urn:kk:evidence:inferred> ; prov:generatedAtTime "2026-10-15T00:00:00Z"^^xsd:dateTime .
+
+
+# module that fills no slot
+<urn:kk:module:orphan> a kk:Module ;
+    rdfs:label "Orphan" ; owl:versionInfo "0.1.0" ; kk:moduleKind kk:Processor ;
+    kk:runsAs <urn:kk:agent:orphan> ; dcterms:license <https://spdx.org/licenses/MIT> .
+

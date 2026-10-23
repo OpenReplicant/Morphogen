@@ -14,6 +14,8 @@ method verifies its own output. The kernel is built here under `kernel/` and wil
 - Working rules: `CLAUDE.md`
 
 ```sh
-PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance
+pip install -r kernel/contract/requirements.txt                       # in a virtualenv
+PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance, every provider
+PGHOST=<socket or host> PGUSER=<superuser> python3 kernel/contract/mutants.py   # every mutant must fail
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
 ```

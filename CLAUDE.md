@@ -59,8 +59,9 @@ Reference implementation (read-only): `OpenReplicant/kernel` (rebuild 4). Port f
 ## Checks
 
 ```sh
-PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 54 cases today
-PGHOST=... PGUSER=... python3 kernel/providers/record-postgres/tests/mutants.py   # every mutant must fail
+pip install -r kernel/contract/requirements.txt                       # once, in a virtualenv (KK_PYTHON=<its python>)
+PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 54 record + 13 validator + 17 belief cases
+PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (29 today)
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
 ```
 
@@ -68,7 +69,7 @@ python3 scripts/check_boundary.py                                      # kernel/
 
 ```
 kernel/                    ← becomes its own repository
-  contract/                invariants.yaml (the guarantees as named cases), run.sh
+  contract/                invariants.yaml (the guarantees as named cases), slots/ (per-slot case sets), run.sh, mutants.py
   blueprint/slots.yaml     the kernel's own slots, couplings and defaults
   schemas/                 change set and module manifest (wire formats)
   src/kk/interfaces.py     slot interfaces

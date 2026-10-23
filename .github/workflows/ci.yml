@@ -17,8 +17,15 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get install -y -q postgresql-client python3-yaml
+      - run: sudo apt-get install -y -q postgresql-client python3-venv
+      - name: Contract requirements
+        run: |
+          python3 -m venv /tmp/kk-venv
+          /tmp/kk-venv/bin/pip install -q -r kernel/contract/requirements.txt
+          echo "KK_PYTHON=/tmp/kk-venv/bin/python" >> "$GITHUB_ENV"
       - name: Conformance contract
         run: sh kernel/contract/run.sh
+      - name: Mutation check (every mutant must fail)
+        run: /tmp/kk-venv/bin/python kernel/contract/mutants.py
       - name: Boundary
         run: python3 scripts/check_boundary.py

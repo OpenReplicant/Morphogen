@@ -38,8 +38,8 @@ slots:
     hook: validation
     cardinality: many
     interface: Validator
-    default: validator-schema         # JSON Schema; SHACL becomes another candidate
-    status: to-write
+    default: validator-shacl          # contract slots/validator; a JSON Schema provider is the R5-O1 candidate
+    status: ported
   - id: lane-policy
     hook: lane
     cardinality: one
@@ -58,8 +58,8 @@ slots:
     hook: feed
     cardinality: one
     interface: BeliefModel
-    default: belief-corroboration
-    status: to-port
+    default: belief-corroboration     # contract slots/belief-model; scoring ported, feed consumer in T3
+    status: ported
   - id: verifier
     hook: feed
     cardinality: many

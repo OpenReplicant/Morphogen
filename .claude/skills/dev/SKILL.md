@@ -13,8 +13,9 @@ description: Set up the environment and run every check for this repo (Postgres 
    export PGHOST=/var/tmp/kpg PGPORT=5433 PGUSER=postgres
    ```
    (`/tmp` may not be writable by the postgres user; `/var/tmp` is.)
-2. `sh kernel/contract/run.sh` → every case passes.
+2. Python deps for the contract: `python3 -m venv /var/tmp/kk-venv && /var/tmp/kk-venv/bin/pip install -r kernel/contract/requirements.txt`, then `export KK_PYTHON=/var/tmp/kk-venv/bin/python`.
+   `sh kernel/contract/run.sh` → every provider passes every case for its slots.
 3. `python3 scripts/check_boundary.py` → boundary ok.
-4. Mutation check when you add or change a contract case: add a mutant to `kernel/providers/record-postgres/tests/mutants.py` (it breaks the check in a copy, `kernel/providers/_mutant`, runs the contract and deletes the copy) and run it: every mutant must fail.
+4. Mutation check when you add or change a contract case: add a mutant to the provider's `tests/mutants.py` and run `$KK_PYTHON kernel/contract/mutants.py [provider]` (it breaks the check in a copy, `kernel/providers/_mutant`, runs the contract and deletes the copy): every mutant must fail.
 5. Run the `invariant-reviewer` agent before committing.
 6. CI (`.github/workflows/ci.yml`) runs steps 2 and 3 on every push.

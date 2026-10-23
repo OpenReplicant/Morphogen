@@ -1,0 +1,10 @@
+id: urn:kk:provider:belief-corroboration
+name: 'Belief model: corroboration counting v0'
+version: 0.4.0
+license: Apache-2.0
+slots: [belief-model]
+origin: OpenReplicant/kernel (rebuild 4) modules/belief-corroboration, model.py unchanged
+requires: Python 3.12+, PyYAML (contract runner only)
+runner: python3 tests/contract.py
+todo:
+  - the feed consumer that scores claims and submits add_belief change sets (T3; rebuild 4 __main__.py)
