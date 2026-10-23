@@ -1,0 +1,10 @@
+id: urn:kk:provider:lane-autonomy
+name: 'Lane policy: autonomy level x risk class'
+version: 0.1.0
+license: Apache-2.0
+slots: [lane-policy]
+origin: new (T5, R5-08, R5-20); configures the kernel's review rules (record-postgres) and routes plans by morphogen/intent/policies/autonomy.yaml
+requires: Python 3.12+, PyYAML
+migration: migration.sql
+tests: [python3 tests/test_lane.py]
+note: the store forces review for plan steps; the matrix decides the lane a planner asks for, and can only add review, never remove it

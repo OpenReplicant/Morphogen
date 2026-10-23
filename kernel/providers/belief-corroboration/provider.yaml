@@ -1,0 +1,11 @@
+id: urn:kk:provider:belief-corroboration
+name: 'Belief model: corroboration counting v0'
+version: 0.4.0
+license: Apache-2.0
+slots: [belief-model]
+origin: OpenReplicant/kernel (rebuild 4) modules/belief-corroboration; model.py unchanged, the service follows the change feed
+requires: Python 3.12+, PyYAML (contract runner), psycopg (service)
+runner: python3 tests/contract.py
+migration: migration.sql
+service: python3 -m belief_corroboration
+note: the premise cap (D-89) needs a truth-maintenance provider, and that slot is unfilled (R5-12)

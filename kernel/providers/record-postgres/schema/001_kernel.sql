@@ -122,6 +122,33 @@ create table kernel.change_set (
   applied_at       timestamptz
 );
 
+-- The change feed (D-86): one row per applied change set or redaction (R5-O3), numbered in commit order.
+-- Consumers keep a cursor (the last seq they read) and read what comes after it. A failed apply takes no
+-- number. A redaction row names its target, so a projection built from the feed drops redacted content
+-- from the same cursor (a NOTIFY can be missed); its scope is the target's.
+-- Numbers come from feed_head, not a sequence: apply locks its one row until the transaction commits,
+-- so a change set that commits later always gets a larger number, and a reader that has seen N has
+-- already seen every number below it (a sequence can hand out N+1 to a transaction that commits
+-- before N's, and a cursor at N+1 then skips N for good). The lock is held only from the end of
+-- apply to the commit. Readers see the rows of scopes they may read; numbers in other scopes are gaps.
+create table kernel.feed_head (
+  one boolean primary key default true check (one),
+  seq bigint not null
+);
+insert into kernel.feed_head values (true, 0);
+
+create table kernel.feed (
+  seq         bigint primary key,
+  change_set  uuid unique references kernel.change_set,
+  redaction   uuid unique,                   -- references kernel.redaction (added below)
+  target_kind text check (target_kind in ('claim','artifact')),
+  target_id   text,
+  scope       text not null references kernel.scope,
+  applied_at  timestamptz not null default now(),
+  check ((change_set is null) = (redaction is not null)),
+  check ((redaction is null) = (target_kind is null) and (redaction is null) = (target_id is null))
+);
+
 create table kernel.artifact (                -- prov:Entity with content; immutable, content-addressed
   sha256        text primary key check (sha256 ~ '^[0-9a-f]{64}$'),
   media_type    text not null,
@@ -158,9 +185,11 @@ create table kernel.claim (
   check (valid_to is null or valid_from is null or valid_to > valid_from)
 );
 create index on kernel.claim (subject, predicate);
+create index on kernel.claim (predicate);
 create index on kernel.claim (object_entity) where object_entity is not null;
 create index on kernel.claim (statement_key);
 create index on kernel.claim (scope);
+create index on kernel.claim (change_set);
 
 create table kernel.claim_reference (         -- source of a claim; quote/span follow Web Annotation selectors
   claim_id      uuid not null references kernel.claim,
@@ -173,6 +202,7 @@ create table kernel.claim_reference (         -- source of a claim; quote/span f
   check (artifact is not null or source_uri is not null)
 );
 create index on kernel.claim_reference (claim_id);
+create index on kernel.claim_reference (artifact) where artifact is not null;   -- redaction, and api.feed for it
 
 create table kernel.claim_derivation (        -- prov:wasDerivedFrom between claims
   claim_id     uuid not null references kernel.claim,
@@ -191,6 +221,7 @@ create table kernel.claim_status (            -- append-only rank history; lates
   recorded_at        timestamptz not null default now()
 );
 create index on kernel.claim_status (claim_id, recorded_at desc);
+create index on kernel.claim_status (change_set);
 
 create table kernel.belief (                  -- append-only; one model may score a claim many times
   claim_id    uuid not null references kernel.claim,
@@ -202,6 +233,7 @@ create table kernel.belief (                  -- append-only; one model may scor
   computed_at timestamptz not null default now()
 );
 create index on kernel.belief (claim_id, model, computed_at desc);
+create index on kernel.belief (change_set);
 
 create table kernel.verification (
   claim_id    uuid not null references kernel.claim,
@@ -213,6 +245,7 @@ create table kernel.verification (
   recorded_at timestamptz not null default now()
 );
 create index on kernel.verification (claim_id);
+create index on kernel.verification (change_set);
 
 create table kernel.redaction (               -- erasure requests; the only path that alters stored content
   id          uuid primary key default gen_random_uuid(),
@@ -223,6 +256,7 @@ create table kernel.redaction (               -- erasure requests; the only path
   run         uuid not null references kernel.run,
   recorded_at timestamptz not null default now()
 );
+alter table kernel.feed add foreign key (redaction) references kernel.redaction;
 
 -- ---------------------------------------------------------------- helpers
 create function kernel.expand(term text) returns text
@@ -296,7 +330,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['claim','claim_reference','claim_derivation','claim_status',
-                           'belief','verification','artifact','redaction','entity'] loop
+                           'belief','verification','artifact','redaction','entity','feed'] loop
     execute format('create trigger %I before update or delete on kernel.%I
                     for each row execute function kernel.forbid_mutation()', t || '_immutable', t);
   end loop;
@@ -458,6 +492,7 @@ declare
   v_input   uuid;
   r         jsonb;
   v_art     kernel.artifact;
+  v_seq     bigint;
   v_gen_run kernel.run;
   v_cs_run  kernel.run;
   v_state   text;
@@ -533,6 +568,9 @@ begin
             select * into v_art from kernel.artifact where sha256 = r->>'artifact';
             if v_art.sha256 is null then
               raise exception 'op %: unknown artifact %', idx, r->>'artifact' using errcode = 'KK034';
+            end if;
+            if v_art.redacted_at is not null then        -- its content was erased; a new quote would bring it back
+              raise exception 'op %: artifact % is redacted', idx, v_art.sha256 using errcode = 'KK038';
             end if;
             if not kernel.readers_subset(cs.target_scope, v_art.scope) then
               raise exception 'op %: artifact % is in a more restrictive scope than %', idx, v_art.sha256, cs.target_scope
@@ -616,8 +654,16 @@ begin
     end loop;
 
     update kernel.change_set set status = 'applied', applied_at = now() where id = p_id;
+    -- Last step of apply: number it for the feed. The feed_head row stays locked until commit.
+    update kernel.feed_head set seq = seq + 1 returning seq into v_seq;
+    insert into kernel.feed(seq, change_set, scope) values (v_seq, p_id, cs.target_scope);
     v_state := 'applied';
   exception when others then
+    -- Concurrency failures (serialization, deadlock, lock timeout, e.g. on feed_head) say nothing
+    -- about the change set: raise them so the caller retries, never mark it invalid for good.
+    if sqlstate in ('40001', '40P01', '55P03') then
+      raise;
+    end if;
     update kernel.change_set
        set status = case when sqlstate = 'KK409' then 'conflict' else 'invalid' end,
            validation_report = coalesce(validation_report, '{}'::jsonb)
@@ -720,7 +766,15 @@ create trigger redaction_rules before insert on kernel.redaction
 -- Keeps structure, identity and lineage; removes content. Recorded as its own run.
 create function kernel.redaction_after_insert() returns trigger
 language plpgsql security definer set search_path = kernel, pg_catalog as $$
+declare
+  v_scope text;
+  v_seq   bigint;
 begin
+  if new.target_kind = 'claim' then
+    select scope into v_scope from kernel.claim where id = new.target_id::uuid;
+  else
+    select scope into v_scope from kernel.artifact where sha256 = new.target_id;
+  end if;
   perform set_config('kernel.redacting', 'on', true);
   if new.target_kind = 'claim' then
     update kernel.claim set object_value = null, object_entity = null, qualifiers = '{}',
@@ -735,6 +789,18 @@ begin
     -- The artifact store must delete the bytes; it listens on this channel.
   end if;
   perform set_config('kernel.redacting', 'off', true);
+  -- In the feed like an applied change set, in the target's scope; the feed_head row stays locked until
+  -- commit, so redact in short transactions. A target that does not exist removes nothing and takes no
+  -- number, and the steward is not told whether it exists (that would reveal it across scopes).
+  -- An artifact's row is in the artifact's scope: at apply time every quoting claim's readers could
+  -- read the artifact (KK035); a reader cleared later for a claim's scope but not the artifact's
+  -- misses the row (accepted, R5-16).
+  if v_scope is not null then
+    update kernel.feed_head set seq = seq + 1 returning seq into v_seq;
+    insert into kernel.feed(seq, redaction, target_kind, target_id, scope)
+    values (v_seq, new.id, new.target_kind, new.target_id, v_scope);
+  end if;
+  -- Also signalled at once, for listeners that want no poll delay; the feed is the durable record.
   perform pg_notify('kernel_redaction', jsonb_build_object('kind', new.target_kind, 'id', new.target_id)::text);
   return null;
 end $$;
@@ -753,15 +819,25 @@ alter table kernel.artifact         enable row level security;
 alter table kernel.change_set       enable row level security;
 alter table kernel.run              enable row level security;
 alter table kernel.redaction        enable row level security;
+alter table kernel.feed             enable row level security;
+
+-- A row about a claim is visible when the claim is. One primary-key lookup per row: written as a function
+-- with its own search path so it is never inlined, since an inlined `exists (select 1 from kernel.claim
+-- ...)` lets the planner hash every visible claim instead, and reads slow down as the record grows.
+create function kernel.claim_visible(p_claim uuid) returns boolean
+language sql stable set search_path = kernel, pg_catalog as $$   -- invoker rights: the claim's own policy applies
+  select exists (select 1 from kernel.claim c where c.id = p_claim)
+$$;
 
 create policy read_by_scope on kernel.claim for select using (kernel.can_read(scope));
 create policy read_by_scope on kernel.artifact for select using (kernel.can_read(scope));
+create policy read_by_scope on kernel.feed for select using (kernel.can_read(scope));
 -- Dependent rows are visible when their claim is (the subquery is itself filtered by RLS).
-create policy read_with_claim on kernel.claim_reference  for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.claim_derivation for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.claim_status     for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.belief           for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
-create policy read_with_claim on kernel.verification     for select using (exists (select 1 from kernel.claim c where c.id = claim_id));
+create policy read_with_claim on kernel.claim_reference  for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.claim_derivation for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.claim_status     for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.belief           for select using (kernel.claim_visible(claim_id));
+create policy read_with_claim on kernel.verification     for select using (kernel.claim_visible(claim_id));
 
 -- Validators and reviewers only see change sets for scopes they are cleared to read.
 create policy own_or_control on kernel.change_set for select using (
@@ -789,7 +865,7 @@ grant usage on schema kernel to kk_agent;
 grant select on kernel.prefix, kernel.setting, kernel.agent, kernel.scope, kernel.scope_grant,
                 kernel.entity, kernel.run, kernel.claim, kernel.claim_reference, kernel.claim_derivation,
                 kernel.claim_status, kernel.belief, kernel.verification, kernel.artifact,
-                kernel.change_set to kk_agent;
+                kernel.change_set, kernel.feed to kk_agent;
 grant insert (iri) on kernel.entity to kk_agent;     -- identifiers only; meaning comes from claims
 grant insert (module, plan_step, used, info) on kernel.run to kk_agent;
 grant update (status, ended_at, cost, info) on kernel.run to kk_agent;
@@ -816,6 +892,18 @@ select id, idempotency_key, submitted_by, attributed_to, generated_by, target_sc
        validated_by, validation_report, decided_by, decided_at, review_note, submitted_at, applied_at,
        jsonb_array_length(ops) as op_count
 from kernel.change_set;
+
+-- Who approved what (D-53; rebuild 4 had it in actuator-compose): applied change sets that went through
+-- the review lane and were decided by a person (a kernel.agent of kind person) other than the submitter,
+-- for scopes the caller may read. Change sets stay visible only to their submitter, validators and
+-- reviewers; an actuator needs to know that a person approved, and no more. Owner rights by design, with
+-- the caller's clearance applied by can_read.
+create view api.review_decisions as
+select c.id, c.target_scope, c.submitted_by, c.decided_by, c.decided_at
+from kernel.change_set c
+join kernel.agent a on a.db_role = c.decided_by and a.kind = 'person'
+where c.lane = 'review' and c.status = 'applied' and c.decided_by is not null
+  and c.decided_by <> c.submitted_by and kernel.can_read(c.target_scope);
 
 create view api.review_queue with (security_invoker = true) as
 select id, attributed_to, target_scope, ops, validation_report, submitted_at
@@ -901,11 +989,68 @@ language sql stable as $$
     'run',          (select to_jsonb(r) from kernel.run r join kernel.claim c on c.generated_by = r.id where c.id = explain.claim_id))
 $$;
 
+-- The change feed after a cursor, in commit order. kind is 'change_set' or 'redaction'. For a change set,
+-- claim_ids are the claims it added or whose status, belief or verification it recorded; for a
+-- redaction, the claims whose content it removed (the claim, or those quoting the artifact), with
+-- target_kind and target_id naming what was redacted. predicates let a consumer gate before querying.
+-- Invoker rights: the caller sees the entries and claims of scopes it may read.
+create function api.feed(after_seq bigint default 0, max_rows int default 100)
+returns table (seq bigint, kind text, change_set_id uuid, scope text, applied_at timestamptz,
+               claim_ids uuid[], predicates text[], target_kind text, target_id text)
+language sql stable as $$
+  select f.seq, case when f.redaction is null then 'change_set' else 'redaction' end,
+         f.change_set, f.scope, f.applied_at, t.ids,
+         -- a join on unnest, not id = any(ids): under row-level security that form scans every claim
+         coalesce(array(select distinct c.predicate from unnest(t.ids) u(id) join kernel.claim c on c.id = u.id
+                        order by 1), '{}'),
+         f.target_kind, f.target_id
+  from kernel.feed f
+  cross join lateral (
+    select coalesce(array(
+      select x.id from (
+        select c.id from kernel.claim c where c.change_set = f.change_set
+        union select s.claim_id from kernel.claim_status s where s.change_set = f.change_set
+        union select b.claim_id from kernel.belief b where b.change_set = f.change_set
+        union select v.claim_id from kernel.verification v where v.change_set = f.change_set
+        union select c.id from kernel.claim c
+              where f.target_kind = 'claim' and c.id = f.target_id::uuid
+        union select r.claim_id from kernel.claim_reference r
+              where f.target_kind = 'artifact' and r.artifact = f.target_id) x
+      order by x.id), '{}') as ids) t
+  where f.seq > after_seq
+  order by f.seq
+  limit max_rows
+$$;
+
+-- Claims as the record stood at record time known_at, restricted to those true at valid time
+-- valid_at (D-09): only claims recorded by then, with the status and belief recorded by then.
+-- Redacted content stays removed at every time. Invoker rights: clearance applies as in api.claims.
+create function api.claims_as_of(valid_at timestamptz default now(), known_at timestamptz default now())
+returns setof api.claims
+language sql stable as $$
+  select c.id, c.subject, c.predicate, c.object_entity, c.object_value, c.qualifiers,
+         c.valid_from, c.valid_to, c.scope, c.evidence_type, c.attributed_to, c.generated_by,
+         c.change_set, c.statement_key, c.recorded_at, c.redacted_at,
+         coalesce((select s.status from kernel.claim_status s
+                   where s.claim_id = c.id and s.recorded_at <= known_at
+                   order by s.recorded_at desc limit 1), 'normal'),
+         (select b.value from kernel.belief b
+           where b.claim_id = c.id and b.computed_at <= known_at
+             and b.model = kernel.expand((select value #>> '{}' from kernel.setting where key = 'active_belief_model'))
+           order by b.computed_at desc limit 1)
+  from kernel.claim c
+  where c.recorded_at <= known_at
+    and (c.valid_from is null or c.valid_from <= valid_at)
+    and (c.valid_to is null or c.valid_to > valid_at)
+$$;
+
 grant usage on schema api to kk_agent;
 grant select on api.claims, api.change_sets to kk_agent;
 grant select on api.review_queue to kk_reviewer;
+grant select on api.review_decisions to kk_agent;
 grant execute on function api.start_run(text, text, jsonb, jsonb), api.finish_run(uuid, text, jsonb),
-                          api.submit_change_set(jsonb), api.explain(uuid) to kk_agent;
+                          api.submit_change_set(jsonb), api.explain(uuid),
+                          api.feed(bigint, int), api.claims_as_of(timestamptz, timestamptz) to kk_agent;
 grant execute on function api.record_validation(uuid, boolean, jsonb) to kk_validator;
 grant execute on function api.review(uuid, boolean, text) to kk_reviewer;
 grant execute on function api.redact(text, text, text, uuid) to kk_steward;

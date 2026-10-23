@@ -4,7 +4,11 @@
 #
 # Cases are named exactly as the record-postgres provider reports them ("ok: <case>"), so the
 # runner can check that every case ran. A new provider adds its own runner and reports the same names.
-version: 0.1.0
+version: 0.4.0
+
+# The cases below apply to providers of these slots. Other slots have their own case sets in
+# slots/<slot>/ (validator, belief-model); kernel/contract/run.py runs whichever apply.
+applies_to: [record-store, write-pipeline, change-feed]
 
 invariants:
   I1:
@@ -24,6 +28,7 @@ invariants:
       - redaction removes the value but keeps the claim
       - redaction removes the quote
       - lineage and attribution survive redaction
+      - a redacted artifact cannot be quoted again
   I3:
     text: A claim's scope is at least as restrictive as everything it was made from.
     cases:
@@ -37,6 +42,10 @@ invariants:
       - cleared agent sees the secret claim
       - uncleared agent cannot see the secret claim
       - uncleared agent cannot see its references either
+      - the secret claim has references and a belief
+      - uncleared agent reads no references, derivations, statuses, beliefs or verifications of the secret claim
+      - review decisions show a person's approval
+      - a decision by a software role is not a person's approval
   I5:
     text: No method verifies its own output.
     cases:
@@ -60,12 +69,43 @@ pipeline:
     - reviewer approval applies it
     - the new property is now approved
     - stale expect_status is a conflict, not an overwrite
+    # no extension code in the commit (R5-04, D-86)
+    - every trigger on a kernel table runs a kernel-owned kernel function
+    - defaults, constraints, policies and rules on kernel tables call only kernel functions
+    - kernel functions call no function outside the kernel by name
+    - kernel functions are owned by the kernel and written in SQL or PL/pgSQL
+    - security definer kernel functions pin their search path
+    - no extension owns anything in the kernel schema
+    - only the kernel owner can create objects in the kernel schema
+    - an agent cannot attach a trigger to a kernel table
 
-# To add (decided in rebuild 4, not yet in the suite):
-pending:
-  - id: feed-cursor
-    text: Every applied change set gets a monotonically increasing sequence number; a consumer reading after seq N sees every later commit exactly once (D-86, D-87).
-  - id: bitemporal-as-of
-    text: A query as of valid time T and record time R returns what was believed then (D-09).
-  - id: no-extension-in-commit
-    text: Applying a change set runs no module or extension code.
+feed:
+  text: Every applied change set and every redaction gets a sequence number in commit order; a consumer reading after its cursor sees every later commit exactly once, within its clearance (D-86, D-87, R5-O3).
+  cases:
+    - every applied change set has one feed number
+    - feed numbers are consecutive
+    - a failed apply takes no feed number
+    - the feed lists the claims a change set added or recorded on
+    - the feed returns what comes after the cursor, in order
+    - cleared agent sees secret change sets in the feed
+    - uncleared agent does not see secret change sets in the feed
+    - a cursor skips no change set that commits concurrently
+    - a concurrent apply that cannot serialize is retried, not marked invalid
+    - the retried apply succeeds
+    - a redaction is in the feed with its target and the claims it removed content from
+    - a redaction takes the next feed number, in its target's scope
+    - cleared agent sees redactions of secret claims in the feed
+    - uncleared agent does not see redactions of secret claims in the feed
+    - redacting a target that does not exist takes no feed number
+    - an artifact redaction is in the feed in the artifact's scope, with the claims that quoted it
+    - an artifact redaction lists only the quoting claims the reader may see
+
+history:
+  text: A query as of valid time T and record time R returns what was believed then (D-09); redaction holds at every time and clearance applies.
+  cases:
+    - as of an earlier record time, later claims are not yet known
+    - as of an earlier record time, status and belief are what was recorded then
+    - a claim is returned only at valid times inside its interval
+    - redacted content stays removed at earlier record times
+    - cleared agent sees the secret claim as of now
+    - uncleared agent cannot see the secret claim as of any time

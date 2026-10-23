@@ -11,7 +11,7 @@
 <https://w3id.org/knowledge-kernel/observables>
     a owl:Ontology ;
     rdfs:label "Observable properties" ;
-    owl:versionInfo "0.3.0" .
+    owl:versionInfo "0.4.0" .
 
 <urn:kk:property:case-count> a sosa:ObservableProperty ;
     rdfs:label "case count" ;
@@ -46,3 +46,9 @@
 <urn:kk:property:latency-seconds-mean> a sosa:ObservableProperty ;
     rdfs:label "mean latency (seconds)" ;
     skos:definition "Mean time in seconds a service took to answer a request in the window, all replicas together." .
+<urn:kk:property:feed-lag-seconds-mean> a sosa:ObservableProperty ;
+    rdfs:label "mean feed lag (seconds)" ;
+    skos:definition "Mean time in seconds, over the window, from a change feed entry's commit to a consumer reading it (kk.feed.lag, reported by kk.lib follow)." .
+<urn:kk:property:step-seconds-mean> a sosa:ObservableProperty ;
+    rdfs:label "mean step time (seconds)" ;
+    skos:definition "Mean time in seconds, over the window, of one pass of a provider's service (kk.step.duration)." .

@@ -1,0 +1,10 @@
+# The fixed action list (D-53, R5-20): what a plan step may ask the intent actuator to change. Anything
+# else is not an action; the planner says so to a person instead. Read-only to agents.
+actions:
+  urn:kk:action:set-poll-seconds:
+    label: set how often a change feed consumer reads the feed
+    setting: KK_POLL_SECONDS          # an environment variable of the provider's service (kk.lib follow)
+    min: 0.1
+    max: 30
+    risk: low                         # reversible by the same action; no data changes
+    answers: [urn:kk:property:feed-lag-seconds-mean]

@@ -1,5 +1,10 @@
-# Autonomy level x risk class -> decision (decision 0009).
+# Autonomy level x risk class -> decision (decision 0009; R5-08).
 # The irreversible column is fixed: always a person.
+# report and approve go to the review lane; auto and auto_notify may apply without it. The store also
+# forces review for plan steps (sosa:Actuation, setting review_types) until a provider earns a level
+# above L1 (R5-20), so today every plan waits for a person.
+levels:
+  default: L1                     # every module that plans starts here
 matrix:
   L0: { low: report,        medium: report,        high: report,        irreversible: approve }
   L1: { low: approve,       medium: approve,       high: approve,       irreversible: approve }

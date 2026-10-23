@@ -1,0 +1,15 @@
+# A small distribution for the self-encoder's tests (the kernel never reads a real distribution's files).
+id: demo
+version: 0.1.0
+kernel: ">=0.1.0"
+
+uses_kernel_slots:
+  - record-store
+  - validator
+
+slots:
+  - id: observer
+    phase: monitor
+    cardinality: many
+    default: observer-otel
+    status: new

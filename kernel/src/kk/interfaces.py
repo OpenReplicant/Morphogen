@@ -78,12 +78,15 @@ class Submitted:
 
 @dataclass
 class Applied:
-    """One entry of the change feed: a change set that was committed."""
-    seq: int                                # monotonically increasing; consumers keep a cursor
-    change_set_id: str
+    """One entry of the change feed: a change set that was committed, or a redaction (R5-O3)."""
+    seq: int                                # commit order; consumers keep a cursor
+    kind: str                               # 'change_set' or 'redaction'
+    change_set_id: Optional[str]            # None for a redaction
     scope: str
-    claim_ids: Sequence[str]
+    claim_ids: Sequence[str]                # for a redaction, the claims whose content it removed
     predicates: Sequence[str]               # for cheap gating before any query
+    target_kind: Optional[str] = None       # a redaction's target: 'claim' or 'artifact'
+    target_id: Optional[str] = None
 
 
 # ================================================================ core slots (conformance suite required)
@@ -93,6 +96,8 @@ class RecordStore(Protocol):
     Enforces clearance on every read. Default provider: kernel/providers/record-postgres."""
 
     def claims(self, **filters: str) -> list[JSON]: ...
+    def claims_as_of(self, valid_at: Optional[str] = None, known_at: Optional[str] = None,
+                     **filters: str) -> list[JSON]: ...           # bitemporal: true at valid_at, as recorded by known_at
     def explain(self, claim_id: str) -> JSON: ...
     def feed(self, after_seq: int, limit: int = 100) -> list[Applied]: ...   # change feed, cursor based
 

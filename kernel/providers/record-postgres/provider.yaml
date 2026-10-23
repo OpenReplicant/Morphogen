@@ -5,6 +5,5 @@ license: Apache-2.0
 slots: [record-store, write-pipeline, lane-policy, change-feed]
 origin: OpenReplicant/kernel (rebuild 4) kernel/schema, frozen v0
 requires: PostgreSQL 16+, no extensions
-contract: ../../contract/invariants.yaml
-todo:
-  - applied-sequence cursor on change sets (D-86, contract case feed-cursor)
+runner: sh tests/run.sh
+note: providers with a migration.sql are installed on top by ../install.py

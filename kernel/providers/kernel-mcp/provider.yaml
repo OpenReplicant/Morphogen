@@ -1,0 +1,13 @@
+id: urn:kk:provider:kernel-mcp
+name: Kernel MCP server (operator tools)
+version: 0.8.0
+license: Apache-2.0
+slots: [agent-interface]
+origin: OpenReplicant/kernel (rebuild 4) modules/kernel-mcp; server.py's operator tools and graph.py unchanged, whoami fixed for non-reviewers
+requires: Python 3.12+, requirements.txt (mcp 2.3.0, psycopg, PyJWT, uvicorn)
+service: python3 -m kernel_mcp            # stdio as the agent's own login; --http with JWTs (kk_authenticator)
+tests:
+  - python3 tests/test_mcp.py
+not_ported: >-
+  The memory profile (remember, recall briefings, changes_since), the briefing (context-assembler, unfilled),
+  recall cues and the Claude Code hooks (harness-adapter slot, to port), dense recall and re-ranking (R5-12).

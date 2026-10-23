@@ -22,7 +22,8 @@ uses_kernel_slots:
   - evaluator
   - harness-adapter
 
-# The MAPE-K loop and design path. status: to-port (from rebuild 4) | to-rewrite | new
+# The MAPE-K loop and design path. status: to-port (from rebuild 4) | to-rewrite | new | ported | written
+# Providers live in modules/<name>/ (provider.yaml); morphogen/tests/test_loop.py runs the loop (T5).
 slots:
   - id: design-agent
     phase: design
@@ -31,26 +32,26 @@ slots:
   - id: observer
     phase: monitor
     cardinality: many
-    default: observer-otel                     # new; observer-prometheus ported alongside
-    status: new
+    default: observer-otel                     # OTLP/HTTP receiver -> SOSA observations; observer-prometheus to port
+    status: written
   - id: analyser
     phase: analyse
     cardinality: many
-    default: anomaly                           # rebuild 4: modules/anomaly
-    status: to-port
+    default: anomaly                           # rebuild 4: modules/anomaly (detect.py unchanged)
+    status: ported
   - id: planner
     phase: plan
-    default: planning-skill                    # plans carry predictions and a risk class
-    status: to-rewrite
+    default: planner                           # fixed action list; plans carry a prediction and a risk class
+    status: written                            # a model-driven planner is a candidate provider (rebuild 4 skill)
   - id: actuator
     phase: execute
     cardinality: many
-    default: intent-actuator                   # approved plans become commits; orchestrators reconcile
-    status: to-rewrite
+    default: intent-actuator                   # approved plan steps become commits; deploy/reconcile.py runs them
+    status: written
   - id: outcome-verifier
     phase: verify
     default: prediction-verifier               # compares observations with plan predictions; not the planner
-    status: new
+    status: written
   - id: catalog-lookup
     phase: plan
     cardinality: many
@@ -59,6 +60,8 @@ slots:
 
 lane_policy:
   file: intent/policies/autonomy.yaml          # autonomy level x risk class
+  provider: lane-autonomy                      # fills the kernel's lane-policy slot for Morphogen (R5-20)
+actions: intent/policies/actions.yaml          # the fixed action list plans choose from
 
 packs:
   - prov

@@ -71,11 +71,11 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 | --- | --- | --- |
 | `kernel/schema/001_kernel.sql`, `002_bootstrap.sql` | Port as the default record-store and pipeline provider | Ported: `kernel/providers/record-postgres/schema/` |
 | `kernel/schema/tests` (30 checks) | Into the conformance suite | Done: `kernel/contract/invariants.yaml` names all 30; `run.sh` passes 30/30 and fails on a disabled quote check |
-| `eval/validator`, `eval/belief-v0` | Into the conformance suite | To port |
+| `eval/validator`, `eval/belief-v0` | Into the conformance suite | Done (T2): `kernel/contract/slots/validator` (13) and `slots/belief-model` (17), passed by the ported providers |
 | `kernel/contracts.py` | Rewrite as slot interfaces | Done: `kernel/src/kk/interfaces.py` |
 | `kernel/schemas` (change set, module manifest) | Port, then adapt | Ported: `kernel/schemas/` |
 | `ontology/slots.yaml` (42 slots) | Rewrite as the self-blueprint | Done for kernel slots: `kernel/blueprint/slots.yaml`; original kept in `docs/slots-rebuild4.yaml` |
-| `ontology` packs | Port; RDF at the edges | Ported: `kernel/packs/` |
+| `ontology` packs | Port; RDF at the edges | Ported: `kernel/packs/`, loaded by `kernel/providers/pack-loader` (T4) |
 | `shapes/` (SHACL) | Rewrite as one validator provider | To do |
 | `kk` command | Rewrite, smaller | To do |
 | `docs/LESSONS.md` | Port whole | Ported |
@@ -88,7 +88,8 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 | --- | --- | --- |
 | kernel-mcp | Port | `kernel/providers/` (agent-interface slot) |
 | validator-shacl | Rewrite | `kernel/providers/` (validator candidate) |
-| belief-corroboration, verifier-quotes, truth-maintenance | Port | `kernel/providers/` |
+| belief-corroboration, verifier-quotes | Port | `kernel/providers/` |
+| truth-maintenance, kernel-mcp briefing | Park: their slots stay unfilled (R5-12) | — |
 | recall-index, recall-dense | Port | `kernel/providers/` |
 | evaluator | Port, central | `kernel/providers/` |
 | self-encoder | Rewrite | `kernel/providers/` (encodes blueprint, providers, packs) |
@@ -167,9 +168,9 @@ after it has failed with the logic broken.
 
 | ID | Task | Check |
 | --- | --- | --- |
-| T1 | Add the three pending contract cases (feed cursor, bitemporal as-of, no extension in commit) to `invariants.yaml` and the record-postgres suite, with the applied-sequence cursor from D-86 | `kernel/contract/run.sh` passes; mutation check fails |
-| T2 | Port `eval/validator` and `eval/belief-v0` into the contract | Same |
-| T3 | Port kernel-mcp, recall-bm25, belief-corroboration, verifier-quotes, evaluator into `kernel/providers/` against `kk.interfaces` | Each module's tests; recall matches rebuild 4 on SciFact |
-| T4 | Rewrite the self-encoder: encode `kernel/blueprint/slots.yaml` and `morphogen/distribution.yaml` as claims | The record answers "which provider fills each slot" with citations |
-| T5 | Morphogen bootstrap: OTel observer, anomaly, planner with predictions, intent actuator, prediction verifier, lane policy | One full loop on Morphogen's own stack |
+| T1 | Add the three pending contract cases (feed cursor, bitemporal as-of, no extension in commit) to `invariants.yaml` and the record-postgres suite, with the applied-sequence cursor from D-86 | `kernel/contract/run.sh` passes; mutation check fails. **Done** (R5-10): 54/54; all 14 mutants in `tests/mutants.py` fail |
+| T2 | Port `eval/validator` and `eval/belief-v0` into the contract | Same. **Done** (R5-11): 13/13 and 17/17 on validator-shacl and belief-corroboration; 30/30 mutants fail across providers |
+| T3 | Port kernel-mcp, recall-bm25, belief-corroboration, verifier-quotes, evaluator into `kernel/providers/` against `kk.interfaces` | Each module's tests; recall matches rebuild 4 on SciFact. **Done** (R5-13): `kernel/providers/test.py` 5/5; SciFact nDCG@10 0.6606 ≥ 0.6594 |
+| T4 | Rewrite the self-encoder: encode `kernel/blueprint/slots.yaml` and `morphogen/distribution.yaml` as claims | The record answers "which provider fills each slot" with citations. **Done** (R5-14): `self-encoder/tests/test_self.py` answers all 16 kernel slots from the manifests, each part cited to its file and line |
+| T5 | Morphogen bootstrap: OTel observer, anomaly, planner with predictions, intent actuator, prediction verifier, lane policy | One full loop on Morphogen's own stack. **Done** (R5-20): `morphogen/tests/test_loop.py` takes the belief model's feed lag over its limit through plan, a person's approval, an intent commit and a restart, to a verdict that the prediction held, each step citing the one before |
 | T6 | G2 | As above |

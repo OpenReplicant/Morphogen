@@ -1,0 +1,9 @@
+# Which OpenTelemetry metrics the observer records, and as which observable property
+# (kernel/packs/observables.ttl). Each window, a metric's mean over the window is one observation of
+# the resource it came from; `subject` names that resource's node in the record from its attributes.
+subject: "urn:kk:provider:{service.name}"
+metrics:
+  - metric: kk.feed.lag
+    property: urn:kk:property:feed-lag-seconds-mean
+  - metric: kk.step.duration
+    property: urn:kk:property:step-seconds-mean

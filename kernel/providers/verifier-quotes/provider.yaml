@@ -1,0 +1,11 @@
+id: urn:kk:provider:verifier-quotes
+name: Quote verifier
+version: 0.2.0
+license: Apache-2.0
+slots: [verifier]
+origin: OpenReplicant/kernel (rebuild 4) modules/verifier-quotes; check.py unchanged, the service follows the change feed
+requires: Python 3.12+, psycopg (service)
+migration: migration.sql
+service: python3 -m verifier_quotes
+tests:
+  - python3 tests/test_check.py

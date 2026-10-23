@@ -1,0 +1,13 @@
+id: urn:kk:provider:recall-bm25
+name: 'Recall: BM25 over claims'
+version: 0.2.0
+license: Apache-2.0
+slots: [recall]
+origin: OpenReplicant/kernel (rebuild 4) modules/recall-index (index and api.recall unchanged); the worker follows the change feed
+requires: PostgreSQL 16+ (no extension), Python 3.12+, psycopg
+migration: migration.sql
+service: python3 -m recall_bm25
+tests:
+  - python3 tests/test_index.py
+eval: ../../evals/scifact (retrieval; rebuild 4 floor nDCG@10 0.659)
+note: dense fusion (D-61) and re-ranking (D-66) are opt-in recall providers, not ported yet
