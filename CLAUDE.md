@@ -14,8 +14,9 @@ Run the `dev` skill (environment, reference clone, checks), then pick the next o
 2. `kernel/contract/invariants.yaml`: the guarantees. They are tests, not prose.
 3. `kernel/blueprint/slots.yaml` and `morphogen/distribution.yaml`: every slot, its interface and default provider.
 4. `kernel/src/kk/interfaces.py`: the slot interfaces.
-5. `docs/decisions.md`: this rebuild's decisions; rebuild 4's D-01 to D-93 stay settled unless superseded.
-6. `docs/LESSONS.md`: traps earlier rebuilds hit. Read before touching Postgres, MCP, Docker or evals.
+5. `docs/morphogen-design.md`: the Morphogen-side design (integration points, catalogs, design agent, scientific loop, embodied profile, prior art).
+6. `docs/decisions.md`: this rebuild's decisions; rebuild 4's D-01 to D-93 stay settled unless superseded.
+7. `docs/LESSONS.md`: traps earlier rebuilds hit. Read before touching Postgres, MCP, Docker or evals.
 
 Reference implementation (read-only): `OpenReplicant/kernel` (rebuild 4). Port from it; do not edit it.
 
@@ -78,6 +79,6 @@ morphogen/                 the distribution
   modules/                 providers for Morphogen's slots (observer, planner, actuator, verifier, ...)
   intent/                  desired state orchestrators reconcile; policies (autonomy x risk)
   ui/, deploy/
-docs/                      rebuild-5.md, decisions.md, LESSONS.md, slots-rebuild4.yaml
+docs/                      rebuild-5.md, morphogen-design.md, decisions.md, LESSONS.md, slots-rebuild4.yaml
 scripts/                   check_boundary.py
 ```
