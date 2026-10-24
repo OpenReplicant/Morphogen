@@ -16,9 +16,10 @@
 #   anomaly against another limit is another anomaly).
 slot: analyser
 runner: runner.py
-version: 0.1.0
+version: 0.2.0
 rules: >-
   Per target and property, each of the latest 3 windows is anomalous when its value exceeds the documented
   limit (kind limit, derived from the observation and the limit), or lies more than 3 standard deviations
   from the mean of the previous windows when there are at least 5 of them, up to 20 (kind zscore, derived
-  from the observation and the windows compared). A limit applies to its own property only.
+  from the observation and the windows compared); when those windows have no spread, more than 3 tenths of
+  their mean away, or more than 3 away when the mean is 0. A limit applies to its own property only.

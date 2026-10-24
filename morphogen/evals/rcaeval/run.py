@@ -15,14 +15,16 @@ AC@1..AC@5 for the root-cause service.
   analyser  each metric averaged over windows of --window seconds aligned to the injection (the observer's
             KK_WINDOW_SECONDS), then, for each window after the injection, the analyser's own z-score
             (morphogen/modules/anomaly detect.zscore: mean and standard deviation of up to 20 previous windows,
-            at least 5) as its passes would compute it; metrics ranked by their largest
+            at least 5; a flat history scaled by a tenth of its mean, else 1, R5-28) as its passes would
+            compute it; metrics ranked by their largest
   robust    rebuild 4's `kernel` method (eval/rcaeval/packs.py zscores): the same windows, then each metric's
             largest robust z (median, IQR, with fallbacks for flat baselines) after the injection against the
             windows before it. Rebuild 4's floor is this method's numbers
 
 Needs Python 3.12 (RCAEval's main.py refuses 3.13) with RCAEval 1.8.1 from PyPI (--no-deps) and pandas,
 pyarrow, numpy, scikit-learn, scipy, tqdm, requests, networkx, matplotlib. KK_EVAL_CACHE holds main.py and
-the data (never committed). Results go to morphogen/evals/rcaeval/runs/<date>-<dataset>-<method>.json.
+the data (never committed). Results go to morphogen/evals/rcaeval/runs/<date>-<dataset>-<method>.json; EXPERIMENTS.md
+records every statistic tried (variants.py) and what was chosen.
 """
 from __future__ import annotations
 

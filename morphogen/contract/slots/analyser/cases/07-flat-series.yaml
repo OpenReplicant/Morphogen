@@ -1,5 +1,5 @@
 id: urn:kk:eval:analyser/flat-series
-text: 'a flat history has no spread: a change is not unusual by z-score'
+text: 'a flat history is scaled by a tenth of its value: 0.05 to 0.06 is not unusual by z-score'
 input:
   observations:
   - id: f0

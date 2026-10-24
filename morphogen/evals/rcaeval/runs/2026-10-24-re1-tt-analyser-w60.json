@@ -3,13 +3,13 @@
   "dataset": "re1-tt",
   "method": "analyser-w60",
   "avg@5": {
-    "CPU": 0.62,
-    "MEM": 0.87,
+    "CPU": 0.99,
+    "MEM": 0.99,
     "DISK": 1.0,
-    "DELAY": 0.64,
-    "LOSS": 0.38
+    "DELAY": 0.6,
+    "LOSS": 0.36
   },
-  "avg@5_mean": 0.702,
+  "avg@5_mean": 0.788,
   "chance@5": {
     "CPU": 0.04,
     "MEM": 0.04,

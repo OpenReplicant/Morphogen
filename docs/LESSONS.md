@@ -30,6 +30,10 @@ tools here were checked by experiment (details in `docs/spikes/` and the decisio
   work; empty bearer → 401 when `kk_anon` has no grants.
 - **gitleaks** v8: `gitleaks dir <path> --redact -f json -r <file> --exit-code 0`; the binary is
   static and can be copied out of its image.
+- **RCAEval** main.py at rebuild 4's pin refuses Python 3.13: run it under 3.12. RE2-OB and RE2-TT
+  unpack to 21 GB (logs.csv, traces.csv, metrics.csv per case) and filled the session's disk; metrics
+  methods read only `simple_metrics.csv`, so delete the rest after unpacking (456 MB left). main.py
+  skips a download when the dataset directory exists, so a second cache can symlink `data/`.
 - Pick dependency versions at least ~2 weeks old (Cytoscape 3.34.4 was a day old; 3.34.3 was used),
   and check npm tarballs against the registry's integrity hash before vendoring.
 
