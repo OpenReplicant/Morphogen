@@ -36,7 +36,7 @@ jobs:
         run: |
           python3 -m venv /tmp/kk-venv
           /tmp/kk-venv/bin/pip install -q -r kernel/contract/requirements.txt -r kernel/providers/kernel-mcp/requirements.txt \
-            -r morphogen/modules/observer-otel/requirements.txt
+            -r morphogen/modules/observer-otel/requirements.txt -r morphogen/modules/registry-lookup/requirements.txt
           echo "KK_PYTHON=/tmp/kk-venv/bin/python" >> "$GITHUB_ENV"
       - name: Conformance contract
         run: sh kernel/contract/run.sh

@@ -36,7 +36,7 @@ description: Set up the environment and run every check for this repo (Postgres 
    su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/tmp/kpg-sbx/data -o '-p 5434 -k /var/tmp/kpg-sbx' -l /var/tmp/kpg-sbx/log start"
    export KK_SANDBOX_CLUSTER="host=/var/tmp/kpg-sbx port=5434 user=postgres password=$(cat /root/.kk-pgpw-sbx)"
    ```
-2. Python deps: `python3 -m venv /var/tmp/kk-venv && /var/tmp/kk-venv/bin/pip install -r kernel/contract/requirements.txt -r kernel/providers/kernel-mcp/requirements.txt -r morphogen/modules/observer-otel/requirements.txt`, then `export KK_PYTHON=/var/tmp/kk-venv/bin/python` (a place the run user can read: not a private scratch directory).
+2. Python deps: `python3 -m venv /var/tmp/kk-venv && /var/tmp/kk-venv/bin/pip install -r kernel/contract/requirements.txt -r kernel/providers/kernel-mcp/requirements.txt -r morphogen/modules/observer-otel/requirements.txt -r morphogen/modules/registry-lookup/requirements.txt`, then `export KK_PYTHON=/var/tmp/kk-venv/bin/python` (a place the run user can read: not a private scratch directory).
    `sh kernel/contract/run.sh` → every provider passes every case for its slots.
 3. `python3 scripts/check_boundary.py` → boundary ok.
 3a. Docker, for G3 (`morphogen/tests/test_g3.py`, `test_compose.py`; R5-25): if `docker info` fails, start the

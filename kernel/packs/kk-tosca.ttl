@@ -18,7 +18,7 @@
 <https://w3id.org/knowledge-kernel/tosca>
     a owl:Ontology ;
     rdfs:label "TOSCA 2.0 metamodel mirror" ;
-    owl:versionInfo "0.3.0" ;
+    owl:versionInfo "0.4.0" ;
     rdfs:seeAlso <https://docs.oasis-open.org/tosca/TOSCA/v2.0/TOSCA-v2.0.html> .
 
 # ------------------------------------------------------------------ types and templates
@@ -86,6 +86,9 @@ kkt:connectsTo a owl:ObjectProperty ; rdfs:subPropertyOf kkt:dependsOn ; rdfs:la
 kkt:propertyValue a rdf:Property ; rdfs:label "property value" ;
     skos:definition "A configuration value of a template; the property name is the qualifier kkt:propertyName." .
 kkt:propertyName a owl:DatatypeProperty ; rdfs:label "property name" .
+kkt:constraint a owl:DatatypeProperty ; rdfs:label "constraint" ;
+    skos:definition "Qualifies a required property value: how a candidate's value must compare with it. TOSCA 2.0's validation functions $equal, $greater_or_equal, $less_or_equal and $valid_values (a JSON list), and $admits (the candidate's version specifier allows this version) and $licence (the candidate's licence can be met with these SPDX ids, a JSON list)." ;
+    skos:closeMatch <https://docs.oasis-open.org/tosca/TOSCA/v2.0/TOSCA-v2.0.html#validation-clauses> .
 kkt:hasInterface a owl:ObjectProperty ; rdfs:range kkt:InterfaceDefinition ; rdfs:label "has interface" .
 kkt:hasOperation a owl:ObjectProperty ; rdfs:domain kkt:InterfaceDefinition ; rdfs:range kkt:OperationDefinition ; rdfs:label "has operation" .
 kkt:hasArtifact a owl:ObjectProperty ; rdfs:range kkt:ArtifactDefinition ; rdfs:label "has artifact" .
