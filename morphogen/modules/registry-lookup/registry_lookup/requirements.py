@@ -14,11 +14,13 @@ A requirement is (property name, constraint, required value); recorded, it is a 
                      only the licences listed (a JSON list): OR needs one allowed side, AND needs both
 
 The first four are TOSCA 2.0's validation functions of the same names. An entry's properties are its
-`properties`, plus `licence`, `version` and `kind`. A property the entry does not state fails its requirement:
-missing is never a match.
+`properties`, plus `licence`, `version` and `kind`; a property may have several values (a requirement holds when one
+meets it). A property the entry does not state fails its requirement: missing is never a match. In `$licence`, ids in
+an expression are compared exactly (MIT-0 is not MIT); only a registry's name with spaces ("BSD License") is read
+through catalogs.spdx. A property named `version` (or `*_version`) compares as versions (3.12 > 3.9).
 
-  holds(constraint, required, actual) -> (ok, why)
-  match(requirements, entry)          -> (every requirement holds, [(requirement, ok, why)])
+  holds(constraint, required, actual, name) -> (ok, why)
+  match(requirements, entry)                -> (every requirement holds, [(requirement, ok, why, claim)])
 """
 from __future__ import annotations
 
@@ -47,13 +49,17 @@ def _version(x):
         return None
 
 
-def _order(required, actual):
-    """(actual, required) as numbers, else as versions, else None."""
+def _order(required, actual, versions: bool = False):
+    """(actual, required) as numbers, else as versions, else None; a version property always as versions."""
     a, r = _number(actual), _number(required)
-    if a is not None and r is not None:
+    if a is not None and r is not None and not versions:
         return a, r
     a, r = _version(actual), _version(required)
     return (a, r) if a is not None and r is not None else None
+
+
+def is_version(name) -> bool:
+    return bool(name) and (name == "version" or str(name).endswith("_version"))
 
 
 def _list(required) -> list[str]:
@@ -70,7 +76,7 @@ def _licence_ok(expr: str, allowed: set[str]) -> bool | None:
     pos = 0
 
     def ident(t):
-        return (spdx(t) or t).lower()
+        return t.lower()                                  # an SPDX id, exactly: MIT-0 is not MIT, Apache-1.1 not Apache-2.0
 
     def term():
         nonlocal pos
@@ -87,7 +93,7 @@ def _licence_ok(expr: str, allowed: set[str]) -> bool | None:
             raise ValueError
         else:
             v = ident(t) in allowed
-        if pos < len(tokens) and tokens[pos] == "WITH":   # an exception narrows a licence; it never widens it
+        if pos < len(tokens) and tokens[pos] == "WITH":   # an exception only adds permissions: met by the licence alone
             pos += 2
         return v
 
@@ -109,23 +115,25 @@ def _licence_ok(expr: str, allowed: set[str]) -> bool | None:
     try:
         if not tokens:
             return None
-        if not re.search(r"\b(AND|OR|WITH)\b|\(", expr) and spdx(expr):
-            return ident(expr) in allowed            # a name a registry wrote ("MIT License"), not an expression
+        if " " in expr.strip() and not re.search(r"\b(AND|OR|WITH)\b|\(", expr):
+            name = spdx(expr)                        # a name a registry wrote ("MIT License"), not an expression
+            return None if name is None else name.lower() in allowed
         v = disj()
         return v if pos == len(tokens) else None
     except (ValueError, IndexError):
         return None
 
 
-def holds(constraint: str, required, actual) -> tuple[bool, str]:
+def holds(constraint: str, required, actual, name: str | None = None) -> tuple[bool, str]:
     if actual is None or str(actual).strip() == "":
         return False, "not stated"
     if constraint == "$equal":
-        a, r = _number(actual), _number(required)
+        pair = _order(required, actual, is_version(name)) if is_version(name) else None
+        a, r = pair if pair else (_number(actual), _number(required))
         ok = a == r if a is not None and r is not None else str(actual).strip().lower() == str(required).strip().lower()
         return ok, f"{actual!r} {'is' if ok else 'is not'} {required!r}"
     if constraint in ("$greater_or_equal", "$less_or_equal"):
-        pair = _order(required, actual)
+        pair = _order(required, actual, is_version(name))
         if pair is None:
             return False, f"{actual!r} and {required!r} cannot be compared"
         a, r = pair
@@ -146,7 +154,7 @@ def holds(constraint: str, required, actual) -> tuple[bool, str]:
         ok = spec.contains(v, prereleases=True)
         return ok, f"{actual!r} {'allows' if ok else 'does not allow'} {required}"
     if constraint == "$licence":
-        allowed = {(spdx(x) or x).lower() for x in _list(required)}
+        allowed = {x.strip().lower() for x in _list(required)}
         ok = _licence_ok(str(actual), allowed)
         if ok is None:
             return False, f"licence {actual!r} cannot be read"
@@ -154,16 +162,30 @@ def holds(constraint: str, required, actual) -> tuple[bool, str]:
     return False, f"unknown constraint {constraint!r}"
 
 
-def properties(entry: dict) -> dict:
-    out = {str(k): v for k, v in (entry.get("properties") or {}).items()}
+def properties(entry: dict) -> dict[str, list[tuple]]:
+    """Each property's values, as (value, claim id or None): an entry may state a property more than once (the
+    slots a provider fills)."""
+    out: dict[str, list[tuple]] = {}
+    for k, v in (entry.get("properties") or {}).items():
+        vals = v if isinstance(v, list) else [v]
+        out[str(k)] = [x if isinstance(x, tuple) else (x, None) for x in vals]
     for k in ("licence", "version", "kind"):
         if entry.get(k) is not None:
-            out.setdefault(k, entry[k])
+            out.setdefault(k, [(entry[k], None)])
     return out
 
 
-def match(requirements: list[dict], entry: dict) -> tuple[bool, list[tuple[dict, bool, str]]]:
-    """requirements: [{name, constraint, value}]. Every requirement must hold; none listed is no match."""
+def match(requirements: list[dict], entry: dict) -> tuple[bool, list[tuple[dict, bool, str, object]]]:
+    """requirements: [{name, constraint, value}]. Each holds when one of the property's values meets it; the result
+    names that value's claim. Every requirement must hold; no requirements is no match."""
     props = properties(entry)
-    results = [(r, *holds(r["constraint"], r["value"], props.get(r["name"]))) for r in requirements]
-    return bool(results) and all(ok for _, ok, _ in results), results
+    results = []
+    for r in requirements:
+        got = (r, False, "not stated", None)
+        for v, claim in props.get(r["name"], []):
+            ok, why = holds(r["constraint"], r["value"], v, r["name"])
+            got = (r, ok, why, claim)
+            if ok:
+                break
+        results.append(got)
+    return bool(results) and all(ok for _, ok, _, _ in results), results

@@ -101,11 +101,12 @@ def ops_for(cat: dict, e: dict, v: dict) -> list[dict]:
     claim(profile, LABEL, lit(str(cat.get("label") or cat["name"])))
     claim(s, LABEL, lit(str(e.get("label") or e["id"])))
     claim(s, DCT + "isPartOf", {"entity": profile})
-    claim(s, DCT + "type", {"entity": f"urn:kk:component-kind:{slug(e.get('kind', 'component'))}"})
+    mine = {DCT + "isPartOf": profile}             # the catalog's word for it, as with every value below
+    claim(s, DCT + "type", {"entity": f"urn:kk:component-kind:{slug(e.get('kind', 'component'))}"}, mine)
     if e.get("version"):
-        claim(s, OWL_VERSION, lit(str(e["version"])))
+        claim(s, OWL_VERSION, lit(str(e["version"])), mine)
     if e.get("licence"):
-        claim(s, DCT + "license", lit(str(e["licence"])))
+        claim(s, DCT + "license", lit(str(e["licence"])), mine)
     if e.get("description"):
         claim(s, DCT + "description", lit(str(e["description"])[:2000]))
     if re.match(r"^https?://", str(e.get("source") or "")):
@@ -274,64 +275,101 @@ def needs(cur) -> dict[str, list[dict]]:
     return out
 
 
-def entries(cur) -> dict[tuple[str, str], dict]:
-    """What catalog lookup recorded, per (entry, catalog): its properties as read from the record, each with the
-    claim it came from, and whether an enforced rule refuses it. Values are the catalog's own (R5-30)."""
-    cur.execute("""select id::text, subject, predicate, object_entity, object_value, qualifiers from api.claims
-                   where attributed_to = %s and status <> 'deprecated' and redacted_at is null
-                     and predicate = any(%s)""", (AGENT, [VALUE, DCT + "license", OWL_VERSION, DCT + "type", DCT + "isPartOf"]))
-    rows = cur.fetchall()
-    part = {}
-    for i, subj, pred, ent, val, q in rows:
-        if pred == DCT + "isPartOf" and (ent or "").startswith("urn:kk:catalog:"):
-            part.setdefault(subj, []).append(ent)
+FACTS = {DCT + "license": "licence", OWL_VERSION: "version", DCT + "type": "kind"}
+
+
+def group(rows) -> dict[tuple[str, str], dict]:
+    """Catalog lookup's claims (id, subject, predicate, object_entity, object_value, qualifiers), per (entry,
+    catalog): every value of each property with the claim it came from, the claims of the rules' verdicts, whether an
+    enforced rule refuses the entry, and the claim that it is in the catalog. Only a value the catalog itself gave
+    counts (qualified dcterms:isPartOf the catalog, R5-30): two catalogs may disagree about one provider."""
     out: dict[tuple[str, str], dict] = {}
-    for i, subj, pred, ent, val, q in rows:
-        v = _value({"object_value": val}) if val is not None else None
+
+    def at(subj, profile):
+        return out.setdefault((subj, profile), {"properties": {}, "rules": [], "refused": False, "member": None})
+    for i, subj, pred, ent, val, q in sorted(rows, key=lambda r: str(r[0])):
         q = q or {}
-        if pred == VALUE and q.get(DCT + "isPartOf") and NAME in q:
-            e = out.setdefault((subj, q[DCT + "isPartOf"]), {"properties": {}, "claims": {}, "refused": False})
+        v = _value({"object_value": val}) if val is not None else None
+        if pred == DCT + "isPartOf" and (ent or "").startswith("urn:kk:catalog:"):
+            at(subj, ent)["member"] = i
+            continue
+        profile = q.get(DCT + "isPartOf")
+        if not profile:
+            continue                                       # unqualified (recorded before T20): superseded by the next search
+        if pred == VALUE and NAME in q:
+            e = at(subj, profile)
             if q[NAME].startswith("rule:"):
+                e["rules"].append(i)
                 e["refused"] |= str(v).startswith("fails") and str(v).endswith("(enforced)")
             else:
-                e["properties"][q[NAME]], e["claims"][q[NAME]] = v, i
-        elif pred in (DCT + "license", OWL_VERSION, DCT + "type"):
-            name = {DCT + "license": "licence", OWL_VERSION: "version", DCT + "type": "kind"}[pred]
+                e["properties"].setdefault(q[NAME], []).append((v, i))
+        elif pred in FACTS:
             v = (ent or "").removeprefix("urn:kk:component-kind:") if pred == DCT + "type" else v
-            for profile in part.get(subj, []):         # an entry's own facts hold in each catalog that lists it
-                e = out.setdefault((subj, profile), {"properties": {}, "claims": {}, "refused": False})
-                e["properties"].setdefault(name, v)
-                e["claims"].setdefault(name, i)
-    return out
+            at(subj, profile)["properties"].setdefault(FACTS[pred], []).append((v, i))
+    return {k: e for k, e in out.items() if e["member"]}
+
+
+def entries(cur) -> dict[tuple[str, str], dict]:
+    cur.execute("""select id::text, subject, predicate, object_entity, object_value, qualifiers from api.claims
+                   where attributed_to = %s and status <> 'deprecated' and redacted_at is null
+                     and predicate = any(%s)""", (AGENT, [VALUE, DCT + "isPartOf", *FACTS]))
+    return group(cur.fetchall())
+
+
+def _scope(cur, ids: list[str]) -> str | None:
+    """The most restrictive scope of the premises (invariant 3), or None when they are in two restricted scopes."""
+    cur.execute("select distinct scope from api.claims where id = any(%s::uuid[])", (ids,))
+    scopes = {r[0] for r in cur.fetchall()} - {SCOPE}
+    return SCOPE if not scopes else (scopes.pop() if len(scopes) == 1 else None)
 
 
 def match_needs(conn) -> dict:
     """One pass of requirement matching over the record (T20): each need against each recorded entry, per catalog.
     An entry every requirement holds for, and no enforced rule refuses, is offered: `<entry> kkt:fulfills <need>`,
-    inferred from the requirement claims and the property claims compared. Nothing is read from a catalog here,
-    and nothing a model said is used."""
-    report = {}
+    inferred from the requirement claims, the property claims that met them, the rules' verdicts and the entry's
+    membership of the catalog, in the most restrictive of their scopes. A changed match supersedes the earlier
+    offer; an entry no longer matched has it retracted. Nothing is read from a catalog here, and no model judges a
+    match. A run is opened only when there is something to submit."""
+    report: dict[str, list] = {}
     with conn.cursor() as cur:
         wanted, found = needs(cur), entries(cur)
-        if not wanted:
-            return report
-        with run(cur, MODULE, {"match": sorted(wanted)}) as (run_id, outputs):
-            for need, reqs in sorted(wanted.items()):
-                got = []
-                for (subj, profile), e in sorted(found.items()):
-                    ok, results = match(reqs, {"properties": e["properties"]})
-                    if not ok or e["refused"]:
+        todo = []
+        for need, reqs in sorted(wanted.items()):
+            report[need] = []
+            for (subj, profile), e in sorted(found.items()):
+                ok, results = match(reqs, {"properties": e["properties"]})
+                prefix = f"match:{profile}|{subj}|{need}|"
+                if ok and not e["refused"]:
+                    premises = sorted({r["id"] for r in reqs} | {c for _, _, _, c in results} | set(e["rules"]) | {e["member"]})
+                    key = prefix + hashlib.sha256(json.dumps(premises).encode()).hexdigest()[:12]
+                    scope = _scope(cur, premises)
+                    if scope is None:
+                        report[need].append({"entry": subj, "catalog": profile, "none": "its premises are in two restricted scopes"})
                         continue
-                    premises = sorted({r["id"] for r in reqs} | {e["claims"][r["name"]] for r in reqs})
-                    digest = hashlib.sha256(json.dumps(premises).encode()).hexdigest()[:12]
-                    op = {"op": "add_claim", "subject": subj, "predicate": KKT + "fulfills", "object": {"entity": need},
-                          "evidence_type": "inferred", "derived_from": premises}
-                    cs = {"idempotency_key": f"match:{profile}|{subj}|{need}|{digest}", "attributed_to": AGENT,
-                          "target_scope": SCOPE, "ops": [op]}
-                    got.append({"entry": subj, "catalog": profile, "change_set": str(submit(cur, cs, run_id)["id"]),
-                                "why": [why for _, _, why in results]})
-                report[need] = got
-            outputs.update(offers=sum(len(x) for x in report.values()))
+                    ops = [{"op": "add_claim", "subject": subj, "predicate": KKT + "fulfills", "object": {"entity": need},
+                            "evidence_type": "inferred", "derived_from": premises}]
+                    report[need].append({"entry": subj, "catalog": profile, "why": [why for _, _, why, _ in results]})
+                else:
+                    ops, key, scope = [], None, None
+                old = prior(cur, AGENT, prefix, key or "")
+                cur.execute("select 1 from api.change_sets where idempotency_key = %s", (key,))
+                if (key and cur.fetchone() and not old) or (not key and not old):
+                    continue                               # offered already, or nothing to offer or withdraw
+                if not key:                                # no longer matched: the offer is withdrawn
+                    key = prefix + "none:" + hashlib.sha256(json.dumps(sorted(str(c["id"]) for c in old)).encode()).hexdigest()[:12]
+                    cur.execute("select scope from api.claims where id = %s", (old[0]["id"],))
+                    scope = cur.fetchone()[0]
+                cs = {"idempotency_key": key, "attributed_to": AGENT, "target_scope": scope, "ops": ops}
+                supersede(cs, old)
+                todo.append((need, subj, profile, cs))
+        if todo:
+            with run(cur, MODULE, {"match": sorted(wanted)}) as (run_id, outputs):
+                for need, subj, profile, cs in todo:
+                    cid = str(submit(cur, cs, run_id)["id"])
+                    for r in report[need]:
+                        if r["entry"] == subj and r["catalog"] == profile:
+                            r["change_set"] = cid
+                outputs.update(submitted=len(todo))
     return report
 
 
@@ -357,7 +395,14 @@ def main(argv=None) -> int:
     if a.cmd == "match":
         print(json.dumps(match_needs(conn), default=str))
         return 0
-    step = lambda c: print(json.dumps({"requests": one_pass(c, intent), "needs": match_needs(c)}, default=str), flush=True)  # noqa: E731
+    def step(c):
+        out = {"requests": one_pass(c, intent)}
+        try:
+            out["needs"] = match_needs(c)
+        except Exception as err:                         # a failed match must not stop build requests being answered
+            c.rollback()
+            out["needs"] = {"error": str(err)[:300]}
+        print(json.dumps(out, default=str), flush=True)
     if a.once:
         step(conn)
         return 0

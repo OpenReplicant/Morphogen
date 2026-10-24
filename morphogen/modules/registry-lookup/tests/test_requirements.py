@@ -8,7 +8,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[2]
-sys.path[:0] = [str(HERE), str(ROOT / "morphogen" / "src")]
+sys.path[:0] = [str(HERE), str(ROOT / "morphogen" / "src"), str(ROOT / "kernel" / "src")]
 from registry_lookup.requirements import holds, match  # noqa: E402
 
 
@@ -38,7 +38,7 @@ check(match(NEED_PY, dual)[0], "Apache-2.0 OR GPL-2.0-only can be met with Apach
 check(not match(NEED_PY, both)[0], "MIT AND GPL-3.0-only needs both: not matched")
 check(match(NEED_PY, named)[0], "a registry's licence name (\"BSD License\") is read as its SPDX id")
 ok, results = match(NEED_PY, nopy)
-check(not ok and any(r["name"] == "requires_python" and not good and why == "not stated" for r, good, why in results),
+check(not ok and any(r["name"] == "requires_python" and not good and why == "not stated" for r, good, why, _ in results),
       "an entry that does not state requires_python is not matched: missing is never a match")
 
 # An M8 stainless bolt, 25 to 40 mm long.
@@ -61,8 +61,45 @@ check(holds("$equal", "8", "8.0")[0] and holds("$equal", "m8", "M8")[0], "equal 
 check(holds("$greater_or_equal", "1.10.0", "1.9.2")[0] is False and holds("$greater_or_equal", "1.9.2", "1.10.0")[0],
       "at least: versions compare as versions (1.10.0 > 1.9.2), not as text")
 check(holds("$greater_or_equal", "1.10", "1.9")[0], "two plain decimals compare as numbers (1.9 >= 1.10)")
+check(not holds("$greater_or_equal", "1.10", "1.9", "version")[0] and holds("$greater_or_equal", "3.9", "3.12", "version")[0]
+      and not holds("$equal", "1.1", "1.10", "version")[0], "a property named version compares as versions (3.12 >= 3.9, 1.10 is not 1.1)")
 check(holds("$less_or_equal", "40", "40")[0] and not holds("$less_or_equal", "40", "40.5")[0], "at most includes the bound")
 check(not holds("$greater_or_equal", "25", "long")[0], "a value that is neither a number nor a version cannot be compared")
 check(not holds("$admits", "3.12", "not a specifier")[0], "a value that is not a specifier admits nothing")
 check(not holds("$licence", '["MIT"]', "MIT OR (")[0], "an unreadable licence expression is not met")
 check(not holds("$approx", "1", "1")[0], "an unknown constraint never holds")
+check(not holds("$valid_values", '[""]', "")[0] and not holds("$equal", "", " ")[0], "an empty value is not stated")
+
+# Licence ids in an expression are exact; a registry's name with spaces is read as its SPDX id.
+ALLOWED = '["Apache-2.0", "MIT", "MPL-2.0"]'
+for lic in ("Apache-1.1", "MPL-1.1", "MIT-0", "LicenseRef-Proprietary-MIT-like", "GPL-3.0-or-later"):
+    check(not holds("$licence", ALLOWED, lic)[0], f"{lic} is not on the list (no mapping across versions or variants)")
+check(not holds("$licence", '["MIT-0"]', "MIT")[0] and not holds("$licence", '["GPL-3.0-only"]', "GPL-3.0-or-later")[0],
+      "an allowed id admits only itself")
+check(holds("$licence", ALLOWED, "MIT License")[0] and holds("$licence", ALLOWED, "Apache-2.0 WITH LLVM-exception")[0],
+      "a registry's name is read as its id; an exception only adds permissions")
+
+# Several values: a requirement holds when one of them meets it, and names that value's claim.
+prov = {"properties": {"slot": [("analyser", "s1"), ("observer", "s2")]}}
+ok, res = match([req("slot", "$equal", "observer")], prov)
+check(ok and res[0][3] == "s2", "a provider filling two slots meets a need for either; the claim of the one that met it is cited")
+
+# What catalog lookup recorded, grouped per (entry, catalog): one catalog's values never stand for another's.
+from registry_lookup.__main__ import DCT, KKT, OWL_VERSION, group  # noqa: E402
+P, A, B = "urn:kk:provider:x", "urn:kk:catalog:a", "urn:kk:catalog:b"
+V = lambda x: {"@value": x}  # noqa: E731
+rows = [("1", P, DCT + "isPartOf", A, None, {}), ("2", P, DCT + "isPartOf", B, None, {}),
+        ("3", P, DCT + "license", None, V("MIT"), {DCT + "isPartOf": A}),
+        ("4", P, DCT + "license", None, V("GPL-3.0-only"), {DCT + "isPartOf": B}),
+        ("5", P, KKT + "propertyValue", None, V("analyser"), {KKT + "propertyName": "slot", DCT + "isPartOf": A}),
+        ("6", P, KKT + "propertyValue", None, V("observer"), {KKT + "propertyName": "slot", DCT + "isPartOf": A}),
+        ("7", P, KKT + "propertyValue", None, V("fails: licence (enforced)"), {KKT + "propertyName": "rule:licences", DCT + "isPartOf": B}),
+        ("8", P, OWL_VERSION, None, V("1.0"), {}),
+        ("9", "urn:kk:provider:y", KKT + "propertyValue", None, V("z"), {KKT + "propertyName": "slot", DCT + "isPartOf": A})]
+g = group(rows)
+check(g[(P, A)]["properties"]["licence"] == [("MIT", "3")] and g[(P, B)]["properties"]["licence"] == [("GPL-3.0-only", "4")],
+      "two catalogs disagreeing about one provider's licence: each keeps its own, with its own claim")
+check(g[(P, A)]["properties"]["slot"] == [("analyser", "5"), ("observer", "6")], "every value of a property is kept")
+check(g[(P, B)]["refused"] and g[(P, B)]["rules"] == ["7"] and not g[(P, A)]["refused"], "an enforced rule refuses the entry in its own catalog only")
+check("version" not in g[(P, A)]["properties"], "a value no catalog qualified is not used")
+check(("urn:kk:provider:y", A) not in g and g[(P, A)]["member"] == "1", "only an entry recorded as in the catalog is matched")

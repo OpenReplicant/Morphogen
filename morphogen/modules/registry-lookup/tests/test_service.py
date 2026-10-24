@@ -85,6 +85,8 @@ def main() -> None:
             {"id": "oldpy", "kind": "python-package", "licence": "MIT", "properties": {"requires_python": ">=3.9"}},
             {"id": "newpy", "kind": "python-package", "licence": "MIT", "properties": {"requires_python": ">=3.13"}},
             {"id": "copyleft", "kind": "python-package", "licence": "GPL-3.0-only", "properties": {"requires_python": ">=3.8"}}]},
+        "py-strict": {"kind": "components", "label": "Python packages, Apache only", "rules": {"licences": {"enforce": True, "allow": ["Apache-2.0"]}},
+                      "components": [{"id": "oldpy", "kind": "python-package", "licence": "MIT", "properties": {"requires_python": ">=3.9"}}]},
         "bike-parts": {"kind": "components", "label": "Bicycle parts", "components": [
             {"id": "chainring-52t", "label": "Chainring, 52 teeth", "kind": "part", "licence": "proprietary",
              "properties": {"material": "aluminium 7075", "teeth": 52}},
@@ -248,6 +250,7 @@ def main() -> None:
         # Requirement matching (T20): needs stated as claims, matched against what was recorded, never against words.
         search(rl, intent, "workshop", {})
         search(rl, intent, "py", {})
+        search(rl, intent, "py-strict", {})
         validator.drain(val)
 
         def need(iri, reqs):
@@ -268,20 +271,44 @@ def main() -> None:
         check(offered["urn:kk:need:bolt"] == {"urn:kk:component:workshop:m8-bolt-a2-30"},
               "an M8 stainless bolt of 25 to 40 mm: the 30 mm bolt is offered; the 60 mm bolt and the nut, which states no length, are not")
         check(offered["urn:kk:need:py312"] == {"urn:kk:component:py:oldpy"},
-              "a package that runs on Python 3.12 under MIT or Apache-2.0: >=3.9 MIT is offered; >=3.13 and GPL-3.0 are not")
+              "a package that runs on Python 3.12 under MIT or Apache-2.0: >=3.9 MIT is offered; >=3.13 and GPL-3.0 are not; "
+              "the same package in a catalog whose enforced rule refuses MIT is not")
         bolt = su.execute("""select c.id::text from api.claims c where c.subject = 'urn:kk:component:workshop:m8-bolt-a2-30'
                              and c.predicate = %s and c.object_entity = 'urn:kk:need:bolt'""", (FULFILLS,)).fetchone()[0]
         prem = {r[0] for r in su.execute("""select (select k.qualifiers->>%s from api.claims k where k.id = d.derived_from) || '/'
                                               || (select k.subject from api.claims k where k.id = d.derived_from)
                                             from kernel.claim_derivation d where d.claim_id = %s""", (KKT + "propertyName", bolt)).fetchall()}
+        B = "urn:kk:component:workshop:m8-bolt-a2-30"
         check(prem == {"thread/urn:kk:need:bolt", "length_mm/urn:kk:need:bolt", "material/urn:kk:need:bolt",
-                       "thread/urn:kk:component:workshop:m8-bolt-a2-30", "length_mm/urn:kk:component:workshop:m8-bolt-a2-30",
-                       "material/urn:kk:component:workshop:m8-bolt-a2-30"},
-              "the offer is inferred from each requirement and the property claims it was compared with")
+                       f"thread/{B}", f"length_mm/{B}", f"material/{B}", f"rule:licences/{B}", f"rule:pinned/{B}", None},
+              "the offer is inferred from each requirement, the property claims that met them, the rules' verdicts and "
+              "the entry's membership of the catalog")
         n = su.execute("select count(*) from kernel.change_set where attributed_to = %s", (AGENT,)).fetchone()[0]
         match_needs(rl)
-        check(su.execute("select count(*) from kernel.change_set where attributed_to = %s", (AGENT,)).fetchone()[0] == n,
-              "matching again offers nothing new")
+        r0 = su.execute("select count(*) from kernel.run where agent = %s", (AGENT,)).fetchone()[0]
+        match_needs(rl)
+        check(su.execute("select count(*) from kernel.change_set where attributed_to = %s", (AGENT,)).fetchone()[0] == n
+              and su.execute("select count(*) from kernel.run where agent = %s", (AGENT,)).fetchone()[0] == r0,
+              "matching again offers nothing new and opens no run")
+
+        # A requirement withdrawn: truth maintenance flags the offer built on it; matching again supersedes it.
+        thread = su.execute("""select id::text from api.claims where subject = 'urn:kk:need:bolt' and qualifiers->>%s = 'thread'""",
+                            (KKT + "propertyName",)).fetchone()[0]
+        with pl.cursor() as cur, run(cur, "urn:kk:module:planner") as (rid, _):
+            submit(cur, {"idempotency_key": "test:drop-thread", "attributed_to": "urn:kk:agent:planner", "target_scope": "urn:kk:scope:default",
+                         "ops": [{"op": "set_status", "claim": thread, "status": "deprecated", "expect_status": "normal", "reason": "retracted"}]}, rid)
+        validator.drain(val)
+        with connect("kkm_truth_maintenance", url) as tm:
+            follow(tm, tms.step, once=True)
+        validator.drain(val)
+        flagged = su.execute("select verdict from api.verifications where claim_id = %s and method = %s", (bolt, tms.METHOD)).fetchone()
+        match_needs(rl)
+        validator.drain(val)
+        now = su.execute("""select id::text, status from api.claims where subject = %s and predicate = %s
+                            and object_entity = 'urn:kk:need:bolt'""", (B, FULFILLS)).fetchall()
+        check(flagged == ("inconclusive",) and dict(now).get(bolt) == "deprecated"
+              and sum(1 for _, st in now if st != "deprecated") == 1,
+              "a requirement withdrawn: truth maintenance flags the offer; matching again supersedes it with one inferred from what remains")
     shutil.rmtree(tmp)
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
     print("registry-lookup service checks passed")
