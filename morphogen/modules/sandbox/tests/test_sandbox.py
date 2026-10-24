@@ -218,6 +218,38 @@ def main() -> None:
     finally:
         ok.close(), no.close()
 
+    # Nothing a run leaves behind runs later: a run user with a cron or at job is refused. And a lease whose
+    # network chain is gone (a flushed ruleset) starts nothing.
+    spool = tmp / "spool"
+    spool.mkdir()
+    spools, confine.SPOOLS = confine.SPOOLS, [spool]
+    first = confine.pool()[0]
+    (spool / first.pw_name).write_text("* * * * * curl ...\n")
+    try:
+        os.environ["KK_RUN_AS"], pool_was = first.pw_name, os.environ["KK_RUN_AS"]
+        try:
+            with confine.lease():
+                refused = None
+        except confine.Unconfined as e:
+            refused = str(e)
+        check(refused is not None and "scheduled jobs" in refused, "a run user with a cron job is refused")
+        (spool / first.pw_name).unlink()
+        with confine.lease() as run:
+            os.chown(spool, run.user.pw_uid, run.user.pw_gid)
+            run.run(["/bin/sh", "-c", f"echo job > {spool}/{first.pw_name}"], {"PATH": "/usr/bin:/bin"}, timeout=30, cwd="/")
+            planted = (spool / first.pw_name).exists()
+            subprocess.run(["nft", "delete", "table", "inet", confine.TABLE], check=True)
+            try:
+                run.popen(["true"], {"PATH": "/usr/bin:/bin"})
+                gone = None
+            except confine.Unconfined as e:
+                gone = str(e)
+        check(planted and not (spool / first.pw_name).exists(), "a job a run planted is removed when its lease ends")
+        check(gone is not None and "chain" in gone, "a lease whose network chain was flushed starts nothing")
+    finally:
+        os.environ["KK_RUN_AS"] = pool_was
+        confine.SPOOLS = spools
+
     # A process already running as a run user (another program sharing its uid) is refused, never killed.
     first = confine.pool()[0]
     other = subprocess.Popen(["sleep", "60"], user=first.pw_uid, group=first.pw_gid, extra_groups=[])
@@ -265,7 +297,7 @@ def main() -> None:
     check(who.startswith("kk_sbx_") and set(creds.split(",")) <= {"-", "PGHOST", "PGPORT"} and sees == "False",
           f"the candidate runs as a login made for its run ({who}), with no other credentials ({creds}), "
           "and cannot see the run files")
-    check(record == "closed", "that login cannot reach the record's cluster")
+    check(record == "closed", "that login has no way into the record's cluster")
     check(os_user in os.environ["KK_RUN_AS"].split(",") and parent_env == "closed" and superuser == "closed",
           f"the candidate runs as the OS user {os_user}: it cannot read the sandbox's environment ({parent_env}) "
           f"or connect as postgres without a password ({superuser})")

@@ -116,6 +116,8 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
         extra["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Bearer%20{telemetry_token(os.environ['KK_OTLP_SECRET'], extra['OTEL_SERVICE_NAME'])}"
     env = login_env(os.environ["DATABASE_URL"], *login, extra) if login else {**os.environ, **extra}
     env.pop("KK_OTLP_SECRET", None)
+    if slot_file != "sandbox":
+        env.pop("KK_SANDBOX_CLUSTER", None)              # a superuser's login: the sandbox's alone
     cmd = shlex.split(spec["service"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable

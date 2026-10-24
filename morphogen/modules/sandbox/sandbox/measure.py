@@ -46,7 +46,8 @@ what it did. The record is read through DATABASE_URL as KK_ROLE. Everything prov
 a cluster of its own (R5-26): KK_SANDBOX_CLUSTER, a conninfo for a superuser of that cluster, which the
 PG* environment points to while an experiment runs (`sandbox_cluster`). The sandbox refuses to measure
 without it, or when it is the record's cluster (same system identifier), so no provider code ever has a
-login on the record's cluster or an address that reaches it.
+login on the record's cluster or a network address that reaches it (a socket the record's cluster
+listens on may still be openable, where its password rule applies).
 """
 from __future__ import annotations
 
@@ -143,9 +144,9 @@ _on_sandbox = [0]
 
 
 @contextlib.contextmanager
-def sandbox_cluster():
+def sandbox_cluster(record=None):
     """Point the PG* environment at KK_SANDBOX_CLUSTER for the life of the context (nested uses share it);
-    refused unless it is set and is not the cluster PG* points to now (the record's)."""
+    refused unless it is set and is neither the cluster PG* points to now nor `record`'s."""
     if _on_sandbox[0]:
         _on_sandbox[0] += 1
         try:
@@ -162,15 +163,17 @@ def sandbox_cluster():
         raise confine.Unconfined(f"KK_SANDBOX_CLUSTER: only {', '.join(CLUSTER_ENV)} (not {', '.join(extra)})")
     ident = "select system_identifier from pg_control_system()"
     with connect(url="dbname=postgres") as su:
-        record_id = su.execute(ident).fetchone()[0]
-    saved = {v: os.environ.get(v) for v in [*CLUSTER_ENV.values(), "PGPASSFILE", "PGSERVICE"]}
+        others = {su.execute(ident).fetchone()[0]}
+    if record is not None:
+        others.add(record.execute(ident).fetchone()[0])
+    saved = {v: os.environ.get(v) for v in [*CLUSTER_ENV.values(), "PGPASSFILE", "PGSERVICE", "PGHOSTADDR"]}
     for v in saved:
         os.environ.pop(v, None)
     os.environ.update({CLUSTER_ENV[k]: str(v) for k, v in given.items()})
     _on_sandbox[0] = 1
     try:
         with connect(url="dbname=postgres") as su:
-            if su.execute(ident).fetchone()[0] == record_id:
+            if su.execute(ident).fetchone()[0] in others:
                 raise confine.Unconfined("KK_SANDBOX_CLUSTER is the record's cluster: give the sandbox a cluster of its own")
         yield
     finally:
@@ -478,7 +481,7 @@ def experiment(exp_dir: Path, record, private: Path) -> list[Path]:
         raise ValueError(f"{spec['incumbent']} declares no agent (provider.yaml agent): its outputs cannot be judged")
     ops = inputs(record, bench["inputs"])
     results = {}
-    with (sandbox_cluster(), confine.lease(allow=[confine.where()]) as run,
+    with (sandbox_cluster(record), confine.lease(allow=[confine.where()]) as run,
           confine.workspace("kk-sbx-code-") as work):    # `private` is not readable by the run user
         reachable(run)
         for role, d in (("incumbent", incumbent), ("candidate", exp_dir / spec["candidate"])):

@@ -14,7 +14,8 @@ provider directory, by one of two strategies:
             write, with the allow-listed environment (PATH, HOME, locale) and only the variables named in
             KK_BUILDER_ENV (its own model credentials, e.g. ANTHROPIC_API_KEY): none of the record's,
             telemetry's or git's. Over the network it reaches only the addresses KK_BUILDER_NET names
-            (host:port, comma-separated: its model API or the proxy in front of it), nothing else. It
+            (host:port, comma-separated: its model API or the proxy in front of it; a general forward
+            proxy gives it the whole network back), nothing else. It
             does not run while the cluster lets any login in without its password. If the repository's or intent's git state changed while it ran, the build fails.
             The harness runs as a leased run user; afterwards every process of that user is ended and the
             workdir is made root's before it is checked, then copied into the experiment as new files with

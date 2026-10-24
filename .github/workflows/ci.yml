@@ -45,6 +45,8 @@ jobs:
         run: |
           # uids of their own: --system would hand out 999, the uid Postgres runs as in the service container
           for i in 1 2 3 4; do sudo useradd --uid $((2900 + i)) --no-create-home --shell /usr/sbin/nologin kkrun$i; done
+          # nothing a run leaves behind may run later (R5-26)
+          for i in 1 2 3 4; do echo kkrun$i | sudo tee -a /etc/cron.deny /etc/at.deny > /dev/null; done
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
           # the confined code reads the repository and the venv: every directory above them must be traversable
           d="$GITHUB_WORKSPACE"; while [ "$d" != / ]; do sudo chmod o+x "$d"; d=$(dirname "$d"); done

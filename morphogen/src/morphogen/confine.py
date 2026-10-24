@@ -26,7 +26,10 @@ What a confined run can reach:
              included, and with no lease the chain rejects everything. Names are resolved when the lease
              starts and the code gets no DNS: give it addresses, or names /etc/hosts answers. Unix sockets
              are files, not network (a Postgres socket directory stays reachable; the Docker socket is
-             closed by its mode).
+             closed by its mode). Local relays it can reach over Unix sockets (systemd-resolved, D-Bus,
+             nscd) still answer it, so name lookups are an open channel; a network namespace would close it.
+  later      nothing it leaves behind runs later: a lease refuses a user with cron or at jobs and
+             removes them on release (deny both to the run users: /etc/cron.deny, /etc/at.deny).
 """
 from __future__ import annotations
 
@@ -88,7 +91,10 @@ class Lease:
         return self.user.pw_name
 
     def popen(self, cmd: list[str], env: dict, **kw) -> subprocess.Popen:
-        """Start cmd as the leased user, in a session of its own, with exactly `env`, under LIMITS."""
+        """Start cmd as the leased user, in a session of its own, with exactly `env`, under LIMITS; refused
+        when its network chain is gone."""
+        if not fenced(self.user):
+            raise Unconfined(f"the network chain of {self.name} is gone (was the nftables ruleset flushed?)")
         return subprocess.Popen(cmd, env=env, user=self.user.pw_uid, group=self.user.pw_gid, extra_groups=[],
                                 umask=0o077, start_new_session=True, preexec_fn=_limits, **kw)
 
@@ -154,6 +160,35 @@ class Lease:
 TABLE = "kk_confine"
 
 
+SPOOLS = [Path("/var/spool/cron/crontabs"), Path("/var/spool/cron"), Path("/var/spool/cron/atjobs"), Path("/var/spool/at")]
+
+
+def scheduled(user: pwd.struct_passwd) -> list[Path]:
+    """Cron and at jobs the user left: they would run later, as whoever holds that uid then."""
+    out = []
+    for d in SPOOLS:
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            continue
+        for e in entries:
+            try:
+                if e.is_file() and not e.is_symlink() and (e.name == user.pw_name or e.stat().st_uid == user.pw_uid):
+                    out.append(e)
+            except OSError:
+                continue
+    return out
+
+
+def fenced(user: pwd.struct_passwd) -> bool:
+    """The user's chain is in place and jumped to (nftables state can be flushed under us)."""
+    try:
+        out = subprocess.run(["nft", "list", "chain", "inet", TABLE, "out"], capture_output=True, text=True)
+    except FileNotFoundError:
+        return False
+    return out.returncode == 0 and f'comment "u{user.pw_uid}"' in out.stdout
+
+
 def _nft(script: str) -> None:
     try:
         out = subprocess.run(["nft", "-f", "-"], input=script, capture_output=True, text=True)
@@ -184,8 +219,7 @@ def fence(user: pwd.struct_passwd, allow=()) -> list[tuple[str, int]]:
     got = addresses(allow)
     rules = "".join(f"add rule inet {TABLE} {chain} {'ip6' if ':' in a else 'ip'} daddr {a} tcp dport {p} accept\n"
                     for a, p in got)
-    listed = subprocess.run(["nft", "list", "chain", "inet", TABLE, "out"], capture_output=True, text=True).stdout
-    jump = "" if f'comment "{chain}"' in listed else f'add rule inet {TABLE} out meta skuid {uid} jump {chain} comment "{chain}"\n'
+    jump = "" if fenced(user) else f'add rule inet {TABLE} out meta skuid {uid} jump {chain} comment "{chain}"\n'
     _nft(f"add table inet {TABLE}\n"
          f"add chain inet {TABLE} out {{ type filter hook output priority 0 ; policy accept ; }}\n"
          f"add chain inet {TABLE} {chain}\nflush chain inet {TABLE} {chain}\n{jump}{rules}"
@@ -214,13 +248,22 @@ def lease(allow=()):
             f.close()
             raise Unconfined(f"run user {u.pw_name} (uid {u.pw_uid}) already has processes {busy[:5]}: its uid may "
                              "belong to something else on this host (end them, or give it a uid of its own)")
+        if jobs := scheduled(u):
+            f.close()
+            raise Unconfined(f"run user {u.pw_name} has scheduled jobs ({', '.join(map(str, jobs[:3]))}): deny cron "
+                             "and at to the run users, and remove them")
         try:
+            for other in pool():                         # every run user not leased rejects everything
+                if other.pw_uid != u.pw_uid and not fenced(other):
+                    fence(other)
             fence(u, allow)
             yield got
         finally:
             try:
                 got.kill_all()
                 fence(u)
+                for job in scheduled(u):
+                    job.unlink(missing_ok=True)
             finally:
                 fcntl.flock(f, fcntl.LOCK_UN)
             f.close()

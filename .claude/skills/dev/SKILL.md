@@ -22,7 +22,8 @@ description: Set up the environment and run every check for this repo (Postgres 
    the repository. OS users for model-written code, one per concurrent run:
    `for i in 1 2 3 4; do useradd --uid $((2900 + i)) --no-create-home --shell /usr/sbin/nologin kkrun$i; done`
    (uids nothing else runs as: `--system` can hand out 999, Postgres's uid in its container image),
-   then `export KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4`; the module tests run as root so they can start code as them.
+   then `for i in 1 2 3 4; do echo kkrun$i >> /etc/cron.deny; echo kkrun$i >> /etc/at.deny; done` (nothing a run
+   leaves behind may run later) and `export KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4`; the module tests run as root so they can start code as them.
    Confined runs reach only the addresses their lease allows (R5-26): `nft` must be installed (`apt-get install -y nftables`).
    The sandbox measures provider code on a cluster of its own (R5-26), made the same way on port 5434:
    ```sh
