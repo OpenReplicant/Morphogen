@@ -42,7 +42,12 @@ jobs:
           # the confined code reads the repository and the venv: every directory above them must be traversable
           d="$GITHUB_WORKSPACE"; while [ "$d" != / ]; do sudo chmod o+x "$d"; d=$(dirname "$d"); done
           chmod -R o+rX "$GITHUB_WORKSPACE" /tmp/kk-venv
-      - name: Morphogen modules and the full loop (T5), as root so they can start code as the run users
+      - name: Images for G3 (R5-25), pulled with retries (Docker Hub rate-limits anonymous pulls)
+        run: |
+          for img in $(grep -ho 'image: .*' morphogen/intent/systems/*/compose.yaml | cut -d' ' -f2); do
+            for i in 1 2 3 4; do docker pull -q "$img" && break; sleep $((i * 15)); done
+          done
+      - name: Morphogen modules, the full loop (T5), G2 and G3, as root so they can start code as the run users
         run: |
           # The password above is in this file, which the run users can read: replace it with one they cannot.
           export PGPASSWORD_NEW=$(openssl rand -hex 24)
@@ -53,6 +58,6 @@ jobs:
           docker exec ${{ job.services.postgres.id }} sh -c \
             'sed -i -E "s/[[:space:]]trust$/ scram-sha-256/" "$PGDATA/pg_hba.conf" && ! grep -Eq "^[^#].*[[:space:]]trust$" "$PGDATA/pg_hba.conf"'
           psql -d postgres -qAtc "select pg_reload_conf()"
-          sudo -E env "PATH=$PATH" KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4 /tmp/kk-venv/bin/python morphogen/modules/test.py
+          sudo -E env "PATH=$PATH" KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4 KK_REQUIRE_DOCKER=1 /tmp/kk-venv/bin/python morphogen/modules/test.py
       - name: Boundary
         run: python3 scripts/check_boundary.py
