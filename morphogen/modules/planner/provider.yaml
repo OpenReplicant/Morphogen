@@ -7,5 +7,5 @@ origin: rewrite of rebuild 4 modules/skill-adaptation-planning (a skill for an a
 requires: Python 3.12+, psycopg, PyYAML
 migration: migration.sql
 service: python3 -m planner
-tests: [python3 tests/test_plan.py]
+tests: [python3 tests/test_plan.py, python3 tests/test_service.py]
 note: plans only from the fixed action list (morphogen/intent/policies/actions.yaml); a model-driven planner is a candidate provider of the same slot, scored by the evaluator

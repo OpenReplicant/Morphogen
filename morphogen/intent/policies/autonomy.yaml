@@ -22,6 +22,6 @@ guards:
   kill_switch_file: policies/KILL     # presence stops all promotion
   max_changes_per_hour_per_target: 3
   cooldown_per_slot: PT15M
-  blast_radius_budget_slots: 5
+  blast_radius_budget_slots: 5     # nodes a step reaches: its node and all that depend on it (kk.graph, R5-32)
   proposal_default_ttl: PT24H
   recheck_preconditions_before_commit: true

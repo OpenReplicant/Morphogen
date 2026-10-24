@@ -100,3 +100,20 @@ check(next(o for o in ops if o["predicate"] == SOSA + "hasFeatureOfInterest")["o
       "the step changes the backend; the prediction is on the frontend, where it was observed")
 check("none" in proposal(nan, nobs, nlim, None, ACTS, BACK), "no service on the map sets it: no plan")
 check("none" in proposal(nan, nobs, nlim, 0.0, ACTS, BACK), "already at the minimum: no plan")
+
+# The blast radius guard (T19, R5-32) fails closed.
+sys.path.insert(0, str(ROOT / "kernel" / "src"))
+from planner.__main__ import beyond_budget, budget_of  # noqa: E402
+
+E = [(FRONT, BACK, "c1"), ("urn:kk:node:podinfo:gateway", FRONT, "c2")]
+check(beyond_budget(E, BACK, 3) is None and "over the blast radius budget of 2" in beyond_budget(E, BACK, 2)["none"],
+      "reach is the node and all that depend on it: 3 nodes, within 3, over 2")
+check(isinstance(budget_of({}), str) and isinstance(budget_of({"guards": {"blast_radius_budget_slots": "five"}}), str)
+      and isinstance(budget_of({"guards": {"blast_radius_budget_slots": 0}}), str)
+      and budget_of({"guards": {"blast_radius_budget_slots": 5}}) == 5, "a missing or invalid budget is no budget")
+check(beyond_budget(E, BACK, budget_of({}))["none"].startswith("refused:"), "no budget: every plan is refused")
+check("not on the map" in beyond_budget(E, "urn:kk:node:podinfo:lonely", 5)["none"],
+      "a node with no edges on the map: its reach cannot be counted, refused")
+check("cannot be counted" in beyond_budget(E, BACK, 5, "the planner cannot read x")["none"],
+      "the map's vocabulary unreadable: refused")
+check(beyond_budget([], TARGET, 1) is None, "a provider is not a node of the map: its reach is itself")

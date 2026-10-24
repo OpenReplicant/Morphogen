@@ -49,6 +49,28 @@ held 55 of its 90 cases; it was downloaded again and every method rerun on all 9
 
 The change gains 0.012 on RE2-OB and nothing on RE2-TT.
 
+## Map-aware ordering (T19, RE1-OB only; not kept)
+
+`map_order.py`: the analyser's scores, reordered by Online Boutique's call graph (from the upstream manifests'
+`*_ADDR` settings; transitive closure with `kk.graph`). Kept only if it does not fall below the analyser on RE1,
+then measured on RE2 (D-64). Every rule fell below on RE1-OB, so RE2 was not used and no map was written for SS or TT.
+
+| Rule | What moves | CPU | MEM | DISK | DELAY | LOSS | Mean |
+|---|---|---|---|---|---|---|---|
+| none (the analyser) | nothing | 0.94 | 0.98 | 0.96 | 0.81 | 0.68 | **0.874** |
+| any 3 | a metric whose service depends on any service scoring >= 3: to the end | 0.75 | 0.80 | 0.63 | 0.58 | 0.58 | 0.668 |
+| any 10 | the same, >= 10 | 0.78 | 0.84 | 0.78 | 0.70 | 0.70 | 0.760 |
+| higher 3 | only when the dependency scores at least as high as the metric | 0.94 | 0.96 | 0.93 | 0.72 | 0.63 | 0.836 |
+| lat 0 | only latency/error metrics, only by a dependency's latency/error | 0.94 | 0.98 | 0.96 | 0.74 | 0.68 | 0.860 |
+| latpen 3 | lat as a penalty (score halved) | 0.94 | 0.98 | 0.96 | 0.76 | 0.68 | 0.864 |
+
+Why it loses: RCAEval's delay and loss faults are network faults on the root's pod, which slow its traffic both
+ways. In `checkoutservice_delay` 2 and 4 the latency of `cartservice`, which checkout calls, rises above
+checkout's own, so every rule demotes the true root (rank 2 to 10 or 12). The idea that a caller is the victim of
+its callee holds for a slow service, not for a slow network on the caller. Where the analyser misses on OB, the top
+places go to unrelated memory or workload metrics (`recommendationservice_mem` in `currencyservice_delay` 2),
+which no call graph explains.
+
 ## Notes
 
 - Rebuild 4's D-65(b) calls a scale of 1 for a baseline flat at 0 a bug ("scores it in raw units (bytes) and

@@ -13,6 +13,11 @@ A node of a managed system (urn:kk:node:<system>:<service>, R5-25) is planned fo
 anomalous node first, then the nodes it connects to (kkt:connectsTo, breadth first, as recorded by the
 agents in KK_MAP_AGENTS), and the step goes to the first whose compose file sets the action's setting;
 the connections followed join the plan's premises.
+A plan whose reach exceeds the blast radius budget (autonomy.yaml guards.blast_radius_budget_slots) is refused
+before review: its reach is the node its step changes and every node that depends on it, transitively
+(kkt:dependsOn and its subproperties on the map, kk.graph; R5-32). The guard fails closed: no valid budget, the
+map's vocabulary unreadable, or a node not on the map, and the plan is refused. It covers plans from anomalies;
+a replace plan changes one provider (reach 1).
 A build request is answered by the candidates recorded for it (`<provider> dcterms:source <request>` by the agents
 in KK_BUILDER_AGENTS: the builder and catalog lookup, R5-30): the fastest the sandbox measured as better than the
 incumbent and within the limit becomes a replace plan.
@@ -32,6 +37,7 @@ from pathlib import Path
 
 import yaml
 
+from kk import graph
 from kk.lib import connect, follow, run, submit
 from morphogen.experiments import ROOT, provider_slots, run_name
 from morphogen import systems
@@ -49,7 +55,8 @@ BUILDERS = [x.strip() for x in os.environ.get("KK_BUILDER_AGENTS", "urn:kk:agent
 CANDIDATE_REF = re.compile(r"experiments/(x[0-9a-f]{12})/[a-z0-9-]+#sha256=([0-9a-f]{64})$")
 DQV = "http://www.w3.org/ns/dqv#"
 BENCHMARKS = ROOT / "morphogen" / "contract" / "slots"
-CONNECTS_TO = "https://w3id.org/knowledge-kernel/tosca#connectsTo"
+KKT = "https://w3id.org/knowledge-kernel/tosca#"
+CONNECTS_TO = KKT + "connectsTo"
 COLUMNS = "id, subject, predicate, object_entity, object_value, qualifiers, valid_from, valid_to, recorded_at, scope"
 
 
@@ -97,11 +104,49 @@ def on_map(cur, intent: Path, start: str, name: str, mappers: list[str]):
     return None
 
 
+def budget_of(policy: dict) -> int | str:
+    """The blast radius budget, or why there is none (then every plan is refused: the guard fails closed)."""
+    v = (policy.get("guards") or {}).get("blast_radius_budget_slots")
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return f"guards.blast_radius_budget_slots is {v!r}, not a whole number"
+    return n if n >= 1 and n == v else f"guards.blast_radius_budget_slots is {v!r}, not a whole number of nodes >= 1"
+
+
+def map_vocabulary(cur) -> str | None:
+    """Why the map cannot be read in full (its subproperties of dependsOn are not visible), else None."""
+    missing = {KKT + "connectsTo", KKT + "hostedOn"} - graph.subproperties(cur, graph.DEPENDS_ON)
+    return f"the planner cannot read that {', '.join(sorted(missing))} are dependencies" if missing else None
+
+
+def beyond_budget(dependencies, target: str, budget: int | str, unreadable: str | None = None) -> dict | None:
+    """A refusal when the step on `target` reaches more nodes than the budget allows, or when its reach
+    cannot be counted (no budget, the map's vocabulary unreadable, a node not on the map), else None. Reach
+    is counted within the planner's clearance: edges it cannot read are not counted (R5-32)."""
+    if isinstance(budget, str):
+        return {"none": f"refused: {budget}"}
+    if systems.NODE.fullmatch(target):
+        if unreadable:
+            return {"none": f"refused: {unreadable}, so the reach of the step on {target} cannot be counted"}
+        if not any(target in (s, o) for s, o, _ in dependencies):
+            return {"none": f"refused: {target} is not on the map, so the reach of its step cannot be counted"}
+    dependents = graph.closure(dependencies, target, reverse=True)
+    if 1 + len(dependents) <= budget:
+        return None
+    return {"none": f"the step on {target} reaches {1 + len(dependents)} nodes (it and those depending on it: "
+                    f"{', '.join(sorted(dependents))}), over the blast radius budget of {budget}",
+            "reach": [target, *sorted(dependents)], "via": sorted({i for path in dependents.values() for i in path})}
+
+
 def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:encoder-compose",)) -> dict:
     acts, policy = actions(intent), autonomy(intent)
     lane = lambda risk: route(policy, level(policy, MODULE), risk)
+    budget = budget_of(policy)
     report = {}
     with conn.cursor() as cur:
+        dependencies = graph.edges(cur, agents=list(mappers))
+        unreadable = map_vocabulary(cur)
         claims = rows(cur, f"""select {COLUMNS} from api.claims where subject like 'urn:kk:anomaly:%%'
                                and status <> 'deprecated'""")
         anomalies: dict[str, dict] = {}
@@ -174,6 +219,10 @@ def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:e
                 report[a["iri"]] = got
                 continue
             p = got["plan"]
+            over = beyond_budget(dependencies, p["target"], budget, unreadable)
+            if over:
+                report[a["iri"]] = over
+                continue
             with run(cur, MODULE, {"anomaly": a["iri"], "target": a["target"], "step_target": p["target"]},
                      used=p["premises"]) as (run_id, outputs):
                 res = submit(cur, change_set(p, AGENT, SCOPE, lane(p["risk"])), run_id)
