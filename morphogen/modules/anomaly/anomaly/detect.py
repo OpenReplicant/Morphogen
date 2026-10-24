@@ -33,6 +33,15 @@ def value(c: dict):
         return None
 
 
+def zscore(values: list[float], v: float) -> float | None:
+    """How many standard deviations v lies from the mean of the previous windows' values (None: fewer than
+    MIN_HISTORY of them, or no spread)."""
+    if len(values) < MIN_HISTORY:
+        return None
+    mean, sd = statistics.fmean(values), statistics.pstdev(values)
+    return abs(v - mean) / sd if sd > 0 else None
+
+
 def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
     """[{iri, kind, target, property, value, text, premises, valid_from, valid_to}]"""
     limit = {}
@@ -63,12 +72,11 @@ def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
                 add("limit", f"{name}: {pname} {v:g} exceeds the documented limit {lim:g}.", [str(c["id"]), lid])
             history = obs[max(0, i - HISTORY):i]
             values = [value(h) for h in history]
-            if len(values) >= MIN_HISTORY:
-                mean, sd = statistics.fmean(values), statistics.pstdev(values)
-                if sd > 0 and abs(v - mean) / sd > Z:
-                    add("zscore", f"{name}: {pname} {v:g} is {abs(v - mean) / sd:.1f} standard deviations from "
-                        f"the mean {mean:g} of the previous {len(values)} windows.",
-                        [str(c["id"])] + [str(h["id"]) for h in history])
+            z = zscore(values, v)
+            if z is not None and z > Z:
+                add("zscore", f"{name}: {pname} {v:g} is {z:.1f} standard deviations from "
+                    f"the mean {statistics.fmean(values):g} of the previous {len(values)} windows.",
+                    [str(c["id"])] + [str(h["id"]) for h in history])
     return out
 
 
