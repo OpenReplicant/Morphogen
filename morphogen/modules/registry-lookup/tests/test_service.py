@@ -122,10 +122,11 @@ def main() -> None:
             return su.execute("""select c.predicate, c.object_entity, c.evidence_type, c.qualifiers, c.object_value
                                  from api.claims c join kernel.claim c2 on c2.id = c.id where c2.change_set = %s""",
                               (cs,)).fetchall()
-        mine, strict = claims_of(answers["mine"]["change_set"]), claims_of(answers["strict"]["change_set"])
+        mine = claims_of(answers["mine"]["change_set"]) + claims_of(answers["mine"]["offer_change_set"])
+        strict = claims_of(answers["strict"]["change_set"])
         check(any(p == FULFILLS and o == "urn:kk:slot:analyser" and ev == "inferred" for p, o, ev, _, _ in mine),
               "the offer is recorded: the provider kkt:fulfills the slot, inferred from the request")
-        check(not any(p == FULFILLS for p, *_ in strict)
+        check(not any(p == FULFILLS for p, *_ in strict) and "offer_change_set" not in answers["strict"]
               and any(p == KKT + "propertyValue" and (q or {}).get(KKT + "propertyName") == "rule:licences"
                       and str((v or {}).get("@value", "")).startswith("fails") for p, _, _, q, v in strict),
               "under the enforced rule the entry is still recorded, with the verdict, and only the offer is withheld")
@@ -140,7 +141,7 @@ def main() -> None:
               "the slots the entry says it fills are recorded")
         ref = su.execute("""select r.source_uri from api.claim_references r join api.claims c on c.id = r.claim_id
                             join kernel.claim c2 on c2.id = c.id where c2.change_set = %s and c.predicate = %s""",
-                         (answers["mine"]["change_set"], FULFILLS)).fetchall()
+                         (answers["mine"]["offer_change_set"], FULFILLS)).fetchall()
         check(ref == [(f"file:{intent / 'catalogs' / 'mine.yaml'}",)],
               "the offer is referenced by what was read (a local repository: the catalog file that names it)")
 
@@ -151,6 +152,12 @@ def main() -> None:
         check(any("already a candidate" in a.get("refused", "") for a in again if a["catalog"] == "mine")
               and not (intent / "experiments" / experiment_id(f"urn:kk:request:c2|{RECENT}")).exists(),
               "a provider already a candidate is not copied into a second experiment (one directory per provider id)")
+        validator.drain(val)
+        offers = dict(su.execute("""select s.idempotency_key, c.status from api.claims c join kernel.claim c2 on c2.id = c.id
+                                    join kernel.change_set s on s.id = c2.change_set where c.predicate = %s
+                                    and s.idempotency_key like 'offer:mine|%%'""", (FULFILLS,)).fetchall())
+        check(offers == {f"offer:mine|{RECENT}|urn:kk:request:c1": "normal", f"offer:mine|{RECENT}|urn:kk:request:c2": "normal"},
+              "each request gets its own offer, inferred from its own claims; a second request does not replace the first's")
 
         # The planner takes a catalog candidate as it takes the builder's: measured by the sandbox (the evaluator's
         # claims, written here as the evaluator), better than the incumbent and within the limit -> a replace plan.

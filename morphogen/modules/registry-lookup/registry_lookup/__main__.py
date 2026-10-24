@@ -75,7 +75,7 @@ def reference(cat: dict, e: dict) -> dict:
     return {"source_uri": src if re.match(r"^https?:", src) else f"file:{rel}"}
 
 
-def ops_for(cat: dict, e: dict, v: dict, need: str | None, premises: list[str]) -> list[dict]:
+def ops_for(cat: dict, e: dict, v: dict) -> list[dict]:
     s, ref = subject(e), reference(cat, e)
     out = []
 
@@ -110,18 +110,25 @@ def ops_for(cat: dict, e: dict, v: dict, need: str | None, premises: list[str]) 
     for name, r in sorted(v.items()):
         claim(s, KKT + "propertyValue", lit(f"{'ok' if r['ok'] else 'fails'}: {r['why']}" + (" (enforced)" if r["enforced"] else "")),
               prop(f"rule:{name}"))
-    if need and catalogs.offer(v):
-        # inferred from the request, and referenced by what was read (which slots the entry says it fills)
-        out.append({"op": "add_claim", "subject": s, "predicate": KKT + "fulfills", "object": {"entity": need},
-                    "evidence_type": "inferred", "derived_from": premises, "references": [ref]})
     return out
 
 
-def record(cur, run_id: str, cat: dict, e: dict, v: dict, need: str | None = None, premises: list[str] = ()) -> str:
-    """One change set per entry (and need): the same facts again are a no-op; changed facts supersede them."""
-    ops = ops_for(cat, e, v, need, list(premises))
+def offer(cur, run_id: str, cat: dict, e: dict, request: str, need: str, premises: list[str]) -> str:
+    """The offer, one change set per request: `<entry> kkt:fulfills <need>`, inferred from the request's claims and
+    referenced by what was read (which slots the entry says it fills). Another request's offer is another claim,
+    so withdrawing one request undermines only its own (truth maintenance)."""
+    op = {"op": "add_claim", "subject": subject(e), "predicate": KKT + "fulfills", "object": {"entity": need},
+          "evidence_type": "inferred", "derived_from": sorted(premises), "references": [reference(cat, e)]}
+    cs = {"idempotency_key": f"offer:{cat['name']}|{subject(e)}|{request}", "attributed_to": AGENT, "target_scope": SCOPE,
+          "ops": [op]}
+    return str(submit(cur, cs, run_id)["id"])
+
+
+def record(cur, run_id: str, cat: dict, e: dict, v: dict) -> str:
+    """One change set per entry and catalog: the same facts again are a no-op; changed facts supersede them."""
+    ops = ops_for(cat, e, v)
     digest = hashlib.sha256(json.dumps(ops, sort_keys=True).encode()).hexdigest()[:16]
-    prefix = f"catalog:{cat['name']}|{subject(e)}|{need or ''}|"
+    prefix = f"catalog:{cat['name']}|{subject(e)}|"
     cs = {"idempotency_key": prefix + digest, "attributed_to": AGENT, "target_scope": SCOPE, "ops": ops}
     old = prior(cur, AGENT, prefix, cs["idempotency_key"])
     if old:
@@ -222,7 +229,9 @@ def one_pass(conn, intent: Path) -> dict:
                                     continue                     # the incumbent itself
                                 v = catalogs.verdicts(e, rules)
                                 a = {"catalog": name, "entry": e["id"], "offered": catalogs.offer(v),
-                                     "change_set": record(cur, run_id, cat, e, v, r["slot"], r["claims"])}
+                                     "change_set": record(cur, run_id, cat, e, v)}
+                                if a["offered"]:
+                                    a["offer_change_set"] = offer(cur, run_id, cat, e, r["iri"], r["slot"], r["claims"])
                                 if a["offered"] and e.get("pinned"):
                                     try:
                                         a.update(candidate(cur, run_id, intent, r, slot, e))
