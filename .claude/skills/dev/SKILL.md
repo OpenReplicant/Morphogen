@@ -26,6 +26,10 @@ description: Set up the environment and run every check for this repo (Postgres 
 2. Python deps: `python3 -m venv /var/tmp/kk-venv && /var/tmp/kk-venv/bin/pip install -r kernel/contract/requirements.txt -r kernel/providers/kernel-mcp/requirements.txt -r morphogen/modules/observer-otel/requirements.txt`, then `export KK_PYTHON=/var/tmp/kk-venv/bin/python` (a place the run user can read: not a private scratch directory).
    `sh kernel/contract/run.sh` → every provider passes every case for its slots.
 3. `python3 scripts/check_boundary.py` → boundary ok.
+3a. Docker, for G3 (`morphogen/tests/test_g3.py`, `test_compose.py`; R5-25): if `docker info` fails, start the
+   daemon with `nohup dockerd > /var/tmp/dockerd.log 2>&1 &` (after a container restart, remove
+   `/var/run/docker/containerd/containerd.pid` first). The first run pulls podinfo and Redis; Docker Hub may
+   answer 429: wait and retry. `KK_REQUIRE_DOCKER=1` makes `test_compose.py` fail instead of skip without it.
 4. Mutation check when you add or change a contract case: add a mutant to the provider's `tests/mutants.py` and run `$KK_PYTHON kernel/contract/mutants.py [provider]` (it breaks the check in a copy, `kernel/providers/_mutant`, runs the contract and deletes the copy): every mutant must fail.
 5. Run the `invariant-reviewer` agent before committing.
 6. CI (`.github/workflows/ci.yml`) runs steps 2 and 3 on every push.

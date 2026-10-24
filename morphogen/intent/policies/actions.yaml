@@ -3,6 +3,8 @@
 #   kind setting  a plan step the intent actuator carries out by changing one setting in intent
 #   kind request  not a plan: a build request (auto lane) that changes nothing running; the builder answers it
 #   kind replace  a plan step the intent actuator carries out by running a measured candidate instead
+# applies_to: provider (default; its intent file in environments/) or node (a service of a managed system,
+# intent/systems/<system>/compose.yaml, R5-25). effect: halve (default) or proportional (planner/plan.py).
 actions:
   urn:kk:action:set-poll-seconds:
     kind: setting
@@ -12,6 +14,17 @@ actions:
     max: 30
     risk: low                         # reversible by the same action; no data changes
     answers: [urn:kk:property:feed-lag-seconds-mean]
+  urn:kk:action:set-random-delay-max:
+    kind: setting
+    applies_to: node
+    label: set the most a podinfo service waits before answering (its documented random delay)
+    setting: PODINFO_RANDOM_DELAY_MAX # in the unit PODINFO_RANDOM_DELAY_UNIT gives (podinfo --random-delay-max)
+    min: 0
+    max: 5000
+    integer: true
+    effect: proportional              # a delay drawn from [min, max] has mean (min + max) / 2: request time scales with it
+    risk: low                         # reversible by the same action; no data changes
+    answers: [urn:kk:property:latency-seconds-mean]
   urn:kk:action:build-candidate:
     kind: request
     label: build a candidate provider for the slot and measure it against the incumbent in the sandbox

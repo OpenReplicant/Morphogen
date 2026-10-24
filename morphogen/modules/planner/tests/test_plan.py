@@ -78,3 +78,25 @@ check(any(o["predicate"] == SUBSTITUTED_BY and o["object"] == {"entity": cand["p
       and any(o["predicate"] == MAX and o["subject"] == cand["provider"] and o["qualifiers"][PROP] == STEP
               and o["object"]["value"]["@value"] == 0.15 for o in ops),
       "the step names the candidate and its content hash; the prediction: the candidate's step time within the limit")
+
+# G3: a managed system's node; the step may go to another node found on the map (R5-25).
+from planner.plan import choose  # noqa: E402
+
+LAT = "urn:kk:property:latency-seconds-mean"
+FRONT, BACK = "urn:kk:node:podinfo:frontend", "urn:kk:node:podinfo:backend"
+nan = {"iri": "urn:kk:anomaly:f", "kind": "urn:kk:anomaly-kind:limit", "target": FRONT, "claim_ids": ["a7"]}
+nobs = {"id": "o7", "qualifiers": {PROP: LAT}, "object_value": {"@value": 0.31}}
+nlim = {"id": "L7", "qualifiers": {PROP: LAT}, "object_value": {"@value": 0.15}}
+check(choose(ACTS, LAT) is None and choose(ACTS, LAT, on="node")[0] == "urn:kk:action:set-random-delay-max",
+      "a node action is chosen only for a node, a provider action only for a provider")
+got = proposal(nan, nobs, nlim, 600.0, ACTS, BACK, ["c1"])["plan"]
+check(got["target"] == BACK and got["observed"] == FRONT and got["to"] == 145 and isinstance(got["to"], int),
+      "proportional: 600 x 0.15 / 0.31 / 2 = 145.2, rounded down, on the backend the map led to")
+check(set(got["premises"]) == {"a7", "o7", "L7", "c1"} and got["label"].startswith("Set backend PODINFO_RANDOM_DELAY_MAX from 600 to 145: frontend's"),
+      "the connection followed joins the premises; the label says whose measure it answers")
+ops = change_set(got, "urn:kk:agent:planner", "urn:kk:scope:default", "review")["ops"]
+check(next(o for o in ops if o["predicate"] == SOSA + "hasFeatureOfInterest")["object"] == {"entity": BACK}
+      and next(o for o in ops if o["predicate"] == MAX)["subject"] == FRONT,
+      "the step changes the backend; the prediction is on the frontend, where it was observed")
+check("none" in proposal(nan, nobs, nlim, None, ACTS, BACK), "no service on the map sets it: no plan")
+check("none" in proposal(nan, nobs, nlim, 0.0, ACTS, BACK), "already at the minimum: no plan")

@@ -1,0 +1,6 @@
+# Histograms the observer reads from each target, and the observable property each window's mean becomes.
+# exclude: series with these label values are left out (a scrape counts itself under path="metrics").
+metrics:
+  - histogram: http_request_duration_seconds
+    property: urn:kk:property:latency-seconds-mean
+    exclude: {path: [metrics]}

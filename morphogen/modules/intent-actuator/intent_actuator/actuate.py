@@ -2,14 +2,17 @@
 
 A plan step is a sosa:Actuation that is p-plan:isStepOfPlan a plan, with dcterms:type an action from the
 fixed list (intent/policies/actions.yaml), sosa:hasFeatureOfInterest a provider (urn:kk:provider:<name>)
-and the new value as sosa:hasSimpleResult. A step is carried out only if
+and the new value as sosa:hasSimpleResult; an action with `applies_to: node` names a service of a managed
+system instead (urn:kk:node:<system>:<service>, R5-25) and changes a setting its compose file already has.
+A step is carried out only if
   every change set that recorded it went through the review lane and a person other than its submitter
   approved it (rebuild 4 actuator-compose's rule; api.review_decisions lists only people's decisions);
   one change set recorded it, with one value per predicate; the action is on the list; the provider has an intent
-  file in this environment; the value is within the action's bounds; and this actuator has not run the
+  file in this environment (a node: its system's compose file sets the action's setting); the value is within the action's bounds; and this actuator has not run the
   step before. A replacement step must name the candidate's content hash, and the candidate's directory
   must still have it: what a person approved is what was measured.
-Carrying it out sets the action's setting in the provider's intent file; the caller commits the file.
+Carrying it out sets the action's setting in the provider's intent file (or the node's compose file); the
+caller commits the file.
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ from pathlib import Path
 
 import yaml
 
+from morphogen import systems
 from morphogen.experiments import candidate_dir, tree_hash
 
 PPLAN_STEP_OF = "http://purl.org/net/p-plan#isStepOfPlan"
@@ -60,6 +64,14 @@ def steps(claims: list[dict], change_sets: dict[str, dict]) -> list[dict]:
     return out
 
 
+def target_file(intent: Path, env: str, target, action: dict) -> Path | None:
+    """The file a step on `target` changes: the node's compose file, or the provider's intent file."""
+    if action.get("applies_to", "provider") == "node":
+        found = systems.compose_file(intent, target)
+        return found[0] if found else None
+    return intent_file(intent, env, target)
+
+
 def intent_file(intent: Path, env: str, target) -> Path | None:
     """The environment's intent file for the provider: the one whose `provider:` names it, else <name>.yaml
     (a file keeps its name when another provider replaces the one it was written for)."""
@@ -85,7 +97,12 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
     a = actions.get(s["action"])
     if a is None or a.get("kind", "setting") not in ("setting", "replace"):
         return f"the action {s['action']!r} is not on the fixed list of plan steps"
-    if intent_file(intent, env, s["target"]) is None:
+    if a.get("applies_to", "provider") == "node":
+        if systems.compose_file(intent, s["target"]) is None:
+            return f"{s['target']!r} is not a service of a managed system"
+        if systems.setting(intent, s["target"], a["setting"]) is None:
+            return f"{s['target']!r} has no setting {a['setting']} in its compose file"
+    elif intent_file(intent, env, s["target"]) is None:
         return f"{s['target']!r} has no intent file in {env}"
     if a.get("kind") == "replace":
         d = candidate_dir(intent, s["candidate"]) if s.get("candidate") else None
@@ -102,6 +119,8 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
     v = s["value"]
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not a["min"] <= v <= a["max"]:
         return f"{a['setting']} must be a number from {a['min']:g} to {a['max']:g}"
+    if a.get("integer") and v != int(v):
+        return f"{a['setting']} must be a whole number"
     return None
 
 

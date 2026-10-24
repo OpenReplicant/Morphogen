@@ -9,8 +9,13 @@ A target gets one open plan at a time: an anomaly is planned for only if no plan
 same target is waiting for review or still without a verdict, and only if its window starts after the target's latest plan
 was recorded (anomalies from before a change are what the change answered). Plans are keyed by their
 anomaly, so a restart submits nothing twice (R5-18).
+A node of a managed system (urn:kk:node:<system>:<service>, R5-25) is planned for on the map: the
+anomalous node first, then the nodes it connects to (kkt:connectsTo, breadth first, as recorded by the
+agents in KK_MAP_AGENTS), and the step goes to the first whose compose file sets the action's setting;
+the connections followed join the plan's premises.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_planner), KK_INTENT_DIR
-(the intent directory, default morphogen/intent), KK_INTENT_ENV (default sandbox), KK_SWEEP_SECONDS.
+(the intent directory, default morphogen/intent), KK_INTENT_ENV (default sandbox), KK_SWEEP_SECONDS,
+KK_MAP_AGENTS (comma-separated; default urn:kk:agent:encoder-compose).
 """
 from __future__ import annotations
 
@@ -25,10 +30,11 @@ import yaml
 
 from kk.lib import connect, follow, run, submit
 from morphogen.experiments import ROOT, experiment_id, provider_slots, run_name
+from morphogen import systems
 from morphogen.policy import actions, autonomy, level, route
 
-from .plan import (DCT_TYPE, MAX, OA, PPLAN, RESULT, SOSA, build_request, change_set, choose, proposal,
-                   replace_change_set, replacement)
+from .plan import (DCT_TYPE, MAX, OA, PART_OF, PPLAN, RESULT, SOSA, applies_to, build_request, change_set, choose,
+                   proposal, replace_change_set, replacement)
 
 MODULE = "urn:kk:module:planner"
 AGENT = "urn:kk:agent:planner"
@@ -37,6 +43,7 @@ EVALUATOR = "urn:kk:agent:evaluator"
 BUILDER = "urn:kk:agent:builder"
 DQV = "http://www.w3.org/ns/dqv#"
 BENCHMARKS = ROOT / "morphogen" / "contract" / "slots"
+CONNECTS_TO = "https://w3id.org/knowledge-kernel/tosca#connectsTo"
 COLUMNS = "id, subject, predicate, object_entity, object_value, qualifiers, valid_from, valid_to, recorded_at, scope"
 
 
@@ -46,19 +53,45 @@ def rows(cur, q: str, args=()) -> list[dict]:
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
-def setting(intent: Path, env: str, target: str, name: str):
-    """The current value of `name` in the target provider's intent file, or None."""
-    f = intent / "environments" / env / (target.rsplit(":", 1)[-1] + ".yaml")
-    if not target.startswith("urn:kk:provider:") or not f.exists():
-        return None
-    v = ((yaml.safe_load(f.read_text()) or {}).get("env") or {}).get(name)
+def number(v):
     try:
         return float(v) if v is not None else None
     except ValueError:
         return None
 
 
-def one_pass(conn, intent: Path, env: str) -> dict:
+def setting(intent: Path, env: str, target: str, name: str):
+    """The current value of `name` in the target provider's intent file, or None."""
+    f = intent / "environments" / env / (target.rsplit(":", 1)[-1] + ".yaml")
+    if not target.startswith("urn:kk:provider:") or not f.exists():
+        return None
+    return number(((yaml.safe_load(f.read_text()) or {}).get("env") or {}).get(name))
+
+
+def same_system(a: str, b: str) -> bool:
+    ma, mb = systems.NODE.fullmatch(a or ""), systems.NODE.fullmatch(b or "")
+    return bool(ma and mb and ma.group(1) == mb.group(1))
+
+
+def on_map(cur, intent: Path, start: str, name: str, mappers: list[str]):
+    """(node, current value, ids of the connections followed) for the first node from `start`, then the
+    nodes it connects to, breadth first, whose compose file sets `name`; None when there is none."""
+    seen, queue = {start}, [(start, [])]
+    while queue:
+        node, via = queue.pop(0)
+        current = number(systems.setting(intent, node, name))
+        if current is not None:
+            return node, current, via
+        for r in rows(cur, """select object_entity, id::text as id from api.claims where subject = %s and predicate = %s
+                              and attributed_to = any(%s) and status <> 'deprecated' order by object_entity""",
+                      (node, CONNECTS_TO, list(mappers))):
+            if r["object_entity"] not in seen and same_system(r["object_entity"], start):
+                seen.add(r["object_entity"])
+                queue.append((r["object_entity"], via + [r["id"]]))
+    return None
+
+
+def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:encoder-compose",)) -> dict:
     acts, policy = actions(intent), autonomy(intent)
     lane = lambda risk: route(policy, level(policy, MODULE), risk)
     report = {}
@@ -75,20 +108,26 @@ def one_pass(conn, intent: Path, env: str) -> dict:
             elif c["predicate"] == OA + "hasTarget":
                 a["target"] = c["object_entity"]
         # This planner's plans per target: when recorded, and whether a verdict closed them.
+        # (A plan holds both the target its step changes and the one its prediction is about.)
         plans = rows(cur, """select s.object_entity as target, p.object_entity as plan, s.recorded_at
                              from api.claims s join api.claims p on p.subject = s.subject
                              where s.predicate = %s and p.predicate = %s and s.attributed_to = %s
-                               and s.status <> 'deprecated' and p.status <> 'deprecated'""",
-                     (SOSA + "hasFeatureOfInterest", PPLAN + "isStepOfPlan", AGENT))
+                               and s.status <> 'deprecated' and p.status <> 'deprecated'
+                             union all
+                             select subject, qualifiers->>%s, recorded_at from api.claims
+                             where predicate = %s and qualifiers ? %s and attributed_to = %s and status <> 'deprecated'""",
+                     (SOSA + "hasFeatureOfInterest", PPLAN + "isStepOfPlan", AGENT, PART_OF, MAX, PART_OF, AGENT))
         # This planner's plan change sets: those on their way (submitted, validated, waiting for a person)
         # hold their target; any plan already proposed for an anomaly, whatever became of it (rejected,
         # invalid), is not proposed again: the person who rejected it gets a new plan only from a new anomaly.
-        mine_sets = rows(cur, """select c.status, r.info->>'target' as target, r.info->>'anomaly' as anomaly,
+        mine_sets = rows(cur, """select c.status, r.info->>'target' as target, r.info->>'step_target' as step_target,
+                                        r.info->>'anomaly' as anomaly,
                                         r.info->>'request' as request, c.idempotency_key as key
                                  from api.change_sets c join kernel.run r on r.id = c.generated_by
                                  where c.attributed_to = %s and (c.idempotency_key like 'plan:%%'
                                                                  or c.idempotency_key like 'request:%%')""", (AGENT,))
-        pending = {r["target"] for r in mine_sets if r["status"] in ("submitted", "valid", "awaiting_review", "approved")}
+        pending = {t for r in mine_sets if r["status"] in ("submitted", "valid", "awaiting_review", "approved")
+                   for t in (r["target"], r["step_target"]) if t}
         proposed = {r["anomaly"] for r in mine_sets}
         replaced = {r["request"] for r in mine_sets if r["key"].startswith("plan:") and r["request"]}
         closed = {r["object_entity"] for r in rows(cur, """select object_entity from api.claims
@@ -115,21 +154,26 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                 report[a["iri"]] = {"none": f"its premises are not all in {SCOPE}"}
                 continue
             prop = (obs["qualifiers"] or {}).get(SOSA + "observedProperty")
-            chosen = choose(acts, prop)
+            chosen = choose(acts, prop, on=applies_to(a["target"]))
             if chosen is None and choose(acts, prop, "request"):
                 report[a["iri"]] = request_for(cur, a, obs, lim, pending)
                 continue
-            current = setting(intent, env, a["target"], chosen[1]["setting"]) if chosen else None
-            got = proposal(a, obs, lim, current, acts)
+            target, current, via = a["target"], None, []
+            if chosen and applies_to(a["target"]) == "node":
+                target, current, via = on_map(cur, intent, a["target"], chosen[1]["setting"], mappers) or (target, None, [])
+            elif chosen:
+                current = setting(intent, env, a["target"], chosen[1]["setting"])
+            got = proposal(a, obs, lim, current, acts, target, via)
             if "none" in got:
                 report[a["iri"]] = got
                 continue
             p = got["plan"]
-            with run(cur, MODULE, {"anomaly": a["iri"], "target": a["target"]}, used=p["premises"]) as (run_id, outputs):
+            with run(cur, MODULE, {"anomaly": a["iri"], "target": a["target"], "step_target": p["target"]},
+                     used=p["premises"]) as (run_id, outputs):
                 res = submit(cur, change_set(p, AGENT, SCOPE, lane(p["risk"])), run_id)
                 outputs.update(plan=p["iri"], change_set=str(res["id"]))
             report[a["iri"]] = {"plan": p["iri"], "change_set": str(res["id"]), "lane": res["lane"], "label": p["label"]}
-            pending.add(a["target"])
+            pending |= {a["target"], p["target"]}
         for r in my_requests(cur):
             if r["iri"] not in replaced:
                 report[r["iri"]] = replace_for(cur, r, lane)
@@ -222,7 +266,8 @@ def main(argv=None) -> int:
     intent = Path(os.environ.get("KK_INTENT_DIR", "morphogen/intent")).resolve()
     env = os.environ.get("KK_INTENT_ENV", "sandbox")
     conn = connect(os.environ.get("KK_ROLE", "kkm_planner"))
-    step = lambda c: print(json.dumps(one_pass(c, intent, env), default=str), flush=True)
+    mappers = [x.strip() for x in os.environ.get("KK_MAP_AGENTS", "urn:kk:agent:encoder-compose").split(",") if x.strip()]
+    step = lambda c: print(json.dumps(one_pass(c, intent, env, mappers), default=str), flush=True)
     if a.once:
         step(conn)
         return 0
