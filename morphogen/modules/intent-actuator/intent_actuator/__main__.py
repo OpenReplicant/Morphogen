@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 from kk.lib import connect, follow, run
-from morphogen import systems
+from morphogen import blueprint, systems
 from morphogen.policy import actions
 
 from .actuate import PPLAN_STEP_OF, refusal, replace, set_env, steps, target_file
@@ -91,6 +91,26 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                         outputs.update(refused=why)
                         raise PermissionError(why)
                     f = target_file(intent, env, s["target"], acts[s["action"]])
+                    if acts[s["action"]].get("kind") == "create":
+                        name = s["target"].removeprefix("urn:kk:system:")
+                        cur.execute(blueprint.MAP, blueprint.params(name))
+                        cols = [d.name for d in cur.description]
+                        text = blueprint.render(blueprint.described([dict(zip(cols, r)) for r in cur.fetchall()], name), name)
+                        if blueprint.sha(text) != s["value"]:
+                            why = "the system as described now is not the file that was approved"
+                            outputs.update(refused=why)
+                            raise PermissionError(why)
+                        f.parent.mkdir(parents=True, exist_ok=True)
+                        f.write_text(text)
+                        try:
+                            sha = commit(intent, f, s, labels.get(s["plan"], s["plan"]))
+                        except Exception:
+                            f.unlink(missing_ok=True)
+                            raise
+                        outputs.update(file=str(f.relative_to(intent)), setting="compose file", before=None,
+                                       after=s["value"], commit=sha)
+                        report[s["step"]] = {"status": "succeeded", **outputs}
+                        continue
                     if uncommitted(intent, f):
                         why = f"{f.relative_to(intent)} has uncommitted edits: commit or discard them first"
                         outputs.update(refused=why)

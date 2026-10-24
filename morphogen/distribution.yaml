@@ -29,7 +29,8 @@ uses_kernel_slots:
 slots:
   - id: design-agent
     phase: design
-    default: interview-encoder                 # rebuild 4: encoder-interaction (R5-29); the interview skill drives it
+    cardinality: many
+    default: interview-encoder + design-blueprint   # rebuild 4: encoder-interaction; the interview skill drives them (R5-29)
     contract: provider-tests
     status: ported
   - id: gap-finder

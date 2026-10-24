@@ -1,0 +1,11 @@
+id: urn:kk:provider:design-blueprint
+name: Design blueprint
+version: 0.1.0
+license: Apache-2.0
+slots: [design-agent]
+origin: new (R5-29)
+requires: Python 3.12+, psycopg, PyYAML; morphogen.blueprint; the gap finder's gaps
+migration: migration.sql
+command: python3 -m design_blueprint propose <system>
+tests: [python3 tests/test_blueprint.py]
+note: a described system with no gaps left becomes a plan to write its compose file, in the review lane; the plan's label is the file's text and its step names the file's sha256, so what a person approves is what the intent actuator writes
