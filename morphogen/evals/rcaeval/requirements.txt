@@ -1,0 +1,11 @@
+# RCAEval eval only (Python 3.12; RCAEval's main.py refuses 3.13). Install RCAEval with --no-deps.
+RCAEval==1.8.1
+matplotlib==3.11.2
+networkx==3.7
+numpy==2.5.4
+pandas==3.1.0
+pyarrow==26.0.0
+requests==2.34.2
+scikit-learn==1.9.1
+scipy==1.18.1
+tqdm==4.70.1

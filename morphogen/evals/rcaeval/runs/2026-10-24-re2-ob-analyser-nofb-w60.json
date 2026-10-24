@@ -1,0 +1,35 @@
+{
+  "benchmark": "RCAEval",
+  "dataset": "re2-ob",
+  "method": "analyser-nofb-w60",
+  "avg@5": {
+    "CPU": 0.89,
+    "MEM": 0.99,
+    "DISK": 1.0,
+    "SOCKET": 0.92,
+    "DELAY": 0.91,
+    "LOSS": 0.87
+  },
+  "avg@5_mean": 0.93,
+  "chance@5": {
+    "CPU": 0.25,
+    "MEM": 0.25,
+    "DISK": 0.25,
+    "SOCKET": 0.25,
+    "DELAY": 0.25,
+    "LOSS": 0.25
+  },
+  "floor": {
+    "rebuild4_kernel_w60": 0.935
+  },
+  "rcaeval": {
+    "commit": "259ea4167160256a74ad30004aa3d96a998c846e",
+    "main_sha256": "4e527f1f16736ef8353f7372bdbbd24270e6a383edb00f3a34b7a599d429e0e0",
+    "package": "RCAEval 1.8.1 (PyPI)"
+  },
+  "note": "the analyser before R5-28 (no score for a flat history): run.py and detect.py at commit dd15118",
+  "analyser": {
+    "detect_sha256": "84796873f7a1fbd8575817f953bdd2f283fc893f53532c254a63812408371b24",
+    "commit": "dd15118"
+  }
+}

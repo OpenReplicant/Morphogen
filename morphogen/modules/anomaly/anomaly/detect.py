@@ -6,7 +6,8 @@ property and window) and documented limits (`<node> bbo:maxValue n` with qualifi
 
   its value exceeds the documented limit                                   limit
   it lies more than 3 standard deviations from the mean of the previous     zscore
-  windows (at least 5 of them, up to 20)
+  windows (at least 5 of them, up to 20); a flat history (no spread) is
+  scaled by a tenth of its mean instead, or by 1 when that is 0 (R5-28)
 
 An anomaly is an oa:Annotation on the service's node, valid for the observation's window, inferred and
 derived from the observation (and the limit, or the windows it was compared with).
@@ -31,6 +32,16 @@ def value(c: dict):
         return float((c.get("object_value") or {}).get("@value"))
     except (TypeError, ValueError):
         return None
+
+
+def zscore(values: list[float], v: float) -> float | None:
+    """How many standard deviations v lies from the mean of the previous windows' values; with no spread, how
+    many tenths of the mean, or units when the mean is 0, as rebuild 4's RCAEval statistic (R5-28). None:
+    fewer than MIN_HISTORY of them."""
+    if len(values) < MIN_HISTORY:
+        return None
+    mean, sd = statistics.fmean(values), statistics.pstdev(values)
+    return abs(v - mean) / (sd or abs(mean) * 0.1 or 1.0)
 
 
 def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
@@ -63,12 +74,14 @@ def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
                 add("limit", f"{name}: {pname} {v:g} exceeds the documented limit {lim:g}.", [str(c["id"]), lid])
             history = obs[max(0, i - HISTORY):i]
             values = [value(h) for h in history]
-            if len(values) >= MIN_HISTORY:
-                mean, sd = statistics.fmean(values), statistics.pstdev(values)
-                if sd > 0 and abs(v - mean) / sd > Z:
-                    add("zscore", f"{name}: {pname} {v:g} is {abs(v - mean) / sd:.1f} standard deviations from "
-                        f"the mean {mean:g} of the previous {len(values)} windows.",
-                        [str(c["id"])] + [str(h["id"]) for h in history])
+            z = zscore(values, v)
+            if z is not None and z > Z:
+                mean, flat = statistics.fmean(values), statistics.pstdev(values) == 0
+                add("zscore", f"{name}: {pname} {v:g} " + (
+                    f"departs from the flat value {mean:g} of the previous {len(values)} windows by "
+                    + (f"{z:.1f} tenths of it." if mean else f"{z:g}.")
+                    if flat else f"is {z:.1f} standard deviations from the mean {mean:g} of the previous "
+                    f"{len(values)} windows."), [str(c["id"])] + [str(h["id"]) for h in history])
     return out
 
 

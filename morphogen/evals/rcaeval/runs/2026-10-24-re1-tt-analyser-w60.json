@@ -1,0 +1,38 @@
+{
+  "benchmark": "RCAEval",
+  "dataset": "re1-tt",
+  "method": "analyser-w60",
+  "avg@5": {
+    "CPU": 0.99,
+    "MEM": 0.99,
+    "DISK": 1.0,
+    "DELAY": 0.6,
+    "LOSS": 0.36
+  },
+  "avg@5_mean": 0.788,
+  "chance@5": {
+    "CPU": 0.04,
+    "MEM": 0.04,
+    "DISK": 0.04,
+    "DELAY": 0.04,
+    "LOSS": 0.04
+  },
+  "floor": {
+    "rebuild4_kernel_w60": 0.8
+  },
+  "rcaeval": {
+    "commit": "259ea4167160256a74ad30004aa3d96a998c846e",
+    "main_sha256": "4e527f1f16736ef8353f7372bdbbd24270e6a383edb00f3a34b7a599d429e0e0",
+    "package": "RCAEval 1.8.1 (PyPI)"
+  },
+  "analyser": {
+    "detect_sha256": "8434cd80af2cb20f30a7f39b87e5214fb01fa0252d2734556029789b61f564ad",
+    "slot_set": "0.2.0"
+  },
+  "packages": {
+    "numpy": "2.5.4",
+    "pandas": "3.1.0",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1"
+  }
+}

@@ -1,0 +1,148 @@
+id: urn:kk:eval:analyser/flat-history-jump
+text: 'a flat history is scaled by a tenth of its value, or by 1 when it is 0: 0.05 to 0.08 and 0 to 5 are unusual, 0 to 2 is not'
+input:
+  observations:
+  - id: s0
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 0
+    value: 0.05
+  - id: s1
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 1
+    value: 0.05
+  - id: s2
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 2
+    value: 0.05
+  - id: s3
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 3
+    value: 0.05
+  - id: s4
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 4
+    value: 0.05
+  - id: s5
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 5
+    value: 0.05
+  - id: s6
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 6
+    value: 0.05
+  - id: s7
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 7
+    value: 0.05
+  - id: s8
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 8
+    value: 0.08
+  - id: c0
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 0
+    value: 0
+  - id: c1
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 1
+    value: 0
+  - id: c2
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 2
+    value: 0
+  - id: c3
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 3
+    value: 0
+  - id: c4
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 4
+    value: 0
+  - id: c5
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 5
+    value: 0
+  - id: c6
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 6
+    value: 0
+  - id: c7
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 7
+    value: 0
+  - id: c8
+    target: urn:kk:node:cache
+    property: urn:kk:property:error-count
+    window: 8
+    value: 5
+  - id: q0
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 0
+    value: 0
+  - id: q1
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 1
+    value: 0
+  - id: q2
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 2
+    value: 0
+  - id: q3
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 3
+    value: 0
+  - id: q4
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 4
+    value: 0
+  - id: q5
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 5
+    value: 0
+  - id: q6
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 6
+    value: 0
+  - id: q7
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 7
+    value: 0
+  - id: q8
+    target: urn:kk:node:queue
+    property: urn:kk:property:error-count
+    window: 8
+    value: 2
+  limits: []
+expect:
+  anomalies:
+  - kind: zscore
+    target: urn:kk:node:shop
+    observation: s8
+  - kind: zscore
+    target: urn:kk:node:cache
+    observation: c8

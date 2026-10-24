@@ -1,6 +1,6 @@
 id: urn:kk:provider:anomaly
 name: Anomaly detection
-version: 0.2.0
+version: 0.3.0
 license: Apache-2.0
 slots: [analyser]
 origin: OpenReplicant/kernel (rebuild 4) modules/anomaly; detect.py unchanged, the service follows the change feed

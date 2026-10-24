@@ -158,7 +158,8 @@ def main() -> None:
                                       "object": {"value": {"@value": LIMIT}}, "qualifiers": {SOSA + "observedProperty": STEP},
                                       "evidence_type": "testimony", "references": [{"source_uri": "urn:kk:test:g2#limit"}]}]}, run_id)
             check(first[1] > LIMIT, f"monitor: the analyser's own step time is observed ({first[1]:.3f} s); a person sets its limit at {LIMIT} s")
-            anomaly = wait("an anomaly on the analyser", lambda: q("select subject from api.claims where predicate = %s and object_entity = %s",
+            anomaly = wait("an anomaly on the analyser", lambda: q("select subject from api.claims where predicate = %s and object_entity = %s and subject in "
+                                                                "(select subject from api.claims where object_entity = 'urn:kk:anomaly-kind:limit')",
                                                                 OA + "hasTarget", ANALYSER))[0][0]
             check(anomaly.startswith("urn:kk:anomaly:"), "analyse: the analyser finds its own step time over the limit")
             request = wait("a build request", lambda: q("select subject from api.claims where subject like 'urn:kk:request:%%' "
