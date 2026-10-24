@@ -1,0 +1,11 @@
+# Rules for what catalogs offer (R5-30). Every entry found is recorded with each rule's verdict; an enforced rule
+# withholds only the offer (`kkt:fulfills`). A catalog's own `rules:` override these. Read-only to agents.
+rules:
+  licences:
+    enforce: false                    # D-11's list, kept and reported; a person turns it on for a catalog
+    allow: [Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, PSF-2.0, Zlib, LGPL-2.1, LGPL-3.0]     # names registries use are read as these ids
+  pinned:
+    enforce: false                    # a provider that becomes a sandbox candidate must be pinned whatever this says (R5-30 d)
+search:                               # settings, not rules: a catalog's `search:` or a query overrides them
+  max_results: 20
+  min_age_days: 14                    # leave out releases published less than two weeks ago (0: include them)

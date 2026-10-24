@@ -38,7 +38,7 @@ from pathlib import Path
 import yaml
 
 from morphogen import confine
-from morphogen.experiments import experiment_id, provider_dir, tree_hash
+from morphogen.experiments import check_candidate, experiment_id, provider_dir, tree_hash  # noqa: F401 (check_candidate: tests)
 from morphogen.logins import KEEP
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -102,24 +102,6 @@ def git_state(d: Path) -> str:
     """HEAD and the work tree's status of the git repository at d ("" when d is not one)."""
     run = lambda *a: subprocess.run(["git", "-C", str(d), *a], capture_output=True, text=True).stdout
     return run("rev-parse", "HEAD") + run("status", "--porcelain", "--untracked-files=all")
-
-
-def check_candidate(d: Path, slot: str, incumbent_id: str, incumbent: Path | None = None) -> dict:
-    meta = yaml.safe_load((d / "provider.yaml").read_text()) if (d / "provider.yaml").exists() else None
-    if not isinstance(meta, dict):
-        raise ValueError("the candidate has no provider.yaml")
-    if slot not in (meta.get("slots") or []):
-        raise ValueError(f"the candidate does not fill {slot}")
-    if not meta.get("service"):
-        raise ValueError("the candidate needs a service")
-    if incumbent is not None:
-        mine, theirs = d / "migration.sql", incumbent / "migration.sql"
-        if mine.exists() and (not theirs.exists() or mine.read_bytes() != theirs.read_bytes()):
-            raise ValueError("the candidate's migration.sql differs from the incumbent's")
-    cid = str(meta.get("id", ""))
-    if cid == incumbent_id or not cid.startswith("urn:kk:provider:") or not NAME.fullmatch(cid.removeprefix("urn:kk:provider:")):
-        raise ValueError(f"the candidate needs an id of its own, not {cid!r}")
-    return meta
 
 
 def build(request: dict, slot: str, incumbent: Path, experiments: Path, strategy: str,

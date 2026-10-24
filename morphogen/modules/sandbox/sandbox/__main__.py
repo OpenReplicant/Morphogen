@@ -10,7 +10,7 @@ builder) and measures the experiment each one's reference names, under KK_INTENT
 has run before (its runs, by experiment) is not run again.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE and, through the PG* environment, create
 databases), KK_ROLE (default kkm_sandbox), KK_EVALUATOR_ROLE (default kkm_evaluator), KK_ARTIFACTS,
-KK_INTENT_DIR (default morphogen/intent), KK_BUILDER_AGENTS (default urn:kk:agent:builder).
+KK_INTENT_DIR (default morphogen/intent), KK_BUILDER_AGENTS (default urn:kk:agent:builder,urn:kk:agent:registry-lookup: who may record candidates).
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def main(argv=None) -> int:
         print(json.dumps(one(conn, a.experiment.resolve())))
         return 0
     intent = Path(os.environ.get("KK_INTENT_DIR", ROOT / "morphogen" / "intent")).resolve()
-    builders = [x.strip() for x in os.environ.get("KK_BUILDER_AGENTS", "urn:kk:agent:builder").split(",") if x.strip()]
+    builders = [x.strip() for x in os.environ.get("KK_BUILDER_AGENTS", "urn:kk:agent:builder,urn:kk:agent:registry-lookup").split(",") if x.strip()]
     serve(conn, intent, builders)
     return 0
 
