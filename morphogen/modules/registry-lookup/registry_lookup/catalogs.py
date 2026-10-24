@@ -132,9 +132,9 @@ def offer(v: dict) -> bool:
 def components(cat: dict, query: dict) -> list[dict]:
     out = []
     for c in cat.get("components") or []:
-        e = {"catalog": cat["name"], "kind": c.get("kind", "component"), **c}
+        e = {**c, "catalog": cat["name"], "kind": c.get("kind", "component"), "adapter": "components"}
         e.setdefault("label", e.get("id"))
-        e["pinned"] = bool(c.get("sha256") or c.get("pinned"))
+        e["pinned"] = bool(c.get("sha256"))        # a hash of the content; `pinned: true` alone states nothing checked
         if e.get("id") and matches(e, query):
             out.append(e)
     return out
@@ -147,12 +147,13 @@ def pypi(cat: dict, query: dict, fetch=None) -> list[dict]:
     out = []
     for name in names:
         try:
-            d = get(f"{index}/{urllib.parse.quote(str(name))}/json")
+            url = f"{index}/{urllib.parse.quote(str(name))}/json"
+            d = get(url)
         except Exception:
             continue                                     # not a project there
         i = d.get("info") or {}
         files = d.get("urls") or []
-        e = {"catalog": cat["name"], "kind": "python-package", "id": i.get("name") or name, "label": i.get("name") or name,
+        e = {"catalog": cat["name"], "adapter": "pypi", "read_from": url, "kind": "python-package", "id": i.get("name") or name, "label": i.get("name") or name,
              "version": i.get("version"), "licence": i.get("license_expression") or i.get("license"),
              "description": i.get("summary"), "source": i.get("project_url") or f"https://pypi.org/project/{name}/",
              "published": min((f.get("upload_time_iso_8601") for f in files if f.get("upload_time_iso_8601")), default=None),
@@ -174,13 +175,22 @@ def providers(cat: dict, query: dict, workdir: Path | None = None) -> list[dict]
             pinned = bool(COMMIT.fullmatch(ref))
             subprocess.run(["git", "clone", "--quiet", "--no-checkout", str(src["git"]), str(tmp / "repo")], check=True,
                            capture_output=True, text=True, timeout=600)
-            subprocess.run(["git", "-C", str(tmp / "repo"), "checkout", "--quiet", ref or "HEAD"], check=True,
+            subprocess.run(["git", "-C", str(tmp / "repo"), "checkout", "--quiet", "--detach",
+                            f"{ref}^{{commit}}" if pinned else (ref or "HEAD"), "--"], check=True,
                            capture_output=True, text=True, timeout=600)
-            root = tmp / "repo" / str(src.get("path", "."))
-            where = f"{src['git']}@{ref or 'HEAD'}"
+            head = subprocess.run(["git", "-C", str(tmp / "repo"), "rev-parse", "HEAD"], check=True, capture_output=True,
+                                  text=True).stdout.strip()
+            if pinned and head != ref:
+                raise ValueError(f"checked out {head}, not the pinned {ref}")
+            root = (tmp / "repo" / str(src.get("path", "."))).resolve()
+            if not root.is_relative_to((tmp / "repo").resolve()):
+                raise ValueError(f"source path {src.get('path')!r} leaves the repository")
+            where = f"{src['git']}@{head if pinned else ref or 'HEAD'}"
         elif src.get("dir"):
             from morphogen.experiments import ROOT
             root, pinned, where = (ROOT / src["dir"]).resolve(), False, f"file:{src['dir']}"
+            if not root.is_relative_to(ROOT.resolve()):
+                raise ValueError(f"source dir {src['dir']!r} leaves the repository")
         else:
             return []
         pins = cat.get("pins") or {}
@@ -190,10 +200,11 @@ def providers(cat: dict, query: dict, workdir: Path | None = None) -> list[dict]
             d = meta_f.parent
             sha = tree_hash(d)
             stated = pins.get(str(meta.get("id", "")))
-            e = {"catalog": cat["name"], "kind": "provider", "id": str(meta.get("id", "")), "label": meta.get("name") or meta.get("id"),
+            e = {"catalog": cat["name"], "adapter": "providers", "kind": "provider", "id": str(meta.get("id", "")), "label": meta.get("name") or meta.get("id"),
                  "version": meta.get("version"), "licence": meta.get("license"), "slots": list(meta.get("slots") or []),
                  "description": meta.get("note") or meta.get("origin"), "source": f"{where}#{d.relative_to(root)}",
-                 "sha256": sha, "pinned": pinned or (stated == sha), "path": str(d) if workdir is not None else None}
+                 "sha256": sha, "pinned": pinned or (stated == sha), "path": str(d) if workdir is not None else None,
+                 "read_from": f"{where}#{d.relative_to(root)}"}
             if stated and stated != sha:
                 e["pinned"], e["mismatch"] = False, f"content {sha[:12]} is not the pinned {stated[:12]}"
             if e["id"].startswith("urn:kk:provider:") and matches(e, query):

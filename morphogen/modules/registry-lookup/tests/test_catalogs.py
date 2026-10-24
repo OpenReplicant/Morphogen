@@ -90,6 +90,16 @@ try:
     check(c.search(cat, {"slot": "planner"}) == [], "a provider that does not fill the slot asked for is not found")
     head = c.search({**cat, "source": {**cat["source"], "commit": "master"}}, {"slot": "analyser"})
     check(head and not head[0]["pinned"], "a branch name is not a pin")
+    for bad in ({"git": str(repo), "commit": first, "path": "../.."}, {"dir": "../.."}):
+        try:
+            c.search({"name": "esc", "kind": "providers", "source": bad}, {})
+            check(False, f"a source that leaves its repository is refused ({bad})")
+        except ValueError:
+            check(True, f"a source that leaves its repository is refused ({list(bad)[-1]})")
+    spoof = c.search({"name": "parts", "kind": "components", "components": [
+        {"id": "urn:kk:provider:anomaly", "kind": "provider", "catalog": "mine", "pinned": True}]}, {})
+    check(spoof[0]["catalog"] == "parts" and spoof[0]["adapter"] == "components" and not spoof[0]["pinned"],
+          "a components entry cannot name another catalog, pose as a provider catalog's entry, or call itself pinned without a hash")
     local = {"name": "local", "kind": "providers", "source": {"dir": "morphogen/tests/fixtures/analyser"},
              "pins": {"urn:kk:provider:anomaly-recent": "0" * 64}}
     got = c.search(local, {"slot": "analyser"})

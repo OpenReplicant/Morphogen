@@ -51,6 +51,7 @@ LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 OWL_VERSION = "http://www.w3.org/2002/07/owl#versionInfo"
 DCT = "http://purl.org/dc/terms/"
 KKT = "https://w3id.org/knowledge-kernel/tosca#"
+RETRIES = 3
 COMMITTER = {"GIT_AUTHOR_NAME": "Morphogen catalog lookup", "GIT_AUTHOR_EMAIL": "registry-lookup@morphogen.invalid",
              "GIT_COMMITTER_NAME": "Morphogen catalog lookup", "GIT_COMMITTER_EMAIL": "registry-lookup@morphogen.invalid"}
 
@@ -60,16 +61,18 @@ def slug(x) -> str:
 
 
 def subject(e: dict) -> str:
-    if e.get("kind") == "provider" and str(e.get("id", "")).startswith("urn:kk:provider:"):
+    if e.get("adapter") == "providers" and str(e.get("id", "")).startswith("urn:kk:provider:"):
         return e["id"]
     return f"urn:kk:component:{slug(e['catalog'])}:{slug(e['id'])}" + (f":{slug(e['version'])}" if e.get("version") else "")
 
 
 def reference(cat: dict, e: dict) -> dict:
+    """What the facts were read from: the API URL or repository fetched, else the catalog file (never a URL the
+    entry merely names: that is its dcterms:source)."""
     f = cat["file"]
     rel = f.relative_to(ROOT) if f.is_relative_to(ROOT) else f
-    src = str(e.get("source") or "")
-    return {"source_uri": src if re.match(r"^(https?|file):", src) else f"file:{rel}"}
+    src = str(e.get("read_from") or "")
+    return {"source_uri": src if re.match(r"^https?:", src) else f"file:{rel}"}
 
 
 def ops_for(cat: dict, e: dict, v: dict, need: str | None, premises: list[str]) -> list[dict]:
@@ -82,8 +85,9 @@ def ops_for(cat: dict, e: dict, v: dict, need: str | None, premises: list[str]) 
             c["qualifiers"] = q
         out.append(c)
     lit = lambda x: {"value": {"@value": x}}  # noqa: E731
-    prop = lambda name: {KKT + "propertyName": name}  # noqa: E731
     profile = f"urn:kk:catalog:{slug(cat['name'])}"
+    # every value is qualified by the catalog that gave it: two catalogs may say different things of one provider
+    prop = lambda name: {KKT + "propertyName": name, DCT + "isPartOf": profile}  # noqa: E731
     claim(profile, RDF_TYPE, {"entity": KKT + "Profile"})
     claim(profile, LABEL, lit(str(cat.get("label") or cat["name"])))
     claim(s, LABEL, lit(str(e.get("label") or e["id"])))
@@ -101,12 +105,15 @@ def ops_for(cat: dict, e: dict, v: dict, need: str | None, premises: list[str]) 
         claim(s, KKT + "propertyValue", lit(str(val)), prop(str(k)))
     if e.get("sha256"):
         claim(s, KKT + "propertyValue", lit(str(e["sha256"])), prop("sha256"))
+    for slot in sorted(e.get("slots") or []):
+        claim(s, KKT + "propertyValue", lit(str(slot)), prop("slot"))
     for name, r in sorted(v.items()):
         claim(s, KKT + "propertyValue", lit(f"{'ok' if r['ok'] else 'fails'}: {r['why']}" + (" (enforced)" if r["enforced"] else "")),
               prop(f"rule:{name}"))
     if need and catalogs.offer(v):
+        # inferred from the request, and referenced by what was read (which slots the entry says it fills)
         out.append({"op": "add_claim", "subject": s, "predicate": KKT + "fulfills", "object": {"entity": need},
-                    "evidence_type": "inferred", "derived_from": premises})
+                    "evidence_type": "inferred", "derived_from": premises, "references": [ref]})
     return out
 
 
@@ -148,6 +155,13 @@ def commit(intent: Path, exp: Path, msg: str) -> str:
     return git("rev-parse", "HEAD")
 
 
+def _id(d: Path) -> str | None:
+    try:
+        return str((yaml.safe_load((d / "provider.yaml").read_text()) or {}).get("id"))
+    except (OSError, yaml.YAMLError, AttributeError):
+        return None
+
+
 def candidate(cur, run_id: str, intent: Path, r: dict, slot: str, e: dict) -> dict:
     """An offered, pinned provider -> an experiment the sandbox measures, recorded as the builder records its own."""
     inc = provider_dir(r["target"])
@@ -157,6 +171,8 @@ def candidate(cur, run_id: str, intent: Path, r: dict, slot: str, e: dict) -> di
     exp = intent / "experiments" / exp_id
     if exp.exists():
         raise ValueError(f"{exp_id} exists already")
+    if any(_id(d) == e["id"] for x in (intent / "experiments").glob("x*") if x.is_dir() for d in x.iterdir() if d.is_dir()):
+        raise ValueError(f"{e['id']} is already a candidate in an experiment: one directory per provider id")
     exp.mkdir(parents=True)
     try:
         work = exp / slug(e["id"].removeprefix("urn:kk:provider:"))
@@ -176,7 +192,7 @@ def candidate(cur, run_id: str, intent: Path, r: dict, slot: str, e: dict) -> di
     ref = [{"source_uri": f"file:{rel}/{work.name}#sha256={e['sha256']}"}]
     claim = lambda p, o: {"op": "add_claim", "subject": meta["id"], "predicate": p, "object": o,  # noqa: E731
                           "evidence_type": "deterministic", "references": ref}
-    res = submit(cur, {"idempotency_key": f"candidate:{meta['id']}|{e['sha256'][:16]}|catalog", "attributed_to": AGENT,
+    res = submit(cur, {"idempotency_key": f"candidate:{meta['id']}|{e['sha256'][:16]}|{exp_id}", "attributed_to": AGENT,
                        "target_scope": SCOPE, "ops": [claim(LABEL, {"value": {"@value": meta.get("name", meta["id"])}}),
                                                        claim(DCT + "source", {"entity": r["iri"]})]}, run_id)
     return {"experiment": exp_id, "candidate": meta["id"], "commit": sha, "candidate_change_set": str(res["id"])}
@@ -186,8 +202,10 @@ def one_pass(conn, intent: Path) -> dict:
     report = {}
     cats = {n: c for n, c in catalogs.load(intent).items() if c.get("kind") == "providers"}
     with conn.cursor() as cur:
-        cur.execute("select distinct info->>'request' from kernel.run where agent = %s and info ? 'request'", (AGENT,))
-        tried = {x[0] for x in cur.fetchall()}
+        # answered once: a succeeded run; a failed one (a network or git error) is retried, up to RETRIES times
+        cur.execute("""select info->>'request', count(*) filter (where status = 'succeeded'), count(*) filter (where status = 'failed')
+                       from kernel.run where agent = %s and info ? 'request' group by 1""", (AGENT,))
+        tried = {x[0] for x in cur.fetchall() if x[1] or x[2] >= RETRIES}
         for r in build_requests(cur):
             if r["iri"] in tried or not cats:
                 continue
