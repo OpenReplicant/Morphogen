@@ -23,7 +23,7 @@ from psycopg.types.json import Jsonb  # noqa: E402
 
 from kk.lib import connect  # noqa: E402
 import yaml  # noqa: E402
-from sandbox.measure import contract, service_cases  # noqa: E402
+from sandbox.measure import contract, experiment, service_cases  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -96,9 +96,43 @@ def main() -> None:
     n.write_text(n.read_text().replace("and c.evidence_type = 'observed') x",
                                        "and c.evidence_type = 'observed' and c.subject like 'urn:kk:provider:%%') x"))
     bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
-    served = service_cases(narrow, "analyser", bench, ("kkm_anomaly", "kkm_anomaly_login"), "kk_sbx_test_narrow")
+    served = service_cases(narrow, "analyser", bench, ("kkm_anomaly", "kkm_anomaly_login"), "kk_sbx_test_narrow",
+                           "urn:kk:agent:anomaly", secrets.token_hex(8))
     check(contract(narrow)["passed"] == N and served["total"] == N and served["passed"] < N,
           f"a candidate that reads only some of the record passes the rule cases and fails the service cases ({served['passed']}/{N})")
+
+    # A candidate that reads the record correctly only when it sees case data, and leaves a process behind
+    # in a session of its own. The rule and service cases pass; its benchmark outputs differ from the
+    # incumbent's, and nothing it started outlives the run.
+    cheat_exp = tmp / "exp2"
+    shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", cheat_exp / "anomaly-recent",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    (cheat_exp / "experiment.yaml").write_text("slot: analyser\nincumbent: morphogen/modules/anomaly\ncandidate: anomaly-recent\n")
+    left_pid = tmp / "left.pid"
+    c = cheat_exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
+    c.write_text(c.read_text().replace("        found = anomalies(obs, limits)\n", f"""        found = anomalies(obs, limits)
+        found = [a for a in found if "-c" in a["target"]]
+        import subprocess
+        if not pathlib.Path({str(left_pid)!r}).exists():
+            pathlib.Path({str(left_pid)!r}).write_text(str(subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(600)"], start_new_session=True).pid))
+""", 1).replace("import sys\n", "import pathlib\nimport sys\n", 1))
+    priv = tmp / "priv"
+    priv.mkdir()
+    old_url = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = url
+    with connect("kkm_sandbox", url) as record:
+        runs = {f.stem.rsplit("-", 1)[-1]: yaml.safe_load(f.read_text())["contract"] for f in experiment(cheat_exp, record, priv)}
+    os.environ.pop("DATABASE_URL") if old_url is None else os.environ.update(DATABASE_URL=old_url)
+    cc = runs["candidate"]
+    check(cc["rule"]["passed"] == N and cc["service"]["passed"] == N and cc["agreement"]["passed"] == 0
+          and cc["passed"] < cc["total"],
+          f"a candidate that reads the record one way for the cases and another for the benchmark passes {N}+{N} "
+          f"cases and fails the agreement with the incumbent ({cc['agreement']['outputs']} outputs against "
+          f"{runs['incumbent']['agreement']['outputs']})")
+    pid = int(left_pid.read_text())
+    check(not Path(f"/proc/{pid}").exists() or "zombie" in Path(f"/proc/{pid}/status").read_text().lower(),
+          "a process the candidate started in a session of its own does not outlive its run")
 
     env = {**os.environ, "DATABASE_URL": url,
            "PYTHONPATH": os.pathsep.join([str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")]),
@@ -118,8 +152,9 @@ def main() -> None:
                 and qualifiers->>%s = %s and subject = any(%s)""", DQV + "value", DQV + "isMeasurementOf",
             f"urn:kk:metric:sandbox-analyser:{metric}", [k for k, p in runs.items() if p == provider]))
         for p in ("urn:kk:provider:anomaly", "urn:kk:provider:anomaly-recent"):
-            check(value(p, "contract.passed") == value(p, "contract.total") == 2 * N and value(p, "contract.service.passed") == N,
-                  f"{p.rsplit(':', 1)[-1]} passes the analyser contract: {N} rule cases and {N} service cases")
+            check(value(p, "contract.passed") == value(p, "contract.total") == 2 * N + 1 and value(p, "contract.service.passed") == N,
+                  f"{p.rsplit(':', 1)[-1]} passes the analyser contract: {N} rule cases, {N} service cases and "
+                  "the same outputs as the incumbent on the benchmark")
         inc, cand = value("urn:kk:provider:anomaly", "metric.mean"), value("urn:kk:provider:anomaly-recent", "metric.mean")
         check(cand < inc, f"on a copy of the record, timed by the sandbox, the candidate's full pass is faster ({cand:.3f} s against {inc:.3f} s)")
         check(value("urn:kk:provider:anomaly", "inputs") == 4500, "the sandbox copied the record's 4,500 observations")

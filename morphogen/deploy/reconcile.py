@@ -42,7 +42,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from morphogen.logins import login_env, login_of, telemetry_token  # noqa: E402
+from morphogen.logins import login_env, login_of, telemetry_token, undumpable  # noqa: E402
 
 
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
@@ -99,9 +99,10 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
             raise OSError(f"{spec['cwd']} differs from HEAD: only committed experiment code runs")
     path = os.pathsep.join(filter(None, [str(cwd), str(repo / "kernel" / "src"), str(repo / "morphogen" / "src"),
                                          os.environ.get("PYTHONPATH")]))
-    extra = {**{k: v for k, v in os.environ.items() if k.startswith("OTEL_")},
+    # OTEL_*HEADERS are not passed on: the service's own token below is the only one it holds.
+    extra = {**{k: v for k, v in os.environ.items() if k.startswith("OTEL_") and not k.endswith("HEADERS")},
              **{k: str(v) for k, v in (spec.get("env") or {}).items()}, "PYTHONPATH": path,
-             "PYTHONDONTWRITEBYTECODE": "1", "OTEL_SERVICE_NAME": spec.get("provider", "")}
+             "PYTHONDONTWRITEBYTECODE": "1", "OTEL_SERVICE_NAME": spec.get("provider") or spec.get("_file", "")}
     if os.environ.get("KK_OTLP_SECRET"):
         extra["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Bearer%20{telemetry_token(os.environ['KK_OTLP_SECRET'], extra['OTEL_SERVICE_NAME'])}"
     env = login_env(os.environ["DATABASE_URL"], *login, extra) if login else {**os.environ, **extra}
@@ -127,6 +128,7 @@ def main(argv=None) -> int:
     ap.add_argument("--env", default="sandbox")
     ap.add_argument("--repo", default=".")
     a = ap.parse_args(argv)
+    undumpable()                                         # children cannot read KK_OTLP_SECRET from /proc
     intent, repo = Path(a.intent).resolve(), Path(a.repo).resolve()
     every = float(os.environ.get("KK_RECONCILE_SECONDS", "1"))
     backoff = float(os.environ.get("KK_RESTART_SECONDS", "5"))

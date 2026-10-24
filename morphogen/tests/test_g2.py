@@ -179,10 +179,10 @@ def main() -> None:
                          "http://www.w3.org/ns/dqv#isMeasurementOf", DCT + "subject")
             score = {(p, m.rsplit(":", 1)[-1]): v for p, m, v in measures}
             n = len(list((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "cases").glob("*.yaml")))
-            check(score[(CANDIDATE, "contract.passed")] == score[(CANDIDATE, "contract.total")] == 2 * n
+            check(score[(CANDIDATE, "contract.passed")] == score[(CANDIDATE, "contract.total")] == 2 * n + 1
                   and score[(CANDIDATE, "contract.service.passed")] == n
                   and score[(CANDIDATE, "metric.mean")] < score[(ANALYSER, "metric.mean")],
-                  f"measure: the candidate passes the analyser contract ({n} rule and {n} service cases) and its full pass, "
+                  f"measure: the candidate passes the analyser contract ({n} rule and {n} service cases, and the incumbent's outputs on the benchmark) and its full pass, "
                   f"timed by the sandbox, is faster "
                   f"({score[(CANDIDATE, 'metric.mean')]:.3f} s against {score[(ANALYSER, 'metric.mean')]:.3f} s)")
             check(any(o["predicate"].endswith("substitutedBy") and o["object"] == {"entity": CANDIDATE} for o in ops)

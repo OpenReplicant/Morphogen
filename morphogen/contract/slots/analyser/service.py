@@ -6,6 +6,12 @@ submitted to `judge`. Slot code, run by the sandbox; it never imports the provid
 
   ops(paths)                 -> (add_claim ops loading every case, expected anomalies per case)
   judge(change_sets, ids, expected) -> {"passed", "total", "failed": [case id, ...]}
+  outputs(change_sets, name) -> the anomalies submitted, as [kind, target, [premise names]], sorted
+
+The sandbox judges only change sets that were applied and attributed to the incumbent's agent. It also
+compares the candidate's `outputs` on the benchmark with the incumbent's on the same inputs (`name` gives
+each premise a name that does not depend on the database), so a provider cannot read the record one way
+for the cases and another way for the benchmark.
 
 Observations are loaded as `observed` claims, limits as `testimony`, each referencing
 `urn:kk:case:<n>/<obs|limit>/<local id>`; `ids` maps claim ids back to (n, obs|limit, local id) (`ref`).
@@ -58,11 +64,11 @@ def ops(paths: list[Path]) -> tuple[list[dict], dict[int, dict]]:
     return out, expected
 
 
-def judge(change_sets: list[list[dict]], ids: dict[str, tuple[int, str, str]], expected: dict[int, dict]) -> dict:
-    """change_sets: the ops of each change set the provider submitted. An anomaly is the subject of a
+def found(change_sets: list[list[dict]]) -> list[dict]:
+    """The anomalies in these change sets: {kind, target, premises}. An anomaly is the subject of a
     dcterms:type and an oa:hasTarget op; its premises are the ops' derived_from (the observation first,
     as the rule cases read them)."""
-    got: dict[int, list[dict]] = {n: [] for n in expected}
+    out = []
     for cs in change_sets:
         by: dict[str, dict] = {}
         for op in cs:
@@ -71,19 +77,29 @@ def judge(change_sets: list[list[dict]], ids: dict[str, tuple[int, str, str]], e
                 a["kind"] = (op.get("object") or {}).get("entity")
             elif op.get("predicate") == OA_TARGET:
                 a["target"] = (op.get("object") or {}).get("entity")
-        for a in by.values():
-            if not a.get("kind") or not a.get("target") or not a["premises"]:
-                continue
-            first = ids.get(str(a["premises"][0]))
-            if first is None or first[1] != "obs":
-                continue
-            n, _, obs = first
-            kind = a["kind"].rsplit(":", 1)[-1]
-            target = a["target"].removesuffix(f"-c{n:02d}")
-            row = {"kind": kind, "target": target, "observation": obs}
-            if kind == "limit":
-                row["limit"] = next((ids[str(p)][2] for p in a["premises"] if ids.get(str(p), (None, None))[:2] == (n, "limit")), None)
-            got[n].append(row)
+        out += [a for a in by.values() if a.get("kind") and a.get("target") and a["premises"]]
+    return out
+
+
+def outputs(change_sets: list[list[dict]], name: dict[str, str]) -> list:
+    return sorted([a["kind"].rsplit(":", 1)[-1], a["target"], [name.get(str(p), "?") for p in a["premises"]]]
+                  for a in found(change_sets))
+
+
+def judge(change_sets: list[list[dict]], ids: dict[str, tuple[int, str, str]], expected: dict[int, dict]) -> dict:
+    """change_sets: the ops of each applied change set the provider submitted."""
+    got: dict[int, list[dict]] = {n: [] for n in expected}
+    for a in found(change_sets):
+        first = ids.get(str(a["premises"][0]))
+        if first is None or first[1] != "obs":
+            continue
+        n, _, obs = first
+        kind = a["kind"].rsplit(":", 1)[-1]
+        target = a["target"].removesuffix(f"-c{n:02d}")
+        row = {"kind": kind, "target": target, "observation": obs}
+        if kind == "limit":
+            row["limit"] = next((ids[str(p)][2] for p in a["premises"] if ids.get(str(p), (None, None))[:2] == (n, "limit")), None)
+        got[n].append(row)
     failed = [expected[n]["id"] for n in expected
               if sorted(got[n], key=lambda r: (r["target"], r["observation"], r["kind"])) != expected[n]["anomalies"]]
     return {"passed": len(expected) - len(failed), "total": len(expected), "failed": failed}

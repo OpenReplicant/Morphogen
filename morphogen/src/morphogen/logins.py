@@ -40,3 +40,14 @@ def login_env(base_url: str, role: str, login: str, extra: dict) -> dict:
     pw = os.environ.get("KK_LOGIN_PASSWORD")
     url = make_conninfo(base_url, user=login, **({"password": pw} if pw else {}))
     return {**{k: v for k, v in os.environ.items() if k in KEEP}, **extra, "DATABASE_URL": url, "KK_ROLE": role}
+
+
+def undumpable() -> None:
+    """Close this process's /proc/<pid>/environ (and memory) to other processes of the same OS user, so a
+    child it starts cannot read the credentials it holds (prctl PR_SET_DUMPABLE 0; Linux only). It does not
+    stop a child running as root, or one that reaches the database by the cluster's own trust (R5-23)."""
+    try:
+        import ctypes
+        ctypes.CDLL(None, use_errno=True).prctl(4, 0, 0, 0, 0)          # PR_SET_DUMPABLE = 4
+    except (OSError, AttributeError):
+        pass
