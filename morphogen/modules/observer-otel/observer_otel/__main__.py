@@ -10,7 +10,7 @@ window was recorded are dropped. Providers send to it with the standard OpenTele
 What it records is attributed to it, so it accepts only what it was configured for: it listens on
 KK_OTLP_HOST (default 127.0.0.1), requires `Authorization: Bearer <KK_OTLP_TOKEN>` when that is set
 (senders set OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>), records only the resources named
-in KK_OTLP_SERVICES when that is set (service.name values, comma-separated), reads at most
+in KK_OTLP_SERVICES when that is set (service.name values, comma-separated; `name*` for a prefix), reads at most
 KK_OTLP_MAX_BYTES per request (default 4 MB), and drops points stamped before the window in progress
 or more than 60 seconds ahead of its clock.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_observer_otel),
@@ -75,6 +75,11 @@ class Buffer:
         return taken
 
 
+def allowed(name, services: set[str]) -> bool:
+    """A service on the list, or matching an entry that ends in * (a prefix: a candidate of a provider)."""
+    return isinstance(name, str) and any(name == s or (s.endswith("*") and name.startswith(s[:-1])) for s in services)
+
+
 def handler(buffer: Buffer, token: str | None = None, services: set[str] | None = None, max_bytes: int = 4 << 20):
     class Receiver(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -92,7 +97,7 @@ def handler(buffer: Buffer, token: str | None = None, services: set[str] | None 
                 body = decode(self.headers.get("Content-Type", ""), self.rfile.read(size))
                 pts = points(body)
                 if services is not None:
-                    pts = [p for p in pts if p["attrs"].get("service.name") in services]
+                    pts = [p for p in pts if allowed(p["attrs"].get("service.name"), services)]
                 buffer.add(pts)
             except Exception as e:           # a malformed request is the sender's problem: 400, keep serving
                 self.send_error(400, str(e)[:200])

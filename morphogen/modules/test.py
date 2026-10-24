@@ -20,7 +20,7 @@ ENV = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(ROOT / "ker
 def main() -> int:
     failed = []
     commands = []
-    for d in sorted(p for p in HERE.iterdir() if (p / "provider.yaml").exists()):
+    for d in sorted(p for p in HERE.iterdir() if (p / "provider.yaml").exists() and not p.name.startswith("_")):
         for t in yaml.safe_load((d / "provider.yaml").read_text()).get("tests", []):
             commands.append((d, t))
     commands += [(ROOT, f"python3 {t.relative_to(ROOT)}") for t in sorted((ROOT / "morphogen" / "tests").glob("test_*.py"))]

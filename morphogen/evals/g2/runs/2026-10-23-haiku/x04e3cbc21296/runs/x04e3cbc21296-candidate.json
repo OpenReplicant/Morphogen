@@ -1,0 +1,18 @@
+{
+  "provider": "urn:kk:provider:anomaly-feed-head",
+  "slot": "analyser",
+  "dataset": "x04e3cbc21296",
+  "inputs": 4543,
+  "contract": {
+    "passed": 11,
+    "total": 11
+  },
+  "metric": {
+    "name": "kk.step.duration",
+    "better": "lower",
+    "steps": 6,
+    "mean": 0.033999
+  },
+  "role": "candidate",
+  "request": "urn:kk:request:3b418d8942d93b30"
+}

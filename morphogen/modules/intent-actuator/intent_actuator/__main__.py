@@ -25,7 +25,7 @@ from pathlib import Path
 from kk.lib import connect, follow, run
 from morphogen.policy import actions
 
-from .actuate import PPLAN_STEP_OF, intent_file, refusal, set_env, steps
+from .actuate import PPLAN_STEP_OF, intent_file, refusal, replace, set_env, steps
 
 MODULE = "urn:kk:module:intent-actuator"
 AGENT = "urn:kk:agent:intent-actuator"
@@ -57,7 +57,7 @@ def commit(intent: Path, f: Path, s: dict, label: str) -> str:
 def one_pass(conn, intent: Path, env: str) -> dict:
     acts = actions(intent)
     with conn.cursor() as cur:
-        cur.execute("""select id, subject, predicate, object_entity, object_value, change_set from api.claims
+        cur.execute("""select id, subject, predicate, object_entity, object_value, qualifiers, change_set from api.claims
                        where status <> 'deprecated' and subject in
                          (select subject from api.claims where predicate = %s and status <> 'deprecated')""",
                     (PPLAN_STEP_OF,))
@@ -84,8 +84,13 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                         outputs.update(refused=why)
                         raise PermissionError(why)
                     f = intent_file(intent, env, s["target"])
-                    setting = acts[s["action"]]["setting"]
-                    before, after = set_env(f, setting, s["value"])
+                    if acts[s["action"]].get("kind") == "replace":
+                        setting = "provider"
+                        change = replace(intent, f, s["candidate"])
+                        before, after = change["before"], change["after"]
+                    else:
+                        setting = acts[s["action"]]["setting"]
+                        before, after = set_env(f, setting, s["value"])
                     try:
                         sha = commit(intent, f, s, labels.get(s["plan"], s["plan"]))
                     except Exception:

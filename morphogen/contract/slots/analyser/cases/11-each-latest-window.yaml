@@ -1,0 +1,38 @@
+id: urn:kk:eval:analyser/each-latest-window
+text: every one of the latest 3 windows over the limit is an anomaly
+input:
+  observations:
+  - id: w0
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 0
+    value: 0.5
+  - id: w1
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 1
+    value: 0.5
+  - id: w2
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 2
+    value: 0.5
+  limits:
+  - id: L
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    value: 0.2
+expect:
+  anomalies:
+  - kind: limit
+    target: urn:kk:node:shop
+    observation: w0
+    limit: L
+  - kind: limit
+    target: urn:kk:node:shop
+    observation: w1
+    limit: L
+  - kind: limit
+    target: urn:kk:node:shop
+    observation: w2
+    limit: L

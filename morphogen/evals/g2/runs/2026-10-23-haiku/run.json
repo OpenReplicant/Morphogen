@@ -1,0 +1,27 @@
+{
+  "builder": "harness",
+  "limit_seconds": 0.12,
+  "incumbent": "urn:kk:provider:anomaly",
+  "candidate": "urn:kk:provider:anomaly-feed-head",
+  "observed_before": 0.1441,
+  "observed_after": [
+    0.1466
+  ],
+  "sandbox": {
+    "anomaly.inputs": 4543.0,
+    "anomaly.contract.passed": 11.0,
+    "anomaly.contract.total": 11.0,
+    "anomaly.metric.steps": 5.0,
+    "anomaly.metric.mean": 0.153807,
+    "anomaly-feed-head.inputs": 4543.0,
+    "anomaly-feed-head.contract.passed": 11.0,
+    "anomaly-feed-head.contract.total": 11.0,
+    "anomaly-feed-head.metric.steps": 6.0,
+    "anomaly-feed-head.metric.mean": 0.033999
+  },
+  "verdict": "urn:kk:verdict:holds",
+  "verdict_text": "step-seconds-mean was 0.0789, 0.0632, 0.0548 in the 3 windows after the change: within the predicted limit 0.12.",
+  "request": "urn:kk:request:3b418d8942d93b30",
+  "plan": "urn:kk:plan:04e3cbc21296141e:step:1",
+  "change_set": "5f4caa6a-e6b6-4789-aa3e-c3b4cee3b797"
+}

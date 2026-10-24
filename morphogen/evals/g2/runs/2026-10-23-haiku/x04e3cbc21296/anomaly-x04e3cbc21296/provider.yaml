@@ -1,0 +1,12 @@
+id: urn:kk:provider:anomaly-feed-head
+name: Anomaly detection (feed-head skip)
+version: 0.2.1
+license: Apache-2.0
+slots: [analyser]
+origin: OpenReplicant/kernel (rebuild 4) modules/anomaly; detect.py unchanged, the service follows the change feed
+requires: Python 3.12+, psycopg
+runner: python3 tests/contract.py
+migration: migration.sql
+service: python3 -m anomaly
+tests: [python3 tests/test_detect.py]
+note: over a documented limit (bbo:maxValue), or more than 3 standard deviations from recent windows; an oa:Annotation on the feature of interest, inferred from what it compared

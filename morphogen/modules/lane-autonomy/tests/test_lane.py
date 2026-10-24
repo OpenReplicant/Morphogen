@@ -31,4 +31,6 @@ try:
 except ValueError:
     check(True, "an unknown level is an error, not a lane")
 a = actions(INTENT)
-check(all({"setting", "min", "max", "risk", "answers"} <= set(v) for v in a.values()), "every action has bounds, risk and what it answers")
+check(all({"kind", "risk", "answers"} <= set(v) for v in a.values())
+      and all({"setting", "min", "max"} <= set(v) for v in a.values() if v["kind"] == "setting"),
+      "every action has a kind, a risk and what it answers; settings have bounds")

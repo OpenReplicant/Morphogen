@@ -1,0 +1,40 @@
+id: urn:kk:eval:analyser/zscore-needs-history
+text: with fewer than 5 earlier windows a spike is not unusual, only over the limit
+input:
+  observations:
+  - id: o0
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 0
+    value: 0.012
+  - id: o1
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 1
+    value: 0.013
+  - id: o2
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 2
+    value: 0.014
+  - id: o3
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 3
+    value: 0.012
+  - id: o4x
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 4
+    value: 1.8
+  limits:
+  - id: L
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    value: 0.2
+expect:
+  anomalies:
+  - kind: limit
+    target: urn:kk:node:shop
+    observation: o4x
+    limit: L

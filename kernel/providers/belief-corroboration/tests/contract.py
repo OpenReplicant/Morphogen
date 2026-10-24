@@ -2,6 +2,7 @@
 Prints "ok: <case id>" per passing case, as every provider runner does. No database needed.
 Ported from rebuild 4 modules/belief-corroboration/tests/test_eval.py.
 """
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from belief_corroboration.model import Claim, score  # noqa: E402
 
-SET = HERE.parents[2] / "contract" / "slots" / "belief-model"
+SET = Path(os.environ.get("KK_CASES") or HERE.parents[2] / "contract" / "slots" / "belief-model")   # run.py sets KK_CASES
 
 
 def when(v):

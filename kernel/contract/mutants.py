@@ -1,9 +1,11 @@
-"""Mutation check: each mutant breaks one guarantee in a copy of a provider (kernel/providers/_mutant)
-and the contract must fail on it. A provider lists its mutants in tests/mutants.py as
+"""Mutation check: each mutant breaks one guarantee in a copy of a provider (<providers>/_mutant) and
+the contract must fail on it. A provider lists its mutants in tests/mutants.py as
 MUTANTS = [(name, file relative to the provider, [(old, new), ...]), ...]; each old text must occur once.
 
-Usage: PGHOST=... PGUSER=<superuser> python3 kernel/contract/mutants.py [provider ...] [-k name filter]
-Exits non-zero if the unmutated provider fails or any mutant passes.
+Usage: PGHOST=... PGUSER=<superuser> python3 kernel/contract/mutants.py [--blueprint FILE]... [--providers DIR]
+       [provider ...] [-k name filter]
+--blueprint and --providers are passed to run.py (defaults: the kernel's). Exits non-zero if the unmutated
+provider fails or any mutant passes.
 """
 import importlib.util
 import re
@@ -14,11 +16,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PROVIDERS = HERE.parent / "providers"
+BLUEPRINTS: list[Path] = []
 MUT = PROVIDERS / "_mutant"
 
 
 def contract(name: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(HERE / "run.py"), name], capture_output=True, text=True)
+    args = [a for bp in BLUEPRINTS for a in ("--blueprint", str(bp))] + ["--providers", str(PROVIDERS)]
+    return subprocess.run([sys.executable, str(HERE / "run.py"), *args, name], capture_output=True, text=True)
 
 
 def has_cases(name: str) -> bool:
@@ -26,7 +30,7 @@ def has_cases(name: str) -> bool:
     run = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(run)
     meta = run.yaml.safe_load((PROVIDERS / name / "provider.yaml").read_text())
-    return bool(run.expected(meta["slots"]))
+    return bool(run.expected(meta["slots"], BLUEPRINTS or None))
 
 
 def mutants_of(name: str) -> list:
@@ -88,10 +92,18 @@ def main(names: list[str], pattern: str) -> int:
 if __name__ == "__main__":
     args = sys.argv[1:]
     pattern = ""
-    if "-k" in args:
-        i = args.index("-k")
-        pattern = args[i + 1]
-        del args[i:i + 2]
+    for flag in ("-k", "--blueprint", "--providers"):
+        while flag in args:
+            i = args.index(flag)
+            value = args[i + 1]
+            del args[i:i + 2]
+            if flag == "-k":
+                pattern = value
+            elif flag == "--blueprint":
+                BLUEPRINTS.append(Path(value).resolve())
+            else:
+                PROVIDERS = Path(value).resolve()
+                MUT = PROVIDERS / "_mutant"
     names = args or sorted(p.name for p in PROVIDERS.iterdir()
                            if (p / "provider.yaml").exists() and not p.name.startswith("_"))
     sys.exit(main(names, pattern))

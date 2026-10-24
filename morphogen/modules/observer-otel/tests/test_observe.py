@@ -91,6 +91,9 @@ post(request("belief-corroboration", "kk.feed.lag", now + 3600, 1, 1.0))
 check(len(buf.points) == 1, "resources not on the list, and points stamped far ahead, are dropped")
 check(post({"resourceMetrics": [], "pad": "x" * 20_000}) == 413, "a request over the size limit is refused")
 srv.shutdown()
+from observer_otel.__main__ import allowed  # noqa: E402
+check(allowed("anomaly-fast", {"anomaly*"}) and allowed("anomaly", {"anomaly*"}) and not allowed("validator", {"anomaly*"})
+      and not allowed(None, {"*"}), "a list entry ending in * allows a prefix")
 
 try:
     from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest

@@ -6,9 +6,8 @@
 # runner can check that every case ran. A new provider adds its own runner and reports the same names.
 version: 0.4.0
 
-# The cases below apply to providers of these slots. Other slots have their own case sets in
-# slots/<slot>/ (validator, belief-model); kernel/contract/run.py runs whichever apply.
-applies_to: [record-store, write-pipeline, change-feed]
+# The record store, write pipeline and change feed name this file as their contract
+# (kernel/blueprint/slots.yaml `contract:`); other slots name their case sets in slots/<slot>/.
 
 invariants:
   I1:

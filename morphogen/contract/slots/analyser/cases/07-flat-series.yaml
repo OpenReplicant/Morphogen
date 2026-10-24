@@ -1,0 +1,52 @@
+id: urn:kk:eval:analyser/flat-series
+text: 'a flat history has no spread: a change is not unusual by z-score'
+input:
+  observations:
+  - id: f0
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 0
+    value: 0.05
+  - id: f1
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 1
+    value: 0.05
+  - id: f2
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 2
+    value: 0.05
+  - id: f3
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 3
+    value: 0.05
+  - id: f4
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 4
+    value: 0.05
+  - id: f5
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 5
+    value: 0.05
+  - id: f6
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 6
+    value: 0.05
+  - id: f7
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 7
+    value: 0.05
+  - id: f8
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 8
+    value: 0.06
+  limits: []
+expect:
+  anomalies: []

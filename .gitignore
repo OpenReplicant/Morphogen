@@ -8,3 +8,4 @@ __pycache__/
 .data_storage/
 dist/
 kernel/providers/_mutant/
+morphogen/modules/_mutant/

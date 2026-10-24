@@ -35,5 +35,11 @@ check("the run is labelled with the models that answered", "m/x:free" in ops[0][
 check("rcaeval's dataset key names the eval set",
       measurements({"dataset": "re1-ob", "avg@5_mean": 0.9}, "rcaeval", "r", "b" * 64)[1]["qualifiers"][DQV + "computedOn"]
       == "urn:kk:dataset:rcaeval:re1-ob")
+named = measurements({"provider": "urn:kk:provider:anomaly", "step_seconds": {"mean": 0.1}}, "sandbox-analyser", "r", "c" * 64)
+check("a run that names its provider says so; the name is not a score",
+      any(o["predicate"] == "http://purl.org/dc/terms/subject" and o["object"] == {"entity": "urn:kk:provider:anomaly"} for o in named)
+      and sum(o["predicate"].endswith("#value") for o in named) == 1)
+check("a provider that is not an IRI is not linked",
+      not any(o["predicate"].endswith("/subject") for o in measurements({"provider": "anomaly"}, "s", "r", "c" * 64)))
 print(f"evaluator checks passed ({sum(checks)}/{len(checks)})" if all(checks) else "evaluator checks FAILED")
 sys.exit(0 if all(checks) else 1)

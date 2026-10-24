@@ -1,0 +1,11 @@
+id: urn:kk:provider:builder
+name: 'Builder: candidate providers'
+version: 0.1.0
+license: Apache-2.0
+slots: [builder]
+origin: new (T6, R5-21)
+requires: Python 3.12+, psycopg, PyYAML, git; for the harness strategy, an agent harness (KK_BUILDER_COMMAND)
+migration: migration.sql
+service: python3 -m builder
+tests: [python3 tests/test_build.py]
+note: never judges its own candidate (invariant 5); the slot contract, the sandbox and the evaluator do

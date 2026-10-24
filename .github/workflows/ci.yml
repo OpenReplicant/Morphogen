@@ -30,6 +30,8 @@ jobs:
         run: /tmp/kk-venv/bin/python kernel/contract/mutants.py
       - name: Provider tests (each provider's own, and the services end to end)
         run: /tmp/kk-venv/bin/python kernel/providers/test.py
+      - name: Morphogen contract (its slots' case sets) and mutants
+        run: sh morphogen/contract/run.sh && sh morphogen/contract/run.sh --mutants
       - name: Morphogen modules and the full loop (T5)
         run: /tmp/kk-venv/bin/python morphogen/modules/test.py
       - name: Boundary

@@ -13,8 +13,16 @@ KK_RECONCILE_SECONDS (default 1) it re-reads.
 Intent is read from the commit at HEAD, never the work tree: only what was committed (by the intent
 actuator, or a person) runs, and an edit left uncommitted runs nothing. A file is refused unless its
 service is `python3 -m <module>`, its directory is a provider's (kernel/providers/<name> or
-morphogen/modules/<name>), and its environment sets only KK_* settings other than KK_ROLE: a provider's
+morphogen/modules/<name> in the repository, or a candidate's experiments/<id>/<name> in intent, which the
+intent actuator points to when a person approves a replacement), and its environment sets only KK_* settings other than KK_ROLE: a provider's
 identity and database login come from this process, not from intent.
+
+Logins (R5-22): the file's name names the slot's reviewed provider (environments/<env>/anomaly.yaml:
+morphogen/modules/anomaly or kernel/providers/anomaly). When that provider declares a login of its own
+(provider.yaml `role`, `login`), the service runs as that login with none of this process's other
+credentials (morphogen.logins); otherwise it gets this process's environment. A candidate from an
+experiment runs only as the incumbent's own login, and only while its directory matches HEAD (the code
+the person approved, measured and committed).
 """
 from __future__ import annotations
 
@@ -32,9 +40,12 @@ from pathlib import Path
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from morphogen.logins import login_env, login_of  # noqa: E402
+
 
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
-CWD = re.compile(r"(kernel/providers|morphogen/modules)/[a-z0-9][a-z0-9-]*")
+CWD = re.compile(r"(kernel/providers|morphogen/modules)/[a-z0-9][a-z0-9-]*|experiments/x[0-9a-f]{12}/[a-z0-9][a-z0-9-]*")
 SETTING = re.compile(r"KK_[A-Z0-9_]+")
 
 
@@ -67,16 +78,30 @@ def desired(intent: Path, env: str) -> tuple[dict[str, tuple[str, dict]], dict[s
         if why:
             refused[name] = why
         else:
-            out[spec.get("provider", name.removesuffix(".yaml"))] = (hashlib.sha256(text).hexdigest()[:16], spec)
+            out[spec.get("provider", name.removesuffix(".yaml"))] = (hashlib.sha256(text).hexdigest()[:16],
+                                                                     {**spec, "_file": name.removesuffix(".yaml")})
     return out, refused
 
 
-def start(repo: Path, spec: dict) -> subprocess.Popen:
-    cwd = repo / spec.get("cwd", ".")
+def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Popen:
+    experiment = intent is not None and spec["cwd"].startswith("experiments/")
+    cwd = (intent if experiment else repo) / spec["cwd"]
+    slot_file = spec.get("_file") or spec.get("provider", "")
+    reviewed = next((d for d in (repo / "morphogen" / "modules" / slot_file, repo / "kernel" / "providers" / slot_file)
+                     if (d / "provider.yaml").exists()), None)
+    login = login_of(reviewed) if reviewed else None
+    if experiment:
+        if login is None:
+            raise OSError(f"a candidate runs only as the incumbent's own login; {slot_file} declares none")
+        git = lambda *a: subprocess.run(["git", "-C", str(intent), *a], capture_output=True, text=True).stdout
+        if not git("ls-tree", "HEAD", "--", spec["cwd"]) or git("status", "--porcelain", "--untracked-files=all", "--", spec["cwd"]):
+            raise OSError(f"{spec['cwd']} differs from HEAD: only committed experiment code runs")
     path = os.pathsep.join(filter(None, [str(cwd), str(repo / "kernel" / "src"), str(repo / "morphogen" / "src"),
                                          os.environ.get("PYTHONPATH")]))
-    env = {**os.environ, **{k: str(v) for k, v in (spec.get("env") or {}).items()}, "PYTHONPATH": path,
-           "OTEL_SERVICE_NAME": spec.get("provider", "")}
+    extra = {**{k: v for k, v in os.environ.items() if k.startswith("OTEL_")},
+             **{k: str(v) for k, v in (spec.get("env") or {}).items()}, "PYTHONPATH": path,
+             "PYTHONDONTWRITEBYTECODE": "1", "OTEL_SERVICE_NAME": spec.get("provider", "")}
+    env = login_env(os.environ["DATABASE_URL"], *login, extra) if login else {**os.environ, **extra}
     cmd = shlex.split(spec["service"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable
@@ -133,7 +158,7 @@ def main(argv=None) -> int:
             for name, (digest, spec) in want.items():
                 if name not in running and time.monotonic() - exited.get(name, -backoff) >= backoff:
                     try:
-                        running[name] = (digest, start(repo, spec))
+                        running[name] = (digest, start(repo, spec, intent))
                     except OSError as e:          # e.g. the provider's directory is missing: say so, retry later
                         exited[name] = time.monotonic()
                         say(event="failed", provider=name, error=str(e)[:200])

@@ -10,6 +10,9 @@
 # hook        = where in the write pipeline or read path the slot attaches
 # cardinality = one (one active provider; alternatives run in shadow until the evaluator promotes one) | many
 # interface   = kernel/src/kk/interfaces.py
+# contract    = what every provider must pass (R5-21): a case set (invariants.yaml, contract/slots/<slot>),
+#               provider-tests (no shared cases yet: only each provider's own tests, a declared gap), or
+#               none (an unfilled slot). Paths are relative to this file. kernel/contract/run.py checks it.
 # default     = the provider installed by default; none = declared but unfilled (`why` says what the slot is
 #               for and when a distribution would fill it). Nothing depends on an unfilled slot.
 version: 0.1.0
@@ -21,12 +24,14 @@ slots:
     cardinality: one
     interface: RecordStore
     default: record-postgres
+    contract: ../contract/invariants.yaml
     status: ported
   - id: write-pipeline
     core: true
     cardinality: one
     interface: WritePipeline
     default: record-postgres          # change sets, lanes and atomic apply live in the same schema today
+    contract: ../contract/invariants.yaml
     status: ported
 
   # ---- before the commit
@@ -35,18 +40,21 @@ slots:
     cardinality: many
     interface: IntakeFilter
     default: filter-gitleaks          # rebuild 4: modules/ingest-filter-gitleaks
+    contract: provider-tests
     status: to-port
   - id: validator
     hook: validation
     cardinality: many
     interface: Validator
     default: validator-shacl          # contract slots/validator; a JSON Schema provider is a candidate (R5-15)
+    contract: ../contract/slots/validator
     status: ported
   - id: lane-policy
     hook: lane
     cardinality: one
     interface: LanePolicy
     default: review-rules             # rebuild 4: settings review_predicates / review_types
+    contract: provider-tests
     status: ported-in-schema
 
   # ---- after the commit
@@ -55,24 +63,28 @@ slots:
     cardinality: one
     interface: RecordStore.feed
     default: record-postgres          # kernel.feed + api.feed(after_seq, max_rows); contract section feed
+    contract: ../contract/invariants.yaml
     status: written
   - id: belief-model
     hook: feed
     cardinality: one
     interface: BeliefModel
     default: belief-corroboration     # contract slots/belief-model; a feed consumer (kk.lib.follow)
+    contract: ../contract/slots/belief-model
     status: ported
   - id: verifier
     hook: feed
     cardinality: many
     interface: Verifier
     default: verifier-quotes          # a feed consumer; its own tests (tests/test_check.py)
+    contract: provider-tests
     status: ported
   - id: truth-maintenance
     hook: feed
     cardinality: one
     interface: FeedConsumer
     default: none
+    contract: none
     status: unfilled
     why: >-
       Marks claims derived from a premise that was later superseded, refuted, retracted or redacted, so belief
@@ -87,18 +99,21 @@ slots:
     cardinality: many
     interface: Recall
     default: recall-bm25              # SciFact nDCG@10 0.6606 (rebuild 4 floor 0.6594); dense and re-ranking opt-in, not ported
+    contract: provider-tests
     status: ported
   - id: agent-interface
     hook: read
     cardinality: many
     interface: MCP tools (read + propose)
     default: kernel-mcp               # operator tools; the memory profile is not ported (R5-12)
+    contract: provider-tests
     status: ported
   - id: context-assembler
     hook: read
     cardinality: one
     interface: ContextAssembler
     default: none
+    contract: none
     status: unfilled
     why: >-
       Builds a session briefing for an agent from the record (rebuild 4 kernel-mcp briefing, M6-T7, for the
@@ -111,21 +126,25 @@ slots:
     cardinality: many
     interface: pack (kernel/packs/packs.yaml)
     default: pack-loader              # packs.sql generated from kernel/packs, reviewed as code
+    contract: provider-tests
     status: ported
   - id: self-encoder
     cardinality: one
     interface: Encoder
     default: self-encoder             # encodes this file, provider manifests and a distribution file as claims
+    contract: provider-tests
     status: written
   - id: evaluator
     cardinality: one
     interface: Evaluator
     default: evaluator                # records eval runs as DQV measurements; candidate vs incumbent in G2
+    contract: provider-tests
     status: ported
   - id: harness-adapter
     cardinality: many
     interface: HarnessAdapter
     default: claude-code
+    contract: provider-tests
     status: to-port
 
 couplings:
