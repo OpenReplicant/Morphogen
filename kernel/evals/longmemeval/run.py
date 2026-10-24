@@ -7,8 +7,9 @@ of a long chat history, and does a small reader answer from it?
                                                           each history into its own scope through the normal
                                                           write path, validated and indexed
   python kernel/evals/longmemeval/run.py retrieval DB [--n N] [--label L]
-                                                          each question through kk.recall (what the MCP `recall`
-                                                          tool runs) as a role that can read only that question's
+                                                          each question through kk.recall (what kernel-mcp's
+                                                          `search` runs, less its substring fallback) as a role
+                                                          that can read only that question's
                                                           history, scored as LongMemEval's own retrieval code does:
                                                           recall_any, recall_all and NDCG at 5 and 10, by turn and by
                                                           session (turns ranked, then collapsed to sessions)
@@ -80,7 +81,9 @@ def fetch() -> None:
     got = hashlib.sha256(DATA.read_bytes()).hexdigest()
     if got != SHA:
         sys.exit(f"{DATA}: sha256 {got}, expected {SHA}")
-    print(json.dumps({"data": str(DATA), "sha256": got}))
+    from kk import recall
+    ce = recall.reranker(download=True)      # the cross-encoder for KK_RERANK=1 (requirements.txt), into KK_EMBED_CACHE
+    print(json.dumps({"data": str(DATA), "sha256": got, "reranker": recall.RERANKER if ce else None, "cache": recall.cache()}))
 
 
 def sample(n: int) -> list[dict]:
@@ -214,7 +217,7 @@ def retrieval(db: str, n: int, label: str) -> dict:
     from kk import recall
     from kk.lib import connect
     qs = [q for q in sample(n) if not q["question_id"].endswith("_abs")]   # abstention has no evidence
-    rows, lat = [], []
+    rows, lat, leaked = [], [], 0
     with connect(url=f"dbname={db}") as admin:
         for q in qs:
             all_turns = list(turns(q))
@@ -226,6 +229,7 @@ def retrieval(db: str, n: int, label: str) -> dict:
             lat.append(time.time() - t0)
             admin.execute("reset role")
             ranked = [c["subject"] for c in found if c.get("scope") == scope(q)]
+            leaked += sum(1 for c in found if c.get("scope") not in (scope(q), "urn:kk:scope:vocab"))
             row = {"type": q["question_type"]}
             for k in (5, 10):
                 if gold_turns:
@@ -245,8 +249,12 @@ def retrieval(db: str, n: int, label: str) -> dict:
     out = {"eval": "longmemeval_s retrieval", "label": label, "questions": len(rows), "metrics": metrics,
            "session_recall_by_type": by_type, "latency_s": {"p50": round(statistics.median(lat), 3),
                                                                  "p95": round(sorted(lat)[int(0.95 * len(lat))], 3)},
-           "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)" + ("" if os.environ.get("KK_RERANK") == "0" else ", re-ranked when the cross-encoder is cached"), "date": date.today().isoformat(),
+           "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)",
+           "reranker": recall.RERANKER if recall.reranker() is not None else None,
+           "other_scopes": leaked, "date": date.today().isoformat(),
            "counts": dict(Counter(r["type"] for r in rows))}
+    if leaked:
+        sys.exit(f"{leaked} recalled claims came from another question's scope: row-level security failed")
     (HERE / "runs").mkdir(exist_ok=True)
     (HERE / "runs" / f"{date.today().isoformat()}-{label}.json").write_text(json.dumps(out, indent=2) + "\n")
     return out

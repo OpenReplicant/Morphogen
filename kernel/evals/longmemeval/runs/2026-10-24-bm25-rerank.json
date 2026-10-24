@@ -55,10 +55,12 @@
     }
   },
   "latency_s": {
-    "p50": 4.628,
-    "p95": 5.01
+    "p50": 4.586,
+    "p95": 4.919
   },
-  "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75), re-ranked when the cross-encoder is cached",
+  "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)",
+  "reranker": "jinaai/jina-reranker-v1-turbo-en",
+  "other_scopes": 0,
   "date": "2026-10-24",
   "counts": {
     "multi-session": 25,

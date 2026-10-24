@@ -55,10 +55,12 @@
     }
   },
   "latency_s": {
-    "p50": 0.325,
-    "p95": 0.503
+    "p50": 0.31,
+    "p95": 0.474
   },
   "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)",
+  "reranker": null,
+  "other_scopes": 0,
   "date": "2026-10-24",
   "counts": {
     "multi-session": 25,

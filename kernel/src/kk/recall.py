@@ -7,10 +7,10 @@ lexemes), ranked by ts_rank_cd, then belief. When nothing matches, a case-insens
 labels and subject IRIs is the fallback (short inputs, partial words, identifiers). Every statement runs
 as the caller's role, so row-level security applies.
 
-With fastembed installed and its cross-encoder already in the local cache (KK_EMBED_CACHE, default
-~/.cache/knowledge-kernel/fastembed), `recall` re-ranks the first POOL claims by subject (D-66, T16): a search
-never downloads a model (`reranker(download=True)` does, once, from an eval's fetch or an install step), and
-KK_RERANK=0 turns it off.
+Re-ranking is opt-in (KK_RERANK=1, D-66, T16): with fastembed installed and its cross-encoder already in the
+local cache (KK_EMBED_CACHE, default ~/.cache/knowledge-kernel/fastembed), `recall` and kernel-mcp's `search`
+re-rank the first POOL claims by subject. A search never downloads a model: `reranker(download=True)` does,
+once (kernel/evals/longmemeval/run.py fetch). Pinned set: kernel/evals/longmemeval/requirements.txt.
 
 Ported from rebuild 4 modules/kernel-mcp/kernel_mcp/recall.py. Not ported yet: dense fusion (D-61).
 """
@@ -79,9 +79,9 @@ def cache() -> str:
 
 
 def reranker(model: str = RERANKER, download: bool = False):
-    """The cross-encoder (fastembed, ONNX on CPU), loaded once from cache(). None when KK_RERANK=0, when
+    """The cross-encoder (fastembed, ONNX on CPU), loaded once from cache(). None unless KK_RERANK=1, and when
     fastembed is not installed, or when the model is not in the cache and `download` is false."""
-    if os.environ.get("KK_RERANK") == "0":
+    if os.environ.get("KK_RERANK") != "1" and not download:
         return None
     key = (model, download)
     if key not in _models:
