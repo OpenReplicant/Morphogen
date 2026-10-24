@@ -1,99 +1,178 @@
 """Running code that was not reviewed (a model-written candidate, an agent harness) as an OS user of its
 own (R5-24).
 
-The OS user is KK_RUN_AS: a user with no rights of its own (no login shell, no home, in no group with
-files of ours). The process that starts such code (the sandbox, the reconciler, the builder) must be able
-to switch to it: root, or CAP_SETUID and CAP_SETGID. What the confined code can then reach:
+KK_RUN_AS names a pool of OS users (comma-separated), each with no rights of its own: no login shell, no
+home, in no group with files of ours. Each run leases one user for itself (`lease()`, a lock only root
+can take), so two confined runs never share a user: they cannot read each other's environment, trace
+each other or end each other's processes. The process that starts confined code (the sandbox, the
+reconciler, the builder) must be able to switch users: root, or CAP_SETUID and CAP_SETGID.
 
-  files      only what is readable by any user: the repository, the Python it runs with, and the copy of
-             its own code in a `workspace()`; its own `home()` is the one place it may write. This
-             process's private directories (0700) and its /proc entries (root's) are closed to it.
-  database   only the login it is given (morphogen.logins): `check_cluster` refuses to run anything
-             while the cluster lets any login in without its password, as a cluster trusting local
-             sockets would.
-  processes  `kill_all` ends every process of the run user, whatever it started and however detached.
-
-Nothing here runs without KK_RUN_AS: `run_user()` raises Unconfined, and callers refuse to run the code.
+What a confined run can reach:
+  files      what any user may read (the repository, the Python it runs with), the copy of its own code
+             made by `copy_tree` (regular files and directories only, fixed modes) in a `workspace()`, and
+             its `home()`, the one place it writes. Private directories (0700) and root's /proc entries
+             are closed to it.
+  database   only the login it is given: `check_cluster` refuses while the cluster's pg_hba trusts any
+             connection, or a probe run as the leased user reaches any login role without a password
+             over the address the code gets (and 127.0.0.1, ::1). It does not see a password the operator
+             left readable (never write one in the repository).
+  processes  at most RLIMIT_NPROC of them, no core files, files up to RLIMIT_FSIZE; `Lease.kill_all`
+             ends every process whose real uid is the leased user (kill(-1) from a process running as
+             it, so setuid children too), until none is left.
+Not confined: the network. A run can reach any address the host can (R5-24 (f)).
 """
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import json
 import os
 import pwd
+import resource
 import shutil
-import signal
+import stat
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 
+import psycopg
+
 
 class Unconfined(RuntimeError):
     """Model-written code would run without an OS user of its own, or could reach past its login."""
 
 
-def run_user() -> pwd.struct_passwd:
-    name = os.environ.get("KK_RUN_AS")
-    if not name:
+LOCKS = Path(os.environ.get("KK_RUN_LOCKS", "/run/lock/kk-confine"))
+LIMITS = {resource.RLIMIT_NPROC: 512, resource.RLIMIT_CORE: 0, resource.RLIMIT_FSIZE: 1 << 30}
+
+
+def pool() -> list[pwd.struct_passwd]:
+    names = [x.strip() for x in os.environ.get("KK_RUN_AS", "").split(",") if x.strip()]
+    if not names:
         raise Unconfined("KK_RUN_AS is not set: model-written code runs only as an OS user of its own")
-    try:
-        u = pwd.getpwnam(name)
-    except KeyError:
-        raise Unconfined(f"KK_RUN_AS names no user: {name}") from None
-    if u.pw_uid in (0, os.geteuid()):
-        raise Unconfined(f"KK_RUN_AS ({name}) must be a user other than root and this process's own")
-    return u
-
-
-def popen(cmd: list[str], env: dict, **kw) -> subprocess.Popen:
-    """Start cmd as the run user, in a session of its own, with exactly `env`."""
-    u = run_user()
-    return subprocess.Popen(cmd, env=env, user=u.pw_uid, group=u.pw_gid, extra_groups=[], umask=0o077,
-                            start_new_session=True, **kw)
-
-
-def run(cmd: list[str], env: dict, timeout: float | None = None, **kw) -> subprocess.CompletedProcess:
-    """popen, waited for; on a timeout every process of the run user is ended."""
-    with popen(cmd, env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **kw) as p:
+    users = []
+    for name in names:
         try:
-            out, err = p.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            kill_all()
-            out, err = p.communicate()
-        return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+            u = pwd.getpwnam(name)
+        except KeyError:
+            raise Unconfined(f"KK_RUN_AS names no user: {name}") from None
+        if u.pw_uid in (0, os.geteuid()):
+            raise Unconfined(f"KK_RUN_AS ({name}) must be a user other than root and this process's own")
+        users.append(u)
+    return users
 
 
-def kill_all() -> int:
-    """End every process of the run user. Returns how many were signalled."""
-    uid, n = run_user().pw_uid, 0
-    for _ in range(20):                                  # again, for anything forked meanwhile
-        found = []
-        for proc in Path("/proc").iterdir():
+def _limits() -> None:
+    for k, v in LIMITS.items():
+        resource.setrlimit(k, (v, v))
+
+
+class Lease:
+    """One leased run user: start code as it, end all of it."""
+
+    def __init__(self, user: pwd.struct_passwd):
+        self.user = user
+
+    @property
+    def name(self) -> str:
+        return self.user.pw_name
+
+    def popen(self, cmd: list[str], env: dict, **kw) -> subprocess.Popen:
+        """Start cmd as the leased user, in a session of its own, with exactly `env`, under LIMITS."""
+        return subprocess.Popen(cmd, env=env, user=self.user.pw_uid, group=self.user.pw_gid, extra_groups=[],
+                                umask=0o077, start_new_session=True, preexec_fn=_limits, **kw)
+
+    def run(self, cmd: list[str], env: dict, timeout: float | None = None, **kw) -> subprocess.CompletedProcess:
+        """popen, waited for; on a timeout every process of the leased user is ended."""
+        with self.popen(cmd, env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **kw) as p:
             try:
-                if proc.name.isdigit() and proc.stat().st_uid == uid \
-                        and (proc / "stat").read_text().rsplit(")", 1)[1].split()[0] != "Z":   # a zombie is already dead
-                    found.append(int(proc.name))
+                out, err = p.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                self.kill_all()
+                out, err = p.communicate()
+            return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+
+    def live(self) -> list[int]:
+        """Processes whose real uid is the leased user (setuid ones too), zombies aside."""
+        out = []
+        for proc in Path("/proc").iterdir():
+            if not proc.name.isdigit():
+                continue
+            try:
+                status = dict(line.split(":", 1) for line in (proc / "status").read_text().splitlines() if ":" in line)
             except OSError:
                 continue
-        live = []
-        for pid in found:
+            if int(status["Uid"].split()[0]) == self.user.pw_uid and not status["State"].strip().startswith("Z"):
+                out.append(int(proc.name))
+        return out
+
+    def kill_all(self) -> None:
+        """End every process whose real uid is the leased user: kill(-1, SIGKILL) from a process running as
+        it (which reaches exactly those, with no pid to reuse), again until none is left."""
+        for _ in range(100):
+            if not self.live():
+                return
+            subprocess.run([sys.executable, "-I", "-c", "import os, signal; os.kill(-1, signal.SIGKILL)"],
+                           user=self.user.pw_uid, group=self.user.pw_gid, extra_groups=[], env={"PATH": "/usr/bin:/bin"},
+                           cwd="/", capture_output=True)
+            time.sleep(0.02)
+        raise Unconfined(f"the processes of {self.name} keep coming back")
+
+    @contextlib.contextmanager
+    def home(self, prefix: str = "kk-home-"):
+        """A directory only the leased user may write (HOME and TMPDIR for the confined code); removed
+        after, once every process of the user has ended."""
+        d = Path(tempfile.mkdtemp(prefix=prefix))
+        try:
+            os.chown(d, self.user.pw_uid, self.user.pw_gid)
+            d.chmod(0o700)
+            yield d
+        finally:
+            self.kill_all()
+            shutil.rmtree(d, ignore_errors=True)
+
+    def take_back(self, d: Path) -> None:
+        """End the user's processes, then make everything under d root's and closed to it: what it wrote
+        cannot change while it is checked and copied."""
+        self.kill_all()
+        for p in [d, *d.rglob("*")]:
+            os.chown(p, 0, 0, follow_symlinks=False)
+            if not p.is_symlink():
+                p.chmod(0o700 if p.is_dir() or p.stat().st_mode & 0o111 else 0o600)
+
+
+@contextlib.contextmanager
+def lease():
+    """A run user nobody else holds, for the life of the context. Its leftovers are ended first."""
+    LOCKS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if LOCKS.stat().st_uid != os.geteuid() or LOCKS.stat().st_mode & 0o077:
+        raise Unconfined(f"{LOCKS} must be this process's own and closed to others")
+    for u in pool():
+        f = open(LOCKS / f"{u.pw_name}.lock", "w")
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            f.close()
+            continue
+        got = Lease(u)
+        try:
+            got.kill_all()
+            yield got
+        finally:
             try:
-                os.kill(pid, signal.SIGKILL)
-                live.append(pid)
-            except OSError:
-                pass
-        if not live:
-            return n
-        n += len(live)
-        time.sleep(0.05)
-    raise Unconfined("the run user's processes keep coming back")
+                got.kill_all()
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+            f.close()
+        return
+    raise Unconfined(f"every run user in KK_RUN_AS is in use ({len(pool())})")
 
 
 @contextlib.contextmanager
 def workspace(prefix: str = "kk-ws-"):
-    """A directory the run user may read but not write: copy code here to run it confined."""
+    """A directory run users may read but not write: copy code here (copy_tree) to run it confined."""
     d = Path(tempfile.mkdtemp(prefix=prefix))
     try:
         d.chmod(0o755)
@@ -102,56 +181,93 @@ def workspace(prefix: str = "kk-ws-"):
         shutil.rmtree(d, ignore_errors=True)
 
 
-def readable(d: Path) -> None:
-    """Make a copied tree readable by the run user (directories 0755, files 0644)."""
-    for p in [d, *d.rglob("*")]:
-        if not p.is_symlink():
-            p.chmod(0o755 if p.is_dir() else 0o644)
-
-
-@contextlib.contextmanager
-def home(prefix: str = "kk-home-"):
-    """A directory only the run user may write (HOME and TMPDIR for the confined code); removed after,
-    once every process of the run user has ended."""
-    u = run_user()
-    d = Path(tempfile.mkdtemp(prefix=prefix))
-    try:
-        os.chown(d, u.pw_uid, u.pw_gid)
-        d.chmod(0o700)
-        yield d
-    finally:
-        kill_all()
-        shutil.rmtree(d, ignore_errors=True)
+def copy_tree(src: Path, dst: Path, skip: tuple[str, ...] = ("__pycache__",)) -> None:
+    """Copy src to dst as new root-owned files: directories 0755, files 0644 (0755 when the source has any
+    execute bit). Only regular files and directories, each with one link; anything else (a symbolic or
+    hard link, a device, a fifo, a socket) is refused. No source mode, owner or setuid bit is carried."""
+    def copy(s: Path, d: Path) -> None:
+        st = os.lstat(s)
+        if stat.S_ISDIR(st.st_mode):
+            os.mkdir(d, 0o755)
+            os.chmod(d, 0o755)
+            for name in sorted(os.listdir(s)):
+                if name not in skip:
+                    copy(s / name, d / name)
+        elif stat.S_ISREG(st.st_mode) and st.st_nlink == 1:
+            fd = os.open(s, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                if os.fstat(fd).st_ino != st.st_ino:
+                    raise ValueError(f"{s} changed while it was copied")
+                with os.fdopen(os.dup(fd), "rb") as r, open(d, "xb") as w:
+                    shutil.copyfileobj(r, w)
+            finally:
+                os.close(fd)
+            os.chmod(d, 0o755 if st.st_mode & 0o111 else 0o644)
+        else:
+            raise ValueError(f"{s} is not a regular file or directory with one link")
+    copy(src, dst)
 
 
 PROBE = """
 import json, sys
 import psycopg
-open_to = []
-for role in json.loads(sys.argv[1]):
-    try:
-        psycopg.connect(dbname="postgres", user=role, connect_timeout=5).close()
-        open_to.append(role)
-    except Exception:
-        pass
-print(json.dumps(open_to))
+args = json.loads(sys.argv[1])
+found, errors = [], []
+for host, required in args["hosts"]:
+    for db in args["databases"]:
+        for role in args["roles"]:
+            try:
+                psycopg.connect(host=host, port=args["port"], dbname=db, user=role, connect_timeout=5).close()
+                found.append(f"{role}@{db} via {host}")
+            except psycopg.OperationalError as e:
+                text = str(e)
+                if "password" in text or "no pg_hba.conf entry" in text or "does not exist" in text:
+                    continue            # asked for a password, or no rule lets it in, or no such database/role
+                if required:
+                    errors.append(f"{host}: {text.strip()[:200]}")
+print(json.dumps({"found": found, "errors": errors}))
 """
 
 
-def check_cluster(env: dict, roles: list[str]) -> None:
-    """Refuse when the cluster, reached as the confined code would reach it (env: PGHOST, PGPORT), lets
-    any of these login roles in without a password. Run as the run user, so peer auth answers for it."""
-    probe = {k: v for k, v in env.items() if k in ("PATH", "LANG", "PGHOST", "PGPORT", "PGSSLMODE")}
-    with home() as h:
-        probe.update(HOME=str(h), TMPDIR=str(h), PGPASSFILE=os.devnull, PGSERVICEFILE=os.devnull)
-        out = run([sys.executable, "-I", "-c", PROBE, json.dumps(sorted(roles))], probe, timeout=60, cwd=h)
+def check_cluster(su, run: Lease, host: str, port: str) -> None:
+    """Refuse unless the cluster asks every connection for a password. `su`: a connection to the cluster (a
+    superuser's, to read pg_hba_file_rules; otherwise only the probe decides); host, port: where the
+    confined code connects (a socket directory or a host name)."""
+    try:
+        bad = su.execute("""select line_number, type, database, user_name, auth_method, error from pg_hba_file_rules
+                            where error is not null or auth_method in ('trust', 'ident', 'peer')""").fetchall()
+    except psycopg.errors.InsufficientPrivilege:          # not a superuser: the probe below decides alone
+        su.rollback() if not su.autocommit else None
+        bad = []
+    for line, kind, dbs, users, method, error in bad:
+        if error:
+            raise Unconfined(f"pg_hba.conf line {line}: {error}")
+        if method == "trust":
+            raise Unconfined(f"pg_hba.conf line {line} trusts {kind} connections ({users} to {dbs}): confined code "
+                             "could act as any role (use scram-sha-256)")
+        if run.name in (users or []) or "all" in (users or []):
+            maps = su.execute("select system_user from pg_ident_file_mappings").fetchall()
+            if method != "peer" or any(m[0] in (run.name, "all") or m[0].startswith("/") for m in maps):
+                raise Unconfined(f"pg_hba.conf line {line} ({method}) could let {run.name} in as a database role")
+    roles = [r[0] for r in su.execute("select rolname from pg_roles where rolcanlogin").fetchall()]
+    dbs = [r[0] for r in su.execute("select datname from pg_database where datallowconn").fetchall()]
+    hosts = [(host, True)] + [(h, False) for h in ("127.0.0.1", "::1") if h != host]
+    with run.home() as h:
+        env = {"PATH": "/usr/bin:/bin", "HOME": str(h), "PGPASSFILE": os.devnull, "PGSERVICEFILE": os.devnull}
+        out = run.run([sys.executable, "-I", "-c", PROBE,
+                       json.dumps({"hosts": hosts, "port": port, "databases": dbs, "roles": roles})], env, timeout=300, cwd=h)
     if out.returncode:
-        raise Unconfined(f"the cluster probe failed as {run_user().pw_name}: {(out.stderr or '').strip()[-300:]}")
-    open_to = json.loads(out.stdout or "[]")
-    if open_to:
-        raise Unconfined(f"the cluster lets {', '.join(open_to)} in without a password: confined code could act "
-                         "as any of them (use scram-sha-256 or md5 in pg_hba.conf, not trust)")
+        raise Unconfined(f"the cluster probe failed as {run.name}: {(out.stderr or '').strip()[-300:]}")
+    got = json.loads(out.stdout)
+    if got["errors"]:
+        raise Unconfined(f"the cluster probe could not reach {host}:{port} as {run.name}: {got['errors'][0]}")
+    if got["found"]:
+        raise Unconfined(f"the cluster lets {run.name} in without a password: {', '.join(got['found'][:5])}")
 
 
-def login_roles(conn) -> list[str]:
-    return [r[0] for r in conn.execute("select rolname from pg_roles where rolcanlogin").fetchall()]
+def where(conninfo: str = "") -> tuple[str, str]:
+    """(host, port) a conninfo (or the PG* environment) points at."""
+    from psycopg.conninfo import conninfo_to_dict
+    d = conninfo_to_dict(conninfo) if conninfo else {}
+    return (str(d.get("host") or os.environ.get("PGHOST") or "/var/run/postgresql"),
+            str(d.get("port") or os.environ.get("PGPORT") or "5432"))

@@ -121,6 +121,7 @@ def main() -> None:
             su.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{role}') then "
                        f"create role {role} login password '{role}'; end if; end $$")
             su.execute(f"grant {member_of} to {role}")
+        su.execute(f"grant connect on database {DB} to {ROLE}, t_mcp_switcher, t_mcp_reviewer")   # install revokes it from public
         su.execute("set role kk_owner")
         su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, %s, 'software', 'MCP test agent'),"
                    " ('urn:kk:agent:test-mcp-switcher', 't_mcp_switcher', 'software', 'switcher'),"

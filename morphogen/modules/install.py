@@ -30,10 +30,12 @@ def install(db: str, names: list[str]) -> None:
     for name in names:
         kernel.psql(db, "-f", str(HERE / name / "migration.sql"))
     pw = os.environ.get("KK_LOGIN_PASSWORD")
-    for name in names if pw else []:
+    for name in names:
         login = next((line.split(":", 1)[1].strip() for line in (HERE / name / "provider.yaml").read_text().splitlines()
                       if line.startswith("login:")), None)
-        if login:                                     # -f, so psql quotes the password (-c would not)
+        if login:                                     # the database revokes connect from public (kernel install)
+            kernel.psql(db, "-c", f'grant connect on database "{db}" to "{login}"')
+        if login and pw:                              # -f, so psql quotes the password (-c would not)
             with tempfile.NamedTemporaryFile("w", suffix=".sql") as f:
                 f.write(f'alter role "{login}" password :\'pw\';\n')
                 f.flush()

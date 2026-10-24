@@ -1,8 +1,9 @@
 id: urn:kk:eval:analyser/retracted-and-superseded
 text: 'a second pass after the newest observation is retracted and the limit is superseded
-  by a lower one: the spike is among the latest windows again, over the new limit
-  and unusual; a provider that keeps what it read before, or reads retracted observations
-  or superseded limits, misses both'
+  by a higher one: the spike is among the latest windows again and unusual, but under
+  the limit now in force; a provider that keeps what it read, or reads retracted observations,
+  misses the z-score, and one that reads the superseded limit flags a limit anomaly
+  it should not'
 input:
   observations:
   - id: o0
@@ -59,7 +60,7 @@ input:
   - id: L0
     target: urn:kk:node:shop
     property: urn:kk:property:latency-seconds-mean
-    value: 0.1
+    value: 0.04
 expect:
   anomalies: []
 then:
@@ -69,14 +70,10 @@ then:
   - id: L1
     target: urn:kk:node:shop
     property: urn:kk:property:latency-seconds-mean
-    value: 0.04
+    value: 0.1
     supersedes: L0
   expect:
     anomalies:
-    - kind: limit
-      target: urn:kk:node:shop
-      observation: o6
-      limit: L1
     - kind: zscore
       target: urn:kk:node:shop
       observation: o6

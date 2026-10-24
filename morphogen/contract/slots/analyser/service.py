@@ -70,13 +70,14 @@ def ops(paths: list[Path]) -> tuple[list[dict], dict[int, dict]]:
 def then(paths: list[Path], ids: dict[str, tuple[int, str, str]]) -> tuple[list[dict], dict[int, dict]]:
     claim = {v: k for k, v in ids.items()}
     out, expected = [], {}
-    key = lambda r: (r["target"], r["observation"], r["kind"])
+    key = lambda r: (r["target"], r["observation"], r["kind"], r.get("limit"))     # a limit anomaly names its limit
     for n, path in enumerate(sorted(paths)):
         case = yaml.safe_load(path.read_text())
         stage = case.get("then") or {}
         first = {key(r) for r in case["expect"]["anomalies"]}
         expected[n] = {"id": case["id"] + "#then",
-                       "anomalies": sorted((r for r in (stage.get("expect") or {}).get("anomalies", []) if key(r) not in first), key=key)}
+                       "anomalies": sorted((r for r in (stage.get("expect") or {}).get("anomalies", []) if key(r) not in first),
+                                           key=lambda r: (r["target"], r["observation"], r["kind"]))}
         for o in stage.get("retract") or []:
             out.append({"op": "set_status", "claim": claim[(n, "obs", o)], "status": "deprecated", "reason": "retracted"})
         for x in stage.get("limits") or []:

@@ -68,7 +68,9 @@ def main() -> None:
     # directory outside intent, as the run user, with only the variables it was allowed.
     home = Path(tempfile.mkdtemp())
     subprocess.run(["git", "-C", str(home), "init", "-q"], check=True)
-    home.chmod(0o777)                                    # writable by the run user: the git check must catch it
+    home.chmod(0o755)
+    (home / "open").mkdir(mode=0o777)                   # writable by the run user: the git check must catch it
+    (home / "open").chmod(0o777)
     exps = home / "experiments"
     with confine.workspace() as ws:
         script = ws / "harness.py"
@@ -80,32 +82,48 @@ def main() -> None:
                           "assert os.getuid() != 0, 'runs as root'\n"
                           "try:\n    pathlib.Path(f'/proc/{os.getppid()}/environ').read_bytes(); sys.exit('read its parent')\n"
                           "except PermissionError:\n    pass\n"
-                          "if len(sys.argv) > 3: pathlib.Path(sys.argv[3]).write_text('x')\n")
+                          "w = pathlib.Path(sys.argv[1])\n"
+                          "if len(sys.argv) > 3 and sys.argv[3] == 'setuid':\n"
+                          "    import shutil; shutil.copy('/bin/sh', w / 'sh'); (w / 'sh').chmod(0o4755)\n"
+                          "elif len(sys.argv) > 3 and sys.argv[3] == 'link':\n"
+                          "    (w / 'l').symlink_to('/etc/shadow')\n"
+                          "elif len(sys.argv) > 3: pathlib.Path(sys.argv[3]).write_text('x')\n")
         script.chmod(0o644)
+        su = connect(url="dbname=postgres")
         os.environ.update(DATABASE_URL="dbname=secret", HARNESS_KEY="k", OTHER_SECRET="s", KK_BUILDER_ENV="HARNESS_KEY")
         run_as = os.environ.pop("KK_RUN_AS")
         try:
             build({"iri": "urn:kk:request:h0", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
-                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}")
+                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}", cluster=su)
             check(False, "the harness runs without an OS user of its own")
         except confine.Unconfined:
             check(True, "without KK_RUN_AS the harness does not run")
         os.environ["KK_RUN_AS"] = run_as
-        with connect(url="dbname=postgres") as su:
-            roles = confine.login_roles(su)
         got = build({"iri": "urn:kk:request:h", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
-                    "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}", roles=roles)
+                    "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}", cluster=su)
         check(got["provider"] == "urn:kk:provider:anomaly-h" and (got["dir"] / "prompt.md").exists()
               and "runner.py" in (got["dir"] / "prompt.md").read_text(),
               f"harness: run as {run_as} on a copy of the incumbent outside intent, with only the variables KK_BUILDER_ENV "
               "names, unable to read its parent's environment, with a prompt naming the slot's runner")
         try:
             build({"iri": "urn:kk:request:h2", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
-                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} {home / 'stray.txt'}")
+                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} {home / 'open' / 'stray.txt'}", cluster=su)
             check(False, "a harness that writes outside its workdir fails the build")
         except RuntimeError as e:
             check("outside its workdir" in str(e) and not (exps / experiment_id("urn:kk:request:h2")).exists(),
                   "a harness that writes outside its workdir fails the build")
+        got = build({"iri": "urn:kk:request:h3", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
+                    "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} setuid", cluster=su)
+        sh = got["dir"] / got["candidate"] / "sh"
+        check(sh.stat().st_uid == 0 and not sh.stat().st_mode & 0o7000 and oct(sh.stat().st_mode & 0o777) == "0o755",
+              f"a setuid file the harness made arrives as a plain root file ({oct(sh.stat().st_mode & 0o7777)})")
+        try:
+            build({"iri": "urn:kk:request:h4", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
+                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} link", cluster=su)
+            check(False, "a symbolic link the harness made is refused")
+        except ValueError as e:
+            check("not a regular file" in str(e), "a symbolic link the harness made is refused")
+        su.close()
     for k in ("DATABASE_URL", "HARNESS_KEY", "OTHER_SECRET", "KK_BUILDER_ENV"):
         del os.environ[k]
 

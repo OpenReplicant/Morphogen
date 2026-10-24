@@ -34,10 +34,11 @@ def login_of(provider_dir: Path) -> tuple[str, str] | None:
     return (meta["role"], meta["login"]) if meta.get("role") and meta.get("login") else None
 
 
-def login_env(base_url: str, role: str, login: str, extra: dict) -> dict:
+def login_env(base_url: str, role: str, login: str, extra: dict, password: str | None = None) -> dict:
     """The allow-listed environment, DATABASE_URL for the login (on base_url's database) and KK_ROLE,
-    plus `extra` (PYTHONPATH, OTEL_*, the provider's KK_* settings)."""
-    pw = os.environ.get("KK_LOGIN_PASSWORD")
+    plus `extra` (PYTHONPATH, OTEL_*, the provider's KK_* settings). The password is `password`, or
+    KK_LOGIN_PASSWORD."""
+    pw = password or os.environ.get("KK_LOGIN_PASSWORD")
     url = make_conninfo(base_url, user=login, **({"password": pw} if pw else {}))
     return {**{k: v for k, v in os.environ.items() if k in KEEP}, **extra, "DATABASE_URL": url, "KK_ROLE": role}
 

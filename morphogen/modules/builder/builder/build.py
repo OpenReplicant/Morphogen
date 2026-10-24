@@ -15,7 +15,9 @@ provider directory, by one of two strategies:
             KK_BUILDER_ENV (its own model credentials, e.g. ANTHROPIC_API_KEY): none of the record's,
             telemetry's or git's. It does not run while the cluster lets any login in without its
             password. If the repository's or intent's git state changed while it ran, the build fails.
-            Only the workdir is copied into the experiment; then every process of the run user is ended.
+            The harness runs as a leased run user; afterwards every process of that user is ended and the
+            workdir is made root's before it is checked, then copied into the experiment as new files with
+            fixed modes (regular files and directories only: a link, device or setuid bit never arrives).
 
 Either way the result must be a provider of the slot (provider.yaml with that slot and a service) with an
 id of its own, and no migration.sql but the incumbent's, unchanged (a candidate gets no grants of its own).
@@ -107,9 +109,10 @@ def check_candidate(d: Path, slot: str, incumbent_id: str, incumbent: Path | Non
 
 
 def build(request: dict, slot: str, incumbent: Path, experiments: Path, strategy: str,
-          fixtures: Path | None = None, command: str | None = None, roles: list[str] | None = None) -> dict:
-    """Make the experiment directory; returns {id, dir, candidate, provider, sha256}. `roles`: the cluster's
-    login roles, which the harness must not reach without a password (morphogen.confine.check_cluster)."""
+          fixtures: Path | None = None, command: str | None = None, cluster=None) -> dict:
+    """Make the experiment directory; returns {id, dir, candidate, provider, sha256}. `cluster`: a connection
+    to the cluster, which the harness must not reach without a password (morphogen.confine.check_cluster);
+    the harness strategy needs it."""
     exp_id = experiment_id(request["iri"])
     exp = experiments / exp_id
     if exp.exists():
@@ -125,33 +128,31 @@ def build(request: dict, slot: str, incumbent: Path, experiments: Path, strategy
         elif strategy == "harness":
             if not command:
                 raise ValueError("the harness strategy needs KK_BUILDER_COMMAND")
+            if cluster is None:
+                raise ValueError("the harness strategy needs a connection to check the cluster with")
             name = f"{incumbent.name}-{exp_id}"
-            u = confine.run_user()
-            with confine.home("kk-build-") as tmp:
+            with confine.lease() as run, run.home("kk-build-") as tmp:
+                confine.check_cluster(cluster, run, *confine.where(os.environ.get("DATABASE_URL", "")))
                 env = harness_env(tmp)
-                if roles is not None:
-                    confine.check_cluster({**env, **{k: v for k, v in os.environ.items() if k in KEEP}}, roles)
                 scratch = tmp / name
-                shutil.copytree(incumbent, scratch, ignore=shutil.ignore_patterns("__pycache__", "_mutant"))
+                confine.copy_tree(incumbent, scratch, skip=("__pycache__", "_mutant"))
                 for x in [scratch, *scratch.rglob("*")]:
-                    os.chown(x, u.pw_uid, u.pw_gid, follow_symlinks=False)
+                    os.chown(x, run.user.pw_uid, run.user.pw_gid, follow_symlinks=False)
                 (exp / "prompt.md").write_text(prompt(request, slot, incumbent, scratch))
                 cmd = [a.replace("{workdir}", str(scratch)).replace("{prompt}", (exp / "prompt.md").read_text())
                        for a in shlex.split(command)]
                 watched = [ROOT, experiments.parent]
                 before = [git_state(x) for x in watched]
-                out = confine.run(cmd, env, timeout=1800, cwd=scratch)
-                confine.kill_all()
+                out = run.run(cmd, env, timeout=1800, cwd=scratch)
+                run.take_back(tmp)                       # nothing of the run user's left to change what is checked
                 changed = [str(x) for x, b in zip(watched, before) if git_state(x) != b]
                 (exp / "harness.log").write_text((out.stdout or "")[-20000:] + "\n--- stderr\n" + (out.stderr or "")[-5000:])
                 if changed:
                     raise RuntimeError(f"the harness changed files outside its workdir: {changed}")
                 if out.returncode:
                     raise RuntimeError(f"the harness exited {out.returncode}")
-                if any(x.is_symlink() for x in scratch.rglob("*")):
-                    raise ValueError("the candidate contains a symbolic link")
                 work = exp / name
-                shutil.copytree(scratch, work, ignore=shutil.ignore_patterns("__pycache__"))
+                confine.copy_tree(scratch, work)         # regular files only, fixed modes; a link is refused
         else:
             raise ValueError(f"unknown strategy {strategy!r}")
         meta = check_candidate(work, slot, yaml.safe_load((incumbent / "provider.yaml").read_text())["id"], incumbent)

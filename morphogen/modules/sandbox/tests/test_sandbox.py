@@ -24,7 +24,7 @@ from psycopg.types.json import Jsonb  # noqa: E402
 from kk.lib import connect  # noqa: E402
 import yaml  # noqa: E402
 from morphogen import confine  # noqa: E402
-from sandbox.measure import contract, experiment, service_cases  # noqa: E402
+from sandbox.measure import contract, drop_login, experiment, fresh_login, service_cases  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -63,8 +63,23 @@ PROBE = """    import pathlib, pwd, psycopg
         str(any(pathlib.Path("../..").rglob("*.json"))),
         pwd.getpwuid(os.getuid()).pw_name,
         _try(lambda: pathlib.Path(f"/proc/{{os.getppid()}}/environ").read_bytes()),
-        _try(lambda: psycopg.connect(dbname="postgres", user="postgres", connect_timeout=5).close())]))
+        _try(lambda: psycopg.connect(dbname="postgres", user="postgres", connect_timeout=5).close()),
+        _try(lambda: psycopg.connect(os.environ["DATABASE_URL"], dbname={record!r}, connect_timeout=5).close())]))
 """
+
+
+def confined(provider: Path, db: str) -> tuple[dict, dict]:
+    """The rule and service cases on one provider directory, run as measure() runs them."""
+    bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
+    with confine.workspace() as ws, confine.lease() as run, run.home() as h:
+        (ws / "p").mkdir(mode=0o755)
+        copy = ws / "p" / provider.name
+        confine.copy_tree(provider, copy)
+        login = fresh_login("kkm_anomaly")
+        try:
+            return contract(copy, run, h), service_cases(copy, "analyser", bench, login, db, "urn:kk:agent:anomaly", run, h)
+        finally:
+            drop_login(login)
 
 
 def main() -> None:
@@ -90,15 +105,14 @@ def main() -> None:
     probe = drop / "probe.txt"
     m = exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
     hook = 'def one_pass(conn, seen: dict | None = None) -> dict:\n'
-    m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe)), 1))
+    m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe), record=DB), 1))
     broken = tmp / "broken" / "anomaly-recent"
     shutil.copytree(exp / "anomaly-recent", broken)
     d = broken / "anomaly_recent" / "detect.py"
     d.write_text(d.read_text().replace("if (node, prop) in limit and v > limit[(node, prop)][0]:", "if False:"))
-    confine.readable(tmp)
+    tmp.chmod(0o711)
     drop.chmod(0o1777)
-    with confine.home() as h:
-        got = contract(broken, h)
+    got, _ = confined(broken, "kk_sbx_test_broken")
     N = len(list((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "cases").glob("*.yaml")))
     check(got["total"] == N and got["passed"] < N, f"a candidate that ignores limits fails the analyser contract ({got['passed']}/{N})")
 
@@ -111,11 +125,7 @@ def main() -> None:
     n.write_text(n.read_text().replace("and c.evidence_type = 'observed') x",
                                        "and c.evidence_type = 'observed' and c.subject like 'urn:kk:provider:%%') x"))
     bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
-    confine.readable(tmp / "narrow")
-    with confine.home() as h:
-        served = service_cases(narrow, "analyser", bench, ("kkm_anomaly", "kkm_anomaly_login"), "kk_sbx_test_narrow",
-                               "urn:kk:agent:anomaly", h)
-        narrow_rule = contract(narrow, h)
+    narrow_rule, served = confined(narrow, "kk_sbx_test_narrow")
     check(narrow_rule["passed"] == N and served["total"] == N and served["passed"] < N,
           f"a candidate that reads only some of the record passes the rule cases and fails the service cases ({served['passed']}/{N})")
 
@@ -130,11 +140,7 @@ def main() -> None:
         obs, limits = _CACHE
         found = anomalies(obs, limits)
 """, 1).replace("def one_pass(", "_CACHE = None\n\n\ndef one_pass(", 1))
-    confine.readable(tmp / "cached")
-    with confine.home() as h:
-        served = service_cases(cached, "analyser", bench, ("kkm_anomaly", "kkm_anomaly_login"), "kk_sbx_test_cached",
-                               "urn:kk:agent:anomaly", h)
-        cached_rule = contract(cached, h)
+    cached_rule, served = confined(cached, "kk_sbx_test_cached")
     check(cached_rule["passed"] == N and served["failed"] == ["urn:kk:eval:analyser/retracted-and-superseded"],
           f"a candidate that keeps what it read passes the rule cases and fails the two-pass service case ({served['passed']}/{N})")
 
@@ -205,13 +211,17 @@ def main() -> None:
         check(cand < inc, f"on a copy of the record, timed by the sandbox, the candidate's full pass is faster ({cand:.3f} s against {inc:.3f} s)")
         check(value("urn:kk:provider:anomaly", "inputs") == 4500, "the sandbox copied the record's 4,500 observations")
         check(not q("select 1 from api.claims where attributed_to = 'urn:kk:agent:sandbox'"), "the sandbox wrote no claims")
-    who, creds, sees, os_user, parent_env, superuser = probe.read_text().split()
-    check(who == "kkm_anomaly_login" and set(creds.split(",")) <= {"-", "PGHOST", "PGPORT"} and sees == "False",
-          f"the candidate runs as the incumbent's own login ({who}), with no other credentials ({creds}), "
+    who, creds, sees, os_user, parent_env, superuser, record = probe.read_text().split()
+    check(who.startswith("kk_sbx_") and set(creds.split(",")) <= {"-", "PGHOST", "PGPORT"} and sees == "False",
+          f"the candidate runs as a login made for its run ({who}), with no other credentials ({creds}), "
           "and cannot see the run files")
-    check(os_user == os.environ["KK_RUN_AS"] and parent_env == "closed" and superuser == "closed",
+    check(record == "closed", "that login cannot connect to the record's database")
+    check(os_user in os.environ["KK_RUN_AS"].split(",") and parent_env == "closed" and superuser == "closed",
           f"the candidate runs as the OS user {os_user}: it cannot read the sandbox's environment ({parent_env}) "
           f"or connect as postgres without a password ({superuser})")
+    roles = subprocess.run(["psql", "-d", "postgres", "-qAtc", "select count(*) from pg_roles where rolname like 'kk_sbx_%'"],
+                           capture_output=True, text=True).stdout.strip()
+    check(roles == "0", "the logins made for the runs are dropped")
     left = subprocess.run(["psql", "-d", "postgres", "-qAtc", "select count(*) from pg_database where datname like 'kk_sbx_%'"],
                           capture_output=True, text=True).stdout.strip()
     check(left == "0", "the sandbox databases are dropped")

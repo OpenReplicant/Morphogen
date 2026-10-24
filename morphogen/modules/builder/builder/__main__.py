@@ -24,8 +24,6 @@ from kk.lib import connect, follow, run, submit
 
 from morphogen.experiments import provider_dir as incumbent_dir
 
-from morphogen import confine
-
 from .build import ROOT, build
 
 MODULE = "urn:kk:module:builder"
@@ -80,8 +78,7 @@ def one_pass(conn, intent: Path, strategy: str, fixtures: Path | None, command: 
                     inc = incumbent_dir(r["target"])
                     if inc is None:
                         raise ValueError(f"no provider directory for {r['target']}")
-                    roles = confine.login_roles(conn) if strategy == "harness" else None
-                    got = build(r, slot, inc, intent / "experiments", strategy, fixtures, command, roles)
+                    got = build(r, slot, inc, intent / "experiments", strategy, fixtures, command, conn)
                     sha = commit(intent, got["dir"], f"request:{r['iri']} experiment:{got['id']}\n\nCandidate {got['provider']} "
                                                      f"for the {slot} slot ({strategy}).\n")
                     rel = got["dir"].relative_to(intent.parent) if got["dir"].is_relative_to(intent.parent) else got["dir"]

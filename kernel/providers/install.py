@@ -34,6 +34,8 @@ def install(db: str, names: list[str]) -> None:
         subprocess.run(["createdb", db], check=True)
     if not psql(db, "-c", "select 1 from pg_namespace where nspname = 'kernel'"):
         psql(db, "-f", str(RECORD / "001_kernel.sql"), "-f", str(RECORD / "002_bootstrap.sql"))
+    # Only the logins granted it may connect: a login made for one database (a sandbox's) reaches no other.
+    psql(db, "-c", f'revoke connect on database "{db}" from public', "-c", f'grant connect on database "{db}" to kk_authenticator')
     for name in names:
         psql(db, "-f", str(HERE / name / "migration.sql"))
 
