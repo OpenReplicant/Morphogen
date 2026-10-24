@@ -1,0 +1,34 @@
+{
+  "provider": "urn:kk:provider:anomaly-newest",
+  "slot": "analyser",
+  "dataset": "xacce4724309a",
+  "inputs": 4646,
+  "contract": {
+    "passed": 22,
+    "total": 22,
+    "rule": {
+      "passed": 11,
+      "total": 11
+    },
+    "service": {
+      "passed": 11,
+      "total": 11,
+      "failed": []
+    }
+  },
+  "metric": {
+    "name": "pass-seconds",
+    "better": "lower",
+    "passes": 5,
+    "mean": 0.086917,
+    "times": [
+      0.072133,
+      0.119715,
+      0.074207,
+      0.090116,
+      0.078414
+    ]
+  },
+  "role": "candidate",
+  "request": "urn:kk:request:c45a89a72cf68672"
+}

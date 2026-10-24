@@ -1,0 +1,309 @@
+id: urn:kk:eval:analyser/two-properties-each-full-history
+text: 'one target, two properties of 30 windows each: each property is compared with its own previous 20 windows,
+  so the last error-rate value, ordinary against its full history, is not an anomaly (a reader that takes the newest
+  windows per target rather than per target and property sees only the quiet recent half and finds one)'
+input:
+  observations:
+  - id: a0
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 0
+    value: 0.012
+  - id: a1
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 1
+    value: 0.013
+  - id: a2
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 2
+    value: 0.014
+  - id: a3
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 3
+    value: 0.012
+  - id: a4
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 4
+    value: 0.013
+  - id: a5
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 5
+    value: 0.014
+  - id: a6
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 6
+    value: 0.012
+  - id: a7
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 7
+    value: 0.013
+  - id: a8
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 8
+    value: 0.014
+  - id: a9
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 9
+    value: 0.012
+  - id: a10
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 10
+    value: 0.013
+  - id: a11
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 11
+    value: 0.014
+  - id: a12
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 12
+    value: 0.012
+  - id: a13
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 13
+    value: 0.013
+  - id: a14
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 14
+    value: 0.014
+  - id: a15
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 15
+    value: 0.012
+  - id: a16
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 16
+    value: 0.013
+  - id: a17
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 17
+    value: 0.014
+  - id: a18
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 18
+    value: 0.012
+  - id: a19
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 19
+    value: 0.013
+  - id: a20
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 20
+    value: 0.014
+  - id: a21
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 21
+    value: 0.012
+  - id: a22
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 22
+    value: 0.013
+  - id: a23
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 23
+    value: 0.014
+  - id: a24
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 24
+    value: 0.012
+  - id: a25
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 25
+    value: 0.013
+  - id: a26
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 26
+    value: 0.014
+  - id: a27
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 27
+    value: 0.012
+  - id: a28
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 28
+    value: 0.013
+  - id: a29
+    target: urn:kk:node:shop
+    property: urn:kk:property:latency-seconds-mean
+    window: 29
+    value: 0.014
+  - id: b0
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 0
+    value: 0.01
+  - id: b1
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 1
+    value: 0.05
+  - id: b2
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 2
+    value: 0.01
+  - id: b3
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 3
+    value: 0.05
+  - id: b4
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 4
+    value: 0.01
+  - id: b5
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 5
+    value: 0.05
+  - id: b6
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 6
+    value: 0.01
+  - id: b7
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 7
+    value: 0.05
+  - id: b8
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 8
+    value: 0.01
+  - id: b9
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 9
+    value: 0.05
+  - id: b10
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 10
+    value: 0.01
+  - id: b11
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 11
+    value: 0.05
+  - id: b12
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 12
+    value: 0.01
+  - id: b13
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 13
+    value: 0.05
+  - id: b14
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 14
+    value: 0.01
+  - id: b15
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 15
+    value: 0.05
+  - id: b16
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 16
+    value: 0.01
+  - id: b17
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 17
+    value: 0.05
+  - id: b18
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 18
+    value: 0.02
+  - id: b19
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 19
+    value: 0.0202
+  - id: b20
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 20
+    value: 0.0198
+  - id: b21
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 21
+    value: 0.02
+  - id: b22
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 22
+    value: 0.0202
+  - id: b23
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 23
+    value: 0.0198
+  - id: b24
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 24
+    value: 0.02
+  - id: b25
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 25
+    value: 0.0202
+  - id: b26
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 26
+    value: 0.0198
+  - id: b27
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 27
+    value: 0.02
+  - id: b28
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 28
+    value: 0.0202
+  - id: b29
+    target: urn:kk:node:shop
+    property: urn:kk:property:error-rate
+    window: 29
+    value: 0.026
+  limits: []
+expect:
+  anomalies: []

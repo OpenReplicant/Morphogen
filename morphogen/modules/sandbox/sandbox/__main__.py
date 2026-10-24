@@ -28,6 +28,8 @@ import yaml
 
 from kk.lib import connect, follow, run
 
+from morphogen.logins import undumpable
+
 from .measure import ROOT, experiment
 
 MODULE = "urn:kk:module:sandbox"
@@ -50,9 +52,12 @@ def one(conn, exp: Path) -> dict:
     with conn.cursor() as cur, run(cur, MODULE, {"experiment": exp.name, "slot": slot}) as (_, outputs), \
             tempfile.TemporaryDirectory(prefix="kk-sbx-") as private:
         files = experiment(exp, conn, Path(private))
-        results = {f.stem: json.loads(f.read_text()) for f in files}
+        texts = {f: f.read_text() for f in files}
+        results = {f.stem: json.loads(t) for f, t in texts.items()}
         outputs.update(runs={k: {"contract": v["contract"], "metric": v["metric"]} for k, v in results.items()})
         print(record(files, f"sandbox-{slot}"), end="", flush=True)
+        if any(f.read_text() != t for f, t in texts.items()):
+            raise RuntimeError("a run file changed while the evaluator read it: something outlived its run")
         (exp / "runs").mkdir(exist_ok=True)              # a copy for whoever reads the experiment, once recorded
         for f in files:
             shutil.copy(f, exp / "runs" / f.name)
@@ -87,6 +92,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Measure an experiment's candidate and the incumbent.")
     ap.add_argument("experiment", type=Path, nargs="?")
     a = ap.parse_args(argv)
+    undumpable()                                         # provider code cannot read this process's PG* from /proc
     conn = connect(os.environ.get("KK_ROLE", "kkm_sandbox"))
     if a.experiment:
         print(json.dumps(one(conn, a.experiment.resolve())))

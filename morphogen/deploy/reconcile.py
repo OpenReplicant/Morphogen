@@ -20,7 +20,8 @@ identity and database login come from this process, not from intent.
 Logins (R5-22): the file's name names the slot's reviewed provider (environments/<env>/anomaly.yaml:
 morphogen/modules/anomaly or kernel/providers/anomaly). When that provider declares a login of its own
 (provider.yaml `role`, `login`), the service runs as that login with none of this process's other
-credentials (morphogen.logins); otherwise it gets this process's environment. A candidate from an
+credentials (morphogen.logins); otherwise it gets this process's environment. Either way it never gets
+KK_OTLP_SECRET: with it set, each service gets its own telemetry token, for its own name. A candidate from an
 experiment runs only as the incumbent's own login, and only while its directory matches HEAD (the code
 the person approved, measured and committed).
 """
@@ -41,7 +42,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from morphogen.logins import login_env, login_of  # noqa: E402
+from morphogen.logins import login_env, login_of, telemetry_token, undumpable  # noqa: E402
 
 
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
@@ -98,10 +99,14 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
             raise OSError(f"{spec['cwd']} differs from HEAD: only committed experiment code runs")
     path = os.pathsep.join(filter(None, [str(cwd), str(repo / "kernel" / "src"), str(repo / "morphogen" / "src"),
                                          os.environ.get("PYTHONPATH")]))
-    extra = {**{k: v for k, v in os.environ.items() if k.startswith("OTEL_")},
+    # OTEL_*HEADERS are not passed on: the service's own token below is the only one it holds.
+    extra = {**{k: v for k, v in os.environ.items() if k.startswith("OTEL_") and not k.endswith("HEADERS")},
              **{k: str(v) for k, v in (spec.get("env") or {}).items()}, "PYTHONPATH": path,
-             "PYTHONDONTWRITEBYTECODE": "1", "OTEL_SERVICE_NAME": spec.get("provider", "")}
+             "PYTHONDONTWRITEBYTECODE": "1", "OTEL_SERVICE_NAME": spec.get("provider") or spec.get("_file", "")}
+    if os.environ.get("KK_OTLP_SECRET"):
+        extra["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Bearer%20{telemetry_token(os.environ['KK_OTLP_SECRET'], extra['OTEL_SERVICE_NAME'])}"
     env = login_env(os.environ["DATABASE_URL"], *login, extra) if login else {**os.environ, **extra}
+    env.pop("KK_OTLP_SECRET", None)
     cmd = shlex.split(spec["service"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable
@@ -123,6 +128,7 @@ def main(argv=None) -> int:
     ap.add_argument("--env", default="sandbox")
     ap.add_argument("--repo", default=".")
     a = ap.parse_args(argv)
+    undumpable()                                         # children cannot read KK_OTLP_SECRET from /proc
     intent, repo = Path(a.intent).resolve(), Path(a.repo).resolve()
     every = float(os.environ.get("KK_RECONCILE_SECONDS", "1"))
     backoff = float(os.environ.get("KK_RESTART_SECONDS", "5"))

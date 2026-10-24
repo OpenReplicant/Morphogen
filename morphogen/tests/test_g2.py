@@ -127,12 +127,12 @@ def main() -> None:
     try:
         service("observer", "observer_otel", MODULES / "observer-otel",
                 {"KK_WINDOW_SECONDS": str(WINDOW), "KK_OTLP_PORT": str(port), "KK_OTLP_SOURCE": f"http://observer:{port}/v1/metrics",
-                 "KK_OTLP_TOKEN": token, "KK_OTLP_SERVICES": "validator-shacl,anomaly*"})
+                 "KK_OTLP_SECRET": token, "KK_OTLP_SERVICES": "validator-shacl,anomaly*"})
         service("planner", "planner", MODULES / "planner", {})
         builder = os.environ.get("KK_G2_BUILDER", "fixture")    # harness: KK_BUILDER_COMMAND runs an agent harness
         service("builder", "builder", MODULES / "builder",
                 {"KK_BUILDER_STRATEGY": builder, "KK_BUILDER_FIXTURES": str(ROOT / "morphogen" / "tests" / "fixtures")})
-        service("sandbox", "sandbox", MODULES / "sandbox", {"KK_BENCH_SECONDS": "6"})
+        service("sandbox", "sandbox", MODULES / "sandbox", {})
         service("actuator", "intent_actuator", MODULES / "intent-actuator", {})
         service("verifier", "prediction_verifier", MODULES / "prediction-verifier", {})
         log = open(tmp / "reconcile.log", "w")
@@ -140,7 +140,7 @@ def main() -> None:
             [sys.executable, str(ROOT / "morphogen" / "deploy" / "reconcile.py"), "--intent", str(intent), "--env", "sandbox",
              "--repo", str(ROOT)],
             env={**base_env, "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}",
-                 "OTEL_EXPORTER_OTLP_HEADERS": f"Authorization=Bearer%20{token}", "OTEL_METRIC_EXPORT_INTERVAL": "1000"},
+                 "KK_OTLP_SECRET": token, "OTEL_METRIC_EXPORT_INTERVAL": "1000"},
             stdout=log, stderr=subprocess.STDOUT)))
 
         with connect("t_g2_person", url) as person:
@@ -178,9 +178,12 @@ def main() -> None:
                             where s.predicate = %s and s.subject like 'urn:kk:eval:sandbox-analyser:%%'""",
                          "http://www.w3.org/ns/dqv#isMeasurementOf", DCT + "subject")
             score = {(p, m.rsplit(":", 1)[-1]): v for p, m, v in measures}
-            check(score[(CANDIDATE, "contract.passed")] == score[(CANDIDATE, "contract.total")] == 11
+            n = len(list((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "cases").glob("*.yaml")))
+            check(score[(CANDIDATE, "contract.passed")] == score[(CANDIDATE, "contract.total")] == 2 * n + 1
+                  and score[(CANDIDATE, "contract.service.passed")] == n
                   and score[(CANDIDATE, "metric.mean")] < score[(ANALYSER, "metric.mean")],
-                  f"measure: the candidate passes the analyser contract (11/11) and is faster in the sandbox "
+                  f"measure: the candidate passes the analyser contract ({n} rule and {n} service cases, and the incumbent's outputs on the benchmark) and its full pass, "
+                  f"timed by the sandbox, is faster "
                   f"({score[(CANDIDATE, 'metric.mean')]:.3f} s against {score[(ANALYSER, 'metric.mean')]:.3f} s)")
             check(any(o["predicate"].endswith("substitutedBy") and o["object"] == {"entity": CANDIDATE} for o in ops)
                   and any(o["predicate"] == MAX and o["subject"] == CANDIDATE for o in ops),

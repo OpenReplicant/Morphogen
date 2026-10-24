@@ -9,5 +9,6 @@ migration: migration.sql
 service: python3 -m anomaly
 role: kkm_anomaly
 login: kkm_anomaly_login
+agent: urn:kk:agent:anomaly
 tests: [python3 tests/test_detect.py]
 note: over a documented limit (bbo:maxValue), or more than 3 standard deviations from recent windows; an oa:Annotation on the feature of interest, inferred from what it compared

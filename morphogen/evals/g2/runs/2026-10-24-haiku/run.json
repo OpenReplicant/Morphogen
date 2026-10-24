@@ -1,0 +1,41 @@
+{
+  "builder": "harness",
+  "limit_seconds": 0.1121,
+  "incumbent": "urn:kk:provider:anomaly",
+  "candidate": "urn:kk:provider:anomaly-newest",
+  "observed_before": [
+    0.1287,
+    0.1602
+  ],
+  "observed_after": [
+    0.1039,
+    0.0803,
+    0.0995,
+    0.0833
+  ],
+  "verdict_text": "step-seconds-mean was 0.0803, 0.0995, 0.0833 in the 3 windows after the change: within the predicted limit 0.1121.",
+  "sandbox": {
+    "anomaly.inputs": 4646.0,
+    "anomaly.contract.passed": 22.0,
+    "anomaly.contract.total": 22.0,
+    "anomaly.contract.rule.passed": 11.0,
+    "anomaly.contract.rule.total": 11.0,
+    "anomaly.contract.service.passed": 11.0,
+    "anomaly.contract.service.total": 11.0,
+    "anomaly.metric.passes": 5.0,
+    "anomaly.metric.mean": 0.130548,
+    "anomaly-newest.inputs": 4646.0,
+    "anomaly-newest.contract.passed": 22.0,
+    "anomaly-newest.contract.total": 22.0,
+    "anomaly-newest.contract.rule.passed": 11.0,
+    "anomaly-newest.contract.rule.total": 11.0,
+    "anomaly-newest.contract.service.passed": 11.0,
+    "anomaly-newest.contract.service.total": 11.0,
+    "anomaly-newest.metric.passes": 5.0,
+    "anomaly-newest.metric.mean": 0.086917
+  },
+  "verdict": "urn:kk:verdict:holds",
+  "request": "urn:kk:request:c45a89a72cf68672",
+  "plan": "urn:kk:plan:acce4724309a8879:step:1",
+  "change_set": "11d98cc8-4776-48d1-99cf-ed13908fba34"
+}

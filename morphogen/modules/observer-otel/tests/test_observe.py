@@ -67,12 +67,14 @@ import urllib.error  # noqa: E402
 import urllib.request  # noqa: E402
 from http.server import ThreadingHTTPServer  # noqa: E402
 
+from morphogen.logins import telemetry_token  # noqa: E402
+TOKEN = telemetry_token("s3cret", "belief-corroboration")
 buf = Buffer()
-srv = ThreadingHTTPServer(("127.0.0.1", 0), handler(buf, "s3cret", {"belief-corroboration"}, max_bytes=10_000))
+srv = ThreadingHTTPServer(("127.0.0.1", 0), handler(buf, "s3cret", {"belief-corroboration", "validator-shacl"}, max_bytes=10_000))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 
-def post(body, auth="Bearer s3cret"):
+def post(body, auth=f"Bearer {TOKEN}"):
     req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/v1/metrics", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json", **({"Authorization": auth} if auth else {})})
     try:
@@ -85,8 +87,12 @@ now = time.time()
 check(post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0), auth=None) == 401
       and post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0), auth="Bearer wrong") == 401 and not buf.points,
       "no token, or the wrong one: refused, nothing kept")
-check(post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0)) == 200 and len(buf.points) == 1, "the token: accepted")
-post(request("someone-else", "kk.feed.lag", now, 1, 1.0))
+check(post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0), auth="Bearer s3cret") == 401 and not buf.points,
+      "the secret itself is not a token")
+check(post(request("belief-corroboration", "kk.feed.lag", now, 1, 1.0)) == 200 and len(buf.points) == 1, "the service's own token: accepted")
+check(post(request("validator-shacl", "kk.feed.lag", now, 1, 1.0)) == 401 and len(buf.points) == 1,
+      "one service's token does not report as another (even one on the list): refused, nothing kept")
+post(request("someone-else", "kk.feed.lag", now, 1, 1.0), auth=f"Bearer {telemetry_token('s3cret', 'someone-else')}")
 post(request("belief-corroboration", "kk.feed.lag", now + 3600, 1, 1.0))
 check(len(buf.points) == 1, "resources not on the list, and points stamped far ahead, are dropped")
 check(post({"resourceMetrics": [], "pad": "x" * 20_000}) == 413, "a request over the size limit is refused")
