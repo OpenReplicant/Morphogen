@@ -1,0 +1,20 @@
+# podinfo (github.com/stefanprodan/podinfo, Apache-2.0) as an operator runs it: a frontend that answers
+# /api/echo by calling the backend, which caches in Redis. Morphogen did not write any of it (R5-25).
+# Host ports are left to Docker (127.0.0.1 only): `docker compose port <service> 9898` finds them.
+services:
+  frontend:
+    image: ghcr.io/stefanprodan/podinfo:6.9.2@sha256:cab90e04829cdae73199a8402882a4e3ccaf251b8a0d50bdefede0ab3f6371e7
+    command: ["./podinfo", "--port=9898", "--backend-url=http://backend:9898/echo"]
+    ports: ["127.0.0.1::9898"]
+    depends_on: [backend]
+  backend:
+    image: ghcr.io/stefanprodan/podinfo:6.9.2@sha256:cab90e04829cdae73199a8402882a4e3ccaf251b8a0d50bdefede0ab3f6371e7
+    command: ["./podinfo", "--port=9898", "--cache-server=tcp://redis:6379"]
+    environment:
+      PODINFO_RANDOM_DELAY: "true"
+      PODINFO_RANDOM_DELAY_UNIT: ms
+      PODINFO_RANDOM_DELAY_MAX: "600"
+    ports: ["127.0.0.1::9898"]
+    depends_on: [redis]
+  redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952

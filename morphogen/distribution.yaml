@@ -32,6 +32,12 @@ slots:
     default: interview-encoder + map-gaps      # rebuild 4: encoder-interaction, skill-interview, map-gaps
     contract: provider-tests
     status: to-port
+  - id: system-encoder
+    phase: design
+    cardinality: many
+    default: encoder-compose                   # a compose file as a TOSCA topology, every claim citing its line (R5-25)
+    contract: provider-tests
+    status: written
   - id: observer
     phase: monitor
     cardinality: many

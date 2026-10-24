@@ -1,0 +1,11 @@
+id: urn:kk:provider:encoder-compose
+name: 'Encoder: compose files'
+version: 0.1.0
+license: Apache-2.0
+slots: [system-encoder]
+origin: new (T9, R5-25); the citation shape is the self-encoder's
+requires: Python 3.12+, psycopg, PyYAML; the kk-tosca pack
+migration: migration.sql
+command: python3 -m encoder_compose scan --system <name> --file <compose file> [--repo <dir>]   |   python3 -m encoder_compose answer <system>
+tests: [python3 tests/test_encode.py]
+note: a compose file (what an operator runs) as a TOSCA topology; every claim cites its file and line
