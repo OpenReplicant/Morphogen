@@ -1,0 +1,72 @@
+# Self-model questions on the kernel (rebuild 4 eval/self-model/questions.yaml, rewritten for rebuild 5's
+# blueprint and providers): answered from the self-encoder's claims by an agent over MCP, citing claim ids
+# and showing belief; graded by run.py. `evidence` is the claim pattern that answers the question
+# (subject / predicate / object_entity / value / qualifiers) and `answer` which side of it is the answer;
+# the reference agent uses them, a live agent never sees them. `exclude`: naming one of these as the answer,
+# backed by a cited claim of the question's predicate, is wrong (citing everything does not pass).
+version: 1
+questions:
+  - id: q01
+    question: Which provider fills the validator slot?
+    expect: [validator-shacl]
+    exclude: [kernel-mcp, belief-corroboration, verifier-quotes]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:validator"}
+    answer: subject
+  - id: q02
+    question: Which slots does the record-postgres provider fill?
+    expect: [record-store, write-pipeline, lane-policy, change-feed]
+    evidence: {subject: "urn:kk:provider:record-postgres", predicate: "kk:fills"}
+    answer: object
+  - id: q03
+    question: Which provider provides the agent-interface slot?
+    expect: [kernel-mcp]
+    exclude: [validator-shacl, self-encoder]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:agent-interface"}
+    answer: subject
+  - id: q04
+    question: What version is the kernel-mcp provider?
+    expect_from: kernel/providers/kernel-mcp/provider.yaml:version
+    evidence: {subject: "urn:kk:provider:kernel-mcp", predicate: "owl:versionInfo"}
+    answer: object
+  - id: q05
+    question: Under which license is the belief-corroboration provider released?
+    expect: [Apache-2.0]
+    evidence: {subject: "urn:kk:provider:belief-corroboration", predicate: "dcterms:license"}
+    answer: object
+  - id: q06
+    question: How many providers may fill the belief-model slot at once (its cardinality)?
+    expect: [one]
+    evidence: {subject: "urn:kk:slot:belief-model", predicate: "kk:cardinality"}
+    answer: object
+  - id: q07
+    question: Which slot does the pack-loader provider fill?
+    expect: [vocabulary-pack]
+    evidence: {subject: "urn:kk:provider:pack-loader", predicate: "kk:fills"}
+    answer: object
+  - id: q08
+    question: Which provider fills the verifier slot?
+    expect: [verifier-quotes]
+    exclude: [validator-shacl, evaluator]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:verifier"}
+    answer: subject
+  - id: q09
+    question: Which interface does the recall slot declare as its contract?
+    expect: [Recall]
+    evidence: {subject: "urn:kk:slot:recall", predicate: "kk:slotContract"}
+    answer: object
+  - id: q10
+    question: What version is the validator-shacl provider?
+    expect_from: kernel/providers/validator-shacl/provider.yaml:version
+    evidence: {subject: "urn:kk:provider:validator-shacl", predicate: "owl:versionInfo"}
+    answer: object
+  - id: q11
+    question: How many providers may fill the validator slot at once (its cardinality)?
+    expect: [many]
+    evidence: {subject: "urn:kk:slot:validator", predicate: "kk:cardinality"}
+    answer: object
+  - id: q12
+    question: Which provider fills the evaluator slot?
+    expect: [evaluator]
+    exclude: [verifier-quotes, recall-bm25]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:evaluator"}
+    answer: subject

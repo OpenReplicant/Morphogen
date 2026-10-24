@@ -1,0 +1,112 @@
+{
+  "set": "morphogen/evals/self-model/questions.yaml",
+  "agent": "claude-code-haiku",
+  "questions": 12,
+  "correct": 12,
+  "accuracy": 1.0,
+  "citations_resolve": true,
+  "belief_shown": true,
+  "passed": true,
+  "floor": {
+    "rebuild4": "12/12 (eval/self-model/runs/2026-10-16-claude-code.json)",
+    "gate": ">= 90% correct, cited, belief shown"
+  },
+  "results": [
+    {
+      "id": "m01",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "Two providers fill lane-policy: record-postgres (claim 539f5f2c-5168-41c4-ad55-59ca089641fc, belief 0.50) and lane-autonomy (claim e5e33674-9b9c-4db4-8205-1ed0e50c0b99, belief 0.50)."
+    },
+    {
+      "id": "m02",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "Two providers fill observer: observer-otel (claim d30c05b0-3fad-4cf0-bfd6-d4cfd768a360, belief 0.50) and observer-prometheus (claim c5f0334d-243d-4bd2-98b2-cdd5f0f721c2, belief 0.50)."
+    },
+    {
+      "id": "m03",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "encoder-compose fills the system-encoder slot (claim 8298a286-ac56-4d9d-9121-3b1db19f30bd, belief 0.50)."
+    },
+    {
+      "id": "m04",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "prediction-verifier fills the outcome-verifier slot (claim 3d6dd922-4566-4b15-9c29-bf7081cbcc1e, belief 0.50). No other provider fills it in the claims returned."
+    },
+    {
+      "id": "m05",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The morphogen distribution's owl:versionInfo is 0.1.0 (claim 4240725c-f1f9-48b6-b78a-5c88bee79130, belief 0.50)."
+    },
+    {
+      "id": "m06",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "anomaly fills the analyser slot (claim d41974e7-0beb-40a2-9c3a-f9a0c52229f2, belief 0.50)."
+    },
+    {
+      "id": "m07",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The system-encoder slot's cardinality is \"many\" (claim 8f1e1f04-170c-409e-bd65-4d42fdbab9ea, belief 0.50), so any number of providers may fill it at once."
+    },
+    {
+      "id": "m08",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "In podinfo, the frontend connects to the backend (claim 266dc989-64ba-4a6a-a9f5-6a303986eba5, belief 0.50)."
+    },
+    {
+      "id": "m09",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The backend connects to redis, so backend is the service that connects to redis (claim b2387756-6ec8-4b9a-82a0-ac8d7d078265, belief 0.50)."
+    },
+    {
+      "id": "m10",
+      "correct": true,
+      "cited": 3,
+      "resolved": true,
+      "belief": true,
+      "answer": "The podinfo system has three services: frontend (claim 16c4b0b1-8bf4-425b-ab98-8b400478129f, belief 0.50), backend (claim f2414317-4f5c-4508-9755-b9c8f90a9fa4, belief 0.50) and redis (claim ae38a7f1-b4ec-4c92-9234-cdd43230bc9c, belief 0.50), each recorded as memberOf podinfo."
+    },
+    {
+      "id": "m11",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "PODINFO_RANDOM_DELAY_MAX is set to \"600\" on podinfo:backend (claim 0467ee00-36ea-4e3e-a19b-11e73b8fa28f, belief 0.50). A companion claim gives PODINFO_RANDOM_DELAY_UNIT as \"ms\" (claim c27ae781-5ff4-42ae-8e7d-544d50c171d1, belief 0.50), so the unit is likely milliseconds, though the claims do not state that outright."
+    },
+    {
+      "id": "m12",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "sandbox fills the sandbox slot (claim 94894e40-ed64-41a6-b7f0-2d5c63078e35, belief 0.50)."
+    }
+  ]
+}

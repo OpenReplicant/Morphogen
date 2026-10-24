@@ -66,6 +66,7 @@ PGHOST=... PGUSER=... python3 kernel/providers/test.py                  # each p
 sh morphogen/contract/run.sh [--mutants]                               # Morphogen's slot contracts (analyser: 13 cases, 7 mutants; the sandbox also runs them as service cases)
 PGHOST=... PGUSER=... KK_RUN_AS=kkrun1,... KK_SANDBOX_CLUSTER=... python3 morphogen/modules/test.py # as root: each module's tests + the T5 loop + G2 + G3 (model code runs as KK_RUN_AS behind nftables, on the sandbox's own cluster, R5-24/26; G3 needs Docker, R5-25)
 KK_EVAL_CACHE=... python3 kernel/evals/scifact/run.py fetch|setup DB|retrieval DB   # recall floor (not in CI)
+PGHOST=... PGUSER=... python3 kernel/evals/self-model/run.py setup DB && ... reference DB    # self-model questions (12, G7 >= 90%); morphogen/evals/self-model/run.py for Morphogen's 12; `claude DB` asks Haiku
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
 ```
 

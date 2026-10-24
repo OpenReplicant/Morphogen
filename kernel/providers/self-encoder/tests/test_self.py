@@ -60,9 +60,9 @@ def cited_line(repo: Path, source: list[str]) -> str:
     return (repo / m.group(1)).read_text().splitlines()[int(m.group(2)) - 1]
 
 
-def scan_and_apply(repo: Path, distribution: bool = True, forget: bool = False) -> list[dict]:
+def scan_and_apply(repo: Path, distribution: bool = True, forget: bool = False, providers: list[str] = ()) -> list[dict]:
     dist = [str(repo / "dist" / "distribution.yaml")]
-    out = encoder.scan(repo, dist if distribution else [], dist if forget else [])
+    out = encoder.scan(repo, dist if distribution else [], dist if forget else [], providers)
     with connect("kkm_validator", f"dbname={DB}") as val:
         validator.drain(val)
         with connect("kkm_belief", f"dbname={DB}") as bel:
@@ -170,6 +170,27 @@ def main() -> None:
     scan_and_apply(repo)
     with connect("kkm_self_encoder", f"dbname={DB}") as conn:
         check(fills(conn, "verifier") == ["urn:kk:provider:verifier-quotes"], "a restored provider fills its slot again")
+
+    # A distribution's own providers (--providers DIR): recorded like the kernel's; left alone by a scan that
+    # was not given the directory; retracted when the directory is scanned and the provider is gone.
+    mine = repo / "dist" / "modules" / "watcher"
+    mine.mkdir(parents=True)
+    (mine / "provider.yaml").write_text("id: urn:kk:provider:watcher\nname: Watcher\nversion: 0.1.0\n"
+                                        "license: Apache-2.0\nslots: [observer]\n")
+    extra = [str(repo / "dist" / "modules")]
+    scan_and_apply(repo, providers=extra)
+    with connect("kkm_self_encoder", f"dbname={DB}") as conn:
+        got = encoder.answer(conn, ["observer"])[0]["filled_by"]
+        check([f["provider"] for f in got] == ["urn:kk:provider:watcher"]
+              and cited_line(repo, got[0]["source"]) == "slots: [observer]",
+              "a provider under --providers fills its distribution's slot, cited to its manifest's line")
+    scan_and_apply(repo)
+    with connect("kkm_self_encoder", f"dbname={DB}") as conn:
+        check(fills(conn, "observer") == ["urn:kk:provider:watcher"], "a scan not given the directory leaves its providers alone")
+    shutil.rmtree(mine)
+    scan_and_apply(repo, providers=extra)
+    with connect("kkm_self_encoder", f"dbname={DB}") as conn:
+        check(fills(conn, "observer") == [], "a provider gone from a directory scanned again is retracted")
 
     scan_and_apply(repo, distribution=False, forget=True)
     with connect("kkm_self_encoder", f"dbname={DB}") as conn:
