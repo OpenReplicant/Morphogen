@@ -61,7 +61,7 @@ Reference implementation (read-only): `OpenReplicant/kernel` (rebuild 4). Port f
 ```sh
 pip install -r kernel/contract/requirements.txt                       # once, in a virtualenv (KK_PYTHON=<its python>)
 PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conformance: 66 record + 13 validator + 17 belief cases
-PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (38 today)
+PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (44 today; truth-maintenance's are killed by its own tests)
 PGHOST=... PGUSER=... python3 kernel/providers/test.py                  # each provider's tests + services end to end
 sh morphogen/contract/run.sh [--mutants]                               # Morphogen's slot contracts (analyser: 14 cases, 10 mutants, the sandbox also runs them as service cases; gap-finder: 12 cases, 11 mutants)
 PGHOST=... PGUSER=... KK_RUN_AS=kkrun1,... KK_SANDBOX_CLUSTER=... python3 morphogen/modules/test.py # as root: each module's tests + the T5 loop + G2 + G3 + the design agent (T13) + catalog lookup (T14) (model code runs as KK_RUN_AS behind nftables, on the sandbox's own cluster, R5-24/26; G3 needs Docker, R5-25)

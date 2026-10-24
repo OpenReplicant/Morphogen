@@ -1,7 +1,8 @@
 """Truth maintenance against a live record (rebuild 4 D-89): a claim inferred from a premise, and one inferred from
 that, are flagged inconclusive when the premise is retracted, naming it; a claim on a current premise is left
 alone; a second pass submits nothing; the belief model then caps the flagged claims; restored, they are
-supported, and withdrawn again, flagged again; a premise superseded by a new claim undermines what was built on the old one.
+supported (the cap lifts), and withdrawn again, flagged again; a premise superseded by a new claim, even with the
+same value (R5-31), or redacted, undermines what was built on it; a verdict goes to its claim's own scope.
 
   PGHOST=... PGUSER=<superuser> python3 tests/test_service.py
 """
@@ -41,16 +42,21 @@ def main() -> None:
     with connect(url=url) as su:
         su.execute("do $$ begin if not exists (select 1 from pg_roles where rolname = 't_tms_extractor') then "
                    "create role t_tms_extractor nologin; end if; end $$")
+        su.execute("do $$ begin if not exists (select 1 from pg_roles where rolname = 't_tms_steward') then "
+                   "create role t_tms_steward nologin; end if; end $$")
         su.execute("grant kk_agent to t_tms_extractor")
+        su.execute("grant kk_steward to t_tms_steward")
         su.execute("set role kk_owner")
         su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, 't_tms_extractor', "
-                   "'software', 'Test extractor') on conflict do nothing", (EXTRACTOR,))
+                   "'software', 'Test extractor'), ('urn:kk:agent:test-steward', 't_tms_steward', 'person', "
+                   "'Test steward') on conflict do nothing", (EXTRACTOR,))
 
     with connect("t_tms_extractor", url) as ex, connect("kkm_validator", url) as val, \
-            connect("kkm_truth_maintenance", url) as tm, connect("kkm_belief", url) as bel:
-        def cs(key, ops):
+            connect("kkm_truth_maintenance", url) as tm, connect("kkm_belief", url) as bel, \
+            connect("t_tms_steward", url) as st:
+        def cs(key, ops, scope=SCOPE):
             with ex.cursor() as cur, run(cur, "urn:kk:module:test-extractor") as (run_id, _):
-                got = submit(cur, {"idempotency_key": key, "attributed_to": EXTRACTOR, "target_scope": SCOPE, "ops": ops}, run_id)
+                got = submit(cur, {"idempotency_key": key, "attributed_to": EXTRACTOR, "target_scope": scope, "ops": ops}, run_id)
             validator.drain(val)
             return got
 
@@ -98,14 +104,20 @@ def main() -> None:
               f"the belief model caps the flagged claims at {PREMISE_CAP} ({b[c]}, {b[d]})")
 
         def latest(claim):
-            return ex.execute("select verdict from api.verifications where method = %s and claim_id = %s "
-                              "order by recorded_at desc limit 1", (tms.METHOD, claim)).fetchone()[0]
+            row = ex.execute("select verdict from api.verifications where method = %s and claim_id = %s "
+                             "order by recorded_at desc limit 1", (tms.METHOD, claim)).fetchone()
+            return row and row[0]
 
-        # Restored: the premise current again, what was built on it is supported; withdrawn again, flagged again.
+        # Restored: the premise current again, what was built on it is supported and the cap lifts; withdrawn
+        # again, flagged again.
         cs("tms:restore-p", [{"op": "set_status", "claim": p, "status": "normal", "expect_status": "deprecated"}])
         follow(tm, tms.step, once=True)
         validator.drain(val)
         check(latest(c) == "supported" and latest(d) == "supported", "the premise current again: the claims built on it are supported")
+        follow(bel, belief.Pass(), once=True)
+        validator.drain(val)
+        lifted = ex.execute("select belief from api.claims where id = %s", (c,)).fetchone()[0]
+        check(lifted is not None and lifted > PREMISE_CAP, f"and the belief model lifts the cap ({lifted})")
         cs("tms:retract-p-again", [{"op": "set_status", "claim": p, "status": "deprecated", "expect_status": "normal",
                                     "reason": "retracted"}])
         follow(tm, tms.step, once=True)
@@ -118,9 +130,46 @@ def main() -> None:
                                 "reason": "superseded", "replaced_by": "c0"}])
         follow(tm, tms.step, once=True)
         validator.drain(val)
-        verdict = ex.execute("select verdict from api.verifications where method = %s and claim_id = %s order by recorded_at desc limit 1",
-                             (tms.METHOD, e)).fetchone()
-        check(verdict == ("inconclusive",), "a premise superseded by a new claim undermines what was inferred from the old one")
+        check(latest(e) == "inconclusive", "a premise superseded by a new claim undermines what was inferred from the old one")
+
+        # Superseded by the same value: still a withdrawal (D-89 kept, R5-31); the dependant is re-derived, not
+        # judged by comparing values.
+        cs("tms:r", [fact("urn:x:r", "same", "urn:test:r")])
+        r = claim_id("urn:x:r")
+        cs("tms:f", [inferred("urn:x:f", "from r", [r])])
+        f = claim_id("urn:x:f")
+        cs("tms:supersede-r", [{**fact("urn:x:r", "same", "urn:test:r2"), "ref": "c0"},
+                               {"op": "set_status", "claim": r, "status": "deprecated", "expect_status": "normal",
+                                "reason": "superseded", "replaced_by": "c0"}])
+        follow(tm, tms.step, once=True)
+        validator.drain(val)
+        check(latest(f) == "inconclusive", "a premise superseded by the same value still flags what was inferred from it")
+
+        # Redacted: the premise keeps its identity and lineage, and what was built on it is flagged.
+        cs("tms:s", [fact("urn:x:s", "to be erased", "urn:test:s")])
+        s_ = claim_id("urn:x:s")
+        cs("tms:g", [inferred("urn:x:g", "from s", [s_])])
+        g = claim_id("urn:x:g")
+        with st.cursor() as cur, run(cur, None) as (run_id, _):
+            cur.execute("select api.redact('claim', %s, 'test erasure', %s)", (s_, run_id))
+        follow(tm, tms.step, once=True)
+        validator.drain(val)
+        check(latest(g) == "inconclusive", "a premise redacted flags what was inferred from it")
+
+        # Another scope: the verdict goes to the claim's own scope.
+        VOCAB = "urn:kk:scope:vocab"
+        cs("tms:v", [fact("urn:x:vp", "vocab premise", "urn:test:vp")], VOCAB)
+        vp = claim_id("urn:x:vp")
+        cs("tms:vi", [inferred("urn:x:vi", "from vp", [vp])], VOCAB)
+        vi = claim_id("urn:x:vi")
+        cs("tms:retract-vp", [{"op": "set_status", "claim": vp, "status": "deprecated", "expect_status": "normal",
+                               "reason": "retracted"}], VOCAB)
+        follow(tm, tms.step, once=True)
+        validator.drain(val)
+        with connect(url=url) as su:
+            where = su.execute("""select s.target_scope from kernel.verification v join kernel.change_set s on s.id = v.change_set
+                                  where v.method = %s and v.claim_id = %s""", (tms.METHOD, vi)).fetchall()
+        check(latest(vi) == "inconclusive" and where == [(VOCAB,)], "a claim in another scope is judged there, in its own scope")
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
     print("truth-maintenance service checks passed")
 

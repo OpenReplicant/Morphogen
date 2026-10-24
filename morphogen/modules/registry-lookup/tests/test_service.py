@@ -200,7 +200,7 @@ def main() -> None:
                   and tree_sha in (o.get("qualifiers") or {}).values() for o in ops[0]),
               "the planner turns a measured catalog candidate into a replace plan in the review lane, naming its content hash")
 
-        # Truth maintenance (T18): the request withdrawn, the offer inferred from it is flagged (and the plan built on it).
+        # Truth maintenance (T18): the request withdrawn by the agent that made it, the offer inferred from it is flagged.
         body = su.execute("select id::text from api.claims where subject = 'urn:kk:request:c1' and predicate = %s", (OA + "bodyValue",)).fetchone()[0]
         with planner_conn.cursor() as cur, run(cur, "urn:kk:module:planner") as (rid, _):
             submit(cur, {"idempotency_key": "test:withdraw-c1", "attributed_to": "urn:kk:agent:planner", "target_scope": "urn:kk:scope:default",
