@@ -1,0 +1,18 @@
+id: urn:kk:eval:gap-finder/limit-on-entry-points-only
+text: only services nothing connects to are asked for a limit
+input:
+  services:
+    shop/front:
+      image: true
+      connects:
+      - shop/back
+    shop/back:
+      image: true
+      connects:
+      - shop/cache
+    shop/cache:
+      image: true
+expect:
+  gaps:
+  - kind: no-limit
+    target: shop/front

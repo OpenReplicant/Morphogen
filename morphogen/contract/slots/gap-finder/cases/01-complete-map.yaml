@@ -1,0 +1,17 @@
+id: urn:kk:eval:gap-finder/complete-map
+text: a map with images, connections and a limit on its entry point has no gaps
+input:
+  services:
+    shop/front:
+      image: true
+      connects:
+      - shop/back
+      limit: true
+    shop/back:
+      image: true
+      connects:
+      - shop/cache
+    shop/cache:
+      image: true
+expect:
+  gaps: []

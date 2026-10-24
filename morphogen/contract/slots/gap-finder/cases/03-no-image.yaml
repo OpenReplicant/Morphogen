@@ -1,0 +1,17 @@
+id: urn:kk:eval:gap-finder/no-image
+text: a service with no image setting is asked about; another setting is not an image
+input:
+  services:
+    shop/front:
+      image: true
+      connects:
+      - shop/back
+      limit: true
+    shop/back:
+      settings:
+        IMAGE_TAG: '1.2'
+        command: serve
+expect:
+  gaps:
+  - kind: no-image
+    target: shop/back
