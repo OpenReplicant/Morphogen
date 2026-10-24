@@ -1,0 +1,22 @@
+id: urn:kk:eval:gap-finder/cycle-asks-the-system
+text: 'a system whose services all call each other has no entry point: the system is asked for a limit, and a limit on any of its services closes it'
+input:
+  services:
+    loop/a:
+      image: true
+      connects:
+      - loop/b
+    loop/b:
+      image: true
+      connects:
+      - loop/a
+expect:
+  gaps:
+  - kind: no-limit
+    target: loop
+then:
+  services:
+    loop/b:
+      limit: true
+  expect:
+    gaps: []

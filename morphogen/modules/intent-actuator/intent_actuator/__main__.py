@@ -27,7 +27,7 @@ from kk.lib import connect, follow, run
 from morphogen import blueprint, systems
 from morphogen.policy import actions
 
-from .actuate import PPLAN_STEP_OF, refusal, replace, set_env, steps, target_file
+from .actuate import PPLAN_STEP_OF, new_system_file, refusal, replace, set_env, steps, target_file
 
 MODULE = "urn:kk:module:intent-actuator"
 AGENT = "urn:kk:agent:intent-actuator"
@@ -96,12 +96,30 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                         cur.execute(blueprint.MAP, blueprint.params(name))
                         cols = [d.name for d in cur.description]
                         text = blueprint.render(blueprint.described([dict(zip(cols, r)) for r in cur.fetchall()], name), name)
-                        if blueprint.sha(text) != s["value"]:
+                        # Claims, not change sets: an actuator may not read other agents' change sets.
+                        cur.execute("""select object_value->>'@value', change_set::text, attributed_to from api.claims
+                                       where subject = %s and predicate = %s and status <> 'deprecated'""",
+                                    (s["plan"], "http://www.w3.org/2000/01/rdf-schema#label"))
+                        shown = cur.fetchall()
+                        cur.execute("select distinct attributed_to from api.claims where id = any(%s::uuid[])", (s["claims"],))
+                        by = {r[0] for r in cur.fetchall()} | {a for _, _, a in shown}
+                        if by != {blueprint.PROPOSER}:
+                            why = "a create step is carried out only when design-blueprint proposed it"
+                        elif [(t, cs) for t, cs, _ in shown] != [(blueprint.label(name, text), s["change_sets"][0])]:
+                            why = "the text the person approved (the plan's label) is not the file the record renders now"
+                        elif blueprint.sha(text) != s["value"]:
                             why = "the system as described now is not the file that was approved"
+                        else:
+                            why = None
+                        if why:
                             outputs.update(refused=why)
                             raise PermissionError(why)
                         f.parent.mkdir(parents=True, exist_ok=True)
-                        f.write_text(text)
+                        if new_system_file(intent, s["target"]) != f:     # a link made since the step was checked
+                            raise PermissionError("the system's directory changed since the step was checked")
+                        fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+                        with os.fdopen(fd, "w") as out:
+                            out.write(text)
                         try:
                             sha = commit(intent, f, s, labels.get(s["plan"], s["plan"]))
                         except Exception:

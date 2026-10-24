@@ -4,7 +4,9 @@ person to approve. A plain command.
   python3 -m design_blueprint propose SYSTEM
 
 Refuses while the gap finder has an open gap on the system (a question not answered yet), while the
-description conflicts (morphogen.blueprint), or when the system has a compose file already. Otherwise it
+description conflicts (morphogen.blueprint), while a claim it would render has a refuted quote, when the system
+has a compose file already, or when the intake filter (the kernel's filter-gitleaks) finds a secret in the plan:
+a setting's value would otherwise reach the record and the intent repository. Otherwise it
 renders the file (morphogen.blueprint.render) and records, in the review lane, a plan whose label is the file's
 whole text and whose one step (urn:kk:action:create-system on urn:kk:system:<name>) names the file's sha256,
 inferred from every map claim the file was rendered from. The intent actuator writes the file only if the system
@@ -15,6 +17,7 @@ KK_INTENT_DIR (default morphogen/intent).
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
@@ -24,7 +27,7 @@ from kk.lib import connect, run, submit
 from morphogen import blueprint
 
 MODULE = "urn:kk:module:design-blueprint"
-AGENT = "urn:kk:agent:design-blueprint"
+AGENT = blueprint.PROPOSER
 SCOPE = "urn:kk:scope:default"
 ACTION = "urn:kk:action:create-system"
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
@@ -33,6 +36,12 @@ DCT_TYPE = "http://purl.org/dc/terms/type"
 PPLAN = "http://purl.org/net/p-plan#"
 SOSA = "http://www.w3.org/ns/sosa/"
 OA = "http://www.w3.org/ns/oa#"
+_spec = importlib.util.spec_from_file_location(
+    "filter_gitleaks", Path(__file__).resolve().parents[4] / "kernel" / "providers" / "filter-gitleaks" / "filter_gitleaks" / "__main__.py")
+intake = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(intake)
+REFUTED = """select c.id from api.claims c join api.verifications v on v.claim_id = c.id
+             where c.id = any(%s::uuid[]) and v.verdict = 'refuted'"""
 GAPS = """select g.object_entity, b.object_value->>'@value' from api.claims g
           join api.claims b on b.subject = g.subject and b.predicate = %(body)s and b.status <> 'deprecated'
           where g.predicate = %(target)s and g.attributed_to = 'urn:kk:agent:map-gaps' and g.status <> 'deprecated'
@@ -50,7 +59,7 @@ def plan(name: str, text: str, premises: list[str]) -> dict:
     ent = lambda x: {"entity": x}  # noqa: E731
     return {"idempotency_key": f"design-blueprint:{iri}", "attributed_to": AGENT, "target_scope": SCOPE, "lane": "review",
             "ops": [claim(iri, RDF_TYPE, ent(PPLAN + "Plan")),
-                    claim(iri, LABEL, {"value": {"@value": f"Write intent/systems/{name}/compose.yaml, as described:\n\n{text}"}}),
+                    claim(iri, LABEL, {"value": {"@value": blueprint.label(name, text)}}),
                     claim(iri, DCT_TYPE, ent("urn:kk:risk:medium")),
                     claim(step, RDF_TYPE, ent(SOSA + "Actuation")), claim(step, PPLAN + "isStepOfPlan", ent(iri)),
                     claim(step, DCT_TYPE, ent(ACTION)), claim(step, SOSA + "hasFeatureOfInterest", ent(f"urn:kk:system:{name}")),
@@ -77,7 +86,15 @@ def propose(conn, name: str, intent: Path) -> dict:
             text = blueprint.render(blueprint.described(claims, name), name)
         except blueprint.Conflict as e:
             return {"refused": f"the description conflicts: {e}"}
-        cs = plan(name, text, sorted({str(c["id"]) for c in claims}))
+        ids = sorted({str(c["id"]) for c in claims})
+        cur.execute(REFUTED, (ids,))
+        refuted = [str(r[0]) for r in cur.fetchall()]
+        if refuted:
+            return {"refused": "a claim the file would be rendered from has a quote the verifier refuted", "claims": refuted}
+        cs = plan(name, text, ids)
+        screened = intake.filter(cs)                      # fails closed: raises when gitleaks cannot run
+        if screened.action != "pass":
+            return {"refused": f"the intake filter found a secret in the file ({screened.reason}): record it elsewhere"}
         with run(cur, MODULE, {"system": name}) as (run_id, outputs):
             res = submit(cur, cs, run_id)
             outputs.update(change_set=str(res["id"]), sha256=blueprint.sha(text))

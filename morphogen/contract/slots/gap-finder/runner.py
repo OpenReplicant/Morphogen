@@ -90,12 +90,25 @@ def answer(provider: Path, package: str, stages: list[list]) -> list[dict]:
 
 
 def judge(found: list[dict], state: list[dict]) -> tuple[list, str | None]:
-    ids = {c["id"] for c in state}
+    """The gaps as {kind, target}, or why one is wrong. A gap derives from claims about its own target: the
+    service's, the connections to an unknown peer, or the system's services'."""
+    by_id = {c["id"]: c for c in state}
+    member = {c["subject"]: c["object_entity"] for c in state if c["predicate"] == KKT + "memberOf"}
     rows = []
     for g in found:
-        if not g["premises"] or not set(g["premises"]) <= ids:
-            return [], f"a gap on {g['target']} does not derive from claims in its input: {g['premises']}"
-        target = g["target"].removeprefix("urn:kk:node:").replace(":", "/", 1)
+        t, kind = g["target"], g["kind"].rsplit(":", 1)[-1]
+        prem = [by_id.get(p) for p in g["premises"]]
+        if not prem or None in prem:
+            return [], f"a gap on {t} does not derive from claims in its input: {g['premises']}"
+        if kind == "unknown-peer":
+            ok = all(c["predicate"] == KKT + "connectsTo" and c["object_entity"] == t for c in prem)
+        elif t.startswith("urn:kk:system:"):
+            ok = all(member.get(c["subject"]) == t for c in prem)
+        else:
+            ok = all(c["subject"] == t for c in prem)
+        if not ok:
+            return [], f"a gap on {t} derives from claims about something else: {g['premises']}"
+        target = t.removeprefix("urn:kk:system:") if t.startswith("urn:kk:system:") else t.removeprefix("urn:kk:node:").replace(":", "/", 1)
         rows.append({"kind": g["kind"].rsplit(":", 1)[-1], "target": target})
     return sorted(rows, key=lambda r: (r["target"], r["kind"])), None
 

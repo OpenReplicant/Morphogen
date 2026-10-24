@@ -11,7 +11,9 @@ A gap is a question to ask next:
   unknown-peer  a connection to something not on the map            "shop connects to payments, ..."
   no-image      a service with no image setting                      "Which container image runs shop?"
   unconnected   in a system of two or more services, one nothing connects to and that connects to nothing
-  no-limit      an entry point (a service no other service connects to) with no documented limit
+  no-limit      an entry point (a service no other service of its system connects to) with no documented limit;
+                or, when every service of a system is called by another (a cycle), the system itself while none
+                of its services has a limit
 
 Each gap is an oa:Annotation (dcterms:type urn:kk:gap-kind:<kind>, oa:hasTarget the service, or the unknown
 peer, oa:bodyValue the question), derived from the claims that make its target part of the map.
@@ -58,10 +60,11 @@ def gaps(claims: list[dict]) -> list[dict]:
         elif p == MAX and set(q) == {PROP}:
             limited.add(s)
     name = lambda x: label.get(x) or x.rsplit(":", 1)[-1]  # noqa: E731
-    called = defaultdict(set)
+    called = defaultdict(set)              # callers within the callee's own system
     for caller, callees in out_.items():
         for callee in callees:
-            called[callee].add(caller)
+            if system.get(caller) == system.get(callee):
+                called[callee].add(caller)
     size = defaultdict(int)
     for s in typed:
         size[system.get(s)] += 1
@@ -85,5 +88,13 @@ def gaps(claims: list[dict]) -> list[dict]:
         if not called.get(s) and s not in limited:
             add("no-limit", s, f"What is the most {name(s)}'s request time (or another measure) may be before something "
                 "should change?", nodes[s])
+    members = defaultdict(list)
+    for s in typed:
+        members[system.get(s)].append(s)
+    for sysiri, svcs in sorted(members.items(), key=lambda x: str(x[0])):
+        if sysiri and all(called.get(s) for s in svcs) and not any(s in limited for s in svcs):
+            add("no-limit", sysiri, f"Every service of {name(sysiri)} is called by another: which one do people use first, and "
+                "what is the most its request time may be before something should change?",
+                [i for s in svcs for i in nodes[s]])
     rank = {KIND + k: i for i, k in enumerate(ORDER)}
     return sorted(found, key=lambda g: (rank[g["kind"]], g["target"]))

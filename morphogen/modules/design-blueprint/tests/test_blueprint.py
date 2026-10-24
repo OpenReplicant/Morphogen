@@ -64,6 +64,13 @@ for extra, why in [({"subject": N + "api", "predicate": KKT + "propertyValue", "
         check(False, f"{why} is a conflict")
     except blueprint.Conflict:
         check(True, f"{why} is a conflict a person settles first")
+short = {"id": "s", "subject": N + "api", "predicate": KKT + "propertyValue", "object_entity": None,
+         "object_value": {"@value": "1"}, "qualifiers": {"kkt:propertyName": "WORKERS"}}
+try:
+    blueprint.described(claims + [short], "notes")
+    check(False, "a setting whose qualifier key is not the full IRI is a conflict")
+except blueprint.Conflict:
+    check(True, "a setting whose qualifier key is not the full IRI is a conflict, not a crash (LESSONS)")
 cs = plan("notes", text, sorted(x["id"] for x in claims))
 get = lambda p: [op["object"] for op in cs["ops"] if op["predicate"] == p]  # noqa: E731
 check(cs["lane"] == "review" and get("http://purl.org/dc/terms/type")[1] == {"entity": ACTION}

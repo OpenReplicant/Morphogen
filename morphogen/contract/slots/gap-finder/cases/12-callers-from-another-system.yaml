@@ -1,0 +1,15 @@
+id: urn:kk:eval:gap-finder/callers-from-another-system
+text: a service called only from another system is an entry point of its own system
+input:
+  services:
+    shop/front:
+      image: true
+      limit: true
+      connects:
+      - blog/api
+    blog/api:
+      image: true
+expect:
+  gaps:
+  - kind: no-limit
+    target: blog/api

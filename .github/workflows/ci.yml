@@ -53,6 +53,8 @@ jobs:
           /tmp/kk-venv/bin/python kernel/evals/self-model/test_grade.py kk_eval_self
           /tmp/kk-venv/bin/python morphogen/evals/self-model/run.py setup kk_eval_self_mg
           /tmp/kk-venv/bin/python morphogen/evals/self-model/run.py reference kk_eval_self_mg
+      - name: The design eval's grader, on the scripted interviewer and two wrong ones (R5-29)
+        run: /tmp/kk-venv/bin/python morphogen/evals/design/test_grade.py
       - name: OS users for model-written code (R5-24)
         run: |
           # uids of their own: --system would hand out 999, the uid Postgres runs as in the service container

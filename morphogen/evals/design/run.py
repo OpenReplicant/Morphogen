@@ -10,7 +10,7 @@ MCP server, records the system a person described in a recorded conversation (mo
 Graded:
   applied     every change set the agent submitted applied (the validator accepted it)
   quotes      the quote verifier supports every quote the agent's claims carry, against the recorded messages
-  no gaps     the gap finder lists nothing missing for the system
+  no gaps     the agent described the system, and the gap finder lists nothing missing for it
   map         the system the agent described is the expected one (notes.yaml): the same services with the same
               images, connections and settings. Service names are the agent's choice, so services are matched by
               their image
@@ -43,6 +43,7 @@ ROOT = HERE.parents[2]
 MODULES = ROOT / "morphogen" / "modules"
 FIX = ROOT / "morphogen" / "tests" / "fixtures" / "design"
 SKILL = ROOT / "morphogen" / "skills" / "interview" / "SKILL.md"
+EXPECTED = FIX / "notes.yaml"            # what a correct description holds; never what an agent was given
 for p in (ROOT / "kernel" / "src", ROOT / "morphogen" / "src", MODULES, MODULES / "map-gaps", MODULES / "design-blueprint",
           ROOT / "kernel" / "providers" / "validator-shacl", ROOT / "kernel" / "providers" / "verifier-quotes"):
     sys.path.insert(0, str(p))
@@ -195,6 +196,9 @@ def grade(db: str, label: str) -> dict:
     settle(db)
     with connect(url=f"dbname={db}") as su:
         sets = su.execute("select status, count(*) from api.change_sets where attributed_to = %s group by 1", (AGENT,)).fetchall()
+        reports = [[k, st, rep] for k, st, rep in su.execute(
+            "select idempotency_key, status, validation_report from api.change_sets where attributed_to = %s order by submitted_at",
+            (AGENT,)).fetchall()]
         verdicts = dict(su.execute("select coalesce(v.verdict, 'unverified'), count(*) from api.claims c left join api.verifications v "
                                    "on v.claim_id = c.id where c.attributed_to = %s and c.status <> 'deprecated' group by 1",
                                    (AGENT,)).fetchall())
@@ -208,7 +212,7 @@ def grade(db: str, label: str) -> dict:
     spec = importlib.util.spec_from_file_location("test_design", ROOT / "morphogen" / "tests" / "test_design.py")
     t = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(t)
-    script = yaml.safe_load((FIX / "notes.yaml").read_text())
+    script = yaml.safe_load(EXPECTED.read_text())
     want_claims = [{"id": str(i), **o, "object_entity": o["object"].get("entity"), "object_value": o["object"].get("value"),
                     "qualifiers": o.get("qualifiers") or {}}
                    for i, o in enumerate(t.op(row, "x") for a in script["answers"] for row in a["claims"])]
@@ -222,14 +226,14 @@ def grade(db: str, label: str) -> dict:
     result = {
         "applied": bool(sets) and all(s == "applied" for s, _ in sets),
         "quotes": set(verdicts) == {"supported"},
-        "no_gaps": not open_,
+        "no_gaps": not open_ and bool(mine),
         "map": got == want,
         "limit": any(s == f"urn:kk:node:notes:{entry}" and abs(v - 0.3) < 1e-9 and q == {PROP: "urn:kk:property:latency-seconds-mean"}
                      for s, v, q in limits),
         "proposable": not open_ and conflict is None and bool(got_described),
     }
     result["passed"] = all(result.values())
-    detail = {"change_sets": dict(sets), "verdicts": verdicts, "open_gaps": open_, "described": got_described,
+    detail = {"change_sets": dict(sets), "validation": reports, "verdicts": verdicts, "open_gaps": open_, "described": got_described,
               "expected": want, "conflict": conflict, "limits": [[s, v, q] for s, v, q in limits]}
     for k, v in result.items():
         print(("ok  " if v else "FAIL"), k)

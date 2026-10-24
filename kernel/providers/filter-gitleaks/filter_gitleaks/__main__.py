@@ -3,7 +3,7 @@ when gitleaks cannot run):
 
   python3 -m filter_gitleaks --repo DIR PATH...   (or the paths as a JSON list on stdin)
       -> stdout {"paths": [clean], "blocked": [{"path", "line", "rule"}]}       files, before an encoder stores them
-  filter_gitleaks.filter(change_set) -> {"action": "pass" | "drop", "reason"}    a proposal (kk.interfaces.IntakeFilter):
+  filter_gitleaks.filter(change_set) -> kk.interfaces.FilterResult (pass | drop)  a proposal (the IntakeFilter hook):
       every text it carries (literal values, quotes, source URIs, labels) is scanned; a finding drops it
 
 Findings name the file (or the op), line and gitleaks rule, never the secret. Needs the gitleaks binary on PATH
@@ -111,14 +111,18 @@ def texts(change_set: dict) -> list[str]:
     return [" ".join(strings(op)).replace("\n", " ") for op in change_set.get("ops", [])]
 
 
-def filter(change_set: dict) -> dict:
-    """The IntakeFilter hook: {"action": "pass"} or {"action": "drop", "reason": "<rule> in op <n>, ..."}."""
+MODULE = "urn:kk:module:filter-gitleaks"
+
+
+def filter(change_set: dict):
+    """The IntakeFilter hook: FilterResult("pass") or FilterResult("drop", reason="<rule> in op <n>, ...")."""
+    from kk.interfaces import FilterResult
     with tempfile.TemporaryDirectory() as d:
         Path(d, "change-set.txt").write_text("\n".join(texts(change_set)) + "\n")
         found = scan(Path(d), ["change-set.txt"])["blocked"]
     if not found:
-        return {"action": "pass", "reason": ""}
-    return {"action": "drop", "reason": ", ".join(f"{b['rule']} in op {b['line'] - 1}" for b in found)}
+        return FilterResult("pass")
+    return FilterResult("drop", reason=", ".join(f"{b['rule']} in op {b['line'] - 1}" for b in found))
 
 
 def main() -> int:

@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).resolve().parents[3] / "src")]
 import filter_gitleaks.__main__ as f  # noqa: E402
 
 checks = []
@@ -48,8 +48,8 @@ cs = {"ops": [{"op": "add_claim", "subject": "urn:kk:node:shop", "object": {"val
                "references": [{"source_uri": "urn:kk:message:x", "quote": f"the key is {KEY}"}]}]}
 res = f.filter(cs)
 check("a proposal quoting a secret is dropped, naming the rule and the op, not the secret",
-      res["action"] == "drop" and "op 1" in res["reason"] and KEY not in res["reason"], res)
-check("a proposal with no secret passes", f.filter({"ops": cs["ops"][:1]}) == {"action": "pass", "reason": ""})
+      res.action == "drop" and "op 1" in res.reason and KEY not in res.reason, res)
+check("a proposal with no secret passes", f.filter({"ops": cs["ops"][:1]}).action == "pass")
 path = os.environ["PATH"]
 os.environ["PATH"] = "/nonexistent"
 try:

@@ -188,7 +188,7 @@ def main() -> None:
         settle()
         with connect("kkm_intent_actuator") as conn:
             report = actuate(conn, intent, "sandbox")
-        check([r["status"] for r in report.values()] == ["failed"] and "not the file that was approved" in next(iter(report.values()))["error"]
+        check([r["status"] for r in report.values()] == ["failed"] and "is not the file" in next(iter(report.values()))["error"]
               and not (intent / "systems" / "notes").exists(),
               "approve: a description changed after approval is not written (the approved text is bound by its sha256)")
 
@@ -223,6 +223,48 @@ def main() -> None:
         with connect("kkm_design_blueprint") as conn:
             again = propose(conn, "notes", intent)
         check("compose file already" in again.get("refused", ""), "propose: a system with a compose file is not created again")
+
+        # Another agent's plan: its label shows a harmless file, its step names what the record renders.
+        def describe(system, rows, key):
+            with connect("t_design_interviewer") as me, me.cursor() as cur, run(cur, "urn:kk:module:design-test") as (run_id, _):
+                ops = [op(r, "urn:kk:message:notes:notes-intake:6") for r in rows]
+                for o in ops:
+                    o["subject"] = o["subject"].replace(":notes:", f":{system}:").replace("system:notes", f"system:{system}")
+                    if "entity" in o["object"]:
+                        o["object"]["entity"] = o["object"]["entity"].replace(":notes:", f":{system}:").replace("system:notes", f"system:{system}")
+                submit(cur, {"idempotency_key": key, "attributed_to": INTERVIEWER, "target_scope": "urn:kk:scope:default", "ops": ops}, run_id)
+            settle()
+        base = [["node:app", "a", "kkt:NodeTemplate", "run the API"], ["node:app", "kkt:memberOf", "sys", "run the API"],
+                ["node:app", "image", '"ghcr.io/example/notes-api:1.4.2"', "run the API"],
+                ["node:app", "limit urn:kk:property:latency-seconds-mean", "0.3", "run the API"]]
+        describe("forge", base + [["node:app", "setting MODE", '"evil"', "run the API"]], "interview:forge")
+        rendered = blueprint.render(blueprint.described(
+            [dict(zip(["id", "subject", "predicate", "object_entity", "object_value", "qualifiers"], r)) for r in
+             connect(url=url).execute(blueprint.MAP, blueprint.params("forge")).fetchall()], "forge"), "forge")
+        from design_blueprint.__main__ import plan as make_plan
+        forged = make_plan("forge", rendered, [])
+        forged["attributed_to"], forged["idempotency_key"] = INTERVIEWER, "forged"
+        for o in forged["ops"]:
+            o.pop("derived_from")
+            o.update(evidence_type="extracted", references=[{"source_uri": "urn:kk:message:notes:notes-intake:6", "quote": "run the API"}])
+            if o["predicate"].endswith("#label"):
+                o["object"] = {"value": {"@value": blueprint.label("forge", "services:\n  app:\n    image: harmless:1\n")}}
+        with connect("t_design_interviewer") as me, me.cursor() as cur, run(cur, "urn:kk:module:design-test") as (run_id, _):
+            fid = str(submit(cur, forged, run_id)["id"])
+        settle()
+        with connect("t_design_person") as person:
+            person.execute("select api.review(%s, true, 'looks harmless')", (fid,))
+        with connect("kkm_intent_actuator") as conn:
+            report = actuate(conn, intent, "sandbox")
+        check(not (intent / "systems" / "forge").exists() and any("design-blueprint proposed" in r.get("error", "") for r in report.values()),
+              "write: a plan another agent made, with a label that is not the file, is not carried out though a person approved it")
+
+        describe("vault", base + [["node:app", "setting AWS_ACCESS_KEY_ID", '"AKIA' + 'Q3EGRTZ7OVMW2KX5"', "run the API"]], "interview:vault")
+        gaps_now()
+        with connect("kkm_design_blueprint") as conn:
+            secret = propose(conn, "vault", intent)
+        check("intake filter found a secret" in secret.get("refused", ""),
+              f"propose: a secret in a setting is not put in a plan or a file ({secret.get('refused')})")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
         subprocess.run(["dropdb", "--force", DB], check=True)

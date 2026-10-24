@@ -16,7 +16,7 @@ submit claims; their effects are observed.
 | sandbox | sandbox | Written (T6) | New: the slot's contract, then candidate and incumbent measured on a copy of the record; the evaluator records the scores |
 | interview-encoder | design-agent | Ported (T13) | rebuild 4 `encoder-interaction`, unchanged but for names: a conversation as notes an interviewer quotes |
 | design-blueprint | design-agent | Written (T13) | New: a described system with no open question becomes a review-lane plan to write its compose file (`morphogen.blueprint`) |
-| map-gaps | gap-finder | Written (T13) | Rules new (system maps), shape from rebuild 4 `map-gaps`; 10 contract cases, 8 mutants |
+| map-gaps | gap-finder | Written (T13) | Rules new (system maps), shape from rebuild 4 `map-gaps`; 12 contract cases, 11 mutants |
 | encoder-compose | system-encoder | Written (T9) | New: a compose file as a TOSCA topology, every claim citing its line |
 | observer-prometheus | observer | Written (T9) | rebuild 4 `observer-prometheus`: request times from a service's metrics |
 | registry-lookup | catalog-lookup | New | — |

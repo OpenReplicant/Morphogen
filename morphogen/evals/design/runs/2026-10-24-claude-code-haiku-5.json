@@ -1,0 +1,110 @@
+{
+  "eval": "design agent (R5-29)",
+  "agent": "claude-code-haiku",
+  "applied": true,
+  "quotes": true,
+  "no_gaps": true,
+  "map": true,
+  "limit": true,
+  "proposable": true,
+  "passed": true,
+  "detail": {
+    "change_sets": {
+      "applied": 3
+    },
+    "validation": [
+      [
+        "interview:notes|urn:kk:message:notes:notes-intake:2",
+        "applied",
+        {
+          "validator": "urn:kk:module:validator-shacl@0.3.1",
+          "schema_errors": [],
+          "shape_violations": []
+        }
+      ],
+      [
+        "interview:notes|urn:kk:message:notes:notes-intake:4",
+        "applied",
+        {
+          "validator": "urn:kk:module:validator-shacl@0.3.1",
+          "schema_errors": [],
+          "shape_violations": []
+        }
+      ],
+      [
+        "interview:notes|urn:kk:message:notes:notes-intake:6",
+        "applied",
+        {
+          "validator": "urn:kk:module:validator-shacl@0.3.1",
+          "schema_errors": [],
+          "shape_violations": []
+        }
+      ]
+    ],
+    "verdicts": {
+      "supported": 18
+    },
+    "open_gaps": [],
+    "described": {
+      "api": {
+        "image": "ghcr.io/example/notes-api:1.4.2",
+        "command": null,
+        "environment": {
+          "LOG_LEVEL": "info"
+        },
+        "connects": [
+          "database"
+        ]
+      },
+      "database": {
+        "image": "postgres:16.4",
+        "command": null,
+        "environment": {},
+        "connects": []
+      },
+      "web": {
+        "image": "ghcr.io/example/notes-web:1.4.2",
+        "command": null,
+        "environment": {},
+        "connects": [
+          "api"
+        ]
+      }
+    },
+    "expected": {
+      "ghcr.io/example/notes-api:1.4.2": {
+        "connects": [
+          "postgres:16.4"
+        ],
+        "command": null,
+        "environment": {
+          "LOG_LEVEL": "info"
+        }
+      },
+      "postgres:16.4": {
+        "connects": [],
+        "command": null,
+        "environment": {}
+      },
+      "ghcr.io/example/notes-web:1.4.2": {
+        "connects": [
+          "ghcr.io/example/notes-api:1.4.2"
+        ],
+        "command": null,
+        "environment": {}
+      }
+    },
+    "conflict": null,
+    "limits": [
+      [
+        "urn:kk:node:notes:web",
+        0.3,
+        {
+          "http://www.w3.org/ns/sosa/observedProperty": "urn:kk:property:latency-seconds-mean"
+        }
+      ]
+    ]
+  },
+  "fixture": "morphogen/tests/fixtures/design/notes.jsonl",
+  "reply": "Change sets submitted (all applied): af7562ce-a199-48a6-8a67-d8fac1666205 (message 2), f28e2aee-94cc-4cab-9245-e90ab7dac5d6 (message 4), 526c6f99-00b4-460e-961c-df42846b63a1 (message 6)."
+}

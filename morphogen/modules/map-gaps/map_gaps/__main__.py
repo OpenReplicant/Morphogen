@@ -4,8 +4,9 @@ Whenever the change feed carries a map claim (a service, a connection, a setting
 KK_SWEEP_SECONDS, a pass reads the current map claims, finds the gaps and submits one change set per gap: an
 oa:Annotation (dcterms:type urn:kk:gap-kind:<kind>, oa:hasTarget the service or the unknown peer,
 oa:bodyValue the question), inferred and derived from the claims that put the target on the map. An unchanged
-gap is a no-op; a gap whose premises changed is superseded; a closed gap has its claims retracted, so the list
-shrinks as the person answers. The shape is rebuild 4 modules/map-gaps', with the change feed (R5-04) in
+open gap is a no-op; a gap whose premises changed is superseded; a closed gap has its claims retracted, so the list
+shrinks as the person answers; a gap that opens again (an answer retracted) is recorded again, under a key of its
+own (the key counts the gap's earlier change sets). The shape is rebuild 4 modules/map-gaps', with the change feed (R5-04) in
 place of NOTIFY patterns.
 
   python3 -m map_gaps [--once]
@@ -30,19 +31,27 @@ SCOPE = "urn:kk:scope:default"
 OA = "http://www.w3.org/ns/oa#"
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 DCT_TYPE = "http://purl.org/dc/terms/type"
+OPEN = """select c.id, c.subject, c.predicate, c.qualifiers, c.valid_from, c.status, s.idempotency_key
+          from api.claims c join api.change_sets s on s.id = c.change_set
+          where c.attributed_to = %(agent)s and c.status <> 'deprecated' and starts_with(s.idempotency_key, %(prefix)s)"""
+SETS = """select count(*) from api.change_sets where attributed_to = %(agent)s and starts_with(idempotency_key, %(prefix)s)"""
 CLAIMS = """select id, subject, predicate, object_entity, object_value, qualifiers from api.claims
             where status <> 'deprecated' and predicate = any(%s)"""
 
 
-def change_set(g: dict) -> dict:
+def change_set(g: dict, generation: int = 0) -> dict:
     def claim(p, o):
         return {"op": "add_claim", "subject": g["iri"], "predicate": p, "object": o, "evidence_type": "inferred",
                 "derived_from": g["premises"]}
     ops = [claim(RDF_TYPE, {"entity": OA + "Annotation"}), claim(DCT_TYPE, {"entity": g["kind"]}),
            claim(OA + "hasTarget", {"entity": g["target"]}), claim(OA + "bodyValue", {"value": {"@value": g["text"]}})]
     digest = hashlib.sha256(json.dumps([g["premises"], g["text"]]).encode()).hexdigest()[:16]
-    return {"idempotency_key": f"map-gaps:{g['iri']}|{digest}", "attributed_to": AGENT, "target_scope": SCOPE,
+    return {"idempotency_key": f"map-gaps:{g['iri']}|{digest}|{generation}", "attributed_to": AGENT, "target_scope": SCOPE,
             "ops": ops}
+
+
+def digest_of(key: str) -> str:
+    return key.split("|")[1] if key.count("|") >= 1 else ""
 
 
 def one_pass(conn) -> dict:
@@ -55,8 +64,15 @@ def one_pass(conn) -> dict:
         submitted = {}
         with run(cur, MODULE, {"gaps": len(found)}) as (run_id, outputs):
             for g in found:
-                cs = change_set(g)
-                old = prior_claims(cur, AGENT, f"map-gaps:{g['iri']}|", cs["idempotency_key"])
+                prefix = f"map-gaps:{g['iri']}|"
+                cur.execute(OPEN, {"agent": AGENT, "prefix": prefix})
+                cols = [d.name for d in cur.description]
+                old = [dict(zip(cols, r)) for r in cur.fetchall()]
+                want = digest_of(change_set(g)["idempotency_key"])
+                if old and {digest_of(c["idempotency_key"]) for c in old} == {want}:
+                    continue                    # open, as it was: nothing to record
+                cur.execute(SETS, {"agent": AGENT, "prefix": prefix})
+                cs = change_set(g, cur.fetchone()[0])
                 if old:   # the premises changed: the new version replaces the old one
                     supersede(cs, old)
                 submitted[g["iri"]] = str(submit(cur, cs, run_id)["id"])

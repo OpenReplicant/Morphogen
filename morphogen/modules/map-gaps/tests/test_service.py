@@ -96,7 +96,7 @@ try:
           f"podinfo as mapped lacks one thing: a limit on its entry point, the frontend ({gaps})")
     check(gaps[FRONT][2] == on_map and "frontend" in gaps[FRONT][1],
           "the gap is a question about the frontend, derived from the claims that put it on the map")
-    check(gap_pass()["change_sets"] == first["change_sets"], "a pass with nothing changed submits nothing new")
+    check(gap_pass()["change_sets"] == {}, "a pass with nothing changed submits nothing")
 
     with connect("t_map_gaps_person") as person, person.cursor() as cur, run(cur, "urn:kk:module:map-gaps-test") as (run_id, _):
         submit(cur, {"idempotency_key": "map-gaps-test:limit", "attributed_to": PERSON, "target_scope": "urn:kk:scope:default",
@@ -112,6 +112,20 @@ try:
     check(second["gaps"] == 0 and second["closed"] == 1 and not left and kept == 4,
           "a person's documented limit closes the gap: its claims are retracted, and kept")
 
+    with connect("t_map_gaps_person") as person, person.cursor() as cur, run(cur, "urn:kk:module:map-gaps-test") as (run_id, _):
+        lim = person.execute("select id, status from api.claims where predicate = %s and subject = %s and status <> 'deprecated'",
+                             (MAX, FRONT)).fetchone()
+        submit(cur, {"idempotency_key": "map-gaps-test:limit-withdrawn", "attributed_to": PERSON, "target_scope": "urn:kk:scope:default",
+                     "ops": [{"op": "set_status", "claim": str(lim[0]), "status": "deprecated", "reason": "retracted",
+                              "expect_status": lim[1]}]}, run_id)
+    settle()
+    third = gap_pass()
+    with connect("kkm_map_gaps") as conn:
+        again = open_gaps(conn)
+    check(third["gaps"] == 1 and list(again) == [FRONT] and again[FRONT][0] == "no-limit",
+          "a gap that opens again (the limit withdrawn) is asked again")
+    check(gap_pass()["change_sets"] == {}, "and stays one open gap: the next pass submits nothing")
+
     copy.write_text(copy.read_text().replace("services:\n", "services:\n  worker:\n    command: [\"sleep\", \"infinity\"]\n", 1))
     scan("podinfo", copy, tmp)
     settle()
@@ -121,8 +135,8 @@ try:
             "select t.object_entity, k.object_entity from api.claims t join api.claims k on k.subject = t.subject "
             "and k.predicate = 'http://purl.org/dc/terms/type' and k.status <> 'deprecated' "
             "where t.predicate = %s and t.attributed_to = %s and t.status <> 'deprecated'", (OA + "hasTarget", AGENT)).fetchall())
-    check(now == [("worker", "no-image"), ("worker", "no-limit"), ("worker", "unconnected")],
-          f"a service added to the file with no image and no connection is asked about each ({now})")
+    check(now == [("frontend", "no-limit"), ("worker", "no-image"), ("worker", "no-limit"), ("worker", "unconnected")],
+          f"a service added to the file with no image and no connection is asked about each; the withdrawn limit is still asked ({now})")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
     subprocess.run(["dropdb", "--force", DB], check=True)
