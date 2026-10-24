@@ -1,13 +1,14 @@
-# How the sandbox measures a provider of this slot (R5-21). The sandbox copies the claims with these
-# predicates from the record (what the sandbox's role may read) into a fresh database per provider, runs
-# the provider's service there for `seconds` with `env`, and takes the mean of `metric` from the
-# provider's own telemetry (kk.telemetry). Lower is better.
+# How the sandbox measures a provider of this slot (R5-21, R5-23). The sandbox copies the claims with these
+# predicates from the record (what the sandbox's role may read) into a fresh database per provider, then
+# times full passes of the provider from its own process: `<package>.__main__.<entry>(conn)`, connected as
+# the incumbent's login, after `warmup` untimed passes. Before each pass it adds one new window of input,
+# as production does, so a pass that skips its work because nothing changed does not help here. The
+# metric is the mean of the timed passes, in seconds. Lower is better.
 inputs:
   - http://www.w3.org/ns/sosa/hasSimpleResult
   - https://www.irit.fr/recherches/MELODI/ontologies/BBO#maxValue
-metric: kk.step.duration
+entry: one_pass
+metric: pass-seconds
 better: lower
-seconds: 8
-env:
-  KK_SWEEP_SECONDS: "1"
-  KK_POLL_SECONDS: "0.5"
+warmup: 1
+passes: 5

@@ -53,7 +53,10 @@ What is wanted: {request['text']}
 
 The incumbent provider is copied into {workdir}. Change the copy so that:
 - it still passes every case of the slot's contract: the case files in {cases}/cases. Run
-  `python3 {cases}/runner.py {workdir}`: it prints "ok: <case id>" for each passing case and must exit 0;
+  `python3 {cases}/runner.py {workdir}`: it prints "ok: <case id>" for each passing case and must exit 0.
+  The sandbox also loads every case into a database and judges what one real pass of the service submits
+  (its `one_pass(conn)` in the package's `__main__`), so the way the service reads the record must find
+  everything the rule needs;
 - it does better than the incumbent on the slot's benchmark, which measures this:
 {benchmark}
 - provider.yaml gets an id of its own (urn:kk:provider:<new-name>, lower-case letters, digits and hyphens),

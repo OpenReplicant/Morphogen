@@ -114,7 +114,7 @@ def main() -> None:
         token = os.urandom(16).hex()
         service("observer", "observer_otel", MODULES / "observer-otel",
                 {"KK_WINDOW_SECONDS": str(WINDOW), "KK_OTLP_PORT": str(port), "KK_OTLP_SOURCE": f"http://observer:{port}/v1/metrics",
-                 "KK_OTLP_TOKEN": token, "KK_OTLP_SERVICES": "belief-corroboration,validator-shacl"})
+                 "KK_OTLP_SECRET": token, "KK_OTLP_SERVICES": "belief-corroboration,validator-shacl"})
         for name, module in (("planner", "planner"), ("actuator", "intent_actuator"),
                              ("verifier", "prediction_verifier")):
             service(name, module, MODULES / {"actuator": "intent-actuator", "verifier": "prediction-verifier"}.get(name, name), {})
@@ -122,7 +122,7 @@ def main() -> None:
         rec = subprocess.Popen([sys.executable, str(ROOT / "morphogen" / "deploy" / "reconcile.py"), "--intent", str(intent),
                                 "--env", "sandbox", "--repo", str(ROOT)],
                                env={**base_env, "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}",
-                                    "OTEL_EXPORTER_OTLP_HEADERS": f"Authorization=Bearer%20{token}",
+                                    "KK_OTLP_SECRET": token,
                                     "OTEL_METRIC_EXPORT_INTERVAL": "1000"}, stdout=log, stderr=subprocess.STDOUT)
         procs.append(("reconcile", rec))
 

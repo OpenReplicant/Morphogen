@@ -20,7 +20,8 @@ identity and database login come from this process, not from intent.
 Logins (R5-22): the file's name names the slot's reviewed provider (environments/<env>/anomaly.yaml:
 morphogen/modules/anomaly or kernel/providers/anomaly). When that provider declares a login of its own
 (provider.yaml `role`, `login`), the service runs as that login with none of this process's other
-credentials (morphogen.logins); otherwise it gets this process's environment. A candidate from an
+credentials (morphogen.logins); otherwise it gets this process's environment. Either way it never gets
+KK_OTLP_SECRET: with it set, each service gets its own telemetry token, for its own name. A candidate from an
 experiment runs only as the incumbent's own login, and only while its directory matches HEAD (the code
 the person approved, measured and committed).
 """
@@ -41,7 +42,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from morphogen.logins import login_env, login_of  # noqa: E402
+from morphogen.logins import login_env, login_of, telemetry_token  # noqa: E402
 
 
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
@@ -101,7 +102,10 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
     extra = {**{k: v for k, v in os.environ.items() if k.startswith("OTEL_")},
              **{k: str(v) for k, v in (spec.get("env") or {}).items()}, "PYTHONPATH": path,
              "PYTHONDONTWRITEBYTECODE": "1", "OTEL_SERVICE_NAME": spec.get("provider", "")}
+    if os.environ.get("KK_OTLP_SECRET"):
+        extra["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Bearer%20{telemetry_token(os.environ['KK_OTLP_SECRET'], extra['OTEL_SERVICE_NAME'])}"
     env = login_env(os.environ["DATABASE_URL"], *login, extra) if login else {**os.environ, **extra}
+    env.pop("KK_OTLP_SECRET", None)
     cmd = shlex.split(spec["service"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable

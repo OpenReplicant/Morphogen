@@ -22,7 +22,8 @@ import importlib  # noqa: E402
 from psycopg.types.json import Jsonb  # noqa: E402
 
 from kk.lib import connect  # noqa: E402
-from sandbox.measure import contract  # noqa: E402
+import yaml  # noqa: E402
+from sandbox.measure import contract, service_cases  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -76,7 +77,7 @@ def main() -> None:
     # reach a run file.
     probe = tmp / "probe.txt"
     m = exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
-    hook = '    conn = connect(os.environ.get("KK_ROLE", "kkm_anomaly"))\n'
+    hook = 'def one_pass(conn, seen: dict | None = None) -> dict:\n'
     m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe)), 1))
     broken = tmp / "broken" / "anomaly-recent"
     shutil.copytree(exp / "anomaly-recent", broken)
@@ -85,7 +86,20 @@ def main() -> None:
     got = contract(broken)
     check(got["total"] == 11 and got["passed"] < 11, f"a candidate that ignores limits fails the analyser contract ({got['passed']}/11)")
 
-    env = {**os.environ, "DATABASE_URL": url, "KK_BENCH_SECONDS": "6",
+    # A candidate whose rule is right but whose reading of the record is not: it reads only providers'
+    # observations. The rule cases pass; the service cases (one real pass on every case) do not.
+    narrow = tmp / "narrow" / "anomaly-recent"
+    shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", narrow,
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    n = narrow / "anomaly_recent" / "__main__.py"
+    n.write_text(n.read_text().replace("and c.evidence_type = 'observed') x",
+                                       "and c.evidence_type = 'observed' and c.subject like 'urn:kk:provider:%%') x"))
+    bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
+    served = service_cases(narrow, "analyser", bench, ("kkm_anomaly", "kkm_anomaly_login"), "kk_sbx_test_narrow")
+    check(contract(narrow)["passed"] == 11 and served["total"] == 11 and served["passed"] < 11,
+          f"a candidate that reads only some of the record passes the rule cases and fails the service cases ({served['passed']}/11)")
+
+    env = {**os.environ, "DATABASE_URL": url,
            "PYTHONPATH": os.pathsep.join([str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")]),
            "KK_ARTIFACTS": str(tmp / "artifacts")}
     out = subprocess.run([sys.executable, "-m", "sandbox", str(exp)], cwd=HERE, env=env, capture_output=True, text=True)
@@ -103,9 +117,10 @@ def main() -> None:
                 and qualifiers->>%s = %s and subject = any(%s)""", DQV + "value", DQV + "isMeasurementOf",
             f"urn:kk:metric:sandbox-analyser:{metric}", [k for k, p in runs.items() if p == provider]))
         for p in ("urn:kk:provider:anomaly", "urn:kk:provider:anomaly-recent"):
-            check(value(p, "contract.passed") == value(p, "contract.total") == 11, f"{p.rsplit(':', 1)[-1]} passes the analyser contract (11/11)")
+            check(value(p, "contract.passed") == value(p, "contract.total") == 22 and value(p, "contract.service.passed") == 11,
+                  f"{p.rsplit(':', 1)[-1]} passes the analyser contract: 11 rule cases and 11 service cases")
         inc, cand = value("urn:kk:provider:anomaly", "metric.mean"), value("urn:kk:provider:anomaly-recent", "metric.mean")
-        check(cand < inc, f"on a copy of the record the candidate's step is faster ({cand:.3f} s against {inc:.3f} s)")
+        check(cand < inc, f"on a copy of the record, timed by the sandbox, the candidate's full pass is faster ({cand:.3f} s against {inc:.3f} s)")
         check(value("urn:kk:provider:anomaly", "inputs") == 4500, "the sandbox copied the record's 4,500 observations")
         check(not q("select 1 from api.claims where attributed_to = 'urn:kk:agent:sandbox'"), "the sandbox wrote no claims")
     who, creds, sees = probe.read_text().split()

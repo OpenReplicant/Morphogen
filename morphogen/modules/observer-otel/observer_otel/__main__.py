@@ -8,13 +8,15 @@ receiver and the window end, so a restart never records a window twice; points a
 window was recorded are dropped. Providers send to it with the standard OpenTelemetry variables
 (OTEL_EXPORTER_OTLP_ENDPOINT=http://<host>:<port>; kk.telemetry, or any OpenTelemetry SDK).
 What it records is attributed to it, so it accepts only what it was configured for: it listens on
-KK_OTLP_HOST (default 127.0.0.1), requires `Authorization: Bearer <KK_OTLP_TOKEN>` when that is set
-(senders set OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>), records only the resources named
+KK_OTLP_HOST (default 127.0.0.1); when KK_OTLP_SECRET is set it requires `Authorization: Bearer <token>`
+where the token is the sender's own (morphogen.logins.telemetry_token(secret, service.name)), and refuses a
+request carrying a resource of any other name, so a provider reports only as itself (senders set
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>; the reconciler does). It records only the resources named
 in KK_OTLP_SERVICES when that is set (service.name values, comma-separated; `name*` for a prefix), reads at most
 KK_OTLP_MAX_BYTES per request (default 4 MB), and drops points stamped before the window in progress
 or more than 60 seconds ahead of its clock.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_observer_otel),
-KK_WINDOW_SECONDS, KK_OTLP_HOST, KK_OTLP_PORT (default 4318), KK_OTLP_TOKEN, KK_OTLP_SERVICES,
+KK_WINDOW_SECONDS, KK_OTLP_HOST, KK_OTLP_PORT (default 4318), KK_OTLP_SECRET, KK_OTLP_SERVICES,
 KK_OTLP_MAX_BYTES, KK_OTLP_SOURCE (the receiver's URL as cited; default http://<hostname>:<port>/v1/metrics).
 """
 from __future__ import annotations
@@ -33,6 +35,7 @@ from pathlib import Path
 import yaml
 
 from kk.lib import connect, run, submit
+from morphogen.logins import telemetry_token
 
 from .observe import ops, points, window
 
@@ -80,13 +83,14 @@ def allowed(name, services: set[str]) -> bool:
     return isinstance(name, str) and any(name == s or (s.endswith("*") and name.startswith(s[:-1])) for s in services)
 
 
-def handler(buffer: Buffer, token: str | None = None, services: set[str] | None = None, max_bytes: int = 4 << 20):
+def handler(buffer: Buffer, secret: str | None = None, services: set[str] | None = None, max_bytes: int = 4 << 20):
     class Receiver(BaseHTTPRequestHandler):
         def do_POST(self):
             if self.path.rstrip("/") != "/v1/metrics":
                 self.send_error(404)
                 return
-            if token and not hmac.compare_digest(self.headers.get("Authorization", ""), f"Bearer {token}"):
+            auth = self.headers.get("Authorization", "")
+            if secret and not auth.startswith("Bearer "):
                 self.send_error(401)
                 return
             size = int(self.headers.get("Content-Length") or 0)
@@ -96,6 +100,10 @@ def handler(buffer: Buffer, token: str | None = None, services: set[str] | None 
             try:
                 body = decode(self.headers.get("Content-Type", ""), self.rfile.read(size))
                 pts = points(body)
+                if secret and not all(hmac.compare_digest(auth, f"Bearer {telemetry_token(secret, str(p['attrs'].get('service.name')))}")
+                                      for p in pts):
+                    self.send_error(401)         # a token for another service, or none: nothing kept
+                    return
                 if services is not None:
                     pts = [p for p in pts if allowed(p["attrs"].get("service.name"), services)]
                 buffer.add(pts)
@@ -136,7 +144,7 @@ def main(argv=None) -> int:
     buffer.recorded_until = window(time.time(), seconds)[1]     # the window in progress is the first recorded
     services = {x.strip() for x in os.environ.get("KK_OTLP_SERVICES", "").split(",") if x.strip()} or None
     server = ThreadingHTTPServer((os.environ.get("KK_OTLP_HOST", "127.0.0.1"), a.port),
-                                 handler(buffer, os.environ.get("KK_OTLP_TOKEN") or None, services,
+                                 handler(buffer, os.environ.get("KK_OTLP_SECRET") or None, services,
                                          int(os.environ.get("KK_OTLP_MAX_BYTES", str(4 << 20)))))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(json.dumps({"listening": a.port, "window_seconds": seconds}), flush=True)

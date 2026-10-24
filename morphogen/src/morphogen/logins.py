@@ -5,9 +5,15 @@ A provider declares, in the provider.yaml of the reviewed incumbent, the role it
 login that may switch only to it (`login:`, created by its migration). The login's password, if the
 cluster asks for one, is KK_LOGIN_PASSWORD (set at deploy time, as kk_authenticator's is). A candidate is
 given the incumbent's login: it acts with exactly the incumbent's rights.
+
+Telemetry: each service gets a token of its own, `telemetry_token(KK_OTLP_SECRET, <service.name>)`, which
+the observer checks against the name every point carries, so a provider reports only under its own name
+and never holds the secret (R5-23).
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 from pathlib import Path
 
@@ -15,6 +21,10 @@ import yaml
 from psycopg.conninfo import make_conninfo
 
 KEEP = {"PATH", "HOME", "LANG", "LC_ALL", "TZ", "TMPDIR", "PGHOST", "PGPORT", "PGSSLMODE"}
+
+
+def telemetry_token(secret: str, service: str) -> str:
+    return hmac.new(secret.encode(), service.encode(), hashlib.sha256).hexdigest()
 
 
 def login_of(provider_dir: Path) -> tuple[str, str] | None:
