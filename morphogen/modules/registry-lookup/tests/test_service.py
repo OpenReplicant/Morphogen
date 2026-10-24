@@ -17,8 +17,9 @@ import yaml
 HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[2]
 sys.path[:0] = [str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src"), str(ROOT / "morphogen" / "modules"),
-                str(ROOT / "morphogen" / "modules" / "sandbox"), str(ROOT / "morphogen" / "modules" / "planner"), str(ROOT / "kernel" / "providers" / "validator-shacl")]
-from kk.lib import connect, run, submit  # noqa: E402
+                str(ROOT / "morphogen" / "modules" / "sandbox"), str(ROOT / "morphogen" / "modules" / "planner"), str(ROOT / "kernel" / "providers" / "validator-shacl"),
+                str(ROOT / "kernel" / "providers" / "truth-maintenance")]
+from kk.lib import connect, follow, run, submit  # noqa: E402
 from morphogen.experiments import BUILD, DCT, OA, experiment_id, tree_hash  # noqa: E402
 
 from registry_lookup.__main__ import AGENT, KKT, one_pass, search  # noqa: E402
@@ -27,6 +28,7 @@ install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
 sandbox = importlib.import_module("sandbox.__main__")
 planner = importlib.import_module("planner.__main__")
+tms = importlib.import_module("truth_maintenance.__main__")
 DB = "kk_registry_lookup_test"
 FULFILLS = KKT + "fulfills"
 RECENT = "urn:kk:provider:anomaly-recent"
@@ -197,6 +199,25 @@ def main() -> None:
                   o["predicate"].endswith("substitutedBy") and o["object"] == {"entity": RECENT}
                   and tree_sha in (o.get("qualifiers") or {}).values() for o in ops[0]),
               "the planner turns a measured catalog candidate into a replace plan in the review lane, naming its content hash")
+
+        # Truth maintenance (T18): the request withdrawn by the agent that made it, the offer inferred from it is flagged.
+        body = su.execute("select id::text from api.claims where subject = 'urn:kk:request:c1' and predicate = %s", (OA + "bodyValue",)).fetchone()[0]
+        with planner_conn.cursor() as cur, run(cur, "urn:kk:module:planner") as (rid, _):
+            submit(cur, {"idempotency_key": "test:withdraw-c1", "attributed_to": "urn:kk:agent:planner", "target_scope": "urn:kk:scope:default",
+                         "ops": [{"op": "set_status", "claim": body, "status": "deprecated", "expect_status": "normal",
+                                  "reason": "retracted"}]}, rid)
+        validator.drain(val)
+        with connect("kkm_truth_maintenance", url) as tm:
+            follow(tm, tms.step, once=True)
+        validator.drain(val)
+        offer = su.execute("""select c.id::text from api.claims c join kernel.claim c2 on c2.id = c.id
+                              where c2.change_set = %s and c.predicate = %s""", (answers["mine"]["offer_change_set"], FULFILLS)).fetchone()[0]
+        flagged = dict(su.execute("select claim_id::text, verdict from api.verifications where method = %s", (tms.METHOD,)).fetchall())
+        other = su.execute("""select c.id::text from api.claims c join kernel.claim c2 on c2.id = c.id join kernel.change_set s
+                              on s.id = c2.change_set where s.idempotency_key = %s""",
+                           (f"offer:mine|{RECENT}|urn:kk:request:c2",)).fetchone()[0]
+        check(flagged.get(offer) == "inconclusive" and other not in flagged,
+              "the request withdrawn, truth maintenance flags the catalog's offer inferred from it, and not the offer to another request")
 
         spoof = search(rl, intent, "bike-parts", {"terms": ["spoofed"]})
         check([f["entry"] for f in spoof["found"]] == ["urn:kk:component:bike-parts:urn-kk-provider-anomaly"],

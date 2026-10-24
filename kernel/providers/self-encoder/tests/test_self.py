@@ -124,8 +124,8 @@ def main() -> None:
         check(True, f"all {len(blueprint)} blueprint slots answered: filled by what the manifests say, the default or "
                     "why unfilled, every part cited to its file and line and shown with its belief")
         check(answers["urn:kk:slot:record-store"]["filled_by"][0]["provider"] == "urn:kk:provider:record-postgres"
-              and not answers["urn:kk:slot:truth-maintenance"]["filled_by"],
-              "record-store is filled by record-postgres; truth-maintenance is unfilled, with why")
+              and not answers["urn:kk:slot:context-assembler"]["filled_by"],
+              "record-store is filled by record-postgres; context-assembler is unfilled, with why")
         check("observer-otel" in answers["urn:kk:slot:observer"]["note"]["text"]
               and not answers["urn:kk:slot:observer"]["filled_by"],
               "a distribution's application slot is recorded with its intended default")

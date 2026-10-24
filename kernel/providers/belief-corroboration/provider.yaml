@@ -8,4 +8,4 @@ requires: Python 3.12+, PyYAML (contract runner), psycopg (service)
 runner: python3 tests/contract.py
 migration: migration.sql
 service: python3 -m belief_corroboration
-note: the premise cap (D-89) needs a truth-maintenance provider, and that slot is unfilled (R5-12)
+note: the premise cap (D-89) reads the truth-maintenance provider's verdicts (filled in T18)

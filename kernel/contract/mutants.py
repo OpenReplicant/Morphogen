@@ -1,6 +1,8 @@
 """Mutation check: each mutant breaks one guarantee in a copy of a provider (<providers>/_mutant) and
 the contract must fail on it. A provider lists its mutants in tests/mutants.py as
 MUTANTS = [(name, file relative to the provider, [(old, new), ...]), ...]; each old text must occur once.
+A provider of a slot with no case set (provider-tests) may list mutants too: its own tests (provider.yaml
+`tests`, run in the copy) must fail on each.
 
 Usage: PGHOST=... PGUSER=<superuser> python3 kernel/contract/mutants.py [--blueprint FILE]... [--providers DIR]
        [provider ...] [-k name filter]
@@ -25,6 +27,18 @@ def contract(name: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(HERE / "run.py"), *args, name], capture_output=True, text=True)
 
 
+def own_tests(name: str) -> subprocess.CompletedProcess:
+    """A provider-tests provider's own tests, run in its directory; the first failure stops them."""
+    import yaml
+    out = subprocess.CompletedProcess([], 0, "", "")
+    for t in yaml.safe_load((PROVIDERS / name / "provider.yaml").read_text()).get("tests", []):
+        out = subprocess.run([sys.executable, *t.split()[1:]] if t.startswith("python3 ") else ["sh", "-c", t],
+                             cwd=PROVIDERS / name, capture_output=True, text=True)
+        if out.returncode:
+            break
+    return out
+
+
 def has_cases(name: str) -> bool:
     spec = importlib.util.spec_from_file_location("contract_run", HERE / "run.py")
     run = importlib.util.module_from_spec(spec)
@@ -47,8 +61,10 @@ def main(names: list[str], pattern: str) -> int:
     survivors, total = [], 0
     for name in names:
         listed = mutants_of(name)
-        if not has_cases(name):
+        cases = has_cases(name)
+        if not cases and not listed:
             continue   # nothing in the contract to kill a mutant with; the provider's own tests cover it
+        check = contract if cases else own_tests
         if not listed and not pattern:
             print(f"{name}: FAIL: no tests/mutants.py; every provider with contract cases needs mutants")
             return 2
@@ -56,9 +72,10 @@ def main(names: list[str], pattern: str) -> int:
         if not mutants:
             continue
         # A mutant "fails" for any reason, including no database: the unmutated provider must pass first.
-        base = contract(name)
+        base = check(name)
         if base.returncode:
-            print(f"{name}: the unmutated provider fails the contract; fix that (or the connection) first")
+            print(f"{name}: the unmutated provider fails {'the contract' if cases else 'its own tests'}; "
+                  "fix that (or the connection) first")
             print(base.stdout[-1500:] + base.stderr[-500:])
             return 2
         for label, rel, edits in mutants:
@@ -72,7 +89,7 @@ def main(names: list[str], pattern: str) -> int:
                 assert s.count(old) == 1, (name, label, old)
                 s = s.replace(old, new)
             p.write_text(s)
-            out = contract("_mutant")
+            out = check("_mutant")
             why = [l for l in (out.stdout + out.stderr).splitlines()
                    if re.search(r"MISSING|CHECK FAILED|FAIL", l)]
             print(("FAILS (good)" if out.returncode else "PASSES (bad)"), f"- {name}: {label}")
@@ -82,7 +99,7 @@ def main(names: list[str], pattern: str) -> int:
                 survivors.append(f"{name}: {label}")
     if MUT.exists():
         shutil.rmtree(MUT)
-    print(f"{total - len(survivors)}/{total} mutants fail the contract")
+    print(f"{total - len(survivors)}/{total} mutants fail the contract (or, without cases, the provider's tests)")
     if not total:
         print("FAIL: no mutant ran")
         return 1
