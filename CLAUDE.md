@@ -64,7 +64,7 @@ PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conform
 PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (38 today)
 PGHOST=... PGUSER=... python3 kernel/providers/test.py                  # each provider's tests + services end to end
 sh morphogen/contract/run.sh [--mutants]                               # Morphogen's slot contracts (analyser: 13 cases, 7 mutants; the sandbox also runs them as service cases)
-PGHOST=... PGUSER=... KK_RUN_AS=kkrun1,... python3 morphogen/modules/test.py # as root: each module's tests + the T5 loop + G2 + G3 (model code runs as KK_RUN_AS, R5-24; G3 needs Docker, R5-25)
+PGHOST=... PGUSER=... KK_RUN_AS=kkrun1,... KK_SANDBOX_CLUSTER=... python3 morphogen/modules/test.py # as root: each module's tests + the T5 loop + G2 + G3 (model code runs as KK_RUN_AS behind nftables, on the sandbox's own cluster, R5-24/26; G3 needs Docker, R5-25)
 KK_EVAL_CACHE=... python3 kernel/evals/scifact/run.py fetch|setup DB|retrieval DB   # recall floor (not in CI)
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
 ```

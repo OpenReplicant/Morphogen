@@ -87,6 +87,12 @@ def main() -> None:
                           "    import shutil; shutil.copy('/bin/sh', w / 'sh'); (w / 'sh').chmod(0o4755)\n"
                           "elif len(sys.argv) > 3 and sys.argv[3] == 'link':\n"
                           "    (w / 'l').symlink_to('/etc/shadow')\n"
+                          "elif len(sys.argv) > 3 and sys.argv[3].startswith('net:'):\n"
+                          "    import socket\n"
+                          "    for port, want in zip(sys.argv[3].split(':')[1:], (True, False)):\n"
+                          "        try:\n            socket.create_connection(('127.0.0.1', int(port)), timeout=3).close(); got = True\n"
+                          "        except OSError:\n            got = False\n"
+                          "        assert got == want, f'port {port}: reached {got}'\n"
                           "elif len(sys.argv) > 3: pathlib.Path(sys.argv[3]).write_text('x')\n")
         script.chmod(0o644)
         su = connect(url="dbname=postgres")
@@ -123,6 +129,18 @@ def main() -> None:
             check(False, "a symbolic link the harness made is refused")
         except ValueError as e:
             check("not a regular file" in str(e), "a symbolic link the harness made is refused")
+        # The network: the harness reaches the address KK_BUILDER_NET names and no other.
+        import socket
+        ok, no = socket.create_server(("127.0.0.1", 0)), socket.create_server(("127.0.0.1", 0))
+        os.environ["KK_BUILDER_NET"] = f"127.0.0.1:{ok.getsockname()[1]}"
+        try:
+            build({"iri": "urn:kk:request:h5", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
+                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} net:{ok.getsockname()[1]}:{no.getsockname()[1]}",
+                  cluster=su)
+            check(True, "harness: it reaches the address KK_BUILDER_NET names, and not another port on the same host")
+        finally:
+            ok.close(), no.close()
+            del os.environ["KK_BUILDER_NET"]
         su.close()
     for k in ("DATABASE_URL", "HARNESS_KEY", "OTHER_SECRET", "KK_BUILDER_ENV"):
         del os.environ[k]

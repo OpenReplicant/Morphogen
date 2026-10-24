@@ -13,8 +13,10 @@ provider directory, by one of two strategies:
             own (KK_RUN_AS; morphogen.confine, R5-24), in a workdir inside a home only that user may
             write, with the allow-listed environment (PATH, HOME, locale) and only the variables named in
             KK_BUILDER_ENV (its own model credentials, e.g. ANTHROPIC_API_KEY): none of the record's,
-            telemetry's or git's. It does not run while the cluster lets any login in without its
-            password. If the repository's or intent's git state changed while it ran, the build fails.
+            telemetry's or git's. Over the network it reaches only the addresses KK_BUILDER_NET names
+            (host:port, comma-separated: its model API or the proxy in front of it; a general forward
+            proxy gives it the whole network back), nothing else. It
+            does not run while the cluster lets any login in without its password. If the repository's or intent's git state changed while it ran, the build fails.
             The harness runs as a leased run user; afterwards every process of that user is ended and the
             workdir is made root's before it is checked, then copied into the experiment as new files with
             fixed modes (regular files and directories only: a link, device or setuid bit never arrives).
@@ -74,6 +76,18 @@ When you are done, say in one line what you changed.
 """
 
 
+def harness_net() -> list[tuple[str, str]]:
+    """The (host, port) pairs KK_BUILDER_NET names: all the harness may reach over the network."""
+    out = []
+    for x in (y.strip() for y in os.environ.get("KK_BUILDER_NET", "").split(",")):
+        host, _, port = x.rpartition(":")
+        if x and not (host and port.isdigit()):
+            raise ValueError(f"KK_BUILDER_NET: {x!r} is not host:port")
+        if x:
+            out.append((host.strip("[]"), port))
+    return out
+
+
 def harness_env(home: Path) -> dict:
     """The allow-listed environment (no database settings), the harness's home, and the variables
     KK_BUILDER_ENV names."""
@@ -131,8 +145,10 @@ def build(request: dict, slot: str, incumbent: Path, experiments: Path, strategy
             if cluster is None:
                 raise ValueError("the harness strategy needs a connection to check the cluster with")
             name = f"{incumbent.name}-{exp_id}"
-            with confine.lease() as run, run.home("kk-build-") as tmp:
-                confine.check_cluster(cluster, run, *confine.where(os.environ.get("DATABASE_URL", "")))
+            net = harness_net()
+            db = confine.where(os.environ.get("DATABASE_URL", ""))
+            with confine.lease(allow=net) as run, run.home("kk-build-") as tmp:
+                confine.check_cluster(cluster, run, *db, reach=db[0].startswith("/") or db in net)
                 env = harness_env(tmp)
                 scratch = tmp / name
                 confine.copy_tree(incumbent, scratch, skip=("__pycache__", "_mutant"))

@@ -25,7 +25,8 @@ KK_OTLP_SECRET: with it set, each service gets its own telemetry token, for its 
 experiment runs only as the incumbent's own login, and only while its directory matches HEAD (the code
 the person approved, measured and committed). It also runs as an OS user leased for it alone (KK_RUN_AS;
 morphogen.confine, R5-24), from a copy of that directory (regular files only) it may read but not write,
-with a home of its own, and not at all while the cluster lets any login in without its password (checked
+with a home of its own, reaching over the network only its record's address and the OTLP endpoint
+(OTEL_EXPORTER_OTLP_[METRICS_]ENDPOINT), and not at all while the cluster lets any login in without its password (checked
 through DATABASE_URL, which must be a superuser's to read pg_hba_file_rules); when it stops or exits,
 every process of that user is ended and the user is given back. Running candidates needs CAP_SETUID and
 CAP_SETGID (root).
@@ -115,6 +116,8 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
         extra["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Bearer%20{telemetry_token(os.environ['KK_OTLP_SECRET'], extra['OTEL_SERVICE_NAME'])}"
     env = login_env(os.environ["DATABASE_URL"], *login, extra) if login else {**os.environ, **extra}
     env.pop("KK_OTLP_SECRET", None)
+    if slot_file != "sandbox":
+        env.pop("KK_SANDBOX_CLUSTER", None)              # a superuser's login: the sandbox's alone
     cmd = shlex.split(spec["service"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable
@@ -122,7 +125,10 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
         return subprocess.Popen(cmd, cwd=cwd, env=env)
     held = contextlib.ExitStack()                        # the leased user, the copy and the home, until release()
     try:
-        run = held.enter_context(confine.lease())
+        # Over the network a candidate reaches its record and its telemetry endpoint, nothing else.
+        allow = [confine.where(env["DATABASE_URL"])] + [e for e in (confine.endpoint(env.get(k, "")) for k in (
+            "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")) if e]
+        run = held.enter_context(confine.lease(allow=allow))
         import psycopg
         with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as su:   # needs pg_hba_file_rules: a superuser
             confine.check_cluster(su, run, *confine.where(env["DATABASE_URL"]))
