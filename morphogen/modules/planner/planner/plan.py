@@ -2,15 +2,22 @@
 
 Input: an anomaly over a documented limit (anomaly module: dcterms:type urn:kk:anomaly-kind:limit,
 derived from the observation and the limit), the current value of the setting the action changes (from
-the provider's intent file), and the fixed action list (intent/policies/actions.yaml).
+the provider's intent file, or the compose file of a managed system's service), and the fixed action list
+(intent/policies/actions.yaml). An action applies to providers (default) or to a system's nodes
+(`applies_to: node`); for a node the step may change another node than the one observed (the one whose
+setting answers it, found on the map: R5-25), and the prediction stays on the observed one. An action's
+`effect` says how the new value is chosen: `halve` (a feed consumer's poll interval: it lags half of it)
+or `proportional` (the property scales with the setting: current x limit / seen / 2, so the prediction
+has a margin of two); `integer: true` rounds it down.
 
 The plan (rebuild 4 skill-adaptation-planning's shape, plus a prediction and a risk class):
 
   <plan>             rdf:type p-plan:Plan; rdfs:label "..."; dcterms:type <risk class>
   <plan>:step:1      rdf:type sosa:Actuation; p-plan:isStepOfPlan <plan>; dcterms:type <action>;
                      sosa:hasFeatureOfInterest <target>; sosa:hasSimpleResult <new value>
-  <target>           bbo:maxValue <limit>  {sosa:observedProperty: <property>, dcterms:isPartOf: <plan>}
-                     -- the prediction: after the step, the property stays within the limit
+  <observed>         bbo:maxValue <limit>  {sosa:observedProperty: <property>, dcterms:isPartOf: <plan>}
+                     -- the prediction: after the step, the property of the observed target (the
+                     anomaly's) stays within the limit
 
 Every claim is inferred and derived from the anomaly's claims, the observation and the limit. The
 prediction's two qualifiers keep it apart from documented limits (which carry only the property), so the
@@ -41,40 +48,55 @@ def value(c: dict):
         return None
 
 
-def choose(actions: dict, prop: str, kind: str = "setting"):
-    """The first action of `kind` on the list that answers `prop`, as (iri, spec), or None."""
+def choose(actions: dict, prop: str, kind: str = "setting", on: str = "provider"):
+    """The first action of `kind` on the list that answers `prop` for a provider or a node, as (iri, spec), or None."""
     return next(((iri, a) for iri, a in sorted(actions.items())
-                 if a.get("kind", "setting") == kind and prop in a.get("answers", [])), None)
+                 if a.get("kind", "setting") == kind and a.get("applies_to", "provider") == on
+                 and prop in a.get("answers", [])), None)
 
 
-def proposal(anomaly: dict, observation: dict, limit: dict, current, actions: dict) -> dict:
+def applies_to(target: str) -> str:
+    return "node" if str(target).startswith("urn:kk:node:") else "provider"
+
+
+def proposal(anomaly: dict, observation: dict, limit: dict, current, actions: dict, target: str | None = None,
+             via: list[str] = ()) -> dict:
     """{"plan": ...} or {"none": reason}. anomaly: {iri, kind, target, claim_ids}; observation and limit:
-    claims (id, subject, qualifiers, object_value); current: the setting's value now, or None."""
+    claims (id, subject, qualifiers, object_value); current: the setting's value now, or None; target: the
+    node the step changes when it is not the anomaly's (found on the map), via: the map's claims that
+    lead there (they join the premises)."""
     if anomaly["kind"] != LIMIT_KIND:
         return {"none": "only anomalies over a documented limit are planned for"}
     prop = (observation.get("qualifiers") or {}).get(PROP)
     lim, seen = value(limit), value(observation)
     if prop is None or lim is None or seen is None:
         return {"none": "the anomaly's observation or limit has no value"}
-    chosen = choose(actions, prop)
+    chosen = choose(actions, prop, on=applies_to(anomaly["target"]))
     if chosen is None:
         return {"none": f"no action on the list answers {prop}"}
     iri, a = chosen
+    step_target = target or anomaly["target"]
     if current is None:
-        return {"none": f"{anomaly['target']} has no intent file setting {a['setting']}: nothing to change"}
-    # A consumer that reads the feed every p seconds lags p/2 on average: halve the interval, and never
-    # leave it above the limit itself.
-    new = round(max(a["min"], min(a["max"], current / 2, lim)), 3)
+        return {"none": f"{step_target} has no intent file setting {a['setting']}: nothing to change"}
+    if a.get("effect", "halve") == "proportional":
+        new = max(a["min"], min(a["max"], current * lim / seen / 2))
+    else:
+        # A consumer that reads the feed every p seconds lags p/2 on average: halve the interval, and never
+        # leave it above the limit itself.
+        new = max(a["min"], min(a["max"], current / 2, lim))
+    new = int(new) if a.get("integer") else round(new, 3)
     if new >= current:
         return {"none": f"{a['setting']} is already {current:g}, at the action's minimum {a['min']:g}"}
     key = hashlib.sha256(anomaly["iri"].encode()).hexdigest()[:16]
     plan = f"urn:kk:plan:{key}"
-    name = anomaly["target"].rsplit(":", 1)[-1]
-    text = (f"Set {name} {a['setting']} from {current:g} to {new:g}: {prop.rsplit(':', 1)[-1]} {seen:g} is over "
+    name, seen_on = step_target.rsplit(":", 1)[-1], anomaly["target"].rsplit(":", 1)[-1]
+    whose = "" if step_target == anomaly["target"] else f"{seen_on}'s "
+    text = (f"Set {name} {a['setting']} from {current:g} to {new:g}: {whose}{prop.rsplit(':', 1)[-1]} {seen:g} is over "
             f"its limit {lim:g}; predicted to stay within it after the change.")
     return {"plan": {"iri": plan, "step": f"{plan}:step:1", "action": iri, "setting": a["setting"], "risk": a["risk"],
-                     "target": anomaly["target"], "property": prop, "limit": lim, "from": current, "to": new,
-                     "label": text, "premises": sorted(set(anomaly["claim_ids"]) | {str(observation["id"]), str(limit["id"])})}}
+                     "target": step_target, "observed": anomaly["target"], "property": prop, "limit": lim,
+                     "from": current, "to": new, "label": text,
+                     "premises": sorted(set(anomaly["claim_ids"]) | {str(observation["id"]), str(limit["id"])} | set(via))}}
 
 
 def change_set(p: dict, agent: str, scope: str, lane: str) -> dict:
@@ -94,7 +116,8 @@ def change_set(p: dict, agent: str, scope: str, lane: str) -> dict:
                     claim(p["step"], DCT_TYPE, ent(p["action"])),
                     claim(p["step"], SOSA + "hasFeatureOfInterest", ent(p["target"])),
                     claim(p["step"], RESULT, lit(p["to"], XSD + "decimal")),
-                    claim(p["target"], MAX, lit(p["limit"], XSD + "decimal"), {PROP: p["property"], PART_OF: p["iri"]})]}
+                    claim(p.get("observed", p["target"]), MAX, lit(p["limit"], XSD + "decimal"),
+                          {PROP: p["property"], PART_OF: p["iri"]})]}
 
 
 # ---------------------------------------------------------------- G2: build requests and replacements (R5-21)

@@ -101,4 +101,29 @@ check(change["after"] == {"provider": "anomaly-recent", "service": "python3 -m a
       and change["before"]["cwd"] == "morphogen/modules/anomaly", "the intent file now runs the candidate; its settings stay")
 check(intent_file(intent, "sandbox", "urn:kk:provider:anomaly-recent") == af and intent_file(intent, "sandbox", "urn:kk:provider:anomaly") is None,
       "the file is found by the provider it now names, not the one it was written for")
+
+# A service of a managed system (G3, R5-25): the step changes a setting its compose file already has.
+from intent_actuator.actuate import target_file  # noqa: E402
+from morphogen import systems  # noqa: E402
+BACK = "urn:kk:node:podinfo:backend"
+ns = {**s, "action": "urn:kk:action:set-random-delay-max", "target": BACK, "value": 145}
+check(refusal(ns, ACTS, intent, "sandbox") is None, "an approved step on a managed system's service: carried out")
+check("not a service" in refusal({**ns, "target": "urn:kk:node:podinfo:nothing"}, ACTS, intent, "sandbox")
+      and "not a service" in refusal({**ns, "target": "urn:kk:node:../etc:x"}, ACTS, intent, "sandbox")
+      and "not a service" in refusal({**ns, "target": TARGET}, ACTS, intent, "sandbox"),
+      "a node action on anything but a managed system's service is refused")
+check("no setting" in refusal({**ns, "target": "urn:kk:node:podinfo:redis"}, ACTS, intent, "sandbox"),
+      "a service whose compose file does not set it is refused (the actuator never adds settings)")
+check("intent file" in refusal({**s, "target": BACK}, ACTS, intent, "sandbox"), "a provider action on a node is refused")
+check("from 0 to 5000" in refusal({**ns, "value": 9000}, ACTS, intent, "sandbox"), "out of the action's bounds: refused")
+cf = target_file(intent, "sandbox", BACK, ACTS["urn:kk:action:set-random-delay-max"])
+old_text = cf.read_text()
+check(systems.set_setting(intent, BACK, "PODINFO_RANDOM_DELAY_MAX", 145) == ("600", "145")
+      and cf.read_text() == old_text.replace('PODINFO_RANDOM_DELAY_MAX: "600"', 'PODINFO_RANDOM_DELAY_MAX: "145"'),
+      "the compose file changes in that one value; every other byte stays")
+try:
+    systems.set_setting(intent, "urn:kk:node:podinfo:frontend", "PODINFO_RANDOM_DELAY_MAX", 1)
+    check(False, "a setting the service does not have is not added")
+except ValueError:
+    check(True, "a setting the service does not have is not added")
 shutil.rmtree(tmp)

@@ -1,5 +1,5 @@
 """Intent actuator (the Execute step of MAPE-K, R5-07): carries out approved plan steps by committing the
-change to the provider's intent file. It never writes claims and never touches running services: each
+change to the provider's intent file (or, for a service of a managed system, its compose file). It never writes claims and never touches running services: each
 step it carries out (or refuses) is a run of this module with `plan_step` the step and `used` its claims,
 finished succeeded with the commit, or failed with the reason. A reconciler (morphogen/deploy) makes the
 running system match intent; the observer records the effect.
@@ -23,9 +23,10 @@ import sys
 from pathlib import Path
 
 from kk.lib import connect, follow, run
+from morphogen import systems
 from morphogen.policy import actions
 
-from .actuate import PPLAN_STEP_OF, intent_file, refusal, replace, set_env, steps
+from .actuate import PPLAN_STEP_OF, refusal, replace, set_env, steps, target_file
 
 MODULE = "urn:kk:module:intent-actuator"
 AGENT = "urn:kk:agent:intent-actuator"
@@ -83,11 +84,14 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                     if why:
                         outputs.update(refused=why)
                         raise PermissionError(why)
-                    f = intent_file(intent, env, s["target"])
+                    f = target_file(intent, env, s["target"], acts[s["action"]])
                     if acts[s["action"]].get("kind") == "replace":
                         setting = "provider"
                         change = replace(intent, f, s["candidate"])
                         before, after = change["before"], change["after"]
+                    elif acts[s["action"]].get("applies_to") == "node":
+                        setting = acts[s["action"]]["setting"]
+                        before, after = systems.set_setting(intent, s["target"], setting, s["value"])
                     else:
                         setting = acts[s["action"]]["setting"]
                         before, after = set_env(f, setting, s["value"])
