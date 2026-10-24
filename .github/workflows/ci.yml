@@ -49,6 +49,10 @@ jobs:
           echo "alter role postgres password '$PGPASSWORD_NEW'" | psql -d postgres -q
           export PGPASSWORD=$PGPASSWORD_NEW
           unset PGPASSWORD_NEW
+          # The image trusts its local socket; confined runs refuse a cluster that trusts any connection.
+          docker exec ${{ job.services.postgres.id }} sh -c \
+            'sed -i -E "s/[[:space:]]trust$/ scram-sha-256/" "$PGDATA/pg_hba.conf" && ! grep -Eq "^[^#].*[[:space:]]trust$" "$PGDATA/pg_hba.conf"'
+          psql -d postgres -qAtc "select pg_reload_conf()"
           sudo -E env "PATH=$PATH" KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4 /tmp/kk-venv/bin/python morphogen/modules/test.py
       - name: Boundary
         run: python3 scripts/check_boundary.py
