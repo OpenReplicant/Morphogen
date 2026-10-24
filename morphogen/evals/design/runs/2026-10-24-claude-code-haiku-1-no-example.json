@@ -1,0 +1,46 @@
+{
+  "eval": "design agent (R5-29)",
+  "agent": "claude-code-haiku",
+  "applied": false,
+  "quotes": false,
+  "no_gaps": true,
+  "map": false,
+  "limit": false,
+  "proposable": false,
+  "passed": false,
+  "detail": {
+    "change_sets": {
+      "invalid": 3
+    },
+    "verdicts": {},
+    "open_gaps": [],
+    "described": {},
+    "expected": {
+      "ghcr.io/example/notes-api:1.4.2": {
+        "connects": [
+          "postgres:16.4"
+        ],
+        "command": null,
+        "environment": {
+          "LOG_LEVEL": "info"
+        }
+      },
+      "postgres:16.4": {
+        "connects": [],
+        "command": null,
+        "environment": {}
+      },
+      "ghcr.io/example/notes-web:1.4.2": {
+        "connects": [
+          "ghcr.io/example/notes-api:1.4.2"
+        ],
+        "command": null,
+        "environment": {}
+      }
+    },
+    "conflict": "no services described for notes",
+    "limits": []
+  },
+  "fixture": "morphogen/tests/fixtures/design/notes.jsonl",
+  "reply": "Submitted three change sets, but the message-2 set is incomplete and I finished the run as failed.\n\n- `5bddaca2-d14a-4ef1-9eab-42f11a119f66`: message 2, only 1 of 13 claims (the system type). The idempotency key `interview:notes|urn:kk:message:notes:notes-intake:2` returns this same set when resubmitted, so the other 12 claims (the labels, the three service nodes, memberOf, and the two connectsTo edges) did not land.\n- `c0be97a4-a7bc-42d8-9925-b0f82ab5da4c`: message 4, 3 images (web, API, Postgres).\n- `7d891e70-ec9b-473d-9729-688b5cf6afd3`: message 6, the API's LOG_LEVEL=info and the web frontend's 0.3 s mean latency limit.\n\nAll three are still `submitted` with no validation report, so I can't confirm they are valid or applied. The run is `ef5416e0-d949-4aab-b9d2-f25111cfebb2`.\n\nTo finish message 2, the kernel needs either a second change set under a different key or a way to reopen the first one. I didn't invent a key, since that would break the one-set-per-message rule. I also couldn't read the change-set schema to check my claim shape; it sits outside the working directory and reading it was not granted."
+}

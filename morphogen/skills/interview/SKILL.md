@@ -32,7 +32,7 @@ your quote against it (no method verifies its own output).
 | --- | --- |
 | the system ("a small notes app") | `urn:kk:system:<name>` a `<KKT>ServiceTemplate`; `rdfs:label` "<name>" |
 | a service ("a web frontend", "an API", "Postgres") | `urn:kk:node:<name>:<service>` a `<KKT>NodeTemplate`; `rdfs:label`; `<KKT>memberOf` the system |
-| what it runs ("the API is ghcr.io/example/notes-api:1.4.2") | `<service>` `<KKT>propertyValue` "<image>" with qualifier `<KKT>propertyName`: `image` |
+| what it runs ("the API is ghcr.io/example/notes-api:1.4.2") | `<service>` `<KKT>propertyValue` "<image>" with qualifier `<KKT>propertyName` (written out in full): `image` |
 | a setting ("run the API with LOG_LEVEL set to info") | `<service>` `<KKT>propertyValue` "<value>" with qualifier `<KKT>propertyName`: the variable's name (`command` for a command) |
 | who calls whom ("the frontend calls the API", "keeps its notes in Postgres") | `<caller>` `<KKT>connectsTo` `<callee>` |
 | a limit ("pages within 300 ms on average") | `<service>` `<BBO>maxValue` <number, in seconds for times> with qualifier `<SOSA>observedProperty`: `urn:kk:property:latency-seconds-mean` (no other qualifier: a qualifier more makes it a plan's prediction) |
@@ -48,7 +48,30 @@ did not give is a question, not a guess.
 - What you conclude rather than hear (two names are one service) is `inferred`, with `derived_from` the claims it
   rests on, in `"lane": "review"`: a person confirms it.
 - Target scope `urn:kk:scope:default` unless the conversation is restricted.
-- One change set per message you record from, idempotency key `interview:<system>|<message IRI>`.
+- One change set per message you record from, idempotency key `interview:<system>|<message IRI>`. The key makes a
+  resubmission a no-op, so a corrected change set for the same message takes the key with `|2`, `|3`, ... added.
+
+A change set in the kernel's format (`kernel/schemas/change_set.schema.json`); `generated_by` is the run you
+started, `attributed_to` your own agent (`whoami`). Ops are `add_claim`; the object is `{"entity": "<IRI>"}` or
+`{"value": {"@value": <text or number>}}`. Predicates and objects may use the kernel's prefixes (`rdf:`, `rdfs:`,
+`prov:`, `oa:`, `kkt:`, ...); anything else is a full IRI. **Qualifier keys are stored exactly as written, never
+expanded: always write them as full IRIs**, or the claim is recorded but nothing that reads it will find it:
+
+```json
+{"idempotency_key": "interview:notes|urn:kk:message:notes:notes-intake:4",
+ "attributed_to": "<your agent IRI>", "generated_by": "<your run id>", "target_scope": "urn:kk:scope:default",
+ "ops": [
+  {"op": "add_claim", "subject": "urn:kk:node:notes:api", "predicate": "rdf:type", "object": {"entity": "kkt:NodeTemplate"},
+   "evidence_type": "extracted", "references": [{"source_uri": "urn:kk:message:notes:notes-intake:2", "quote": "which calls an API"}]},
+  {"op": "add_claim", "subject": "urn:kk:node:notes:api", "predicate": "kkt:propertyValue",
+   "object": {"value": {"@value": "ghcr.io/example/notes-api:1.4.2"}}, "qualifiers": {"https://w3id.org/knowledge-kernel/tosca#propertyName": "image"},
+   "evidence_type": "extracted", "references": [{"source_uri": "urn:kk:message:notes:notes-intake:4", "quote": "the API is ghcr.io/example/notes-api:1.4.2"}]},
+  {"op": "add_claim", "subject": "urn:kk:node:notes:web", "predicate": "https://www.irit.fr/recherches/MELODI/ontologies/BBO#maxValue",
+   "object": {"value": {"@value": 0.3}}, "qualifiers": {"http://www.w3.org/ns/sosa/observedProperty": "urn:kk:property:latency-seconds-mean"},
+   "evidence_type": "extracted", "references": [{"source_uri": "urn:kk:message:notes:notes-intake:6", "quote": "within 300 ms on average"}]}]}
+```
+
+(Each op quotes the message it came from; in a real change set all ops quote the one message the set is for.)
 
 ## Ask next about the gaps
 
