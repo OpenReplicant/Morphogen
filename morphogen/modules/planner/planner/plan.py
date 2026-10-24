@@ -144,9 +144,13 @@ def build_request(anomaly: dict, observation: dict, limit: dict, slot: str, agen
                     claim(OA + "bodyValue", {"value": {"@value": text}})]}
 
 
-def replacement(request: dict, incumbent: dict, candidate: dict, limit: dict) -> dict:
+def replacement(request: dict, incumbent: dict, candidate: dict, limit: dict, observed: dict | None = None) -> dict:
     """{"plan": ...} or {"none": reason}. incumbent and candidate: the sandbox's measurements of each
-    ({provider, passed, total, mean, claim_ids}); limit: the documented limit the request answers."""
+    ({provider, passed, total, mean, claim_ids}); limit: the documented limit the request answers; observed: the
+    incumbent's latest observation of it. The candidate's step time is predicted as the observed one scaled by the
+    candidate's share of the incumbent's time in the sandbox (T15): the sandbox's workload is not production's,
+    so its seconds are compared with each other, not with the limit. Without an observation, the candidate's
+    own sandbox time is the prediction."""
     lim = value(limit)
     if candidate["total"] == 0 or candidate["passed"] != candidate["total"]:
         return {"none": f"the candidate passed {candidate['passed']} of {candidate['total']} contract cases"}
@@ -154,19 +158,23 @@ def replacement(request: dict, incumbent: dict, candidate: dict, limit: dict) ->
         return {"none": "the incumbent does not pass its own contract: fix that first"}
     if candidate["mean"] is None or incumbent["mean"] is None or candidate["mean"] >= incumbent["mean"]:
         return {"none": f"the candidate is not better ({candidate['mean']} against {incumbent['mean']})"}
-    if lim is None or candidate["mean"] > lim:
-        return {"none": f"the candidate's {candidate['mean']:g} is still over the limit {lim}"}
+    seen = value(observed) if observed else None
+    predicted = seen * candidate["mean"] / incumbent["mean"] if seen is not None else candidate["mean"]
+    if lim is None or predicted > lim:
+        return {"none": f"the candidate's predicted {predicted:g} is still over the limit {lim}"}
     key = hashlib.sha256(request["iri"].encode()).hexdigest()[:16]
     plan = f"urn:kk:plan:{key}"
     old, new = incumbent["provider"].rsplit(":", 1)[-1], candidate["provider"].rsplit(":", 1)[-1]
     prop = (limit.get("qualifiers") or {}).get(PROP)
     text = (f"Run {new} instead of {old}: it passed {candidate['passed']}/{candidate['total']} contract cases and took "
-            f"{candidate['mean']:g} s a step in the sandbox against {incumbent['mean']:g} s; predicted to stay within {lim:g}.")
+            f"{candidate['mean']:g} s a step in the sandbox against {incumbent['mean']:g} s"
+            + (f", so about {predicted:g} s against the {seen:g} s observed" if seen is not None else "")
+            + f"; predicted to stay within {lim:g}.")
     return {"plan": {"iri": plan, "step": f"{plan}:step:1", "action": REPLACE, "risk": "medium", "label": text,
                      "target": incumbent["provider"], "candidate": candidate["provider"], "sha256": candidate.get("sha256"),
                      "property": prop, "limit": lim,
                      "premises": sorted(set(request["claim_ids"]) | set(incumbent["claim_ids"]) | set(candidate["claim_ids"])
-                                        | {str(limit["id"])})}}
+                                        | {str(limit["id"])} | ({str(observed["id"])} if observed else set()))}}
 
 
 def replace_change_set(p: dict, agent: str, scope: str, lane: str) -> dict:

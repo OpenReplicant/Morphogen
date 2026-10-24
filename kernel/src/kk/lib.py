@@ -3,6 +3,7 @@
   conn = connect("kkm_example")                 # DATABASE_URL, then SET ROLE to the provider's own role
   listen(conn, step)                            # before the commit: step(conn) on start, on each NOTIFY, every sweep
   follow(conn, step)                            # after the commit: step(conn) on start and when the change feed moves
+  since = resume(conn, MODULE)                  # a durable cursor: the feed seq the last succeeded run handled (R5-18)
   with run(cur, MODULE) as (run_id, outputs):   # a recorded run; failed if the block raises
       submit(cur, change_set, run_id)           # the only way a provider writes (api.submit_change_set)
 
@@ -124,6 +125,30 @@ def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
                     break
             else:
                 time.sleep(poll)
+
+
+def resume(conn: psycopg.Connection, module: str) -> int:
+    """The durable cursor of a watcher that must act on each feed entry once (R5-18): the `feed_seq` in the
+    outputs of this agent's last succeeded run of `module` that recorded one, else 0. A failed or unfinished
+    run does not move it, so what that run handled is handled again; the change sets' idempotency keys keep a
+    second pass from acting twice."""
+    row = conn.execute("""select (cost->>'feed_seq')::bigint from kernel.run
+                           where agent = kernel.my_agent() and module = %s and status = 'succeeded'
+                             and cost ? 'feed_seq'
+                           order by (cost->>'feed_seq')::bigint desc limit 1""", (module,)).fetchone()
+    return row[0] if row else 0
+
+
+def feed_since(conn: psycopg.Connection, cursor: int, predicates: set[str], page: int = 1000) -> tuple[int, list[tuple]]:
+    """Every feed entry after `cursor`, page by page: (the last seq read, else `cursor`; for each entry carrying
+    one of `predicates`, in feed order, (its change set id, or None for a redaction; the ids of the claims it
+    touched)). An entry touches the claims it added and those whose status, belief or verification it changed."""
+    out: list[tuple] = []
+    while entries := feed_after(conn, cursor, page):
+        cursor = entries[-1]["seq"]
+        out += [(e["change_set_id"], {str(i) for i in e["claim_ids"] or []})
+                for e in entries if predicates & set(e["predicates"] or [])]
+    return cursor, out
 
 
 def my_agent(conn: psycopg.Connection) -> str:

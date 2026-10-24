@@ -50,22 +50,25 @@ def observations(targets: int, windows: int) -> list[dict]:
             for t in range(targets) for w in range(windows)]
 
 
-PROBE = """    import pathlib, pwd, psycopg
-    def _try(f):
-        try:
-            f()
-            return "open"
-        except Exception:
-            return "closed"
-    pathlib.Path({path!r}).write_text(" ".join([
-        conn.execute("select session_user").fetchone()[0],
-        ",".join(sorted(k for k in os.environ if k.startswith("PG") or k == "OTEL_EXPORTER_OTLP_HEADERS")) or "-",
-        str(any(pathlib.Path("../..").rglob("*.json"))),
-        pwd.getpwuid(os.getuid()).pw_name,
-        _try(lambda: pathlib.Path(f"/proc/{{os.getppid()}}/environ").read_bytes()),
-        _try(lambda: psycopg.connect(dbname="postgres", user="postgres", connect_timeout=5).close()),
-        _try(lambda: psycopg.connect(os.environ["DATABASE_URL"], dbname={record!r}, host={rhost!r}, port={rport!r},
-                                     connect_timeout=5).close())]))
+PROBE = """    global _PROBED
+    if not globals().get("_PROBED"):         # once per process: the probe is slow, and the passes are timed
+        _PROBED = True
+        import pathlib, pwd, psycopg
+        def _try(f):
+            try:
+                f()
+                return "open"
+            except Exception:
+                return "closed"
+        pathlib.Path({path!r}).write_text(" ".join([
+            conn.execute("select session_user").fetchone()[0],
+            ",".join(sorted(k for k in os.environ if k.startswith("PG") or k == "OTEL_EXPORTER_OTLP_HEADERS")) or "-",
+            str(any(pathlib.Path("../..").rglob("*.json"))),
+            pwd.getpwuid(os.getuid()).pw_name,
+            _try(lambda: pathlib.Path(f"/proc/{{os.getppid()}}/environ").read_bytes()),
+            _try(lambda: psycopg.connect(dbname="postgres", user="postgres", connect_timeout=5).close()),
+            _try(lambda: psycopg.connect(os.environ["DATABASE_URL"], dbname={record!r}, host={rhost!r}, port={rport!r},
+                                         connect_timeout=5).close())]))
 """
 
 
@@ -123,8 +126,8 @@ def main() -> None:
     shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", narrow,
                     ignore=shutil.ignore_patterns("__pycache__"))
     n = narrow / "anomaly_recent" / "__main__.py"
-    n.write_text(n.read_text().replace("and c.evidence_type = 'observed') x",
-                                       "and c.evidence_type = 'observed' and c.subject like 'urn:kk:provider:%%') x"))
+    n.write_text(n.read_text().replace("and c.evidence_type = 'observed'",
+                                       "and c.evidence_type = 'observed' and c.subject like 'urn:kk:provider:%%'"))
     bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
     narrow_rule, served = confined(narrow, "kk_sbx_test_narrow")
     check(narrow_rule["passed"] == N and served["total"] == N and served["passed"] < N,
@@ -136,10 +139,10 @@ def main() -> None:
     shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", cached,
                     ignore=shutil.ignore_patterns("__pycache__"))
     c = cached / "anomaly_recent" / "__main__.py"
-    c.write_text(c.read_text().replace("        found = anomalies(obs, limits)\n", """        global _CACHE
+    c.write_text(c.read_text().replace("        found = anomalies(obs, limits, check)\n", """        global _CACHE
         _CACHE = _CACHE or (obs, limits)
         obs, limits = _CACHE
-        found = anomalies(obs, limits)
+        found = anomalies(obs, limits, check)
 """, 1).replace("def one_pass(", "_CACHE = None\n\n\ndef one_pass(", 1))
     cached_rule, served = confined(cached, "kk_sbx_test_cached")
     check(cached_rule["passed"] == N and served["failed"] == ["urn:kk:eval:analyser/retracted-and-superseded"],
@@ -154,7 +157,7 @@ def main() -> None:
     (cheat_exp / "experiment.yaml").write_text("slot: analyser\nincumbent: morphogen/modules/anomaly\ncandidate: anomaly-recent\n")
     left_pid = drop / "left.pid"
     c = cheat_exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
-    c.write_text(c.read_text().replace("        found = anomalies(obs, limits)\n", f"""        found = anomalies(obs, limits)
+    c.write_text(c.read_text().replace("        found = anomalies(obs, limits, check)\n", f"""        found = anomalies(obs, limits, check)
         found = [a for a in found if "-c" in a["target"]]
         import subprocess
         if not pathlib.Path({str(left_pid)!r}).exists():

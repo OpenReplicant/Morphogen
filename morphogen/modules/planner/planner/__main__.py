@@ -304,6 +304,16 @@ def candidates(cur, request: str) -> dict[str, dict]:
     return out
 
 
+def latest_observed(cur, target: str, limit: dict) -> dict | None:
+    """The incumbent's latest observation of the limited property: its pace now, which the sandbox's ratio scales
+    (the request's own observation may be a first pass that read a backlog)."""
+    prop = (limit.get("qualifiers") or {}).get(SOSA + "observedProperty")
+    got = rows(cur, f"""select {COLUMNS} from api.claims where predicate = %s and subject = %s and qualifiers->>%s = %s
+                        and evidence_type = 'observed' and status <> 'deprecated' order by valid_from desc limit 1""",
+               (RESULT, target, SOSA + "observedProperty", prop))
+    return got[0] if got else None
+
+
 def replace_for(cur, r: dict, lane) -> dict:
     """The best candidate measured so far for the request, from the builder or a catalog, as a replace plan (one
     plan per request: a candidate measured later than the plan is not considered)."""
@@ -324,7 +334,7 @@ def replace_for(cur, r: dict, lane) -> dict:
             why.append(f"{exp}: measured {cand['provider']} with {len(c['shas'])} content hashes recorded for {c['provider']}")
             continue
         got = replacement(r, inc, {**cand, "claim_ids": cand["claim_ids"] + sorted(c["claim_ids"]), "sha256": next(iter(c["shas"]))},
-                          r["limit"])
+                          r["limit"], latest_observed(cur, r["target"], r["limit"]))
         if "none" in got:
             why.append(f"{exp}: {got['none']}")
         else:
