@@ -245,7 +245,7 @@ def retrieval(db: str, n: int, label: str) -> dict:
     out = {"eval": "longmemeval_s retrieval", "label": label, "questions": len(rows), "metrics": metrics,
            "session_recall_by_type": by_type, "latency_s": {"p50": round(statistics.median(lat), 3),
                                                                  "p95": round(sorted(lat)[int(0.95 * len(lat))], 3)},
-           "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)", "date": date.today().isoformat(),
+           "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)" + ("" if os.environ.get("KK_RERANK") == "0" else ", re-ranked when the cross-encoder is cached"), "date": date.today().isoformat(),
            "counts": dict(Counter(r["type"] for r in rows))}
     (HERE / "runs").mkdir(exist_ok=True)
     (HERE / "runs" / f"{date.today().isoformat()}-{label}.json").write_text(json.dumps(out, indent=2) + "\n")
