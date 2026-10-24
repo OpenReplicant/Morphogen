@@ -105,6 +105,12 @@ def main() -> None:
               "is refused before review; nothing is submitted")
         check(NODE + "redis" not in got["reach"], "what the step's node depends on is not in its reach, only what depends on it")
 
+        p = yaml.safe_load(policy.read_text())
+        del p["guards"]["blast_radius_budget_slots"]
+        policy.write_text(yaml.safe_dump(p, sort_keys=False))
+        got = one_pass(pl, intent, "sandbox", [MAPPER])[a]
+        check(got.get("none", "").startswith("refused:") and plans() == 0, "no budget set: the guard fails closed")
+
         budget(3)
         got = one_pass(pl, intent, "sandbox", [MAPPER])[a]
         validator.drain(val)

@@ -7,7 +7,8 @@ edges they make.
   closure(edge_list, start, reverse=False)        -> {node: [claim ids on the shortest path from start]}
 
 Only current claims count (not deprecated, not redacted), and only those the caller may read (the store's
-row security). `agents` keeps the edges recorded by those agents (a map's encoders). closure is pure: a
+row security): a closure is a lower bound for a caller without clearance on every scope, so a guard built on it
+must say so or fail closed. `agents` keeps the edges recorded by those agents (a map's encoders). closure is pure: a
 cycle ends where it closes, the start is not in its own closure, and ties break by node name, so the same
 edges always give the same paths. reverse=True follows edges backwards: who depends on `start`.
 """

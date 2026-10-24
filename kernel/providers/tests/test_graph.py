@@ -46,19 +46,22 @@ def main() -> None:
     install.install(DB, ["validator-shacl", "pack-loader"])
     url = f"dbname={DB}"
     with connect(url=url) as su:
-        for role in ("t_graph_mapper", "t_graph_other"):
+        for role in ("t_graph_mapper", "t_graph_other", "t_graph_steward"):
             su.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{role}') then "
                        f"create role {role} nologin; end if; end $$")
             su.execute(f"grant kk_agent to {role}")
+        su.execute("grant kk_steward to t_graph_steward")
         su.execute("set role kk_owner")
         su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, 't_graph_mapper', 'software', 'm'), "
-                   "(%s, 't_graph_other', 'software', 'o') on conflict do nothing", (MAPPER, OTHER))
+                   "(%s, 't_graph_other', 'software', 'o'), ('urn:kk:agent:test-steward', 't_graph_steward', 'person', 's') "
+                   "on conflict do nothing", (MAPPER, OTHER))
 
     def edge(s, p, o):
         return {"op": "add_claim", "subject": f"urn:x:{s}", "predicate": KKT + p, "object": {"entity": f"urn:x:{o}"},
                 "evidence_type": "deterministic", "references": [{"source_uri": "urn:test:map"}]}
 
-    with connect("t_graph_mapper", url) as m, connect("t_graph_other", url) as o, connect("kkm_validator", url) as val:
+    with connect("t_graph_mapper", url) as m, connect("t_graph_other", url) as o, connect("kkm_validator", url) as val, \
+            connect("t_graph_steward", url) as st:
         def cs(conn, agent, key, ops):
             with conn.cursor() as cur, run(cur, "urn:kk:module:test-map") as (rid, _):
                 submit(cur, {"idempotency_key": key, "attributed_to": agent, "target_scope": "urn:kk:scope:default",
@@ -85,6 +88,25 @@ def main() -> None:
         check(set(up) == {"urn:x:web", "urn:x:vm", "urn:x:batch"}, "backwards: everything that depends on api")
         check("urn:x:batch" not in graph.closure(mine, "urn:x:api", reverse=True),
               "edges kept to the agents asked for")
+
+        # A redacted edge is withdrawn too; so is a subproperty whose declaration is withdrawn.
+        batch = m.execute("select id::text from api.claims where subject = 'urn:x:batch'").fetchone()[0]
+        with st.cursor() as cur, run(cur, None) as (rid, _):
+            cur.execute("select api.redact('claim', %s, 'test erasure', %s)", (batch, rid))
+        with m.cursor() as cur:
+            check("urn:x:batch" not in graph.closure(graph.edges(cur), "urn:x:api", reverse=True), "a redacted edge is left out")
+        hosted = m.execute("select id::text from api.claims where subject = %s and predicate = %s",
+                           (KKT + "hostedOn", graph.SUBPROPERTY)).fetchone()[0]
+        with m.cursor() as cur, run(cur, "urn:kk:module:test-map") as (rid, _):
+            submit(cur, {"idempotency_key": "drop-hosted", "attributed_to": MAPPER, "target_scope": "urn:kk:scope:vocab",
+                         "ops": [{"op": "set_status", "claim": hosted, "status": "deprecated", "expect_status": "normal",
+                                  "reason": "retracted"}]}, rid)
+        validator.drain(val)
+        with m.cursor() as cur:
+            props = graph.subproperties(cur, graph.DEPENDS_ON)
+            down = graph.closure(graph.edges(cur, agents=[MAPPER]), "urn:x:web")
+        check(KKT + "hostedOn" not in props and set(down) == {"urn:x:api"},
+              "a withdrawn subPropertyOf declaration: hostedOn is no longer a dependency, and its edges drop out")
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
     print("graph checks passed")
 
