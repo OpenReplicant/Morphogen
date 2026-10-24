@@ -64,7 +64,7 @@ PGHOST=<socket or host> PGUSER=<superuser> sh kernel/contract/run.sh   # conform
 PGHOST=... PGUSER=... python3 kernel/contract/mutants.py                # every mutant must fail (38 today)
 PGHOST=... PGUSER=... python3 kernel/providers/test.py                  # each provider's tests + services end to end
 sh morphogen/contract/run.sh [--mutants]                               # Morphogen's slot contracts (analyser: 14 cases, 10 mutants, the sandbox also runs them as service cases; gap-finder: 12 cases, 11 mutants)
-PGHOST=... PGUSER=... KK_RUN_AS=kkrun1,... KK_SANDBOX_CLUSTER=... python3 morphogen/modules/test.py # as root: each module's tests + the T5 loop + G2 + G3 + the design agent (T13) (model code runs as KK_RUN_AS behind nftables, on the sandbox's own cluster, R5-24/26; G3 needs Docker, R5-25)
+PGHOST=... PGUSER=... KK_RUN_AS=kkrun1,... KK_SANDBOX_CLUSTER=... python3 morphogen/modules/test.py # as root: each module's tests + the T5 loop + G2 + G3 + the design agent (T13) + catalog lookup (T14) (model code runs as KK_RUN_AS behind nftables, on the sandbox's own cluster, R5-24/26; G3 needs Docker, R5-25)
 KK_EVAL_CACHE=... python3 kernel/evals/scifact/run.py fetch|setup DB|retrieval DB   # recall floor (not in CI)
 PGHOST=... PGUSER=... python3 kernel/evals/self-model/run.py setup DB && ... reference DB    # self-model questions (12, G7 >= 90%); morphogen/evals/self-model/run.py for Morphogen's 12; `claude DB` asks Haiku
 PGHOST=... PGUSER=... python3 morphogen/evals/design/run.py setup DB && ... claude DB   # the interview with Haiku as the interviewer (R5-29); test_grade.py: the grader

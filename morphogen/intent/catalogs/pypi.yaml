@@ -1,0 +1,6 @@
+# Python packages on PyPI (R5-30). PyPI has no search API: the projects named here, or a query's terms, are looked
+# up by name in its JSON API. Rules and search settings come from ../policies/catalogs.yaml unless set here.
+kind: pypi
+label: Python packages (PyPI)
+index: https://pypi.org/pypi
+projects: [psycopg, PyYAML, rdflib, pyshacl, numpy]

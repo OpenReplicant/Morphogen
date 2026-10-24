@@ -6,9 +6,12 @@
       a service: each build request the planner makes is also answered from the provider catalogs
 
 What is found is recorded, deterministic and referenced by the catalog (its file, or the source it read): the
-catalog a `kkt:Profile`; each entry a `kkt:NodeType` (a Morphogen provider keeps its own IRI, other entries are
+catalog a `kkt:Profile`; each entry (a Morphogen provider keeps its own IRI, other entries are
 urn:kk:component:<catalog>:<id>) with its label, `dcterms:isPartOf` the catalog, kind, version, licence,
-source, description, properties, and each rule's verdict (a `kkt:propertyValue` named `rule:<name>`). For a
+source, description, properties, and each rule's verdict (a `kkt:propertyValue` named `rule:<name>`). An entry is
+not typed `kkt:NodeType`: that type defines a kind of thing, which the store sends to a person (setting
+review_types), as the self-encoder leaves providers untyped; membership of the catalog and the entry's kind say
+what it is. For a
 build request, an entry no enforced rule refuses is offered: `<entry> kkt:fulfills urn:kk:slot:<slot>`, inferred
 from the request. An offered provider whose content is pinned becomes a candidate as the builder's do: copied
 into intent/experiments/<id>/ (regular files only), checked as a candidate of the slot (morphogen.experiments),
@@ -83,7 +86,6 @@ def ops_for(cat: dict, e: dict, v: dict, need: str | None, premises: list[str]) 
     profile = f"urn:kk:catalog:{slug(cat['name'])}"
     claim(profile, RDF_TYPE, {"entity": KKT + "Profile"})
     claim(profile, LABEL, lit(str(cat.get("label") or cat["name"])))
-    claim(s, RDF_TYPE, {"entity": KKT + "NodeType"})
     claim(s, LABEL, lit(str(e.get("label") or e["id"])))
     claim(s, DCT + "isPartOf", {"entity": profile})
     claim(s, DCT + "type", {"entity": f"urn:kk:component-kind:{slug(e.get('kind', 'component'))}"})
@@ -177,7 +179,7 @@ def candidate(cur, run_id: str, intent: Path, r: dict, slot: str, e: dict) -> di
     res = submit(cur, {"idempotency_key": f"candidate:{meta['id']}|{e['sha256'][:16]}|catalog", "attributed_to": AGENT,
                        "target_scope": SCOPE, "ops": [claim(LABEL, {"value": {"@value": meta.get("name", meta["id"])}}),
                                                        claim(DCT + "source", {"entity": r["iri"]})]}, run_id)
-    return {"experiment": exp_id, "candidate": meta["id"], "commit": sha, "change_set": str(res["id"])}
+    return {"experiment": exp_id, "candidate": meta["id"], "commit": sha, "candidate_change_set": str(res["id"])}
 
 
 def one_pass(conn, intent: Path) -> dict:

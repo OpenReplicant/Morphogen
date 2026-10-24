@@ -9,4 +9,5 @@ evidence. Outcomes are observed, never claimed by the actuator.
 | `base/` | Shared definitions per slot provider |
 | `environments/<sandbox|staging|production>/` | What runs where, with which config |
 | `experiments/<id>/` | Short-lived sandbox setups for candidate providers |
-| `policies/` | Lane policy (read-only to agents) |
+| `catalogs/<name>.yaml` | Component sets catalog lookup searches, of any kind (R5-30); written by people |
+| `policies/` | Lane policy, catalog rules (read-only to agents) |
