@@ -1,0 +1,112 @@
+{
+  "set": "morphogen/evals/self-model/questions.yaml",
+  "agent": "claude-code-haiku",
+  "questions": 12,
+  "correct": 12,
+  "accuracy": 1.0,
+  "citations_resolve": true,
+  "belief_shown": true,
+  "passed": true,
+  "floor": {
+    "rebuild4": "12/12 (eval/self-model/runs/2026-10-16-claude-code.json)",
+    "gate": ">= 90% correct, cited, belief shown"
+  },
+  "results": [
+    {
+      "id": "m01",
+      "correct": true,
+      "cited": 3,
+      "resolved": true,
+      "belief": true,
+      "answer": "Two providers fill the lane-policy slot: lane-autonomy (claim a28bdce6-ab03-4ed1-9e7c-7fb8a171b8d7, belief 0.50) and record-postgres (claim d1c73962-7a8d-4cbe-9496-0484a26357ae, belief 0.50). The slot's cardinality claim is \"one\" (claim feeb57be-e096-40f0-93fb-fbde4a9a5232, belief 0.50), so the two fillers conflict with it and the kernel does not say which one is correct."
+    },
+    {
+      "id": "m02",
+      "correct": true,
+      "cited": 3,
+      "resolved": true,
+      "belief": true,
+      "answer": "Two providers fill the observer slot: observer-otel (claim 364d02ca-4906-4ab1-b86a-a08ddbbec936, belief 0.50) and observer-prometheus (claim 2b6ee493-45e1-4d22-8b2a-2fcbc5bdf466, belief 0.50). The slot's cardinality is \"many\" (claim ac3f0fc1-d1f4-4cda-ba03-8e238f35417b, belief 0.50), so both are allowed."
+    },
+    {
+      "id": "m03",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The encoder-compose provider fills the system-encoder slot (claim 915d56cf-7f16-476a-8eb6-499d6f2b7e75, belief 0.50)."
+    },
+    {
+      "id": "m04",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The prediction-verifier provider fills the outcome-verifier slot (claim d20b97f8-4850-4b93-9e33-b6da884983ce, belief 0.50)."
+    },
+    {
+      "id": "m05",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The morphogen distribution is version 0.1.0 (claim baa245e3-a3f9-4d52-af29-fbacb20de4d6, belief 0.50)."
+    },
+    {
+      "id": "m06",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The anomaly provider fills the analyser slot (claim b9f3d6e0-78b1-4cc6-bc7b-e89fcdd4c0f3, belief 0.50)."
+    },
+    {
+      "id": "m07",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The system-encoder slot has cardinality \"many\", so any number of providers may fill it at once (claim 696756df-80f3-4df7-85f4-c0b63a7a6c75, belief 0.50)."
+    },
+    {
+      "id": "m08",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "In podinfo, the frontend connects to the backend (claim a2550cbd-b371-4586-a80e-6e744518767a, belief 0.50). Its command also points at the backend URL (claim 8cb23781-74c4-4a04-a14b-9bd00843fa15, belief 0.50)."
+    },
+    {
+      "id": "m09",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The backend service connects to redis (claim f7c961e7-c491-4f18-8d7d-6a4b0a4c27ae, belief 0.50). No claim has the frontend connecting to redis."
+    },
+    {
+      "id": "m10",
+      "correct": true,
+      "cited": 3,
+      "resolved": true,
+      "belief": true,
+      "answer": "The podinfo system has three services: frontend (claim 95a6a8b2-3a4e-4796-88cb-19c30e9a0fe3, belief 0.50), backend (claim 8b587350-4f03-4ca7-a06c-f6947cd953e8, belief 0.50) and redis (claim e92e21b8-5e4c-4851-a6fb-769f714141ca, belief 0.50). Each is linked to the system by a memberOf claim."
+    },
+    {
+      "id": "m11",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "PODINFO_RANDOM_DELAY_MAX is set to 600 on the podinfo backend (claim 30839687-50ee-43f3-a8d7-276f0c211a56, belief 0.50). Its unit is ms (claim 40fb124f-2bb0-4337-8bdf-70e74e48518a, belief 0.50)."
+    },
+    {
+      "id": "m12",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The sandbox provider fills the sandbox slot (claim a8459a5f-dc80-4cb6-b8a7-ae3a92cf339f, belief 0.50)."
+    }
+  ]
+}

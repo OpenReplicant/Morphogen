@@ -1,0 +1,73 @@
+# Self-model questions on Morphogen: its own providers (modules/), its distribution file and the map of a
+# system it manages (intent/systems/podinfo, encoder-compose). Same format and grading as
+# kernel/evals/self-model/questions.yaml; run with morphogen/evals/self-model/run.py.
+version: 1
+questions:
+  - id: m01
+    question: Which providers fill the lane-policy slot?
+    expect: [record-postgres, lane-autonomy]
+    exclude: [planner, intent-actuator]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:lane-policy"}
+    answer: subject
+  - id: m02
+    question: Which providers fill the observer slot?
+    expect: [observer-otel, observer-prometheus]
+    exclude: [anomaly, prediction-verifier]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:observer"}
+    answer: subject
+  - id: m03
+    question: Which slot does the encoder-compose provider fill?
+    expect: [system-encoder]
+    evidence: {subject: "urn:kk:provider:encoder-compose", predicate: "kk:fills"}
+    answer: object
+  - id: m04
+    question: Which provider fills the outcome-verifier slot?
+    expect: [prediction-verifier]
+    exclude: [verifier-quotes, evaluator]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:outcome-verifier"}
+    answer: subject
+  - id: m05
+    question: What version is the morphogen distribution?
+    expect_from: morphogen/distribution.yaml:version
+    evidence: {subject: "urn:kk:distribution:morphogen", predicate: "owl:versionInfo"}
+    answer: object
+  - id: m06
+    question: Which provider fills the analyser slot?
+    expect: [anomaly]
+    exclude: [observer-otel, planner]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:analyser"}
+    answer: subject
+  - id: m07
+    question: How many providers may fill the system-encoder slot at once (its cardinality)?
+    expect: [many]
+    evidence: {subject: "urn:kk:slot:system-encoder", predicate: "kk:cardinality"}
+    answer: object
+  - id: m08
+    question: In the podinfo system, which service does the frontend connect to?
+    expect: [backend]
+    exclude: [redis]
+    evidence: {subject: "urn:kk:node:podinfo:frontend", predicate: "kkt:connectsTo"}
+    answer: object
+  - id: m09
+    question: In the podinfo system, which service connects to redis?
+    expect: [backend]
+    exclude: [frontend]
+    evidence: {predicate: "kkt:connectsTo", object_entity: "urn:kk:node:podinfo:redis"}
+    answer: subject
+  - id: m10
+    question: Which services make up the podinfo system?
+    expect: [frontend, backend, redis]
+    evidence: {predicate: "kkt:memberOf", object_entity: "urn:kk:system:podinfo"}
+    answer: subject
+  - id: m11
+    question: What is PODINFO_RANDOM_DELAY_MAX set to on the podinfo backend?
+    expect: ["600"]
+    evidence: {subject: "urn:kk:node:podinfo:backend", predicate: "kkt:propertyValue",
+               qualifiers: {"kkt:propertyName": PODINFO_RANDOM_DELAY_MAX}}
+    answer: object
+  - id: m12
+    question: Which provider fills the sandbox slot?
+    expect: [sandbox]
+    exclude: [builder, evaluator]
+    evidence: {predicate: "kk:fills", object_entity: "urn:kk:slot:sandbox"}
+    answer: subject

@@ -1,10 +1,11 @@
 """Self-encoder: records the kernel's own structure as claims, and answers from them. A plain command.
 
-  python -m self_encoder scan [--repo DIR] [--distribution FILE ...]
-      kernel/blueprint/slots.yaml, every kernel/providers/*/provider.yaml and each distribution file (paths
-      relative to the repository) into one change set per file (encode.py): the same file again is a no-op, a
-      changed (or reverted, or restored) file supersedes its earlier claims, a kernel file gone from disk is
-      retracted, and a distribution is retracted only with --forget FILE.
+  python -m self_encoder scan [--repo DIR] [--distribution FILE ...] [--providers DIR ...]
+      kernel/blueprint/slots.yaml, every kernel/providers/*/provider.yaml, every */provider.yaml under each
+      --providers directory (a distribution's own providers) and each distribution file (paths relative to the
+      repository) into one change set per file (encode.py): the same file again is a no-op, a changed (or
+      reverted, or restored) file supersedes its earlier claims, a provider file gone from a directory scanned
+      now is retracted, and a distribution is retracted only with --forget FILE.
   python -m self_encoder answer [SLOT ...]
       which provider fills each slot, from the self-encoder's own claims (what the files say; claims by other
       agents are not counted): every answer cites the claim ids it rests on, with their belief and the file and
@@ -34,12 +35,18 @@ SCOPE = "urn:kk:scope:vocab"           # slot and provider descriptions (002_boo
 KEY = "self:"
 
 
-def files(repo: Path, distributions: list[str]) -> list[tuple[str, str]]:
+def provider_dirs(repo: Path, extra: list[str] = ()) -> list[str]:
+    """The provider directories scan reads, relative to the repository: the kernel's, then each one given."""
+    return ["kernel/providers"] + [str(Path(d).resolve().relative_to(repo.resolve())) for d in extra]
+
+
+def files(repo: Path, distributions: list[str], providers: list[str] = ()) -> list[tuple[str, str]]:
     """(relative path, kind) for every file scan reads."""
     out = [("kernel/blueprint/slots.yaml", "blueprint")]
-    for p in sorted((repo / "kernel" / "providers").glob("*/provider.yaml")):
-        if not p.parent.name.startswith("_"):
-            out.append((str(p.relative_to(repo)), "provider"))
+    for d in provider_dirs(repo, providers):
+        for p in sorted((repo / d).glob("*/provider.yaml")):
+            if not p.parent.name.startswith("_"):
+                out.append((str(p.relative_to(repo)), "provider"))
     out += [(str(Path(d).resolve().relative_to(repo.resolve())), "distribution") for d in distributions]
     for rel, _ in out:
         if "|" in rel:   # the change-set key separates the path from the content hash with |
@@ -93,11 +100,13 @@ def record(cur, rel: str, sha: str | None, ops: list[dict], info: dict) -> dict:
             "superseded" if sha else "retracted": len(prior)}
 
 
-def scan(repo: Path, distributions: list[str], forget: list[str] = ()) -> list[dict]:
-    """Record every file scan reads. Kernel files encoded before and gone from disk now are retracted; a
-    distribution is retracted only when named in `forget` (another scan may simply not have been given it)."""
+def scan(repo: Path, distributions: list[str], forget: list[str] = (), providers: list[str] = ()) -> list[dict]:
+    """Record every file scan reads. Kernel files, and provider files under a directory scanned now, encoded
+    before and gone from disk now are retracted; a distribution is retracted only when named in `forget`
+    (another scan may simply not have been given it)."""
     results = []
-    seen = files(repo, distributions)
+    seen = files(repo, distributions, providers)
+    scanned = tuple(d.rstrip("/") + "/" for d in provider_dirs(repo, providers))
     with connect(os.environ.get("KK_ROLE", "kkm_self_encoder")) as conn, conn.cursor() as cur:
         for rel, kind in seen:
             data = (repo / rel).read_bytes()
@@ -107,8 +116,9 @@ def scan(repo: Path, distributions: list[str], forget: list[str] = ()) -> list[d
                     "where attributed_to = %s and starts_with(idempotency_key, %s) and status = 'applied'",
                     (len(KEY) + 1, AGENT, KEY))
         current = {rel for rel, _ in seen}
-        gone = [rel for (rel,) in cur.fetchall() if rel not in current and rel.startswith("kernel/")
-                and not (repo / rel).exists()]
+        gone = [rel for (rel,) in cur.fetchall() if rel not in current and not (repo / rel).exists()
+                and (rel == "kernel/blueprint/slots.yaml"           # a provider file, never a distribution under it
+                     or (Path(rel).name == "provider.yaml" and Path(rel).parent.parent.as_posix() + "/" in scanned))]
         gone += [str(Path(f).resolve().relative_to(repo.resolve())) for f in forget]
         for rel in sorted(set(gone)):
             results.append(record(cur, rel, None, [], {"file": rel, "removed": True}))
@@ -163,11 +173,12 @@ def main(argv=None) -> int:
     sc.add_argument("--repo", default=".")
     sc.add_argument("--distribution", action="append", default=[])
     sc.add_argument("--forget", action="append", default=[], help="a distribution file to retract")
+    sc.add_argument("--providers", action="append", default=[], help="a directory of provider directories")
     an = sub.add_parser("answer")
     an.add_argument("slots", nargs="*")
     a = ap.parse_args(argv)
     if a.cmd == "scan":
-        for r in scan(Path(a.repo), a.distribution, a.forget):
+        for r in scan(Path(a.repo), a.distribution, a.forget, a.providers):
             print(json.dumps(r))
         return 0
     with connect(os.environ.get("KK_ROLE", "kkm_self_encoder")) as conn:

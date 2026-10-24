@@ -1,0 +1,112 @@
+{
+  "set": "kernel/evals/self-model/questions.yaml",
+  "agent": "claude-code-haiku",
+  "questions": 12,
+  "correct": 11,
+  "accuracy": 0.9167,
+  "citations_resolve": true,
+  "belief_shown": true,
+  "passed": true,
+  "floor": {
+    "rebuild4": "12/12 (eval/self-model/runs/2026-10-16-claude-code.json)",
+    "gate": ">= 90% correct, cited, belief shown"
+  },
+  "results": [
+    {
+      "id": "q01",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "validator-shacl fills the validator slot (claim 26b3534a-454c-4edc-b707-5c42266da0e3, belief 0.50; slot cardinality 'many', claim 65a557cf-5858-43b0-ae84-e12d9b0bb1df, belief 0.50)."
+    },
+    {
+      "id": "q02",
+      "correct": true,
+      "cited": 4,
+      "resolved": true,
+      "belief": true,
+      "answer": "record-postgres fills four slots: record-store (claim 43612ce4-6cd6-4fd5-ace9-329cea314713, belief 0.50), write-pipeline (claim e885847b-631e-4fc1-91ed-b1526a6e196e, belief 0.50), lane-policy (claim 64f757a4-0fd7-4033-b007-1bbcb3260e9c, belief 0.50), and change-feed (claim 7200b554-9980-4dd0-91bc-eec00ee88907, belief 0.50)."
+    },
+    {
+      "id": "q03",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "kernel-mcp provides the agent-interface slot (claim a71c0399-b5d9-49d0-bfd7-4b31ec122d35, belief 0.50). The slot's contract is 'MCP tools (read + propose)' (claim dac8edf2-79ec-4318-a8e2-2e9f31aea1db, belief 0.50)."
+    },
+    {
+      "id": "q04",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "kernel-mcp is at version 0.8.0 (claim bee9b5f4-da2d-42b9-bc15-b1ff42406853, belief 0.50)."
+    },
+    {
+      "id": "q05",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "belief-corroboration is released under Apache-2.0, per the SPDX license claim (claim 43d297f1-d6a1-44d5-8399-553a004067f5, belief 0.50)."
+    },
+    {
+      "id": "q06",
+      "correct": true,
+      "cited": 2,
+      "resolved": true,
+      "belief": true,
+      "answer": "The belief-model slot's cardinality is 'one', so at most one provider may fill it at once (claim fcac4616-2eba-4131-99fc-189c1f474ea5, belief 0.50). The only provider claiming to fill it is belief-corroboration (claim e5712260-21f3-4c4e-b840-358750e3a4c9, belief 0.50)."
+    },
+    {
+      "id": "q07",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "pack-loader fills the vocabulary-pack slot (claim 7b9a3816-636e-4c91-9e13-1cffebcc0bb0, belief 0.50)."
+    },
+    {
+      "id": "q08",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "verifier-quotes fills the verifier slot (claim 9ee59835-7b1f-4773-928c-d3327fe0c0e5, belief 0.50)."
+    },
+    {
+      "id": "q09",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The recall slot declares its slotContract as 'Recall' (claim f197a18b-04c5-435e-b544-e08e35c5640c, belief 0.50). The claims give no further detail on that contract's interface."
+    },
+    {
+      "id": "q10",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "validator-shacl is at version 0.3.1 (claim b056e3e3-6e3b-47af-9535-7f09ca269292, belief 0.50)."
+    },
+    {
+      "id": "q11",
+      "correct": true,
+      "cited": 1,
+      "resolved": true,
+      "belief": true,
+      "answer": "The validator slot's cardinality is 'many', so any number of providers may fill it at once (claim 65a557cf-5858-43b0-ae84-e12d9b0bb1df, belief 0.50)."
+    },
+    {
+      "id": "q12",
+      "correct": false,
+      "cited": 1,
+      "resolved": false,
+      "belief": true,
+      "answer": "The evaluator provider fills the evaluator slot (claim ae1383fb-a863-48a8-8bff-1897a85d400d, belief 0.50)."
+    }
+  ]
+}

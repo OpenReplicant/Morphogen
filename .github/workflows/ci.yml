@@ -41,6 +41,13 @@ jobs:
         run: /tmp/kk-venv/bin/python kernel/providers/test.py
       - name: Morphogen contract (its slots' case sets) and mutants
         run: sh morphogen/contract/run.sh && sh morphogen/contract/run.sh --mutants
+      - name: Self-model questions, the reference agent and the grader's own test (R5-27)
+        run: |
+          /tmp/kk-venv/bin/python kernel/evals/self-model/run.py setup kk_eval_self
+          /tmp/kk-venv/bin/python kernel/evals/self-model/run.py reference kk_eval_self
+          /tmp/kk-venv/bin/python kernel/evals/self-model/test_grade.py kk_eval_self
+          /tmp/kk-venv/bin/python morphogen/evals/self-model/run.py setup kk_eval_self_mg
+          /tmp/kk-venv/bin/python morphogen/evals/self-model/run.py reference kk_eval_self_mg
       - name: OS users for model-written code (R5-24)
         run: |
           # uids of their own: --system would hand out 999, the uid Postgres runs as in the service container
