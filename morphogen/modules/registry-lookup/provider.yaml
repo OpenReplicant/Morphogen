@@ -1,0 +1,14 @@
+id: urn:kk:provider:registry-lookup
+name: Catalog lookup
+version: 0.1.0
+license: Apache-2.0
+slots: [catalog-lookup]
+origin: new (R5-30)
+requires: Python 3.12+, psycopg, PyYAML, git; the kk-tosca, owl and dcterms packs
+migration: migration.sql
+service: python3 -m registry_lookup
+command: python3 -m registry_lookup search <catalog> [--terms ...] [--slot ...] [--kind ...]
+tests:
+  - python3 tests/test_catalogs.py
+  - python3 tests/test_service.py
+note: catalogs are open component sets of any kind (intent/catalogs/*.yaml, adapters components, pypi, providers); every entry found is recorded with its rules' verdicts; an offered, pinned provider for a build request becomes a sandbox candidate

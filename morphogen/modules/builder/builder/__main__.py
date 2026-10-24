@@ -22,7 +22,7 @@ from pathlib import Path
 
 from kk.lib import connect, follow, run, submit
 
-from morphogen.experiments import provider_dir as incumbent_dir
+from morphogen.experiments import build_requests as requests, provider_dir as incumbent_dir
 
 from .build import ROOT, build
 
@@ -35,24 +35,6 @@ LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 BUILD = "urn:kk:action:build-candidate"
 COMMITTER = {"GIT_AUTHOR_NAME": "Morphogen builder", "GIT_AUTHOR_EMAIL": "builder@morphogen.invalid",
              "GIT_COMMITTER_NAME": "Morphogen builder", "GIT_COMMITTER_EMAIL": "builder@morphogen.invalid"}
-
-
-def requests(cur) -> list[dict]:
-    cur.execute("""select subject, predicate, object_entity, object_value->>'@value', id from api.claims
-                   where subject in (select subject from api.claims where predicate = %s and object_entity = %s
-                                     and status <> 'deprecated')
-                     and status <> 'deprecated'""", (DCT + "type", BUILD))
-    out: dict[str, dict] = {}
-    for s, p, oe, ov, cid in cur.fetchall():
-        r = out.setdefault(s, {"iri": s, "claims": []})
-        r["claims"].append(str(cid))
-        if p == OA + "hasTarget":
-            r["target"] = oe
-        elif p == DCT + "subject":
-            r["slot"] = oe
-        elif p == OA + "bodyValue":
-            r["text"] = ov
-    return [r for r in out.values() if r.get("target") and r.get("slot") and r.get("text")]
 
 
 def commit(intent: Path, exp: Path, msg: str) -> str:

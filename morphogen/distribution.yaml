@@ -85,9 +85,9 @@ slots:
   - id: catalog-lookup
     phase: plan
     cardinality: many
-    default: registry-lookup                   # configured registries, matched on slot requirements
+    default: registry-lookup                   # component sets of any kind (intent/catalogs/), R5-30
     contract: provider-tests
-    status: new
+    status: written
 
 lane_policy:
   file: intent/policies/autonomy.yaml          # autonomy level x risk class

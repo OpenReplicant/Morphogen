@@ -1,0 +1,17 @@
+# A component set outside software (R5-30): catalogs record any kind of thing the same way. An example; a real
+# set would come from a supplier's list.
+kind: components
+label: Workshop parts (example)
+components:
+  - id: m8-bolt-a2-30
+    label: Hex bolt M8 x 30, stainless A2
+    kind: fastener
+    properties: {thread: M8, length_mm: 30, material: stainless steel A2-70, standard: ISO 4017}
+  - id: m8-nut-a2
+    label: Hex nut M8, stainless A2
+    kind: fastener
+    properties: {thread: M8, material: stainless steel A2-70, standard: ISO 4032}
+  - id: bearing-6204-2rs
+    label: Deep groove ball bearing 6204-2RS
+    kind: bearing
+    properties: {bore_mm: 20, outer_mm: 47, width_mm: 14, seals: rubber both sides}

@@ -13,9 +13,13 @@ A node of a managed system (urn:kk:node:<system>:<service>, R5-25) is planned fo
 anomalous node first, then the nodes it connects to (kkt:connectsTo, breadth first, as recorded by the
 agents in KK_MAP_AGENTS), and the step goes to the first whose compose file sets the action's setting;
 the connections followed join the plan's premises.
+A build request is answered by the candidates recorded for it (`<provider> dcterms:source <request>` by the agents
+in KK_BUILDER_AGENTS: the builder and catalog lookup, R5-30): the fastest the sandbox measured as better than the
+incumbent and within the limit becomes a replace plan.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_planner), KK_INTENT_DIR
 (the intent directory, default morphogen/intent), KK_INTENT_ENV (default sandbox), KK_SWEEP_SECONDS,
-KK_MAP_AGENTS (comma-separated; default urn:kk:agent:encoder-compose).
+KK_MAP_AGENTS (comma-separated; default urn:kk:agent:encoder-compose), KK_BUILDER_AGENTS (comma-separated; default
+urn:kk:agent:builder,urn:kk:agent:registry-lookup).
 """
 from __future__ import annotations
 
@@ -29,7 +33,7 @@ from pathlib import Path
 import yaml
 
 from kk.lib import connect, follow, run, submit
-from morphogen.experiments import ROOT, experiment_id, provider_slots, run_name
+from morphogen.experiments import ROOT, provider_slots, run_name
 from morphogen import systems
 from morphogen.policy import actions, autonomy, level, route
 
@@ -40,7 +44,9 @@ MODULE = "urn:kk:module:planner"
 AGENT = "urn:kk:agent:planner"
 SCOPE = "urn:kk:scope:default"
 EVALUATOR = "urn:kk:agent:evaluator"
-BUILDER = "urn:kk:agent:builder"
+BUILDERS = [x.strip() for x in os.environ.get("KK_BUILDER_AGENTS", "urn:kk:agent:builder,urn:kk:agent:registry-lookup").split(",")
+            if x.strip()]                                    # whoever may record candidates (the builder, catalog lookup)
+CANDIDATE_REF = re.compile(r"experiments/(x[0-9a-f]{12})/[a-z0-9-]+#sha256=([0-9a-f]{64})$")
 DQV = "http://www.w3.org/ns/dqv#"
 BENCHMARKS = ROOT / "morphogen" / "contract" / "slots"
 CONNECTS_TO = "https://w3id.org/knowledge-kernel/tosca#connectsTo"
@@ -232,26 +238,52 @@ def measured(cur, suite: str, run: str) -> dict | None:
             "claim_ids": [str(c["id"]) for c in got]}
 
 
+def candidates(cur, request: str) -> dict[str, dict]:
+    """The candidates recorded for a request, by experiment: {exp: {provider, claim_ids, shas}}, from the claims
+    `<provider> dcterms:source <request>` a builder agent made, referenced by experiments/<exp>/<dir>#sha256=."""
+    got = rows(cur, """select c.id, c.subject, r.source_uri from api.claims c join api.claim_references r on r.claim_id = c.id
+                       where c.predicate = 'http://purl.org/dc/terms/source' and c.object_entity = %s
+                         and c.attributed_to = any(%s) and c.status <> 'deprecated'""", (request, BUILDERS))
+    out: dict[str, dict] = {}
+    for g in got:
+        m = CANDIDATE_REF.search(g["source_uri"] or "")
+        if m:
+            e = out.setdefault(m.group(1), {"provider": g["subject"], "claim_ids": set(), "shas": set()})
+            if e["provider"] == g["subject"]:
+                e["claim_ids"].add(str(g["id"]))
+                e["shas"].add(m.group(2))
+    return out
+
+
 def replace_for(cur, r: dict, lane) -> dict:
-    exp = experiment_id(r["iri"])
+    """The best candidate measured so far for the request, from the builder or a catalog, as a replace plan (one
+    plan per request: a candidate measured later than the plan is not considered)."""
     suite = f"sandbox-{r['slot']}"
-    inc, cand = measured(cur, suite, run_name(exp, "incumbent")), measured(cur, suite, run_name(exp, "candidate"))
-    if inc is None or cand is None:
-        return {"wait": "the sandbox has not measured the candidate and the incumbent yet"}
-    if inc["provider"] != r["target"]:
-        return {"none": f"the incumbent measured is {inc['provider']}, not {r['target']}"}
-    built = rows(cur, """select id from api.claims where subject = %s and attributed_to = %s and status <> 'deprecated'""",
-                 (cand["provider"], BUILDER))
-    if not built:
-        return {"wait": f"the builder has not recorded {cand['provider']}"}
-    refs = rows(cur, "select source_uri from api.claim_references where claim_id = any(%s::uuid[])", ([str(b["id"]) for b in built],))
-    shas = {m.group(1) for r in refs if (m := re.search(r"#sha256=([0-9a-f]{64})$", r["source_uri"] or ""))}
-    if len(shas) != 1:
-        return {"none": f"the builder recorded {len(shas)} content hashes for {cand['provider']}, not one"}
-    cand = {**cand, "claim_ids": cand["claim_ids"] + [str(b["id"]) for b in built], "sha256": shas.pop()}
-    got = replacement(r, inc, cand, r["limit"])
-    if "none" in got:
-        return got
+    found = candidates(cur, r["iri"])
+    if not found:
+        return {"wait": "no candidate has been recorded for the request yet"}
+    plans, why = [], []
+    for exp, c in sorted(found.items()):
+        inc, cand = measured(cur, suite, run_name(exp, "incumbent")), measured(cur, suite, run_name(exp, "candidate"))
+        if inc is None or cand is None:
+            why.append(f"{exp}: not measured yet")
+            continue
+        if inc["provider"] != r["target"]:
+            why.append(f"{exp}: the incumbent measured is {inc['provider']}, not {r['target']}")
+            continue
+        if cand["provider"] != c["provider"] or len(c["shas"]) != 1:
+            why.append(f"{exp}: measured {cand['provider']} with {len(c['shas'])} content hashes recorded for {c['provider']}")
+            continue
+        got = replacement(r, inc, {**cand, "claim_ids": cand["claim_ids"] + sorted(c["claim_ids"]), "sha256": next(iter(c["shas"]))},
+                          r["limit"])
+        if "none" in got:
+            why.append(f"{exp}: {got['none']}")
+        else:
+            plans.append((cand["mean"], cand["provider"], got))
+    if not plans:
+        waiting = [w for w in why if w.endswith("not measured yet")]
+        return {"wait": "; ".join(why)} if waiting else {"none": "; ".join(why)}
+    got = min(plans, key=lambda x: x[:2])[2]                # the fastest measured candidate; ties by provider id
     p = got["plan"]
     with run(cur, MODULE, {"request": r["iri"], "target": r["target"]}, used=p["premises"]) as (run_id, outputs):
         res = submit(cur, replace_change_set(p, AGENT, SCOPE, lane(p["risk"])), run_id)
