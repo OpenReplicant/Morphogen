@@ -2,8 +2,9 @@
 own (R5-24).
 
 KK_RUN_AS names a pool of OS users (comma-separated), each with no rights of its own: no login shell, no
-home, in no group with files of ours. Each run leases one user for itself (`lease()`, a lock only root
-can take), so two confined runs never share a user: they cannot read each other's environment, trace
+home, in no group with files of ours, and a uid nothing else on the host runs as (a container's processes
+included: `useradd --system` can hand out 999, the uid of Postgres in its image). Each run leases one
+user for itself (`lease()`, a lock only root can take), so two confined runs never share a user: they cannot read each other's environment, trace
 each other or end each other's processes. The process that starts confined code (the sandbox, the
 reconciler, the builder) must be able to switch users: root, or CAP_SETUID and CAP_SETGID.
 
@@ -145,7 +146,8 @@ class Lease:
 
 @contextlib.contextmanager
 def lease():
-    """A run user nobody else holds, for the life of the context. Its leftovers are ended first."""
+    """A run user nobody else holds, for the life of the context. A user that already has processes is
+    refused, not cleared: they may be another program's that shares its uid."""
     LOCKS.mkdir(mode=0o700, parents=True, exist_ok=True)
     if LOCKS.stat().st_uid != os.geteuid() or LOCKS.stat().st_mode & 0o077:
         raise Unconfined(f"{LOCKS} must be this process's own and closed to others")
@@ -157,8 +159,11 @@ def lease():
             f.close()
             continue
         got = Lease(u)
+        if busy := got.live():
+            f.close()
+            raise Unconfined(f"run user {u.pw_name} (uid {u.pw_uid}) already has processes {busy[:5]}: its uid may "
+                             "belong to something else on this host (end them, or give it a uid of its own)")
         try:
-            got.kill_all()
             yield got
         finally:
             try:

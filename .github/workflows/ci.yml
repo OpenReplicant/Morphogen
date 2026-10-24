@@ -36,7 +36,8 @@ jobs:
         run: sh morphogen/contract/run.sh && sh morphogen/contract/run.sh --mutants
       - name: OS users for model-written code (R5-24)
         run: |
-          for u in kkrun1 kkrun2 kkrun3 kkrun4; do sudo useradd --system --no-create-home --shell /usr/sbin/nologin $u; done
+          # uids of their own: --system would hand out 999, the uid Postgres runs as in the service container
+          for i in 1 2 3 4; do sudo useradd --uid $((2900 + i)) --no-create-home --shell /usr/sbin/nologin kkrun$i; done
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
           # the confined code reads the repository and the venv: every directory above them must be traversable
           d="$GITHUB_WORKSPACE"; while [ "$d" != / ]; do sudo chmod o+x "$d"; d=$(dirname "$d"); done

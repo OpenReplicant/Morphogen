@@ -20,7 +20,8 @@ description: Set up the environment and run every check for this repo (Postgres 
    otherwise (R5-24). After a container restart: `rm -f /var/tmp/kpg/data/postmaster.pid` and start again.
    Never write a superuser's password in the repository or anywhere a run user can read: confined code reads
    the repository. OS users for model-written code, one per concurrent run:
-   `for u in kkrun1 kkrun2 kkrun3 kkrun4; do useradd --system --no-create-home --shell /usr/sbin/nologin $u; done`,
+   `for i in 1 2 3 4; do useradd --uid $((2900 + i)) --no-create-home --shell /usr/sbin/nologin kkrun$i; done`
+   (uids nothing else runs as: `--system` can hand out 999, Postgres's uid in its container image),
    then `export KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4`; the module tests run as root so they can start code as them.
 2. Python deps: `python3 -m venv /var/tmp/kk-venv && /var/tmp/kk-venv/bin/pip install -r kernel/contract/requirements.txt -r kernel/providers/kernel-mcp/requirements.txt -r morphogen/modules/observer-otel/requirements.txt`, then `export KK_PYTHON=/var/tmp/kk-venv/bin/python` (a place the run user can read: not a private scratch directory).
    `sh kernel/contract/run.sh` → every provider passes every case for its slots.

@@ -186,6 +186,24 @@ def main() -> None:
     check(not Path(f"/proc/{pid}").exists() or "zombie" in Path(f"/proc/{pid}/status").read_text().lower(),
           "a process the candidate started in a session of its own does not outlive its run")
 
+    # A process already running as a run user (another program sharing its uid) is refused, never killed.
+    first = confine.pool()[0]
+    other = subprocess.Popen(["sleep", "60"], user=first.pw_uid, group=first.pw_gid, extra_groups=[])
+    try:
+        os.environ["KK_RUN_AS"], pool_was = first.pw_name, os.environ["KK_RUN_AS"]
+        try:
+            with confine.lease():
+                refused = None
+        except confine.Unconfined as e:
+            refused = str(e)
+        finally:
+            os.environ["KK_RUN_AS"] = pool_was
+        check(refused is not None and "already has processes" in refused and other.poll() is None,
+              "a run user that already has processes is refused, and they are left running")
+    finally:
+        other.kill()
+        other.wait()
+
     env = {**os.environ, "DATABASE_URL": url,
            "PYTHONPATH": os.pathsep.join([str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")]),
            "KK_ARTIFACTS": str(tmp / "artifacts")}
