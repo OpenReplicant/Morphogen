@@ -15,6 +15,7 @@ uses_kernel_slots:
   - change-feed
   - belief-model
   - verifier
+  - truth-maintenance
   - recall
   - agent-interface
   - vocabulary-pack

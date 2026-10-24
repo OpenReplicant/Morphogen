@@ -83,15 +83,14 @@ slots:
     hook: feed
     cardinality: one
     interface: FeedConsumer
-    default: none
-    contract: none
-    status: unfilled
+    default: truth-maintenance        # rebuild 4 modules/truth-maintenance (D-89), plan.py unchanged, follows the feed
+    contract: provider-tests
+    status: ported
     why: >-
-      Marks claims derived from a premise that was later superseded, refuted, retracted or redacted, so belief
-      can cap them (rebuild 4 D-89, modules/truth-maintenance). Morphogen's loop does not reason over chains of
-      inferred claims: plans cite observations and predictions are checked by the outcome verifier, so no
-      Morphogen use case needs it yet. Without it the belief model's premise cap never applies. Fill it (port
-      rebuild 4's module) when a distribution keeps inferred claims whose premises change.
+      Marks claims derived from a premise that was later superseded, refuted, retracted or redacted (directly or
+      through other derived claims) inconclusive, naming the withdrawn premises, so the belief model caps them;
+      supported again when the premises are current. Filled in T18 (R5-O7 a1): distributions now keep inferred
+      claims whose premises change (Morphogen's catalog offers, inferred from build requests; answered gaps).
 
   # ---- read path
   - id: recall

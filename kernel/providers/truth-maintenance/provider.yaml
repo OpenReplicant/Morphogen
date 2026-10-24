@@ -1,0 +1,13 @@
+id: urn:kk:provider:truth-maintenance
+name: Truth maintenance
+version: 0.2.0
+license: Apache-2.0
+slots: [truth-maintenance]
+origin: OpenReplicant/kernel (rebuild 4) modules/truth-maintenance (D-89, M6-T12); plan.py unchanged, the service follows the change feed
+requires: Python 3.12+, psycopg (service)
+migration: migration.sql
+service: python3 -m truth_maintenance
+tests:
+  - python3 tests/test_plan.py
+  - python3 tests/test_service.py
+note: every current claim derived from a withdrawn claim (superseded, refuted, retracted or redacted), directly or through other derived claims, gets the verdict inconclusive naming the withdrawn premises; supported when they are current again; the belief model caps the inconclusive ones. Writes no claims and deletes nothing.
