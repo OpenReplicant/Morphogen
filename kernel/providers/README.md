@@ -12,7 +12,7 @@ end-to-end service test (`tests/test_services.py`). Services share `kk.lib` (`..
 | Provider | Slot(s) | Status |
 | --- | --- | --- |
 | record-postgres | record-store, write-pipeline, lane-policy (review rules), change-feed (applied-sequence cursor), as-of reads | Ported from rebuild 4 `kernel/schema`, plus the feed and `api.claims_as_of` (T1) and redactions in the feed (R5-16); 66/66 contract cases; 22 mutants, all fail |
-| filter-gitleaks | intake-filter | To port (rebuild 4 `modules/ingest-filter-gitleaks`) |
+| filter-gitleaks | intake-filter | Ported from rebuild 4 `modules/ingest-filter-gitleaks` (T13a): files before an encoder stores them (`kk.lib.ingest_filter`), and `filter(change_set)` for proposals (R5-29); fails closed; gitleaks 8.30.1 pinned by checksum. No caller runs the intake hook on every proposal yet: encoders call it |
 | validator-shacl | validator | Ported from rebuild 4 `modules/validator-shacl` (core, shapes, service) (T2, T3); 13/13 contract cases plus the shape tests; 8 mutants, all fail. Default until a JSON Schema validator passes the same set (R5-11, R5-O1) |
 | belief-corroboration | belief-model | Ported from rebuild 4 (T2, T3): scoring unchanged, the service follows the change feed; 17/17 contract cases; 8 mutants, all fail |
 | verifier-quotes | verifier | Ported from rebuild 4 (T3): checks unchanged (17/17), the service follows the change feed |
