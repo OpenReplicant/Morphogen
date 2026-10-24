@@ -1,7 +1,9 @@
 """The analyser slot's own runner (set.yaml `runner:`): runs every case against one provider's
 `<package>.detect.anomalies(observations, limits)`, the package being the one its service runs
 (provider.yaml `service: python3 -m <package>`). Prints "ok: <case id>" per passing case. The slot owns
-it, not the provider, so a candidate cannot certify itself (R5-21). No database needed.
+it, not the provider, so a candidate cannot certify itself (R5-21). No database needed. A case with a
+`then:` stage is checked twice: on its input, and on the input after `then` (observations retracted,
+limits superseded), which must give `then.expect`.
 
   python3 runner.py <provider directory>
 """
@@ -26,6 +28,15 @@ def claims(case: dict):
     limits = [{"id": x["id"], "subject": x["target"], "predicate": MAX, "qualifiers": {PROP: x["property"]},
                "object_value": {"@value": x["value"]}} for x in case["input"]["limits"]]
     return obs, limits
+
+
+def after(case: dict) -> dict:
+    """The case's input once its `then` stage is applied."""
+    then = case["then"]
+    gone = set(then.get("retract") or []) | {x["supersedes"] for x in then.get("limits") or [] if x.get("supersedes")}
+    new = [{k: v for k, v in x.items() if k != "supersedes"} for x in then.get("limits") or []]
+    return {"input": {"observations": [o for o in case["input"]["observations"] if o["id"] not in gone],
+                      "limits": [x for x in case["input"]["limits"] if x["id"] not in gone] + new}}
 
 
 def summary(found: list[dict], limit_ids: set) -> list[dict]:
@@ -56,10 +67,13 @@ def main() -> int:
         return 1
     for path in paths:
         case = yaml.safe_load(path.read_text())
-        obs, limits = claims(case)
-        want = sorted(case["expect"]["anomalies"], key=lambda r: (r["target"], r["observation"], r["kind"]))
+        stages = [(case, case["expect"])] + ([(after(case), case["then"]["expect"])] if case.get("then") else [])
+        want, got = [], []
         try:
-            got = summary(anomalies(obs, limits), {x["id"] for x in limits})
+            for state, expect in stages:
+                obs, limits = claims(state)
+                want.append(sorted(expect["anomalies"], key=lambda r: (r["target"], r["observation"], r["kind"])))
+                got.append(summary(anomalies(obs, limits), {x["id"] for x in limits}))
         except Exception as e:  # a crash is a failed case, and the other cases still run
             failed += 1
             print(f"FAIL: {case['id']}: {type(e).__name__}: {e}")

@@ -1,7 +1,10 @@
 """Every Morphogen module's own tests (provider.yaml `tests`, run in its directory), then the full loop
 (morphogen/tests/test_loop.py). Mirrors kernel/providers/test.py.
 
-  PGHOST=... PGUSER=<superuser> python3 morphogen/modules/test.py
+  PGHOST=... PGUSER=<superuser> KK_RUN_AS=<user> python3 morphogen/modules/test.py   (as root)
+
+The sandbox, builder and reconciler tests start model-written code as KK_RUN_AS (morphogen.confine): run
+as root, with a cluster that asks every login for its password and a Python the run user can read.
 """
 import os
 import shlex

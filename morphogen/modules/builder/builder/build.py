@@ -9,11 +9,13 @@ provider directory, by one of two strategies:
   harness   copy the incumbent into a temporary directory outside the repository and intent, then run
             an agent harness there (KK_BUILDER_COMMAND, a command line with {workdir} and {prompt}
             placeholders; e.g. `claude -p --model haiku ...`) with a prompt naming the request, the
-            slot's case set and benchmark: the gate run uses this. The harness gets this process's
-            environment without the record's and telemetry's credentials (DATABASE_URL, PG*, OTEL_*,
-            KK_*, GIT_*); if the repository's or intent's git state changed while it ran, the build fails.
-            Only the workdir is copied into the experiment. This is a check, not a sandbox: an unattended
-            harness needs a container (R5-22).
+            slot's case set and benchmark: the gate run uses this. The harness runs as an OS user of its
+            own (KK_RUN_AS; morphogen.confine, R5-24), in a workdir inside a home only that user may
+            write, with the allow-listed environment (PATH, HOME, locale) and only the variables named in
+            KK_BUILDER_ENV (its own model credentials, e.g. ANTHROPIC_API_KEY): none of the record's,
+            telemetry's or git's. It does not run while the cluster lets any login in without its
+            password. If the repository's or intent's git state changed while it ran, the build fails.
+            Only the workdir is copied into the experiment; then every process of the run user is ended.
 
 Either way the result must be a provider of the slot (provider.yaml with that slot and a service) with an
 id of its own, and no migration.sql but the incumbent's, unchanged (a candidate gets no grants of its own).
@@ -27,12 +29,13 @@ import shlex
 import shutil
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 import yaml
 
+from morphogen import confine
 from morphogen.experiments import experiment_id, provider_dir, tree_hash
+from morphogen.logins import KEEP
 
 ROOT = Path(__file__).resolve().parents[4]
 NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
@@ -69,12 +72,14 @@ When you are done, say in one line what you changed.
 """
 
 
-SECRET = ("DATABASE_URL", "PG", "OTEL_", "KK_", "GIT_")
-
-
-def harness_env() -> dict:
-    """This process's environment without the record's, telemetry's and git's settings."""
-    return {k: v for k, v in os.environ.items() if not k.startswith(SECRET)}
+def harness_env(home: Path) -> dict:
+    """The allow-listed environment (no database settings), the harness's home, and the variables
+    KK_BUILDER_ENV names."""
+    named = {x.strip() for x in os.environ.get("KK_BUILDER_ENV", "").split(",") if x.strip()}
+    if any(n == "DATABASE_URL" or n.startswith(("PG", "KK_", "OTEL_", "GIT_")) for n in named):
+        raise ValueError("KK_BUILDER_ENV may not pass the record's, telemetry's or git's settings")
+    return {**{k: v for k, v in os.environ.items() if (k in KEEP and not k.startswith("PG")) or k in named},
+            "HOME": str(home), "TMPDIR": str(home)}
 
 
 def git_state(d: Path) -> str:
@@ -102,8 +107,9 @@ def check_candidate(d: Path, slot: str, incumbent_id: str, incumbent: Path | Non
 
 
 def build(request: dict, slot: str, incumbent: Path, experiments: Path, strategy: str,
-          fixtures: Path | None = None, command: str | None = None) -> dict:
-    """Make the experiment directory; returns {id, dir, candidate, provider, sha256}."""
+          fixtures: Path | None = None, command: str | None = None, roles: list[str] | None = None) -> dict:
+    """Make the experiment directory; returns {id, dir, candidate, provider, sha256}. `roles`: the cluster's
+    login roles, which the harness must not reach without a password (morphogen.confine.check_cluster)."""
     exp_id = experiment_id(request["iri"])
     exp = experiments / exp_id
     if exp.exists():
@@ -120,15 +126,22 @@ def build(request: dict, slot: str, incumbent: Path, experiments: Path, strategy
             if not command:
                 raise ValueError("the harness strategy needs KK_BUILDER_COMMAND")
             name = f"{incumbent.name}-{exp_id}"
-            with tempfile.TemporaryDirectory(prefix="kk-build-") as tmp:
-                scratch = Path(tmp) / name
+            u = confine.run_user()
+            with confine.home("kk-build-") as tmp:
+                env = harness_env(tmp)
+                if roles is not None:
+                    confine.check_cluster({**env, **{k: v for k, v in os.environ.items() if k in KEEP}}, roles)
+                scratch = tmp / name
                 shutil.copytree(incumbent, scratch, ignore=shutil.ignore_patterns("__pycache__", "_mutant"))
+                for x in [scratch, *scratch.rglob("*")]:
+                    os.chown(x, u.pw_uid, u.pw_gid, follow_symlinks=False)
                 (exp / "prompt.md").write_text(prompt(request, slot, incumbent, scratch))
                 cmd = [a.replace("{workdir}", str(scratch)).replace("{prompt}", (exp / "prompt.md").read_text())
                        for a in shlex.split(command)]
                 watched = [ROOT, experiments.parent]
                 before = [git_state(x) for x in watched]
-                out = subprocess.run(cmd, cwd=scratch, capture_output=True, text=True, timeout=1800, env=harness_env())
+                out = confine.run(cmd, env, timeout=1800, cwd=scratch)
+                confine.kill_all()
                 changed = [str(x) for x, b in zip(watched, before) if git_state(x) != b]
                 (exp / "harness.log").write_text((out.stdout or "")[-20000:] + "\n--- stderr\n" + (out.stderr or "")[-5000:])
                 if changed:

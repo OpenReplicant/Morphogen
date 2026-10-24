@@ -9,6 +9,10 @@
 #   extra: further qualifiers (an observation qualified by more than its property is not compared)
 # input.limits:       {id, target, property, value}
 # expect.anomalies:   {kind (limit | zscore), target, observation, limit (for kind limit)}, in any order
+# then (optional):    a second stage: {retract: [observation id], limits: [{id, target, property, value,
+#   supersedes: <limit id>}], expect: {anomalies}}; expect is every anomaly of the input after the stage.
+#   As a service case it is a second pass of the same process, after the retraction and the new limit
+#   are recorded; what that pass submits must be the anomalies not already submitted by the first.
 slot: analyser
 runner: runner.py
 version: 0.1.0

@@ -32,7 +32,14 @@ jobs:
         run: /tmp/kk-venv/bin/python kernel/providers/test.py
       - name: Morphogen contract (its slots' case sets) and mutants
         run: sh morphogen/contract/run.sh && sh morphogen/contract/run.sh --mutants
-      - name: Morphogen modules and the full loop (T5)
-        run: /tmp/kk-venv/bin/python morphogen/modules/test.py
+      - name: An OS user for model-written code (R5-24)
+        run: |
+          sudo useradd --system --no-create-home --shell /usr/sbin/nologin kkrun
+          sudo git config --system --add safe.directory '*'
+          # the confined code reads the repository and the venv: every directory above them must be traversable
+          d="$GITHUB_WORKSPACE"; while [ "$d" != / ]; do sudo chmod o+x "$d"; d=$(dirname "$d"); done
+          chmod -R o+rX "$GITHUB_WORKSPACE" /tmp/kk-venv
+      - name: Morphogen modules and the full loop (T5), as root so they can start code as kkrun
+        run: sudo -E env "PATH=$PATH" KK_RUN_AS=kkrun /tmp/kk-venv/bin/python morphogen/modules/test.py
       - name: Boundary
         run: python3 scripts/check_boundary.py

@@ -5,6 +5,9 @@ provider (its benchmark entry, as the incumbent's login), and gives the change s
 submitted to `judge`. Slot code, run by the sandbox; it never imports the provider.
 
   ops(paths)                 -> (add_claim ops loading every case, expected anomalies per case)
+  then(paths, ids)           -> (ops recording every case's `then` stage, the anomalies a second pass must
+                                 submit per case: those of `then.expect` the first pass did not; none for a
+                                 case without one)
   judge(change_sets, ids, expected) -> {"passed", "total", "failed": [case id, ...]}
   outputs(change_sets, name) -> the anomalies submitted, as [kind, target, [premise names]], sorted
 
@@ -61,6 +64,29 @@ def ops(paths: list[Path]) -> tuple[list[dict], dict[int, dict]]:
             out.append({"op": "add_claim", "subject": suffix(x["target"], n), "predicate": runner.MAX,
                         "object": {"value": {"@value": x["value"], "@type": XSD}}, "qualifiers": {runner.PROP: x["property"]},
                         "evidence_type": "testimony", "references": [{"source_uri": f"urn:kk:case:{n}/limit/{x['id']}"}]})
+    return out, expected
+
+
+def then(paths: list[Path], ids: dict[str, tuple[int, str, str]]) -> tuple[list[dict], dict[int, dict]]:
+    claim = {v: k for k, v in ids.items()}
+    out, expected = [], {}
+    key = lambda r: (r["target"], r["observation"], r["kind"])
+    for n, path in enumerate(sorted(paths)):
+        case = yaml.safe_load(path.read_text())
+        stage = case.get("then") or {}
+        first = {key(r) for r in case["expect"]["anomalies"]}
+        expected[n] = {"id": case["id"] + "#then",
+                       "anomalies": sorted((r for r in (stage.get("expect") or {}).get("anomalies", []) if key(r) not in first), key=key)}
+        for o in stage.get("retract") or []:
+            out.append({"op": "set_status", "claim": claim[(n, "obs", o)], "status": "deprecated", "reason": "retracted"})
+        for x in stage.get("limits") or []:
+            ref = f"c{n}-{x['id']}"
+            out.append({"op": "add_claim", "ref": ref, "subject": suffix(x["target"], n), "predicate": runner.MAX,
+                        "object": {"value": {"@value": x["value"], "@type": XSD}}, "qualifiers": {runner.PROP: x["property"]},
+                        "evidence_type": "testimony", "references": [{"source_uri": f"urn:kk:case:{n}/limit/{x['id']}"}]})
+            if x.get("supersedes"):
+                out.append({"op": "set_status", "claim": claim[(n, "limit", x["supersedes"])], "status": "deprecated",
+                            "reason": "superseded", "replaced_by": ref})
     return out, expected
 
 

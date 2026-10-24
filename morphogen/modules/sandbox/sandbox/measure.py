@@ -33,11 +33,12 @@ all, the service as the incumbent's own login (provider.yaml `role`, `login`; mo
 candidate shares; an incumbent that declares no login is not measured. The metric is this process's clock,
 not the provider's telemetry (R5-23); provider code that runs in the driver's process could still cheat it
 (a pass that returns before its work is done), which the person reviewing the candidate's code sees.
-After each provider's runs the sandbox ends everything that provider started (the driver's session, any
-process carrying its run marker, the login's database sessions) before it drops the databases, so no
-provider code is left running when the run files are written. All of this is same-OS-user isolation:
-it holds against a candidate that does not reach past its own process group and environment, not
-against one that reads the cluster with the trust a local socket gives (R5-23 (f); T8).
+Provider code also runs as an OS user of its own (KK_RUN_AS; morphogen.confine, R5-24), from a copy it
+may read but not write, with a home of its own: it cannot read this process's environment or its private
+directory, and the sandbox refuses to run it at all while the cluster lets any login in without its
+password. After each provider's runs the sandbox ends every process of the run user and the login's
+database sessions before it drops the databases, so no provider code is left running when the run files
+are written. This process needs CAP_SETUID and CAP_SETGID (root) to start it.
 
 The sandbox writes no claims itself: the evaluator records the scores, and this module's run records
 what it did. Creating databases needs a superuser login for the sandbox's cluster (the PG* environment);
@@ -51,9 +52,7 @@ import importlib.util
 import json
 import os
 import re
-import secrets
 import shutil
-import signal
 import subprocess
 import select
 import sys
@@ -66,6 +65,7 @@ import yaml
 from psycopg.types.json import Jsonb
 
 from kk.lib import connect
+from morphogen import confine
 from morphogen.logins import KEEP, login_env, login_of
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -73,15 +73,20 @@ CONTRACT = ROOT / "morphogen" / "contract"
 PASSED = re.compile(r"^\S+: (\d+)/(\d+) contract cases passed$", re.M)
 
 
-def contract(provider_dir: Path) -> dict:
-    """The slot contract on one provider: {"passed", "total"} (0 of 0 when the slot has none)."""
-    out = subprocess.run([sys.executable, str(ROOT / "kernel" / "contract" / "run.py"),
-                          "--blueprint", str(ROOT / "kernel" / "blueprint" / "slots.yaml"),
-                          "--blueprint", str(ROOT / "morphogen" / "distribution.yaml"),
-                          "--providers", str(provider_dir.parent), provider_dir.name],
-                         capture_output=True, text=True,
-                         env={**{k: v for k, v in os.environ.items() if k in KEEP and not k.startswith("PG")},
-                              "PYTHONPATH": pythonpath(provider_dir)})
+def base_env(home: Path) -> dict:
+    """What every confined run gets: the allow-listed environment without database settings, its home."""
+    return {**{k: v for k, v in os.environ.items() if k in KEEP and not k.startswith("PG")},
+            "HOME": str(home), "TMPDIR": str(home), "PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def contract(provider_dir: Path, home: Path) -> dict:
+    """The slot contract on one provider, run as the run user: {"passed", "total"} (0 of 0 when the slot
+    has none)."""
+    out = confine.run([sys.executable, str(ROOT / "kernel" / "contract" / "run.py"),
+                       "--blueprint", str(ROOT / "kernel" / "blueprint" / "slots.yaml"),
+                       "--blueprint", str(ROOT / "morphogen" / "distribution.yaml"),
+                       "--providers", str(provider_dir.parent), provider_dir.name],
+                      {**base_env(home), "PYTHONPATH": pythonpath(provider_dir)}, timeout=600, cwd=home)
     m = PASSED.search(out.stdout)
     return {"passed": int(m.group(1)), "total": int(m.group(2))} if m else {"passed": 0, "total": 0}
 
@@ -127,22 +132,10 @@ def slot_code(slot: str):
     return svc
 
 
-def end_run(db: str, login: tuple[str, str], marker: str, under: Path) -> None:
-    """End whatever one provider's runs left behind: processes carrying its run marker or working under its
-    copy, and its login's sessions on the database."""
-    for proc in Path("/proc").iterdir():
-        if not proc.name.isdigit() or int(proc.name) == os.getpid():
-            continue
-        try:
-            mine = f"KK_SANDBOX_RUN={marker}".encode() in (proc / "environ").read_bytes().split(b"\0")
-            mine = mine or Path(os.readlink(proc / "cwd")).is_relative_to(under)
-        except OSError:
-            continue
-        if mine:
-            try:
-                os.kill(int(proc.name), signal.SIGKILL)
-            except OSError:
-                pass
+def end_run(db: str, login: tuple[str, str]) -> None:
+    """End whatever one provider's runs left behind: every process of the run user, and its login's
+    sessions on the cluster."""
+    confine.kill_all()
     with connect(url=f"dbname={db}") as su:
         su.execute("select pg_terminate_backend(pid) from pg_stat_activity where usename = %s and pid <> pg_backend_pid()",
                    (login[1],))
@@ -152,9 +145,9 @@ def drop(db: str) -> None:
     subprocess.run(["dropdb", "--if-exists", "--force", db], check=True, capture_output=True)
 
 
-def pass_times(provider_dir: Path, db: str, bench: dict, login: tuple[str, str], between, marker: str) -> dict:
+def pass_times(provider_dir: Path, db: str, bench: dict, login: tuple[str, str], between, home: Path) -> dict:
     """Time the provider's passes from this process (R5-23): its `<package>.__main__.<entry>(conn)`, run by
-    driver.py as `login` (role, login) on the sandbox database, in a session of its own. `between()`
+    driver.py as the run user and `login` (role, login) on the sandbox database. `between()`
     changes the record before each pass, as production does, so a pass cannot skip its work because nothing
     changed. The first `warmup` passes are not counted. Returns {"passes", "mean", "times"} or {"error"}."""
     meta = yaml.safe_load((provider_dir / "provider.yaml").read_text())
@@ -162,11 +155,11 @@ def pass_times(provider_dir: Path, db: str, bench: dict, login: tuple[str, str],
     if not m:
         return {"error": "the service must be python3 -m <package>"}
     env = login_env(f"dbname={db}", *login, {"PYTHONPATH": pythonpath(provider_dir), "PYTHONDONTWRITEBYTECODE": "1",
-                                              "KK_SANDBOX_RUN": marker})
+                                              "HOME": str(home), "TMPDIR": str(home)})
     limit = float(bench.get("pass_timeout", 60))
     with tempfile.TemporaryFile() as log:                # stderr goes to a file: a full pipe would stall a pass
-        p = subprocess.Popen([sys.executable, str(DRIVER), m.group(1), bench.get("entry", "one_pass")], cwd=provider_dir,
-                             env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, start_new_session=True)
+        p = confine.popen([sys.executable, str(DRIVER), m.group(1), bench.get("entry", "one_pass")], env, cwd=provider_dir,
+                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log)
         buf = [b""]
 
         def line() -> str:                               # the raw descriptor: nothing waits in a reader's buffer
@@ -198,10 +191,7 @@ def pass_times(provider_dir: Path, db: str, bench: dict, login: tuple[str, str],
                 if i >= int(bench.get("warmup", 1)):
                     times.append(round(dt, 6))
         finally:
-            try:
-                os.killpg(p.pid, signal.SIGKILL)
-            except OSError:
-                pass
+            confine.kill_all()
             p.wait()
             log.seek(0)
             stderr = log.read().decode(errors="replace")
@@ -283,31 +273,59 @@ def sandbox_db(name: str, ops_by_scope: dict[str, list[dict]]) -> None:
 
 
 def service_cases(provider_dir: Path, slot: str, bench: dict, login: tuple[str, str], db: str, agent: str,
-                  marker: str) -> dict | None:
+                  home: Path) -> dict | None:
     """The slot's service cases (morphogen/contract/slots/<slot>/service.py), if it has them: every case
     loaded into a fresh database, one pass of the provider as `login`, the change sets it submitted that
-    the kernel applied, attributed to `agent`, judged by the slot's code. {"passed", "total", "failed"};
-    None when the slot has no service cases."""
+    the kernel applied, attributed to `agent`, judged by the slot's code; then each case's `then` stage
+    recorded (retractions, superseded limits) and a second pass of the same process judged the same way,
+    so a provider that keeps what it read before fails. A case passes when both passes do.
+    {"passed", "total", "failed"}; None when the slot has no service cases."""
     svc = slot_code(slot)
     if svc is None:
         return None
-    ops, expected = svc.ops(sorted((CONTRACT / "slots" / slot / "cases").glob("*.yaml")))
+    paths = sorted((CONTRACT / "slots" / slot / "cases").glob("*.yaml"))
+    ops, expected = svc.ops(paths)
+
+    def case_ids() -> dict:
+        with connect(url=f"dbname={db}") as su:
+            return {cid: got for cid, uri in su.execute("select claim_id::text, source_uri from kernel.claim_reference "
+                                                        "where source_uri like 'urn:kk:case:%%'").fetchall()
+                    if (got := svc.ref(uri))}
+
+    def change_sets() -> set:
+        with connect(url=f"dbname={db}") as su:
+            return {r[0] for r in su.execute("select id from kernel.change_set").fetchall()}
+    stage = {"n": 0}
+
+    def between() -> None:                               # before each pass: the second gets the `then` stages
+        stage["n"] += 1
+        if stage["n"] == 1:
+            stage["before"] = change_sets()
+            return
+        validate(db)
+        stage["first"] = applied(db, agent, stage["before"])
+        later, stage["expected"] = svc.then(paths, ids)
+        if later:
+            with connect(url=f"dbname={db}") as su:
+                su.execute("set role kk_owner")
+                su.execute("select kernel.install_ops('sandbox:then', 'urn:kk:scope:default', %s, 'urn:kk:agent:sandbox', %s)",
+                           (Jsonb(later), MODULE))
+        stage["ids"] = case_ids()
+        stage["before2"] = change_sets()
     try:
         sandbox_db(db, {"urn:kk:scope:default": ops})
-        with connect(url=f"dbname={db}") as su:
-            ids = {cid: got for cid, uri in su.execute("select claim_id::text, source_uri from kernel.claim_reference "
-                                                       "where source_uri like 'urn:kk:case:%%'").fetchall()
-                   if (got := svc.ref(uri))}
-            before = {r[0] for r in su.execute("select id from kernel.change_set").fetchall()}
-        ran = pass_times(provider_dir, db, {**bench, "warmup": 0, "passes": 1}, login, lambda: None, marker)
-        end_run(db, login, marker, provider_dir.parent)
+        ids = case_ids()
+        ran = pass_times(provider_dir, db, {**bench, "warmup": 0, "passes": 2}, login, between, home)
+        end_run(db, login)
         if "error" in ran:
-            return {"passed": 0, "total": len(expected), "failed": ["(the pass failed)"], "error": ran["error"]}
+            return {"passed": 0, "total": len(expected), "failed": ["(a pass failed)"], "error": ran["error"]}
         validate(db)
-        sets = applied(db, agent, before)
+        second = applied(db, agent, stage["before2"])
     finally:
         drop(db)
-    return svc.judge(sets, ids, expected)
+    one, two = svc.judge(stage["first"], ids, expected), svc.judge(second, stage["ids"], stage["expected"])
+    failed = sorted(set(one["failed"]) | {f.removesuffix("#then") for f in two["failed"]})
+    return {"passed": len(expected) - len(failed), "total": len(expected), "failed": failed}
 
 
 def measure(provider_dir: Path, slot: str, record, exp_id: str, bench: dict, ops_by_scope: dict,
@@ -317,21 +335,21 @@ def measure(provider_dir: Path, slot: str, record, exp_id: str, bench: dict, ops
     `experiment`)."""
     meta = yaml.safe_load((provider_dir / "provider.yaml").read_text())
     db = "kk_sbx_" + re.sub(r"[^a-z0-9]", "_", f"{exp_id}_{meta['id'].rsplit(':', 1)[-1]}".lower())[:40]
-    marker = secrets.token_hex(8)
     svc = slot_code(slot)
     outputs = None
-    try:
-        sandbox_db(db, ops_by_scope)
-        metric = pass_times(provider_dir, db, bench, login, between_passes(db, ops_by_scope), marker)
-        end_run(db, login, marker, provider_dir.parent)
-        if svc is not None and "error" not in metric:
-            validate(db)
-            outputs = svc.outputs(applied(db, agent, set()), names(db))
-    finally:
-        drop(db)
-    rule = contract(provider_dir)
-    served = service_cases(provider_dir, slot, bench, login, db[:36] + "_svc", agent, marker)
-    end_run("postgres", login, marker, provider_dir.parent)
+    with confine.home() as home:
+        try:
+            sandbox_db(db, ops_by_scope)
+            metric = pass_times(provider_dir, db, bench, login, between_passes(db, ops_by_scope), home)
+            end_run(db, login)
+            if svc is not None and "error" not in metric:
+                validate(db)
+                outputs = svc.outputs(applied(db, agent, set()), names(db))
+        finally:
+            drop(db)
+        rule = contract(provider_dir, home)
+        served = service_cases(provider_dir, slot, bench, login, db[:36] + "_svc", agent, home)
+        end_run("postgres", login)
     n = len(list((CONTRACT / "slots" / slot / "cases").glob("*.yaml")))
     rule["total"] = max(rule["total"], n)                # a case that did not run counts as failed
     if served is not None:
@@ -342,6 +360,21 @@ def measure(provider_dir: Path, slot: str, record, exp_id: str, bench: dict, ops
             "inputs": sum(len(v) for v in ops_by_scope.values()), "contract": total,
             "metric": {"name": bench["metric"], "better": bench.get("better", "lower"), **metric},
             "outputs": outputs}
+
+
+def reachable(login: tuple[str, str]) -> None:
+    """Refuse before any provider code runs: unless there is a run user, it can run this Python with the
+    repository's code, and the cluster asks every login for its password (morphogen.confine)."""
+    with connect(url="dbname=postgres") as su:
+        roles = confine.login_roles(su)
+    with confine.home() as home:
+        env = {**base_env(home), "PYTHONPATH": pythonpath(ROOT / "kernel" / "src")}
+        out = confine.run([sys.executable, "-c", "import kk.lib, morphogen.logins, psycopg, yaml"], env, timeout=60, cwd=home)
+        if out.returncode:
+            raise confine.Unconfined(f"the run user cannot run {sys.executable} with the repository's code: "
+                                     f"{out.stderr.strip()[-300:]}")
+        confine.check_cluster({**env, **{k: v for k, v in os.environ.items() if k in ("PGHOST", "PGPORT", "PGSSLMODE")}},
+                              roles)
 
 
 def experiment(exp_dir: Path, record, private: Path) -> list[Path]:
@@ -359,14 +392,15 @@ def experiment(exp_dir: Path, record, private: Path) -> list[Path]:
     agent = (yaml.safe_load((incumbent / "provider.yaml").read_text()) or {}).get("agent")
     if slot_code(slot) is not None and not agent:
         raise ValueError(f"{spec['incumbent']} declares no agent (provider.yaml agent): its outputs cannot be judged")
+    reachable(login)
     ops = inputs(record, bench["inputs"])
     results = {}
-    work = private / "work"
-    for role, d in (("incumbent", incumbent), ("candidate", exp_dir / spec["candidate"])):
-        copy = work / role / d.name
-        shutil.copytree(d, copy, ignore=shutil.ignore_patterns("__pycache__", "runs"), symlinks=True)
-        results[role] = measure(copy, slot, record, exp_dir.name, bench, ops, login, agent)
-    shutil.rmtree(work)
+    with confine.workspace("kk-sbx-code-") as work:     # readable by the run user; `private` is not
+        for role, d in (("incumbent", incumbent), ("candidate", exp_dir / spec["candidate"])):
+            copy = work / role / d.name
+            shutil.copytree(d, copy, ignore=shutil.ignore_patterns("__pycache__", "runs"), symlinks=True)
+            confine.readable(work / role)
+            results[role] = measure(copy, slot, record, exp_dir.name, bench, ops, login, agent)
     # The candidate must submit what the incumbent submits on the same benchmark inputs.
     inc = results["incumbent"].pop("outputs")
     cand = results["candidate"].pop("outputs")

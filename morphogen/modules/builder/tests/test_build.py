@@ -19,6 +19,7 @@ sys.path[:0] = [str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" 
 from kk.lib import connect, run, submit  # noqa: E402
 from builder.__main__ import AGENT, BUILD, DCT, OA, one_pass  # noqa: E402
 from builder.build import build, check_candidate, experiment_id, incumbent_dir  # noqa: E402
+from morphogen import confine  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -64,31 +65,49 @@ def main() -> None:
         check(True, "a candidate with a migration of its own is refused")
 
     # The harness strategy with a stand-in harness: it renames the provider, as a real one is asked to, in a
-    # directory outside intent, without the record's credentials.
+    # directory outside intent, as the run user, with only the variables it was allowed.
     home = Path(tempfile.mkdtemp())
     subprocess.run(["git", "-C", str(home), "init", "-q"], check=True)
+    home.chmod(0o777)                                    # writable by the run user: the git check must catch it
     exps = home / "experiments"
-    script = bad / "harness.py"
-    script.write_text("import os, sys, pathlib\np = pathlib.Path(sys.argv[1]) / 'provider.yaml'\n"
-                      "p.write_text(p.read_text().replace('urn:kk:provider:anomaly', 'urn:kk:provider:anomaly-h'))\n"
-                      "assert 'analyser' in sys.argv[2] and 'experiments' not in sys.argv[1]\n"
-                      "assert not any(k == 'DATABASE_URL' or k.startswith(('PG', 'KK_')) for k in os.environ)\n"
-                      "if len(sys.argv) > 3: pathlib.Path(sys.argv[3]).write_text('x')\n")
-    os.environ["DATABASE_URL"] = "dbname=secret"
-    got = build({"iri": "urn:kk:request:h", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
-                "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}")
-    check(got["provider"] == "urn:kk:provider:anomaly-h" and (got["dir"] / "prompt.md").exists()
-          and "runner.py" in (got["dir"] / "prompt.md").read_text(),
-          "harness: the incumbent copied outside intent, the harness run there without the record's credentials, "
-          "with a prompt naming the slot's runner")
-    try:
-        build({"iri": "urn:kk:request:h2", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
-              "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} {home / 'stray.txt'}")
-        check(False, "a harness that writes outside its workdir fails the build")
-    except RuntimeError as e:
-        check("outside its workdir" in str(e) and not (exps / experiment_id("urn:kk:request:h2")).exists(),
-              "a harness that writes outside its workdir fails the build")
-    del os.environ["DATABASE_URL"]
+    with confine.workspace() as ws:
+        script = ws / "harness.py"
+        script.write_text("import os, sys, pathlib\np = pathlib.Path(sys.argv[1]) / 'provider.yaml'\n"
+                          "p.write_text(p.read_text().replace('urn:kk:provider:anomaly', 'urn:kk:provider:anomaly-h'))\n"
+                          "assert 'analyser' in sys.argv[2] and 'experiments' not in sys.argv[1]\n"
+                          "assert not any(k == 'DATABASE_URL' or k.startswith(('PG', 'KK_')) for k in os.environ)\n"
+                          "assert os.environ.get('HARNESS_KEY') == 'k' and 'OTHER_SECRET' not in os.environ\n"
+                          "assert os.getuid() != 0, 'runs as root'\n"
+                          "try:\n    pathlib.Path(f'/proc/{os.getppid()}/environ').read_bytes(); sys.exit('read its parent')\n"
+                          "except PermissionError:\n    pass\n"
+                          "if len(sys.argv) > 3: pathlib.Path(sys.argv[3]).write_text('x')\n")
+        script.chmod(0o644)
+        os.environ.update(DATABASE_URL="dbname=secret", HARNESS_KEY="k", OTHER_SECRET="s", KK_BUILDER_ENV="HARNESS_KEY")
+        run_as = os.environ.pop("KK_RUN_AS")
+        try:
+            build({"iri": "urn:kk:request:h0", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
+                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}")
+            check(False, "the harness runs without an OS user of its own")
+        except confine.Unconfined:
+            check(True, "without KK_RUN_AS the harness does not run")
+        os.environ["KK_RUN_AS"] = run_as
+        with connect(url="dbname=postgres") as su:
+            roles = confine.login_roles(su)
+        got = build({"iri": "urn:kk:request:h", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
+                    "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}}", roles=roles)
+        check(got["provider"] == "urn:kk:provider:anomaly-h" and (got["dir"] / "prompt.md").exists()
+              and "runner.py" in (got["dir"] / "prompt.md").read_text(),
+              f"harness: run as {run_as} on a copy of the incumbent outside intent, with only the variables KK_BUILDER_ENV "
+              "names, unable to read its parent's environment, with a prompt naming the slot's runner")
+        try:
+            build({"iri": "urn:kk:request:h2", "text": "faster"}, "analyser", ROOT / "morphogen" / "modules" / "anomaly", exps,
+                  "harness", command=f"{sys.executable} {script} {{workdir}} {{prompt}} {home / 'stray.txt'}")
+            check(False, "a harness that writes outside its workdir fails the build")
+        except RuntimeError as e:
+            check("outside its workdir" in str(e) and not (exps / experiment_id("urn:kk:request:h2")).exists(),
+                  "a harness that writes outside its workdir fails the build")
+    for k in ("DATABASE_URL", "HARNESS_KEY", "OTHER_SECRET", "KK_BUILDER_ENV"):
+        del os.environ[k]
 
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
     install.install(DB, install.modules())
