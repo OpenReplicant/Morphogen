@@ -1,0 +1,73 @@
+{
+  "eval": "longmemeval_s retrieval",
+  "label": "bm25",
+  "questions": 93,
+  "metrics": {
+    "session@5.recall_any": 0.935,
+    "session@5.recall_all": 0.806,
+    "session@5.ndcg": 0.866,
+    "session@10.recall_any": 0.957,
+    "session@10.recall_all": 0.892,
+    "session@10.ndcg": 0.888,
+    "turn@5.recall_any": 0.796,
+    "turn@5.recall_all": 0.581,
+    "turn@5.ndcg": 0.585,
+    "turn@10.recall_any": 0.882,
+    "turn@10.recall_all": 0.731,
+    "turn@10.ndcg": 0.629
+  },
+  "session_recall_by_type": {
+    "knowledge-update": {
+      "session@5.recall_any": 1.0,
+      "session@5.recall_all": 1.0,
+      "session@10.recall_any": 1.0,
+      "session@10.recall_all": 1.0
+    },
+    "multi-session": {
+      "session@5.recall_any": 1.0,
+      "session@5.recall_all": 0.68,
+      "session@10.recall_any": 1.0,
+      "session@10.recall_all": 0.84
+    },
+    "single-session-assistant": {
+      "session@5.recall_any": 1.0,
+      "session@5.recall_all": 1.0,
+      "session@10.recall_any": 1.0,
+      "session@10.recall_all": 1.0
+    },
+    "single-session-preference": {
+      "session@5.recall_any": 0.167,
+      "session@5.recall_all": 0.167,
+      "session@10.recall_any": 0.5,
+      "session@10.recall_all": 0.5
+    },
+    "single-session-user": {
+      "session@5.recall_any": 1.0,
+      "session@5.recall_all": 1.0,
+      "session@10.recall_any": 1.0,
+      "session@10.recall_all": 1.0
+    },
+    "temporal-reasoning": {
+      "session@5.recall_any": 0.962,
+      "session@5.recall_all": 0.808,
+      "session@10.recall_any": 0.962,
+      "session@10.recall_all": 0.885
+    }
+  },
+  "latency_s": {
+    "p50": 0.31,
+    "p95": 0.474
+  },
+  "recall": "api.recall: BM25 over recall-bm25 (k1 1.2, b 0.75)",
+  "reranker": null,
+  "other_scopes": 0,
+  "date": "2026-10-24",
+  "counts": {
+    "multi-session": 25,
+    "temporal-reasoning": 26,
+    "knowledge-update": 13,
+    "single-session-assistant": 11,
+    "single-session-preference": 6,
+    "single-session-user": 12
+  }
+}

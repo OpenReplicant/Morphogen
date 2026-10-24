@@ -14,10 +14,12 @@ Every claim returned carries its id and belief, so answers can cite them (invari
 
 Ported from rebuild 4 modules/kernel-mcp: the operator tools, unchanged. Not ported (R5-12): the memory
 profile (remember, recall briefings, changes_since) and the briefing, which serve agent memory, a use no
-distribution has yet; dense recall and re-ranking (opt-in recall providers, not ported yet); the harness hooks
+distribution has yet; dense recall (not ported yet; re-ranking is, opt-in in kk.recall, T16); the harness hooks
 (harness-adapter slot).
 """
 from __future__ import annotations
+
+import asyncio
 
 import os
 from contextlib import asynccontextmanager
@@ -177,7 +179,12 @@ async def search(ctx: Context, text: str, limit: int = 20) -> list[dict]:
     full-text search, then belief), or by substring on labels and IRIs when no word matches. Each has id,
     status, belief, rank."""
     indexed = bool(await query(ctx, recall.INSTALLED) and await query(ctx, recall.READY))
-    rows = await query(ctx, recall.ranked(indexed), recall.params(text, limit))
+    rerank = indexed and recall.reranker() is not None     # KK_RERANK=1 and the model cached (kk.recall)
+    rows = await query(ctx, recall.ranked(indexed), recall.params(text, max(limit, recall.POOL) if rerank else limit))
+    if rows and rerank:
+        subjects = list(dict.fromkeys(c.get("subject") or "" for c in rows[:recall.POOL]))
+        texts = await query(ctx, recall.TEXTS, {"subjects": subjects})
+        return await asyncio.to_thread(recall.rerank, text, rows, limit, texts)
     return (rows or await query(ctx, recall.SUBSTRING, recall.params(text, limit)))[:limit]
 
 
