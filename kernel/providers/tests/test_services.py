@@ -23,7 +23,7 @@ for p in (PROVIDERS.parent / "src", PROVIDERS / "validator-shacl", PROVIDERS / "
           PROVIDERS / "verifier-quotes", PROVIDERS / "evaluator", PROVIDERS):
     sys.path.insert(0, str(p))
 
-from kk.lib import connect, feed_after, follow, run, submit  # noqa: E402
+from kk.lib import connect, feed_after, feed_head, feed_since, follow, resume, run, submit  # noqa: E402
 import install  # noqa: E402
 
 validator = importlib.import_module("validator.__main__")
@@ -141,6 +141,32 @@ def main() -> None:
         time.sleep(0.1)
     check(len(steps) == 2, "a feed consumer wakes when a change set is applied")
     waker.close()
+
+    # A durable cursor (R5-18, T15): the feed seq in the outputs of the last succeeded run of a module.
+    CURSOR = "urn:kk:module:test-cursor"
+    with connect("t_services_extractor", url) as ex:
+        check(resume(ex, CURSOR) == 0, "no run of the module yet: the cursor is 0")
+        with ex.cursor() as cur:
+            with run(cur, CURSOR) as (_, out):
+                out["feed_seq"] = 5
+            try:
+                with run(cur, CURSOR) as (_, out):
+                    out["feed_seq"] = 9
+                    raise RuntimeError("failed after reading")
+            except RuntimeError:
+                pass
+            cur.execute("select api.start_run(%s, null, '[]', '{}')", (CURSOR,))   # left running, as by a crash
+            with run(cur, "urn:kk:module:test-other") as (_, out):
+                out["feed_seq"] = 99
+        check(resume(ex, CURSOR) == 5, "a failed or unfinished run, or another module's, does not move it")
+        label = "http://www.w3.org/2000/01/rdf-schema#label"
+        reached, entries = feed_since(ex, 0, {label}, page=1)
+        made = ex.execute("select change_set, array_agg(id::text) from api.claims where predicate = %s "
+                          "and subject like 'urn:x:%%' group by 1", (label,)).fetchall()
+        check(reached == feed_head(ex) and len(made) == 1
+              and [t for c, t in entries if c == made[0][0]] == [set(made[0][1])],
+              "feed_since reads every page to the head and names each entry's change set and claims")
+        check(feed_since(ex, reached, {label}) == (reached, []), "nothing after the head: the cursor stays")
 
     subprocess.run(["dropdb", "--force", DB], check=True)
     print("ALL SERVICE TESTS PASSED")

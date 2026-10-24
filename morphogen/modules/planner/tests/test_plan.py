@@ -69,6 +69,11 @@ cand = {"provider": "urn:kk:provider:anomaly-recent", "passed": 11, "total": 11,
 check("none" in replacement(r, inc, {**cand, "passed": 10}, slim), "a candidate failing a contract case is not proposed")
 check("none" in replacement(r, inc, {**cand, "mean": 0.25}, slim), "a candidate no better than the incumbent is not proposed")
 check("none" in replacement(r, {**inc, "mean": 0.3}, {**cand, "mean": 0.2}, slim), "a candidate still over the limit is not proposed")
+check("plan" in replacement(r, {**inc, "mean": 0.02}, {**cand, "mean": 0.01}, slim, sobs)
+      and "none" in replacement(r, {**inc, "mean": 0.02}, {**cand, "mean": 0.016}, slim, sobs),
+      "with the observation, the prediction is the observed 0.21 s scaled by the sandbox's ratio: 0.105 is within 0.15, 0.168 is not")
+check(set(replacement(r, inc, cand, slim, sobs)["plan"]["premises"]) == {"q1", "m1", "m2", "L2", "o9"},
+      "a prediction scaled from the observation cites it")
 got = replacement(r, inc, cand, slim)["plan"]
 check(got["action"] == REPLACE and got["risk"] == "medium" and set(got["premises"]) == {"q1", "m1", "m2", "L2"},
       "a better candidate: a replacement, citing the request, both measurements and the limit")

@@ -2,15 +2,16 @@
 prediction. Every step is a separate service on one record; every step cites the one before it.
 
   monitor    the analyser (anomaly, run by the reconciler from intent) reports its own step time over
-             OpenTelemetry; the record holds 4,500 earlier observations, so its pass is slow
+             OpenTelemetry; the record holds 4,500 earlier observations, read once on its first pass (T15)
   analyse    the analyser finds its own step time over the limit a person documented: KK_G2_LIMIT_RATIO
              (0.7) of the incumbent's second observed window, so the gate does not depend on the machine's
-             speed (the candidates measured so far run at 0.4-0.55 of the incumbent); KK_G2_LIMIT fixes it
+             speed (the candidate measured so far runs at about half the incumbent's time); KK_G2_LIMIT fixes it
   request    the planner asks for a better provider of the analyser slot (a build request, auto lane)
   build      the builder writes a candidate into intent/experiments/ and commits it (CI: a fixture)
   measure    the sandbox runs the analyser contract on candidate and incumbent and measures both on a copy
              of the record; the evaluator records the scores
-  plan       the planner proposes the replacement, predicting the candidate's step time within the limit
+  plan       the planner proposes the replacement, predicting the candidate's step time (the incumbent's latest,
+             scaled by the sandbox's ratio, R5-34) within the limit
   approve    a person approves it in the review lane
   execute    the intent actuator commits the switch; the reconciler runs the candidate
   verify     the prediction verifier compares the candidate's observed step time with the prediction

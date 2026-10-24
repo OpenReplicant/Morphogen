@@ -2,7 +2,8 @@
 the contract must fail on it. A provider lists its mutants in tests/mutants.py as
 MUTANTS = [(name, file relative to the provider, [(old, new), ...]), ...]; each old text must occur once.
 A provider of a slot with no case set (provider-tests) may list mutants too: its own tests (provider.yaml
-`tests`, run in the copy) must fail on each.
+`tests`, run in the copy) must fail on each. A provider with a case set marks a mutant its own tests must kill
+(code the cases do not reach, such as a service's cursor) with a fourth item, "own".
 
 Usage: PGHOST=... PGUSER=<superuser> python3 kernel/contract/mutants.py [--blueprint FILE]... [--providers DIR]
        [provider ...] [-k name filter]
@@ -72,13 +73,15 @@ def main(names: list[str], pattern: str) -> int:
         if not mutants:
             continue
         # A mutant "fails" for any reason, including no database: the unmutated provider must pass first.
-        base = check(name)
-        if base.returncode:
-            print(f"{name}: the unmutated provider fails {'the contract' if cases else 'its own tests'}; "
-                  "fix that (or the connection) first")
-            print(base.stdout[-1500:] + base.stderr[-500:])
-            return 2
-        for label, rel, edits in mutants:
+        checks = {check} | ({own_tests} if any(m[3:] == ("own",) for m in mutants) else set())
+        for c in sorted(checks, key=lambda c: c.__name__):
+            base = c(name)
+            if base.returncode:
+                print(f"{name}: the unmutated provider fails {'its own tests' if c is own_tests else 'the contract'}; "
+                      "fix that (or the connection) first")
+                print(base.stdout[-1500:] + base.stderr[-500:])
+                return 2
+        for label, rel, edits, *how in mutants:
             total += 1
             if MUT.exists():
                 shutil.rmtree(MUT)
@@ -89,7 +92,7 @@ def main(names: list[str], pattern: str) -> int:
                 assert s.count(old) == 1, (name, label, old)
                 s = s.replace(old, new)
             p.write_text(s)
-            out = check("_mutant")
+            out = (own_tests if how == ["own"] else check)("_mutant")
             why = [l for l in (out.stdout + out.stderr).splitlines()
                    if re.search(r"MISSING|CHECK FAILED|FAIL", l)]
             print(("FAILS (good)" if out.returncode else "PASSES (bad)"), f"- {name}: {label}")

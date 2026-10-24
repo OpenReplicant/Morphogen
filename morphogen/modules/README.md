@@ -7,7 +7,7 @@ submit claims; their effects are observed.
 | Module | Slot | Status | Source |
 | --- | --- | --- | --- |
 | observer-otel | observer | Written (T5) | New: OTLP/HTTP receiver; observations shaped as rebuild 4 `observer-prometheus` |
-| anomaly | analyser | Ported (T5) | rebuild 4 `anomaly`; `detect.py` unchanged, follows the change feed |
+| anomaly | analyser | Ported (T5) | rebuild 4 `anomaly`; follows the change feed from a durable cursor (T15, R5-34): each change set's latest windows, judged once |
 | planner | planner | Written (T5) | Rewrite of rebuild 4 `skill-adaptation-planning`: the fixed action list, a prediction and a risk class |
 | lane-autonomy | lane-policy (kernel slot) | Written (T5) | New: review forced for plan steps; autonomy level x risk class picks the lane |
 | intent-actuator | actuator | Written (T5) | Rewrite of rebuild 4 `actuator-compose`: approval rules ported, commits to `../intent/` |

@@ -2,7 +2,8 @@
 
 Input: current observed claims about services (`urn:kk:node:*`, `sosa:hasSimpleResult`, one per
 property and window) and documented limits (`<node> bbo:maxValue n` with qualifier
-`sosa:observedProperty`). For each service and property, each of the latest windows is anomalous when
+`sosa:observedProperty`). For each service and property, each of the latest windows (the service: of each
+change set that records them, T15) is anomalous when
 
   its value exceeds the documented limit                                   limit
   it lies more than 3 standard deviations from the mean of the previous     zscore
@@ -34,8 +35,19 @@ def value(c: dict):
         return None
 
 
-def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
-    """[{iri, kind, target, property, value, text, premises, valid_from, valid_to}]"""
+def zscore(values: list[float], v: float) -> float | None:
+    """How many standard deviations v lies from the mean of the previous windows' values; with no spread, how
+    many tenths of the mean, or units when the mean is 0, as rebuild 4's RCAEval statistic (R5-28). None:
+    fewer than MIN_HISTORY of them."""
+    if len(values) < MIN_HISTORY:
+        return None
+    mean, sd = statistics.fmean(values), statistics.pstdev(values)
+    return abs(v - mean) / (sd or abs(mean) * 0.1 or 1.0)
+
+
+def anomalies(observations: list[dict], limits: list[dict], check: set[str] | None = None) -> list[dict]:
+    """[{iri, kind, target, property, value, text, premises, valid_from, valid_to}]. The windows judged are those
+    whose claim id is in `check`, each against the windows before it; without `check`, each series' latest 3."""
     limit = {}
     for c in limits:
         q = c.get("qualifiers") or {}
@@ -50,7 +62,9 @@ def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
     for (node, prop), obs in sorted(series.items()):
         obs.sort(key=lambda c: c["valid_from"])
         name, pname = node.rsplit(":", 1)[-1], prop.rsplit(":", 1)[-1]
-        for i in range(max(0, len(obs) - LATEST), len(obs)):
+        judged = (i for i in range(len(obs)) if str(obs[i]["id"]) in check) if check is not None \
+            else range(max(0, len(obs) - LATEST), len(obs))
+        for i in judged:
             c, v = obs[i], value(obs[i])
 
             def add(kind, text, premises):
@@ -64,15 +78,14 @@ def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
                 add("limit", f"{name}: {pname} {v:g} exceeds the documented limit {lim:g}.", [str(c["id"]), lid])
             history = obs[max(0, i - HISTORY):i]
             values = [value(h) for h in history]
-            if len(values) >= MIN_HISTORY:
-                mean, sd = statistics.fmean(values), statistics.pstdev(values)
-                z = abs(v - mean) / (sd or abs(mean) * 0.1 or 1.0)
-                if z > Z:
-                    add("zscore", f"{name}: {pname} {v:g} " + (
-                        f"departs from the flat value {mean:g} of the previous {len(values)} windows by "
-                        + (f"{z:.1f} tenths of it." if mean else f"{z:g}.")
-                        if sd == 0 else f"is {z:.1f} standard deviations from the mean {mean:g} of the previous "
-                        f"{len(values)} windows."), [str(c["id"])] + [str(h["id"]) for h in history])
+            z = zscore(values, v)
+            if z is not None and z > Z:
+                mean, flat = statistics.fmean(values), statistics.pstdev(values) == 0
+                add("zscore", f"{name}: {pname} {v:g} " + (
+                    f"departs from the flat value {mean:g} of the previous {len(values)} windows by "
+                    + (f"{z:.1f} tenths of it." if mean else f"{z:g}.")
+                    if flat else f"is {z:.1f} standard deviations from the mean {mean:g} of the previous "
+                    f"{len(values)} windows."), [str(c["id"])] + [str(h["id"]) for h in history])
     return out
 
 

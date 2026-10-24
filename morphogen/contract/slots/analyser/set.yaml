@@ -3,7 +3,8 @@
 # rules imply. The slot's own runner (runner.py) runs every case against a provider's
 # <package>.detect.anomalies(observations, limits) and prints "ok: <id>"; a provider's own runner is not used.
 # The sandbox also runs every case through the provider's service (service.py: all cases in one database,
-# one pass of <package>.__main__.one_pass(conn), the anomalies it submits judged), R5-23.
+# one pass of <package>.__main__.one_pass(conn), the anomalies it submits judged), R5-23. A service reads
+# "the latest 3 windows" per change set that records them (each case's windows are one change set), T15.
 #
 # input.observations: {id, target, property, window (index; each window is one minute), value, extra?}
 #   extra: further qualifiers (an observation qualified by more than its property is not compared)
