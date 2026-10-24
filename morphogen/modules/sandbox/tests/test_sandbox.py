@@ -84,7 +84,8 @@ def main() -> None:
     d = broken / "anomaly_recent" / "detect.py"
     d.write_text(d.read_text().replace("if (node, prop) in limit and v > limit[(node, prop)][0]:", "if False:"))
     got = contract(broken)
-    check(got["total"] == 11 and got["passed"] < 11, f"a candidate that ignores limits fails the analyser contract ({got['passed']}/11)")
+    N = len(list((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "cases").glob("*.yaml")))
+    check(got["total"] == N and got["passed"] < N, f"a candidate that ignores limits fails the analyser contract ({got['passed']}/{N})")
 
     # A candidate whose rule is right but whose reading of the record is not: it reads only providers'
     # observations. The rule cases pass; the service cases (one real pass on every case) do not.
@@ -96,8 +97,8 @@ def main() -> None:
                                        "and c.evidence_type = 'observed' and c.subject like 'urn:kk:provider:%%') x"))
     bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
     served = service_cases(narrow, "analyser", bench, ("kkm_anomaly", "kkm_anomaly_login"), "kk_sbx_test_narrow")
-    check(contract(narrow)["passed"] == 11 and served["total"] == 11 and served["passed"] < 11,
-          f"a candidate that reads only some of the record passes the rule cases and fails the service cases ({served['passed']}/11)")
+    check(contract(narrow)["passed"] == N and served["total"] == N and served["passed"] < N,
+          f"a candidate that reads only some of the record passes the rule cases and fails the service cases ({served['passed']}/{N})")
 
     env = {**os.environ, "DATABASE_URL": url,
            "PYTHONPATH": os.pathsep.join([str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")]),
@@ -117,8 +118,8 @@ def main() -> None:
                 and qualifiers->>%s = %s and subject = any(%s)""", DQV + "value", DQV + "isMeasurementOf",
             f"urn:kk:metric:sandbox-analyser:{metric}", [k for k, p in runs.items() if p == provider]))
         for p in ("urn:kk:provider:anomaly", "urn:kk:provider:anomaly-recent"):
-            check(value(p, "contract.passed") == value(p, "contract.total") == 22 and value(p, "contract.service.passed") == 11,
-                  f"{p.rsplit(':', 1)[-1]} passes the analyser contract: 11 rule cases and 11 service cases")
+            check(value(p, "contract.passed") == value(p, "contract.total") == 2 * N and value(p, "contract.service.passed") == N,
+                  f"{p.rsplit(':', 1)[-1]} passes the analyser contract: {N} rule cases and {N} service cases")
         inc, cand = value("urn:kk:provider:anomaly", "metric.mean"), value("urn:kk:provider:anomaly-recent", "metric.mean")
         check(cand < inc, f"on a copy of the record, timed by the sandbox, the candidate's full pass is faster ({cand:.3f} s against {inc:.3f} s)")
         check(value("urn:kk:provider:anomaly", "inputs") == 4500, "the sandbox copied the record's 4,500 observations")

@@ -178,10 +178,11 @@ def main() -> None:
                             where s.predicate = %s and s.subject like 'urn:kk:eval:sandbox-analyser:%%'""",
                          "http://www.w3.org/ns/dqv#isMeasurementOf", DCT + "subject")
             score = {(p, m.rsplit(":", 1)[-1]): v for p, m, v in measures}
-            check(score[(CANDIDATE, "contract.passed")] == score[(CANDIDATE, "contract.total")] == 22
-                  and score[(CANDIDATE, "contract.service.passed")] == 11
+            n = len(list((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "cases").glob("*.yaml")))
+            check(score[(CANDIDATE, "contract.passed")] == score[(CANDIDATE, "contract.total")] == 2 * n
+                  and score[(CANDIDATE, "contract.service.passed")] == n
                   and score[(CANDIDATE, "metric.mean")] < score[(ANALYSER, "metric.mean")],
-                  f"measure: the candidate passes the analyser contract (11 rule and 11 service cases) and its full pass, "
+                  f"measure: the candidate passes the analyser contract ({n} rule and {n} service cases) and its full pass, "
                   f"timed by the sandbox, is faster "
                   f"({score[(CANDIDATE, 'metric.mean')]:.3f} s against {score[(ANALYSER, 'metric.mean')]:.3f} s)")
             check(any(o["predicate"].endswith("substitutedBy") and o["object"] == {"entity": CANDIDATE} for o in ops)

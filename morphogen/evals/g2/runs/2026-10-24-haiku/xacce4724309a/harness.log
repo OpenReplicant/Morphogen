@@ -1,0 +1,8 @@
+Changed `anomaly/__main__.py` so each pass reads only the newest 23 observations per series, the window `detect.py` compares, with the status lookup done only for those rows. Full read is the fallback when a window holds a deprecated or non-numeric value.
+
+- **Provider:** `provider.yaml` now has id `urn:kk:provider:anomaly-newest`, name "Anomaly detection, newest windows", version 0.3.0. Service, role, login, agent and `migration.sql` are unchanged, and `detect.py` is untouched.
+- **Checks:** the slot contract passes all 11 cases and exits 0; `tests/test_detect.py` passes 7/7. A fake-cursor check confirmed the windowed read gives the same anomalies as the full read, including the fallback path.
+- **Not verified:** I could not run the sandbox benchmark, since there is no Postgres or psycopg here. Whether this gets under 0.1121 is unmeasured, and the SQL has not run against a real database.
+- **Behaviour change:** the old global 5,000-row cap is gone, so a series is judged on its own newest windows rather than being cut off by age.
+
+--- stderr

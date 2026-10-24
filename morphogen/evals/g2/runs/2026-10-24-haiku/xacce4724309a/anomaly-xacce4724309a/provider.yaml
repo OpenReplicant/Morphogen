@@ -1,0 +1,13 @@
+id: urn:kk:provider:anomaly-newest
+name: Anomaly detection, newest windows
+version: 0.3.0
+license: Apache-2.0
+slots: [analyser]
+origin: OpenReplicant/kernel (rebuild 4) modules/anomaly; detect.py unchanged, the service follows the change feed and reads only the newest windows it compares
+requires: Python 3.12+, psycopg
+migration: migration.sql
+service: python3 -m anomaly
+role: kkm_anomaly
+login: kkm_anomaly_login
+tests: [python3 tests/test_detect.py]
+note: over a documented limit (bbo:maxValue), or more than 3 standard deviations from recent windows; an oa:Annotation on the feature of interest, inferred from what it compared
