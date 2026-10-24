@@ -23,7 +23,8 @@ from psycopg.types.json import Jsonb  # noqa: E402
 
 from kk.lib import connect  # noqa: E402
 import yaml  # noqa: E402
-from sandbox.measure import contract, experiment, service_cases  # noqa: E402
+from morphogen import confine  # noqa: E402
+from sandbox.measure import contract, drop_login, experiment, fresh_login, service_cases  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -49,12 +50,36 @@ def observations(targets: int, windows: int) -> list[dict]:
             for t in range(targets) for w in range(windows)]
 
 
-PROBE = """    import pathlib
+PROBE = """    import pathlib, pwd, psycopg
+    def _try(f):
+        try:
+            f()
+            return "open"
+        except Exception:
+            return "closed"
     pathlib.Path({path!r}).write_text(" ".join([
         conn.execute("select session_user").fetchone()[0],
         ",".join(sorted(k for k in os.environ if k.startswith("PG") or k == "OTEL_EXPORTER_OTLP_HEADERS")) or "-",
-        str(any(pathlib.Path("../..").rglob("*.json")))]))
+        str(any(pathlib.Path("../..").rglob("*.json"))),
+        pwd.getpwuid(os.getuid()).pw_name,
+        _try(lambda: pathlib.Path(f"/proc/{{os.getppid()}}/environ").read_bytes()),
+        _try(lambda: psycopg.connect(dbname="postgres", user="postgres", connect_timeout=5).close()),
+        _try(lambda: psycopg.connect(os.environ["DATABASE_URL"], dbname={record!r}, connect_timeout=5).close())]))
 """
+
+
+def confined(provider: Path, db: str) -> tuple[dict, dict]:
+    """The rule and service cases on one provider directory, run as measure() runs them."""
+    bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
+    with confine.workspace() as ws, confine.lease() as run, run.home() as h:
+        (ws / "p").mkdir(mode=0o755)
+        copy = ws / "p" / provider.name
+        confine.copy_tree(provider, copy)
+        login = fresh_login("kkm_anomaly")
+        try:
+            return contract(copy, run, h), service_cases(copy, "analyser", bench, login, db, "urn:kk:agent:anomaly", run, h)
+        finally:
+            drop_login(login)
 
 
 def main() -> None:
@@ -67,6 +92,8 @@ def main() -> None:
         su.execute("select kernel.install_ops('test:observations', 'urn:kk:scope:default', %s)", (Jsonb(observations(30, 150)),))
 
     tmp = Path(tempfile.mkdtemp())
+    drop = tmp / "drop"                                  # the one place the confined probes may write
+    drop.mkdir()
     exp = tmp / "exp1"
     exp.mkdir()
     shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", exp / "anomaly-recent",
@@ -75,15 +102,17 @@ def main() -> None:
 
     # A probe in the candidate: who it connects as, what credentials it was given, and whether it can
     # reach a run file.
-    probe = tmp / "probe.txt"
+    probe = drop / "probe.txt"
     m = exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
     hook = 'def one_pass(conn, seen: dict | None = None) -> dict:\n'
-    m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe)), 1))
+    m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe), record=DB), 1))
     broken = tmp / "broken" / "anomaly-recent"
     shutil.copytree(exp / "anomaly-recent", broken)
     d = broken / "anomaly_recent" / "detect.py"
     d.write_text(d.read_text().replace("if (node, prop) in limit and v > limit[(node, prop)][0]:", "if False:"))
-    got = contract(broken)
+    tmp.chmod(0o711)
+    drop.chmod(0o1777)
+    got, _ = confined(broken, "kk_sbx_test_broken")
     N = len(list((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "cases").glob("*.yaml")))
     check(got["total"] == N and got["passed"] < N, f"a candidate that ignores limits fails the analyser contract ({got['passed']}/{N})")
 
@@ -96,10 +125,24 @@ def main() -> None:
     n.write_text(n.read_text().replace("and c.evidence_type = 'observed') x",
                                        "and c.evidence_type = 'observed' and c.subject like 'urn:kk:provider:%%') x"))
     bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
-    served = service_cases(narrow, "analyser", bench, ("kkm_anomaly", "kkm_anomaly_login"), "kk_sbx_test_narrow",
-                           "urn:kk:agent:anomaly", secrets.token_hex(8))
-    check(contract(narrow)["passed"] == N and served["total"] == N and served["passed"] < N,
+    narrow_rule, served = confined(narrow, "kk_sbx_test_narrow")
+    check(narrow_rule["passed"] == N and served["total"] == N and served["passed"] < N,
           f"a candidate that reads only some of the record passes the rule cases and fails the service cases ({served['passed']}/{N})")
+
+    # A candidate that keeps what it read on its first pass: every rule case passes, and every service case
+    # but the one that retracts an observation and supersedes a limit before a second pass.
+    cached = tmp / "cached" / "anomaly-recent"
+    shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", cached,
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    c = cached / "anomaly_recent" / "__main__.py"
+    c.write_text(c.read_text().replace("        found = anomalies(obs, limits)\n", """        global _CACHE
+        _CACHE = _CACHE or (obs, limits)
+        obs, limits = _CACHE
+        found = anomalies(obs, limits)
+""", 1).replace("def one_pass(", "_CACHE = None\n\n\ndef one_pass(", 1))
+    cached_rule, served = confined(cached, "kk_sbx_test_cached")
+    check(cached_rule["passed"] == N and served["failed"] == ["urn:kk:eval:analyser/retracted-and-superseded"],
+          f"a candidate that keeps what it read passes the rule cases and fails the two-pass service case ({served['passed']}/{N})")
 
     # A candidate that reads the record correctly only when it sees case data, and leaves a process behind
     # in a session of its own. The rule and service cases pass; its benchmark outputs differ from the
@@ -108,7 +151,7 @@ def main() -> None:
     shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", cheat_exp / "anomaly-recent",
                     ignore=shutil.ignore_patterns("__pycache__"))
     (cheat_exp / "experiment.yaml").write_text("slot: analyser\nincumbent: morphogen/modules/anomaly\ncandidate: anomaly-recent\n")
-    left_pid = tmp / "left.pid"
+    left_pid = drop / "left.pid"
     c = cheat_exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
     c.write_text(c.read_text().replace("        found = anomalies(obs, limits)\n", f"""        found = anomalies(obs, limits)
         found = [a for a in found if "-c" in a["target"]]
@@ -118,9 +161,18 @@ def main() -> None:
                 [sys.executable, "-c", "import time; time.sleep(600)"], start_new_session=True).pid))
 """, 1).replace("import sys\n", "import pathlib\nimport sys\n", 1))
     priv = tmp / "priv"
-    priv.mkdir()
+    priv.mkdir(mode=0o700)
     old_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
+    run_as = os.environ.pop("KK_RUN_AS")
+    try:
+        with connect("kkm_sandbox", url) as record:
+            experiment(cheat_exp, record, priv)
+        check(False, "the sandbox runs a candidate without an OS user of its own")
+    except confine.Unconfined as e:
+        check("KK_RUN_AS" in str(e), f"without an OS user to run it as, the sandbox refuses to run a candidate ({e})")
+    finally:
+        os.environ["KK_RUN_AS"] = run_as
     with connect("kkm_sandbox", url) as record:
         runs = {f.stem.rsplit("-", 1)[-1]: yaml.safe_load(f.read_text())["contract"] for f in experiment(cheat_exp, record, priv)}
     os.environ.pop("DATABASE_URL") if old_url is None else os.environ.update(DATABASE_URL=old_url)
@@ -133,6 +185,24 @@ def main() -> None:
     pid = int(left_pid.read_text())
     check(not Path(f"/proc/{pid}").exists() or "zombie" in Path(f"/proc/{pid}/status").read_text().lower(),
           "a process the candidate started in a session of its own does not outlive its run")
+
+    # A process already running as a run user (another program sharing its uid) is refused, never killed.
+    first = confine.pool()[0]
+    other = subprocess.Popen(["sleep", "60"], user=first.pw_uid, group=first.pw_gid, extra_groups=[])
+    try:
+        os.environ["KK_RUN_AS"], pool_was = first.pw_name, os.environ["KK_RUN_AS"]
+        try:
+            with confine.lease():
+                refused = None
+        except confine.Unconfined as e:
+            refused = str(e)
+        finally:
+            os.environ["KK_RUN_AS"] = pool_was
+        check(refused is not None and "already has processes" in refused and other.poll() is None,
+              "a run user that already has processes is refused, and they are left running")
+    finally:
+        other.kill()
+        other.wait()
 
     env = {**os.environ, "DATABASE_URL": url,
            "PYTHONPATH": os.pathsep.join([str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")]),
@@ -159,10 +229,17 @@ def main() -> None:
         check(cand < inc, f"on a copy of the record, timed by the sandbox, the candidate's full pass is faster ({cand:.3f} s against {inc:.3f} s)")
         check(value("urn:kk:provider:anomaly", "inputs") == 4500, "the sandbox copied the record's 4,500 observations")
         check(not q("select 1 from api.claims where attributed_to = 'urn:kk:agent:sandbox'"), "the sandbox wrote no claims")
-    who, creds, sees = probe.read_text().split()
-    check(who == "kkm_anomaly_login" and set(creds.split(",")) <= {"-", "PGHOST", "PGPORT"} and sees == "False",
-          f"the candidate runs as the incumbent's own login ({who}), with no other credentials ({creds}), "
+    who, creds, sees, os_user, parent_env, superuser, record = probe.read_text().split()
+    check(who.startswith("kk_sbx_") and set(creds.split(",")) <= {"-", "PGHOST", "PGPORT"} and sees == "False",
+          f"the candidate runs as a login made for its run ({who}), with no other credentials ({creds}), "
           "and cannot see the run files")
+    check(record == "closed", "that login cannot connect to the record's database")
+    check(os_user in os.environ["KK_RUN_AS"].split(",") and parent_env == "closed" and superuser == "closed",
+          f"the candidate runs as the OS user {os_user}: it cannot read the sandbox's environment ({parent_env}) "
+          f"or connect as postgres without a password ({superuser})")
+    roles = subprocess.run(["psql", "-d", "postgres", "-qAtc", "select count(*) from pg_roles where rolname like 'kk_sbx_%'"],
+                           capture_output=True, text=True).stdout.strip()
+    check(roles == "0", "the logins made for the runs are dropped")
     left = subprocess.run(["psql", "-d", "postgres", "-qAtc", "select count(*) from pg_database where datname like 'kk_sbx_%'"],
                           capture_output=True, text=True).stdout.strip()
     check(left == "0", "the sandbox databases are dropped")

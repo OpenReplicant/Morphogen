@@ -23,11 +23,17 @@ morphogen/modules/anomaly or kernel/providers/anomaly). When that provider decla
 credentials (morphogen.logins); otherwise it gets this process's environment. Either way it never gets
 KK_OTLP_SECRET: with it set, each service gets its own telemetry token, for its own name. A candidate from an
 experiment runs only as the incumbent's own login, and only while its directory matches HEAD (the code
-the person approved, measured and committed).
+the person approved, measured and committed). It also runs as an OS user leased for it alone (KK_RUN_AS;
+morphogen.confine, R5-24), from a copy of that directory (regular files only) it may read but not write,
+with a home of its own, and not at all while the cluster lets any login in without its password (checked
+through DATABASE_URL, which must be a superuser's to read pg_hba_file_rules); when it stops or exits,
+every process of that user is ended and the user is given back. Running candidates needs CAP_SETUID and
+CAP_SETGID (root).
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -42,6 +48,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from morphogen import confine  # noqa: E402
 from morphogen.logins import login_env, login_of, telemetry_token, undumpable  # noqa: E402
 
 
@@ -97,6 +104,7 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
         git = lambda *a: subprocess.run(["git", "-C", str(intent), *a], capture_output=True, text=True).stdout
         if not git("ls-tree", "HEAD", "--", spec["cwd"]) or git("status", "--porcelain", "--untracked-files=all", "--", spec["cwd"]):
             raise OSError(f"{spec['cwd']} differs from HEAD: only committed experiment code runs")
+        confine.pool()
     path = os.pathsep.join(filter(None, [str(cwd), str(repo / "kernel" / "src"), str(repo / "morphogen" / "src"),
                                          os.environ.get("PYTHONPATH")]))
     # OTEL_*HEADERS are not passed on: the service's own token below is the only one it holds.
@@ -110,7 +118,34 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
     cmd = shlex.split(spec["service"])
     if cmd[0] == "python3":
         cmd[0] = sys.executable
-    return subprocess.Popen(cmd, cwd=cwd, env=env)
+    if not experiment:
+        return subprocess.Popen(cmd, cwd=cwd, env=env)
+    held = contextlib.ExitStack()                        # the leased user, the copy and the home, until release()
+    try:
+        run = held.enter_context(confine.lease())
+        import psycopg
+        with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as su:   # needs pg_hba_file_rules: a superuser
+            confine.check_cluster(su, run, *confine.where(env["DATABASE_URL"]))
+        ws = held.enter_context(confine.workspace("kk-run-code-"))
+        home = held.enter_context(run.home("kk-run-home-"))
+        code = ws / cwd.name
+        confine.copy_tree(cwd, code, skip=("__pycache__", "runs"))
+        env = {**env, "HOME": str(home), "TMPDIR": str(home),
+               "PYTHONPATH": env["PYTHONPATH"].replace(str(cwd), str(code), 1)}
+        p = run.popen(cmd, env, cwd=code)
+    except BaseException:
+        held.close()
+        raise
+    p.confined = held
+    return p
+
+
+def release(p: subprocess.Popen) -> None:
+    """After a confined service ends: end every process of its run user, remove its copy and home, give the
+    user back."""
+    if getattr(p, "confined", None):
+        p.confined.close()
+        p.confined = None
 
 
 def stop(p: subprocess.Popen) -> None:
@@ -120,6 +155,7 @@ def stop(p: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         p.kill()
         p.wait()
+    release(p)
 
 
 def main(argv=None) -> int:
@@ -158,6 +194,7 @@ def main(argv=None) -> int:
                     del running[name]
                     say(event="restarting", provider=name, intent=want[name][0])
                 elif p.poll() is not None:
+                    release(p)
                     del running[name]
                     exited[name] = time.monotonic()
                     say(event="exited", provider=name, code=p.returncode)
@@ -165,7 +202,7 @@ def main(argv=None) -> int:
                 if name not in running and time.monotonic() - exited.get(name, -backoff) >= backoff:
                     try:
                         running[name] = (digest, start(repo, spec, intent))
-                    except OSError as e:          # e.g. the provider's directory is missing: say so, retry later
+                    except (OSError, confine.Unconfined) as e:   # e.g. the directory is missing: say so, retry later
                         exited[name] = time.monotonic()
                         say(event="failed", provider=name, error=str(e)[:200])
                         continue

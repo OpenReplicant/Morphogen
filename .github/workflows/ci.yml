@@ -17,6 +17,8 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false                 # no token in .git/config: the run users read the checkout
       - run: sudo apt-get install -y -q postgresql-client python3-venv
       - name: Contract requirements
         run: |
@@ -32,7 +34,25 @@ jobs:
         run: /tmp/kk-venv/bin/python kernel/providers/test.py
       - name: Morphogen contract (its slots' case sets) and mutants
         run: sh morphogen/contract/run.sh && sh morphogen/contract/run.sh --mutants
-      - name: Morphogen modules and the full loop (T5)
-        run: /tmp/kk-venv/bin/python morphogen/modules/test.py
+      - name: OS users for model-written code (R5-24)
+        run: |
+          # uids of their own: --system would hand out 999, the uid Postgres runs as in the service container
+          for i in 1 2 3 4; do sudo useradd --uid $((2900 + i)) --no-create-home --shell /usr/sbin/nologin kkrun$i; done
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          # the confined code reads the repository and the venv: every directory above them must be traversable
+          d="$GITHUB_WORKSPACE"; while [ "$d" != / ]; do sudo chmod o+x "$d"; d=$(dirname "$d"); done
+          chmod -R o+rX "$GITHUB_WORKSPACE" /tmp/kk-venv
+      - name: Morphogen modules and the full loop (T5), as root so they can start code as the run users
+        run: |
+          # The password above is in this file, which the run users can read: replace it with one they cannot.
+          export PGPASSWORD_NEW=$(openssl rand -hex 24)
+          echo "alter role postgres password '$PGPASSWORD_NEW'" | psql -d postgres -q
+          export PGPASSWORD=$PGPASSWORD_NEW
+          unset PGPASSWORD_NEW
+          # The image trusts its local socket; confined runs refuse a cluster that trusts any connection.
+          docker exec ${{ job.services.postgres.id }} sh -c \
+            'sed -i -E "s/[[:space:]]trust$/ scram-sha-256/" "$PGDATA/pg_hba.conf" && ! grep -Eq "^[^#].*[[:space:]]trust$" "$PGDATA/pg_hba.conf"'
+          psql -d postgres -qAtc "select pg_reload_conf()"
+          sudo -E env "PATH=$PATH" KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4 /tmp/kk-venv/bin/python morphogen/modules/test.py
       - name: Boundary
         run: python3 scripts/check_boundary.py

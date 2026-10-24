@@ -10,6 +10,7 @@ for r in t_extractor t_verifier t_validator t_reviewer t_steward t_secret_reader
   psql -d postgres -qc "drop role if exists $r" >/dev/null
 done
 createdb "$db"
+psql -d postgres -qc "revoke connect on database \"$db\" from public" >/dev/null
 # The feed test opens two more sessions from inside the server (dblink), so it needs a libpq
 # connection string as the server sees it: the same host, port and credentials as this script.
 conn="dbname=$db"

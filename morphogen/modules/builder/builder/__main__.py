@@ -78,7 +78,7 @@ def one_pass(conn, intent: Path, strategy: str, fixtures: Path | None, command: 
                     inc = incumbent_dir(r["target"])
                     if inc is None:
                         raise ValueError(f"no provider directory for {r['target']}")
-                    got = build(r, slot, inc, intent / "experiments", strategy, fixtures, command)
+                    got = build(r, slot, inc, intent / "experiments", strategy, fixtures, command, conn)
                     sha = commit(intent, got["dir"], f"request:{r['iri']} experiment:{got['id']}\n\nCandidate {got['provider']} "
                                                      f"for the {slot} slot ({strategy}).\n")
                     rel = got["dir"].relative_to(intent.parent) if got["dir"].is_relative_to(intent.parent) else got["dir"]
