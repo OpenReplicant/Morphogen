@@ -1,0 +1,16 @@
+id: urn:kk:eval:gap-finder/systems-apart
+text: 'two systems are judged apart: a service is unconnected only within its own system'
+input:
+  services:
+    shop/front:
+      image: true
+      connects:
+      - shop/back
+      limit: true
+    shop/back:
+      image: true
+    blog/app:
+      image: true
+      limit: true
+expect:
+  gaps: []

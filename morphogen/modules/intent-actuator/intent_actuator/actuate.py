@@ -10,7 +10,9 @@ A step is carried out only if
   one change set recorded it, with one value per predicate; the action is on the list; the provider has an intent
   file in this environment (a node: its system's compose file sets the action's setting); the value is within the action's bounds; and this actuator has not run the
   step before. A replacement step must name the candidate's content hash, and the candidate's directory
-  must still have it: what a person approved is what was measured.
+  must still have it: what a person approved is what was measured. A create step (R5-29) names a new system
+(urn:kk:system:<name>) whose compose file does not exist yet, and the sha256 of the file the design agent
+rendered: the actuator renders it again from the record and writes it only if it is the text approved.
 Carrying it out sets the action's setting in the provider's intent file (or the node's compose file); the
 caller commits the file.
 """
@@ -64,8 +66,24 @@ def steps(claims: list[dict], change_sets: dict[str, dict]) -> list[dict]:
     return out
 
 
+def new_system_file(intent: Path, target) -> Path | None:
+    """intent/systems/<name>/compose.yaml for urn:kk:system:<name>, when neither it nor a link on its way exists."""
+    m = re.fullmatch(r"urn:kk:system:([a-z0-9][a-z0-9_.-]*)", target) if isinstance(target, str) else None
+    if not m:
+        return None
+    root = Path(intent) / "systems"
+    d = root / m.group(1)
+    if root.is_symlink() or d.is_symlink() or (d.exists() and not d.is_dir()):
+        return None
+    f = d / "compose.yaml"
+    return None if f.exists() or f.is_symlink() else f
+
+
 def target_file(intent: Path, env: str, target, action: dict) -> Path | None:
-    """The file a step on `target` changes: the node's compose file, or the provider's intent file."""
+    """The file a step on `target` changes: a new system's compose file, the node's compose file, or the
+    provider's intent file."""
+    if action.get("kind") == "create":
+        return new_system_file(intent, target)
     if action.get("applies_to", "provider") == "node":
         found = systems.compose_file(intent, target)
         return found[0] if found else None
@@ -95,8 +113,15 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
     if s.get("ambiguous"):
         return "the step is recorded by more than one change set, or names a predicate twice"
     a = actions.get(s["action"])
-    if a is None or a.get("kind", "setting") not in ("setting", "replace"):
+    if a is None or a.get("kind", "setting") not in ("setting", "replace", "create"):
         return f"the action {s['action']!r} is not on the fixed list of plan steps"
+    if a.get("kind") == "create":
+        f = new_system_file(intent, s["target"])
+        if f is None:
+            return f"{s['target']!r} is not a new system's name, or its compose file exists already"
+        if not isinstance(s["value"], str) or not re.fullmatch(r"[0-9a-f]{64}", s["value"]):
+            return "the step names no sha256 for the file to write"
+        return None
     if a.get("applies_to", "provider") == "node":
         if systems.compose_file(intent, s["target"]) is None:
             return f"{s['target']!r} is not a service of a managed system"

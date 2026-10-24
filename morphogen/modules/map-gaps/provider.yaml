@@ -1,0 +1,14 @@
+id: urn:kk:provider:map-gaps
+name: Map gap finder
+version: 0.1.0
+license: Apache-2.0
+slots: [gap-finder]
+origin: new rules (R5-29) in the shape of OpenReplicant/kernel (rebuild 4) modules/map-gaps, which asked about organisation and process maps; the service follows the change feed
+requires: Python 3.12+, psycopg; the kk-tosca, bbo and oa packs
+migration: migration.sql
+service: python3 -m map_gaps
+role: kkm_map_gaps
+login: kkm_map_gaps_login
+agent: urn:kk:agent:map-gaps
+tests: [python3 tests/test_service.py]
+note: each gap an oa:Annotation whose body is the question to ask, derived from the claims that put its target on the map; retracted once answered

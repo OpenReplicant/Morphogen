@@ -1,0 +1,11 @@
+id: urn:kk:eval:gap-finder/prediction-is-not-a-limit
+text: a plan's prediction (a limit with one more qualifier) does not close no-limit
+input:
+  services:
+    shop/front:
+      image: true
+      prediction: true
+expect:
+  gaps:
+  - kind: no-limit
+    target: shop/front

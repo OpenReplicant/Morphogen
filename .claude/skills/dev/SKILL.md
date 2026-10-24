@@ -25,6 +25,7 @@ description: Set up the environment and run every check for this repo (Postgres 
    then `for i in 1 2 3 4; do echo kkrun$i >> /etc/cron.deny; echo kkrun$i >> /etc/at.deny; done` (nothing a run
    leaves behind may run later) and `export KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4`; the module tests run as root so they can start code as them.
    Confined runs reach only the addresses their lease allows (R5-26): `nft` must be installed (`apt-get install -y nftables`).
+   The intake filter needs gitleaks 8.30.1 on PATH (R5-29): download `gitleaks_8.30.1_linux_x64.tar.gz` from its GitHub release, check sha256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, put `gitleaks` in `/usr/local/bin`.
    The sandbox measures provider code on a cluster of its own (R5-26), made the same way on port 5434:
    ```sh
    mkdir -p /var/tmp/kpg-sbx && chown postgres /var/tmp/kpg-sbx

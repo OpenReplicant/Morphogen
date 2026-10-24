@@ -14,14 +14,17 @@ submit claims; their effects are observed.
 | prediction-verifier | outcome-verifier | Written (T5) | New |
 | builder | builder | Written (T6) | New: a build request becomes a candidate in `../intent/experiments/` (fixture, or an agent harness) |
 | sandbox | sandbox | Written (T6) | New: the slot's contract, then candidate and incumbent measured on a copy of the record; the evaluator records the scores |
-| interview-encoder, map-gaps | design-agent | To port | rebuild 4 `encoder-interaction`, `skill-interview`, `map-gaps` |
-| observer-prometheus | observer | To port | rebuild 4 `observer-prometheus` |
+| interview-encoder | design-agent | Ported (T13) | rebuild 4 `encoder-interaction`, unchanged but for names: a conversation as notes an interviewer quotes |
+| design-blueprint | design-agent | Written (T13) | New: a described system with no open question becomes a review-lane plan to write its compose file (`morphogen.blueprint`) |
+| map-gaps | gap-finder | Written (T13) | Rules new (system maps), shape from rebuild 4 `map-gaps`; 12 contract cases, 11 mutants |
+| encoder-compose | system-encoder | Written (T9) | New: a compose file as a TOSCA topology, every claim citing its line |
+| observer-prometheus | observer | Written (T9) | rebuild 4 `observer-prometheus`: request times from a service's metrics |
 | registry-lookup | catalog-lookup | New | — |
 
 The reconciler that runs the services an environment's intent describes is `../deploy/reconcile.py`.
 
 ```sh
 python3 morphogen/modules/install.py <db>          # kernel, the kernel providers Morphogen uses, every module
-sh morphogen/contract/run.sh [--mutants]                  # the case sets of Morphogen's slots (analyser)
-PGHOST=... PGUSER=... python3 morphogen/modules/test.py   # each module's tests, then the T5 loop and G2
+sh morphogen/contract/run.sh [--mutants]                  # the case sets of Morphogen's slots (analyser, gap-finder)
+PGHOST=... PGUSER=... python3 morphogen/modules/test.py   # each module's tests, then the T5 loop, G2, G3 and the design agent
 ```

@@ -99,6 +99,11 @@ tools here were checked by experiment (details in `docs/spikes/` and the decisio
 - Free model endpoints are rate-limited upstream per model (429 from a shared pool even with quota
   left); probe a few and record which model answered.
 
+- The kernel expands CURIEs in a claim's predicate and object, but stores **qualifier keys exactly as written**:
+  `{"kkt:propertyName": "image"}` is accepted and applied, and then nothing that reads
+  `qualifiers->>'https://w3id.org/knowledge-kernel/tosca#propertyName'` finds it. Write qualifier keys as full IRIs
+  (the interview skill says so; found by submitting the skill's own example, T13).
+
 ## Tests
 
 - Gate checks that read a live system must tolerate other modules writing meanwhile: assert "every

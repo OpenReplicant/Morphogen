@@ -1,0 +1,27 @@
+id: urn:kk:eval:gap-finder/answers-close-gaps
+text: a person's answers (an image, a limit, the peer described) close the gaps asked about
+input:
+  services:
+    shop/front:
+      connects:
+      - shop/back
+      - shop/payments
+    shop/back:
+      image: true
+expect:
+  gaps:
+  - kind: no-image
+    target: shop/front
+  - kind: no-limit
+    target: shop/front
+  - kind: unknown-peer
+    target: shop/payments
+then:
+  services:
+    shop/front:
+      image: true
+      limit: true
+    shop/payments:
+      image: true
+  expect:
+    gaps: []

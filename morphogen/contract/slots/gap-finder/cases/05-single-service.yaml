@@ -1,0 +1,10 @@
+id: urn:kk:eval:gap-finder/single-service
+text: a system of one service is not unconnected; its entry point still needs a limit
+input:
+  services:
+    solo/app:
+      image: true
+expect:
+  gaps:
+  - kind: no-limit
+    target: solo/app

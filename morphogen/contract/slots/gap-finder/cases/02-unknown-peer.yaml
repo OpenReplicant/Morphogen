@@ -1,0 +1,16 @@
+id: urn:kk:eval:gap-finder/unknown-peer
+text: a connection to something not on the map is asked about, on the peer
+input:
+  services:
+    shop/front:
+      image: true
+      connects:
+      - shop/back
+      - shop/payments
+      limit: true
+    shop/back:
+      image: true
+expect:
+  gaps:
+  - kind: unknown-peer
+    target: shop/payments

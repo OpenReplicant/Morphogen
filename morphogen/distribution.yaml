@@ -29,9 +29,15 @@ uses_kernel_slots:
 slots:
   - id: design-agent
     phase: design
-    default: interview-encoder + map-gaps      # rebuild 4: encoder-interaction, skill-interview, map-gaps
+    cardinality: many
+    default: interview-encoder + design-blueprint   # rebuild 4: encoder-interaction; the interview skill drives them (R5-29)
     contract: provider-tests
-    status: to-port
+    status: ported
+  - id: gap-finder
+    phase: design
+    default: map-gaps                          # what a system map lacks, as questions (R5-29; rules new, shape from rebuild 4 map-gaps)
+    contract: contract/slots/gap-finder
+    status: written
   - id: system-encoder
     phase: design
     cardinality: many

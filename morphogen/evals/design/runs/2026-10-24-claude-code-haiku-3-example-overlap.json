@@ -1,0 +1,81 @@
+{
+  "eval": "design agent (R5-29)",
+  "agent": "claude-code-haiku",
+  "applied": true,
+  "quotes": true,
+  "no_gaps": true,
+  "map": true,
+  "limit": true,
+  "proposable": true,
+  "passed": true,
+  "detail": {
+    "change_sets": {
+      "applied": 3
+    },
+    "verdicts": {
+      "supported": 18
+    },
+    "open_gaps": [],
+    "described": {
+      "api": {
+        "image": "ghcr.io/example/notes-api:1.4.2",
+        "command": null,
+        "environment": {
+          "LOG_LEVEL": "info"
+        },
+        "connects": [
+          "postgres"
+        ]
+      },
+      "postgres": {
+        "image": "postgres:16.4",
+        "command": null,
+        "environment": {},
+        "connects": []
+      },
+      "web": {
+        "image": "ghcr.io/example/notes-web:1.4.2",
+        "command": null,
+        "environment": {},
+        "connects": [
+          "api"
+        ]
+      }
+    },
+    "expected": {
+      "ghcr.io/example/notes-api:1.4.2": {
+        "connects": [
+          "postgres:16.4"
+        ],
+        "command": null,
+        "environment": {
+          "LOG_LEVEL": "info"
+        }
+      },
+      "postgres:16.4": {
+        "connects": [],
+        "command": null,
+        "environment": {}
+      },
+      "ghcr.io/example/notes-web:1.4.2": {
+        "connects": [
+          "ghcr.io/example/notes-api:1.4.2"
+        ],
+        "command": null,
+        "environment": {}
+      }
+    },
+    "conflict": null,
+    "limits": [
+      [
+        "urn:kk:node:notes:web",
+        0.3,
+        {
+          "http://www.w3.org/ns/sosa/observedProperty": "urn:kk:property:latency-seconds-mean"
+        }
+      ]
+    ]
+  },
+  "fixture": "morphogen/tests/fixtures/design/notes.jsonl",
+  "reply": "Submitted and applied: 113a15b0-30da-4094-b2e0-0dbd2e92ddab (message 2), ea582285-5578-4451-a7bb-d023be2287e8 (message 4), 8e14840b-a350-48f9-9b3e-b7b048827d7e (message 6)."
+}

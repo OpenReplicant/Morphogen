@@ -39,9 +39,9 @@ slots:
     hook: intake
     cardinality: many
     interface: IntakeFilter
-    default: filter-gitleaks          # rebuild 4: modules/ingest-filter-gitleaks
+    default: filter-gitleaks          # rebuild 4: modules/ingest-filter-gitleaks; files (kk.lib.ingest_filter), and proposals when a caller runs filter() (R5-29)
     contract: provider-tests
-    status: to-port
+    status: ported
   - id: validator
     hook: validation
     cardinality: many

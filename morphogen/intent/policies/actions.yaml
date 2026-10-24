@@ -3,8 +3,11 @@
 #   kind setting  a plan step the intent actuator carries out by changing one setting in intent
 #   kind request  not a plan: a build request (auto lane) that changes nothing running; the builder answers it
 #   kind replace  a plan step the intent actuator carries out by running a measured candidate instead
-# applies_to: provider (default; its intent file in environments/) or node (a service of a managed system,
-# intent/systems/<system>/compose.yaml, R5-25). effect: halve (default) or proportional (planner/plan.py).
+#   kind create   a plan step the intent actuator carries out by writing a new system's compose file from the
+#                 system a person described (morphogen.blueprint); the step names the file's sha256 (R5-29)
+# applies_to: provider (default; its intent file in environments/), node (a service of a managed system,
+# intent/systems/<system>/compose.yaml, R5-25) or system (urn:kk:system:<system>, a new one).
+# effect: halve (default) or proportional (planner/plan.py).
 actions:
   urn:kk:action:set-poll-seconds:
     kind: setting
@@ -35,3 +38,9 @@ actions:
     label: run a candidate that passed the slot's contract and measured better than the incumbent instead of it
     risk: medium                      # new code; reversible by the same action
     answers: []                       # proposed from measurements, not from an anomaly directly
+  urn:kk:action:create-system:
+    kind: create
+    applies_to: system
+    label: write a new system's compose file from the system a person described
+    risk: medium                      # new intent; nothing runs until a reconciler is pointed at it
+    answers: []                       # proposed from a description with no gaps, not from an anomaly

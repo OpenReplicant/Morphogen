@@ -1,0 +1,35 @@
+# The scripted interview (R5-29): what an agent following morphogen/skills/interview/SKILL.md records from each of
+# the person's answers in notes.jsonl, and what the gap finder lists after it. A claim: [subject, predicate, object,
+# quote]; the quote is copied from the answer. Shorthands: sys = urn:kk:system:notes, node:X = urn:kk:node:notes:X,
+# kkt:X = the TOSCA mirror, a = rdf:type, label = rdfs:label, image / setting NAME = kkt:propertyValue named so,
+# limit PROPERTY = bbo:maxValue qualified by sosa:observedProperty; an object in quotes is a literal.
+source: notes
+system: notes
+answers:
+- message: "2"
+  claims:
+  - [sys, a, kkt:ServiceTemplate, "A small notes app"]
+  - [sys, label, '"notes"', "A small notes app"]
+  - [node:web, a, kkt:NodeTemplate, "People use a web frontend"]
+  - [node:web, label, '"web"', "a web frontend"]
+  - [node:web, kkt:memberOf, sys, "A small notes app. People use a web frontend"]
+  - [node:api, a, kkt:NodeTemplate, "which calls an API"]
+  - [node:api, label, '"api"', "an API"]
+  - [node:api, kkt:memberOf, sys, "which calls an API"]
+  - [node:db, a, kkt:NodeTemplate, "the API keeps its notes in Postgres"]
+  - [node:db, label, '"db"', "Postgres"]
+  - [node:db, kkt:memberOf, sys, "the API keeps its notes in Postgres"]
+  - [node:web, kkt:connectsTo, node:api, "a web frontend, which calls an API"]
+  - [node:api, kkt:connectsTo, node:db, "the API keeps its notes in Postgres"]
+  open: [no-image web, no-image api, no-image db, no-limit web]
+- message: "4"
+  claims:
+  - [node:web, image, '"ghcr.io/example/notes-web:1.4.2"', "The web is ghcr.io/example/notes-web:1.4.2"]
+  - [node:api, image, '"ghcr.io/example/notes-api:1.4.2"', "the API is ghcr.io/example/notes-api:1.4.2"]
+  - [node:db, image, '"postgres:16.4"', "the database is postgres:16.4"]
+  open: [no-limit web]
+- message: "6"
+  claims:
+  - [node:web, limit urn:kk:property:latency-seconds-mean, '0.3', "Pages should come back within 300 ms on average"]
+  - [node:api, setting LOG_LEVEL, '"info"', "run the API with LOG_LEVEL set to info"]
+  open: []

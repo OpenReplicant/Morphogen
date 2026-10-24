@@ -1,0 +1,18 @@
+id: urn:kk:eval:gap-finder/unconnected
+text: in a system of several services, one with no connection either way is asked about
+input:
+  services:
+    shop/front:
+      image: true
+      connects:
+      - shop/back
+      limit: true
+    shop/back:
+      image: true
+    shop/worker:
+      image: true
+      limit: true
+expect:
+  gaps:
+  - kind: unconnected
+    target: shop/worker

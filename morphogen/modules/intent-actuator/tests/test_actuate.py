@@ -135,4 +135,19 @@ try:
     check(False, "a setting the service does not have is not added")
 except ValueError:
     check(True, "a setting the service does not have is not added")
+
+# A create step (R5-29): a new system's compose file, named by the sha256 the design agent rendered.
+CREATE, H = "urn:kk:action:create-system", "a" * 64
+cs = lambda target, value: steps([c("1", RDF_TYPE, SOSA + "Actuation"), c("2", PPLAN_STEP_OF, PLAN), c("3", DCT_TYPE, CREATE),
+                                  c("4", SOSA + "hasFeatureOfInterest", target), c("5", SOSA + "hasSimpleResult", v={"@value": value})],
+                                 person)[0]
+check(refusal(cs("urn:kk:system:notes", H), ACTS, intent, "sandbox") is None, "a create step for a new system, naming a sha256: carried out")
+check("exists already" in refusal(cs("urn:kk:system:podinfo", H), ACTS, intent, "sandbox"),
+      "a create step for a system whose compose file exists is refused (create never overwrites)")
+check("exists already" in refusal(cs("urn:kk:system:../etc", H), ACTS, intent, "sandbox")
+      and "exists already" in refusal(cs("urn:kk:node:notes:web", H), ACTS, intent, "sandbox"),
+      "a create step must name a system by a plain name")
+check("sha256" in refusal(cs("urn:kk:system:notes", 0.5), ACTS, intent, "sandbox"), "a create step must name the file's sha256")
+(link_intent / "systems" / "notes").symlink_to(tmp)
+check(refusal(cs("urn:kk:system:notes", H), ACTS, link_intent, "sandbox") is not None, "a system directory that is a link is refused")
 shutil.rmtree(tmp)

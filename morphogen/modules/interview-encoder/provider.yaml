@@ -1,0 +1,11 @@
+id: urn:kk:provider:interview-encoder
+name: Interview encoder
+version: 0.1.0
+license: Apache-2.0
+slots: [design-agent]
+origin: OpenReplicant/kernel (rebuild 4) modules/encoder-interaction (D-81), unchanged but for names (R5-29)
+requires: Python 3.12+, psycopg; the activitystreams pack; the intake filter (kernel filter-gitleaks, gitleaks on PATH)
+migration: migration.sql
+command: python3 -m interview_encoder [--source NAME] [--scope IRI] FILE   (chat JSON lines or a Claude Code session)
+tests: [python3 tests/test_encode.py]
+note: the intake filter runs first and fails closed; each message becomes an as:Note in a rendered transcript (the artifact every claim quotes), so an interviewer's claims can quote the person's words and the quote verifier can check them
