@@ -119,6 +119,8 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
     v = s["value"]
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not a["min"] <= v <= a["max"]:
         return f"{a['setting']} must be a number from {a['min']:g} to {a['max']:g}"
+    if a.get("integer") and v != int(v):
+        return f"{a['setting']} must be a whole number"
     return None
 
 

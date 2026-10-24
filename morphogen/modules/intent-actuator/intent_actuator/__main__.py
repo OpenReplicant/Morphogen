@@ -8,7 +8,8 @@ running system match intent; the observer records the effect.
 
 Commit messages start with `change-set:<id>` (the change sets that recorded the step) and name the plan
 step, so the intent history links to the evidence. Steps it has run before (its runs with that
-plan_step) are never run again.
+plan_step) are never run again. A step whose file has uncommitted edits (in the work tree or the index) is
+refused: committing would carry edits nobody approved, and restoring the file would discard them.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_intent_actuator),
 KK_INTENT_DIR (an intent directory inside a git work tree; default morphogen/intent), KK_INTENT_ENV
 (default sandbox), KK_SWEEP_SECONDS.
@@ -40,6 +41,11 @@ def git(intent: Path, *args: str) -> str:
     if out.returncode:
         raise RuntimeError(f"git {args[0]}: {(out.stderr or out.stdout).strip()[-300:]}")
     return out.stdout.strip()
+
+
+def uncommitted(intent: Path, f: Path) -> bool:
+    """Whether the file differs from HEAD in the work tree or the index."""
+    return bool(git(intent, "status", "--porcelain", "--", str(f.relative_to(intent))))
 
 
 def restore(intent: Path, f: Path) -> None:
@@ -85,6 +91,10 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                         outputs.update(refused=why)
                         raise PermissionError(why)
                     f = target_file(intent, env, s["target"], acts[s["action"]])
+                    if uncommitted(intent, f):
+                        why = f"{f.relative_to(intent)} has uncommitted edits: commit or discard them first"
+                        outputs.update(refused=why)
+                        raise PermissionError(why)
                     if acts[s["action"]].get("kind") == "replace":
                         setting = "provider"
                         change = replace(intent, f, s["candidate"])

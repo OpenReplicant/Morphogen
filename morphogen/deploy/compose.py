@@ -10,7 +10,8 @@ environment, ports (published on 127.0.0.1), depends_on, healthcheck, restart, l
 user; no `$` anywhere (compose would fill it from this process's environment). Anything else (privileged,
 cap_add, devices, volumes, build, env_file, network_mode, extends, ...) is refused, and the system keeps
 running as it was. The file is copied into a fresh private directory and compose runs there with only
-PATH, HOME and DOCKER_HOST, so no `.env` file or variable of ours reaches it. A file removed from HEAD
+PATH, HOME and DOCKER_HOST, so no `.env` file or variable of ours reaches it (an environment entry
+without a value, which would pass one on, is refused). A file removed from HEAD
 leaves the system running (it is someone else's: stopping it is a person's call) and says so.
 Prints one JSON line per event. Every KK_RECONCILE_SECONDS (default 2) it re-reads. Needs Docker.
 """
@@ -56,7 +57,7 @@ def refusal(text: str) -> str | None:
     for name, svc in doc["services"].items():
         if not isinstance(name, str) or not NAME.fullmatch(name) or not isinstance(svc, dict):
             return f"service {name!r}: a lower-case name and a mapping"
-        if extra := sorted(set(svc) - SERVICE_KEYS):
+        if extra := sorted(str(k) for k in svc if k not in SERVICE_KEYS):
             return f"service {name}: {', '.join(extra)} not allowed"
         if not isinstance(svc.get("image"), str) or not DIGEST.fullmatch(svc["image"]):
             return f"service {name}: the image must be pinned by digest (name@sha256:...)"
@@ -64,11 +65,12 @@ def refusal(text: str) -> str | None:
         if not isinstance(ports, list) or not all(isinstance(p, str) and PORT.fullmatch(p) for p in ports):
             return f"service {name}: ports must be published on 127.0.0.1 only (\"127.0.0.1:[host]:container\")"
         env = svc.get("environment") or {}
+        # A name without a value (`- HOME`, `HOME:`) makes compose pass on this process's own variable.
         if isinstance(env, dict):
-            if not all(isinstance(v, (str, int, float, bool)) or v is None for v in env.values()):
-                return f"service {name}: environment values must be plain"
-        elif not isinstance(env, list) or not all(isinstance(x, str) for x in env):
-            return f"service {name}: environment must be a mapping or a list of NAME=value"
+            if not all(isinstance(k, str) and isinstance(v, (str, int, float, bool)) for k, v in env.items()):
+                return f"service {name}: environment entries must be NAME: value (a name alone passes ours on)"
+        elif not isinstance(env, list) or not all(isinstance(x, str) and "=" in x for x in env):
+            return f"service {name}: environment must be a mapping or a list of NAME=value (a name alone passes ours on)"
     return None
 
 

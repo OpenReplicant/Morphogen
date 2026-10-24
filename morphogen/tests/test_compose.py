@@ -37,7 +37,8 @@ for text, why in [(svc(privileged="true"), "privileged not allowed"), (svc(volum
                   (svc(extends="{file: x.yaml, service: b}"), "extends not allowed"),
                   ("services:\n  a:\n    image: redis:7.4.2-alpine\n", "pinned by digest"),
                   (svc(ports='["9898:9898"]'), "127.0.0.1"), (svc(ports='["0.0.0.0:1:2"]'), "127.0.0.1"),
-                  (svc(environment="{A: ${HOME}}"), "no $"), (svc() + "volumes: {x: {}}\n", "nothing else at the top"),
+                  (svc(environment="{A: ${HOME}}"), "no $"), (svc(environment="[DOCKER_HOST]"), "a name alone"),
+                  (svc(environment="{HOME: }"), "a name alone"), (svc(**{"1": "x"}), "1 not allowed"), (svc() + "volumes: {x: {}}\n", "nothing else at the top"),
                   ("include: [x.yaml]\nservices: {}\n", "nothing else at the top"), ("services:\n  A B: {image: x}\n", "lower-case")]:
     got = refusal(text)
     check(got is not None and why in got, f"refused: {why} ({text.splitlines()[-1].strip()[:40]})")

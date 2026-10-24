@@ -68,6 +68,11 @@ def setting(intent: Path, env: str, target: str, name: str):
     return number(((yaml.safe_load(f.read_text()) or {}).get("env") or {}).get(name))
 
 
+def same_system(a: str, b: str) -> bool:
+    ma, mb = systems.NODE.fullmatch(a or ""), systems.NODE.fullmatch(b or "")
+    return bool(ma and mb and ma.group(1) == mb.group(1))
+
+
 def on_map(cur, intent: Path, start: str, name: str, mappers: list[str]):
     """(node, current value, ids of the connections followed) for the first node from `start`, then the
     nodes it connects to, breadth first, whose compose file sets `name`; None when there is none."""
@@ -80,7 +85,7 @@ def on_map(cur, intent: Path, start: str, name: str, mappers: list[str]):
         for r in rows(cur, """select object_entity, id::text as id from api.claims where subject = %s and predicate = %s
                               and attributed_to = any(%s) and status <> 'deprecated' order by object_entity""",
                       (node, CONNECTS_TO, list(mappers))):
-            if r["object_entity"] not in seen:
+            if r["object_entity"] not in seen and same_system(r["object_entity"], start):
                 seen.add(r["object_entity"])
                 queue.append((r["object_entity"], via + [r["id"]]))
     return None
@@ -115,12 +120,14 @@ def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:e
         # This planner's plan change sets: those on their way (submitted, validated, waiting for a person)
         # hold their target; any plan already proposed for an anomaly, whatever became of it (rejected,
         # invalid), is not proposed again: the person who rejected it gets a new plan only from a new anomaly.
-        mine_sets = rows(cur, """select c.status, r.info->>'target' as target, r.info->>'anomaly' as anomaly,
+        mine_sets = rows(cur, """select c.status, r.info->>'target' as target, r.info->>'step_target' as step_target,
+                                        r.info->>'anomaly' as anomaly,
                                         r.info->>'request' as request, c.idempotency_key as key
                                  from api.change_sets c join kernel.run r on r.id = c.generated_by
                                  where c.attributed_to = %s and (c.idempotency_key like 'plan:%%'
                                                                  or c.idempotency_key like 'request:%%')""", (AGENT,))
-        pending = {r["target"] for r in mine_sets if r["status"] in ("submitted", "valid", "awaiting_review", "approved")}
+        pending = {t for r in mine_sets if r["status"] in ("submitted", "valid", "awaiting_review", "approved")
+                   for t in (r["target"], r["step_target"]) if t}
         proposed = {r["anomaly"] for r in mine_sets}
         replaced = {r["request"] for r in mine_sets if r["key"].startswith("plan:") and r["request"]}
         closed = {r["object_entity"] for r in rows(cur, """select object_entity from api.claims
@@ -161,11 +168,12 @@ def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:e
                 report[a["iri"]] = got
                 continue
             p = got["plan"]
-            with run(cur, MODULE, {"anomaly": a["iri"], "target": a["target"]}, used=p["premises"]) as (run_id, outputs):
+            with run(cur, MODULE, {"anomaly": a["iri"], "target": a["target"], "step_target": p["target"]},
+                     used=p["premises"]) as (run_id, outputs):
                 res = submit(cur, change_set(p, AGENT, SCOPE, lane(p["risk"])), run_id)
                 outputs.update(plan=p["iri"], change_set=str(res["id"]))
             report[a["iri"]] = {"plan": p["iri"], "change_set": str(res["id"]), "lane": res["lane"], "label": p["label"]}
-            pending.add(a["target"])
+            pending |= {a["target"], p["target"]}
         for r in my_requests(cur):
             if r["iri"] not in replaced:
                 report[r["iri"]] = replace_for(cur, r, lane)
