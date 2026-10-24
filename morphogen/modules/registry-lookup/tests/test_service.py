@@ -22,7 +22,7 @@ sys.path[:0] = [str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" 
 from kk.lib import connect, follow, run, submit  # noqa: E402
 from morphogen.experiments import BUILD, DCT, OA, experiment_id, tree_hash  # noqa: E402
 
-from registry_lookup.__main__ import AGENT, KKT, one_pass, search  # noqa: E402
+from registry_lookup.__main__ import AGENT, KKT, match_needs, one_pass, search  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -77,6 +77,14 @@ def main() -> None:
         "local": {"kind": "providers", "source": {"dir": "morphogen/tests/fixtures/analyser"}},
         "strict": {"kind": "providers", "source": {"git": str(repo), "commit": first, "path": "."},
                    "rules": {"licences": {"enforce": True, "allow": ["MIT"]}}},
+        "workshop": {"kind": "components", "label": "Workshop parts", "components": [
+            {"id": "m8-bolt-a2-30", "kind": "fastener", "properties": {"thread": "M8", "length_mm": 30, "material": "stainless steel A2-70"}},
+            {"id": "m8-bolt-a2-60", "kind": "fastener", "properties": {"thread": "M8", "length_mm": 60, "material": "stainless steel A2-70"}},
+            {"id": "m8-nut-a2", "kind": "fastener", "properties": {"thread": "M8", "material": "stainless steel A2-70"}}]},
+        "py": {"kind": "components", "label": "Python packages (as a list)", "components": [
+            {"id": "oldpy", "kind": "python-package", "licence": "MIT", "properties": {"requires_python": ">=3.9"}},
+            {"id": "newpy", "kind": "python-package", "licence": "MIT", "properties": {"requires_python": ">=3.13"}},
+            {"id": "copyleft", "kind": "python-package", "licence": "GPL-3.0-only", "properties": {"requires_python": ">=3.8"}}]},
         "bike-parts": {"kind": "components", "label": "Bicycle parts", "components": [
             {"id": "chainring-52t", "label": "Chainring, 52 teeth", "kind": "part", "licence": "proprietary",
              "properties": {"material": "aluminium 7075", "teeth": 52}},
@@ -236,6 +244,44 @@ def main() -> None:
         check(su.execute("select count(*) from kernel.change_set where attributed_to = %s", (AGENT,)).fetchone()[0] == n,
               "the same search again submits nothing new")
         check("refused" in search(rl, intent, "no-such", {}), "an unknown catalog is refused")
+
+        # Requirement matching (T20): needs stated as claims, matched against what was recorded, never against words.
+        search(rl, intent, "workshop", {})
+        search(rl, intent, "py", {})
+        validator.drain(val)
+
+        def need(iri, reqs):
+            ops = [{"op": "add_claim", "subject": iri, "predicate": KKT + "propertyValue", "object": {"value": {"@value": v}},
+                    "qualifiers": {KKT + "propertyName": n, KKT + "constraint": c}, "evidence_type": "testimony",
+                    "references": [{"source_uri": "urn:kk:test:need"}]} for n, c, v in reqs]
+            with pl.cursor() as cur, run(cur, "urn:kk:module:planner") as (rid, _):
+                submit(cur, {"idempotency_key": f"test:{iri}", "attributed_to": "urn:kk:agent:planner",
+                             "target_scope": "urn:kk:scope:default", "ops": ops}, rid)
+            validator.drain(val)
+        need("urn:kk:need:bolt", [("thread", "$equal", "M8"), ("length_mm", "$greater_or_equal", "25"),
+                                  ("length_mm", "$less_or_equal", "40"),
+                                  ("material", "$valid_values", '["stainless steel A2-70", "stainless steel A4-80"]')])
+        need("urn:kk:need:py312", [("requires_python", "$admits", "3.12"), ("licence", "$licence", '["MIT", "Apache-2.0"]')])
+        got = match_needs(rl)
+        validator.drain(val)
+        offered = {n: {o["entry"] for o in got[n]} for n in got}
+        check(offered["urn:kk:need:bolt"] == {"urn:kk:component:workshop:m8-bolt-a2-30"},
+              "an M8 stainless bolt of 25 to 40 mm: the 30 mm bolt is offered; the 60 mm bolt and the nut, which states no length, are not")
+        check(offered["urn:kk:need:py312"] == {"urn:kk:component:py:oldpy"},
+              "a package that runs on Python 3.12 under MIT or Apache-2.0: >=3.9 MIT is offered; >=3.13 and GPL-3.0 are not")
+        bolt = su.execute("""select c.id::text from api.claims c where c.subject = 'urn:kk:component:workshop:m8-bolt-a2-30'
+                             and c.predicate = %s and c.object_entity = 'urn:kk:need:bolt'""", (FULFILLS,)).fetchone()[0]
+        prem = {r[0] for r in su.execute("""select (select k.qualifiers->>%s from api.claims k where k.id = d.derived_from) || '/'
+                                              || (select k.subject from api.claims k where k.id = d.derived_from)
+                                            from kernel.claim_derivation d where d.claim_id = %s""", (KKT + "propertyName", bolt)).fetchall()}
+        check(prem == {"thread/urn:kk:need:bolt", "length_mm/urn:kk:need:bolt", "material/urn:kk:need:bolt",
+                       "thread/urn:kk:component:workshop:m8-bolt-a2-30", "length_mm/urn:kk:component:workshop:m8-bolt-a2-30",
+                       "material/urn:kk:component:workshop:m8-bolt-a2-30"},
+              "the offer is inferred from each requirement and the property claims it was compared with")
+        n = su.execute("select count(*) from kernel.change_set where attributed_to = %s", (AGENT,)).fetchone()[0]
+        match_needs(rl)
+        check(su.execute("select count(*) from kernel.change_set where attributed_to = %s", (AGENT,)).fetchone()[0] == n,
+              "matching again offers nothing new")
     shutil.rmtree(tmp)
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
     print("registry-lookup service checks passed")

@@ -2,8 +2,11 @@
 
   python3 -m registry_lookup search CATALOG [--terms WORD ...] [--slot SLOT] [--kind KIND]
       search one catalog for anyone (a person, the design agent, a planner) and record what is found
+  python3 -m registry_lookup match
+      match every recorded need against every recorded entry (T20) and offer what holds
   python3 -m registry_lookup [--once]
-      a service: each build request the planner makes is also answered from the provider catalogs
+      a service: each build request the planner makes is also answered from the provider catalogs, and needs
+      are matched
 
 What is found is recorded, deterministic and referenced by the catalog (its file, or the source it read): the
 catalog a `kkt:Profile`; each entry (a Morphogen provider keeps its own IRI, other entries are
@@ -18,6 +21,10 @@ into intent/experiments/<id>/ (regular files only), checked as a candidate of th
 committed, and recorded (`<provider> rdfs:label`, `<provider> dcterms:source <request>`, referenced by the
 experiment directory and its content hash), so the sandbox measures it. An unpinned one is recorded and offered,
 never run. A request is answered once.
+A need (T20) is any subject with requirements: `<need> kkt:propertyValue "<value>"` qualified by kkt:propertyName and
+kkt:constraint (requirements.py). Matching reads only the record: each entry's properties as recorded per catalog,
+compared deterministically; an entry is offered (`kkt:fulfills <need>`, derived from the requirement and property
+claims) only when every requirement holds; a property it does not state fails. Word search stays for people.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_registry_lookup), KK_INTENT_DIR
 (default morphogen/intent), KK_SWEEP_SECONDS.
 """
@@ -42,6 +49,7 @@ from morphogen import confine
 from morphogen.experiments import ROOT, build_requests, check_candidate, experiment_id, provider_dir, tree_hash
 
 from . import catalogs
+from .requirements import match
 
 MODULE = "urn:kk:module:registry-lookup"
 AGENT = "urn:kk:agent:registry-lookup"
@@ -51,6 +59,7 @@ LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 OWL_VERSION = "http://www.w3.org/2002/07/owl#versionInfo"
 DCT = "http://purl.org/dc/terms/"
 KKT = "https://w3id.org/knowledge-kernel/tosca#"
+VALUE, NAME, CONSTRAINT = KKT + "propertyValue", KKT + "propertyName", KKT + "constraint"
 RETRIES = 3
 COMMITTER = {"GIT_AUTHOR_NAME": "Morphogen catalog lookup", "GIT_AUTHOR_EMAIL": "registry-lookup@morphogen.invalid",
              "GIT_COMMITTER_NAME": "Morphogen catalog lookup", "GIT_COMMITTER_EMAIL": "registry-lookup@morphogen.invalid"}
@@ -247,6 +256,85 @@ def one_pass(conn, intent: Path) -> dict:
     return report
 
 
+def _value(c: dict):
+    v = c["object_value"]
+    return v.get("@value") if isinstance(v, dict) else v
+
+
+def needs(cur) -> dict[str, list[dict]]:
+    """Every need in the record: its requirements, each `<need> kkt:propertyValue "<value>"` qualified by
+    kkt:propertyName and kkt:constraint (current claims only)."""
+    cur.execute("""select id::text, subject, object_value, qualifiers from api.claims
+                   where predicate = %s and qualifiers ? %s and qualifiers ? %s and status <> 'deprecated'
+                     and redacted_at is null order by subject, id""", (VALUE, NAME, CONSTRAINT))
+    out: dict[str, list[dict]] = {}
+    for i, subj, val, q in cur.fetchall():
+        out.setdefault(subj, []).append({"id": i, "name": q[NAME], "constraint": q[CONSTRAINT],
+                                         "value": _value({"object_value": val})})
+    return out
+
+
+def entries(cur) -> dict[tuple[str, str], dict]:
+    """What catalog lookup recorded, per (entry, catalog): its properties as read from the record, each with the
+    claim it came from, and whether an enforced rule refuses it. Values are the catalog's own (R5-30)."""
+    cur.execute("""select id::text, subject, predicate, object_entity, object_value, qualifiers from api.claims
+                   where attributed_to = %s and status <> 'deprecated' and redacted_at is null
+                     and predicate = any(%s)""", (AGENT, [VALUE, DCT + "license", OWL_VERSION, DCT + "type", DCT + "isPartOf"]))
+    rows = cur.fetchall()
+    part = {}
+    for i, subj, pred, ent, val, q in rows:
+        if pred == DCT + "isPartOf" and (ent or "").startswith("urn:kk:catalog:"):
+            part.setdefault(subj, []).append(ent)
+    out: dict[tuple[str, str], dict] = {}
+    for i, subj, pred, ent, val, q in rows:
+        v = _value({"object_value": val}) if val is not None else None
+        q = q or {}
+        if pred == VALUE and q.get(DCT + "isPartOf") and NAME in q:
+            e = out.setdefault((subj, q[DCT + "isPartOf"]), {"properties": {}, "claims": {}, "refused": False})
+            if q[NAME].startswith("rule:"):
+                e["refused"] |= str(v).startswith("fails") and str(v).endswith("(enforced)")
+            else:
+                e["properties"][q[NAME]], e["claims"][q[NAME]] = v, i
+        elif pred in (DCT + "license", OWL_VERSION, DCT + "type"):
+            name = {DCT + "license": "licence", OWL_VERSION: "version", DCT + "type": "kind"}[pred]
+            v = (ent or "").removeprefix("urn:kk:component-kind:") if pred == DCT + "type" else v
+            for profile in part.get(subj, []):         # an entry's own facts hold in each catalog that lists it
+                e = out.setdefault((subj, profile), {"properties": {}, "claims": {}, "refused": False})
+                e["properties"].setdefault(name, v)
+                e["claims"].setdefault(name, i)
+    return out
+
+
+def match_needs(conn) -> dict:
+    """One pass of requirement matching over the record (T20): each need against each recorded entry, per catalog.
+    An entry every requirement holds for, and no enforced rule refuses, is offered: `<entry> kkt:fulfills <need>`,
+    inferred from the requirement claims and the property claims compared. Nothing is read from a catalog here,
+    and nothing a model said is used."""
+    report = {}
+    with conn.cursor() as cur:
+        wanted, found = needs(cur), entries(cur)
+        if not wanted:
+            return report
+        with run(cur, MODULE, {"match": sorted(wanted)}) as (run_id, outputs):
+            for need, reqs in sorted(wanted.items()):
+                got = []
+                for (subj, profile), e in sorted(found.items()):
+                    ok, results = match(reqs, {"properties": e["properties"]})
+                    if not ok or e["refused"]:
+                        continue
+                    premises = sorted({r["id"] for r in reqs} | {e["claims"][r["name"]] for r in reqs})
+                    digest = hashlib.sha256(json.dumps(premises).encode()).hexdigest()[:12]
+                    op = {"op": "add_claim", "subject": subj, "predicate": KKT + "fulfills", "object": {"entity": need},
+                          "evidence_type": "inferred", "derived_from": premises}
+                    cs = {"idempotency_key": f"match:{profile}|{subj}|{need}|{digest}", "attributed_to": AGENT,
+                          "target_scope": SCOPE, "ops": [op]}
+                    got.append({"entry": subj, "catalog": profile, "change_set": str(submit(cur, cs, run_id)["id"]),
+                                "why": [why for _, _, why in results]})
+                report[need] = got
+            outputs.update(offers=sum(len(x) for x in report.values()))
+    return report
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Search component catalogs; answer build requests from provider catalogs.")
     ap.add_argument("--once", action="store_true", help="one pass of the service, print the result and exit")
@@ -257,6 +345,7 @@ def main(argv=None) -> int:
     s.add_argument("--slot")
     s.add_argument("--kind")
     s.add_argument("--min-age-days", type=float, help="leave out releases newer than this (0: none; default: the policy's)")
+    sub.add_parser("match", help="match every recorded need against every recorded entry, and offer what holds")
     a = ap.parse_args(argv)
     intent = Path(os.environ.get("KK_INTENT_DIR", ROOT / "morphogen" / "intent")).resolve()
     conn = connect(os.environ.get("KK_ROLE", "kkm_registry_lookup"))
@@ -265,11 +354,14 @@ def main(argv=None) -> int:
                      | ({"min_age_days": a.min_age_days} if a.min_age_days is not None else {}))
         print(json.dumps(out, default=str))
         return 1 if "refused" in out else 0
-    step = lambda c: print(json.dumps(one_pass(c, intent), default=str), flush=True)  # noqa: E731
+    if a.cmd == "match":
+        print(json.dumps(match_needs(conn), default=str))
+        return 0
+    step = lambda c: print(json.dumps({"requests": one_pass(c, intent), "needs": match_needs(c)}, default=str), flush=True)  # noqa: E731
     if a.once:
         step(conn)
         return 0
-    follow(conn, step, wake=lambda e: DCT + "type" in (e["predicates"] or []))
+    follow(conn, step, wake=lambda e: bool({DCT + "type", VALUE} & set(e["predicates"] or [])))
     return 0
 
 

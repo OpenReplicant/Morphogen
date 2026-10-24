@@ -19,7 +19,7 @@ submit claims; their effects are observed.
 | map-gaps | gap-finder | Written (T13) | Rules new (system maps), shape from rebuild 4 `map-gaps`; 12 contract cases, 11 mutants |
 | encoder-compose | system-encoder | Written (T9) | New: a compose file as a TOSCA topology, every claim citing its line |
 | observer-prometheus | observer | Written (T9) | rebuild 4 `observer-prometheus`: request times from a service's metrics |
-| registry-lookup | catalog-lookup | Written (T14) | New (R5-30): component sets of any kind searched through adapters (`components`, `pypi`, `providers`); rules are toggles judged on every entry; an offered, pinned provider for a build request becomes a sandbox candidate |
+| registry-lookup | catalog-lookup | Written (T14, T20) | New (R5-30): component sets of any kind searched through adapters (`components`, `pypi`, `providers`); rules are toggles judged on every entry; an offered, pinned provider for a build request becomes a sandbox candidate; needs are matched against recorded entries by their requirements, deterministically (T20, R5-33) |
 
 The reconciler that runs the services an environment's intent describes is `../deploy/reconcile.py`.
 
