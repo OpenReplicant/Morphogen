@@ -4,7 +4,7 @@ results.  python3.12 morphogen/evals/rcaeval/variants.py DATASET STAT
   STAT  mean       the analyser's statistic (mean, population sd; None when sd is 0)
         mean-fb    the same, with rebuild 4's fallbacks for a flat history (|mean|/10, else 1.0)
         mean-fb10  mean-fb without the last fallback (a history flat at 0 still has no score)
-        robust     median and IQR (else sd, else |median|/10; None when all are 0)
+        robust-slide  median and IQR (else sd, else |median|/10; None when all are 0)
         robust-fb  the same, with the last fallback 1.0, as rebuild 4's robust_z
         <stat>-excl  a window scored above 3 is left out of the history after it
         r4-unrounded  rebuild 4's method (run.py robust) without rounding scores to one decimal
@@ -53,7 +53,7 @@ if STAT == "r4-unrounded":
     exec(src, rc.__dict__)
     res = rc.run(sys.argv[1], "robust", 60)
     print(STAT, sys.argv[1], res["avg@5"], res["avg@5_mean"]); sys.exit()
-stat = {"robust": robust, "mean": mean_sd, "mean-fb": mean_fb, "mean-fb10": mean_fb10, "robust-fb": robust_fb}[STAT.replace("-excl", "")]
+stat = {"robust-slide": robust, "mean": mean_sd, "mean-fb": mean_fb, "mean-fb10": mean_fb10, "robust-fb": robust_fb}[STAT.replace("-excl", "")]
 def factory(window):
     def method(data, inject_time=None, dataset=None, **kw):
         means = rc.windows(data, inject_time, window); scores = {}

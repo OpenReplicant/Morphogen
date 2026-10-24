@@ -25,5 +25,9 @@
     "main_sha256": "4e527f1f16736ef8353f7372bdbbd24270e6a383edb00f3a34b7a599d429e0e0",
     "package": "RCAEval 1.8.1 (PyPI)"
   },
-  "note": "the analyser before R5-28: no score for a flat history"
+  "note": "the analyser before R5-28 (no score for a flat history): run.py and detect.py at commit dd15118",
+  "analyser": {
+    "detect_sha256": "84796873f7a1fbd8575817f953bdd2f283fc893f53532c254a63812408371b24",
+    "commit": "dd15118"
+  }
 }

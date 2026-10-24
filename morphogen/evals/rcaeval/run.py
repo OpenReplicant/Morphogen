@@ -21,8 +21,7 @@ AC@1..AC@5 for the root-cause service.
             largest robust z (median, IQR, with fallbacks for flat baselines) after the injection against the
             windows before it. Rebuild 4's floor is this method's numbers
 
-Needs Python 3.12 (RCAEval's main.py refuses 3.13) with RCAEval 1.8.1 from PyPI (--no-deps) and pandas,
-pyarrow, numpy, scikit-learn, scipy, tqdm, requests, networkx, matplotlib. KK_EVAL_CACHE holds main.py and
+Needs Python 3.12 (RCAEval's main.py refuses 3.13) with requirements.txt here (RCAEval with --no-deps). KK_EVAL_CACHE holds main.py and
 the data (never committed). Results go to morphogen/evals/rcaeval/runs/<date>-<dataset>-<method>.json; EXPERIMENTS.md
 records every statistic tried (variants.py) and what was chosen.
 """
@@ -48,7 +47,7 @@ CACHE = Path(os.environ.get("KK_EVAL_CACHE") or Path.home() / ".cache/knowledge-
 COMMIT = "259ea4167160256a74ad30004aa3d96a998c846e"      # rebuild 4's pin
 MAIN = (f"https://raw.githubusercontent.com/phamquiluan/RCAEval/{COMMIT}/main.py",
         "4e527f1f16736ef8353f7372bdbbd24270e6a383edb00f3a34b7a599d429e0e0")
-FLOOR = {  # rebuild 4, eval/rcaeval/runs/2026-10-17-*-kernel-w60.json (Avg@5 mean)
+FLOOR = {  # rebuild 4, eval/rcaeval/runs/2026-10-17-*-kernel-w60.json (Avg@5 mean); its re2-tt had 63 of 90 cases
     "re1-ob": 0.894, "re1-ss": 0.922, "re1-tt": 0.800, "re2-ob": 0.935, "re2-tt": 0.643}
 SPAN = 600           # seconds before and after the injection, as RCAEval's default length (20 minutes)
 
@@ -136,9 +135,14 @@ def run(dataset: str, method: str, window: int) -> dict:
     if not scores:
         raise SystemExit(text[-2000:])
     mean = round(sum(scores.values()) / len(scores), 4)
+    detect = ROOT / "morphogen" / "modules" / "anomaly" / "anomaly" / "detect.py"
+    rules = re.search(r"^version: (\S+)", (ROOT / "morphogen" / "contract" / "slots" / "analyser" / "set.yaml").read_text(), re.M)
+    from importlib.metadata import version
     return {"benchmark": "RCAEval", "dataset": dataset, "method": name, "avg@5": scores, "avg@5_mean": mean,
             "chance@5": chance, "floor": {"rebuild4_kernel_w60": FLOOR.get(dataset)},
-            "rcaeval": {"commit": COMMIT, "main_sha256": MAIN[1], "package": "RCAEval 1.8.1 (PyPI)"}}
+            "rcaeval": {"commit": COMMIT, "main_sha256": MAIN[1], "package": "RCAEval 1.8.1 (PyPI)"},
+            "analyser": {"detect_sha256": hashlib.sha256(detect.read_bytes()).hexdigest(), "slot_set": rules.group(1)},
+            "packages": {p: version(p) for p in ("numpy", "pandas", "scipy", "scikit-learn")}}
 
 
 def main(argv=None) -> int:

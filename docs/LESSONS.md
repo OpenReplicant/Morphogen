@@ -32,7 +32,9 @@ tools here were checked by experiment (details in `docs/spikes/` and the decisio
   static and can be copied out of its image.
 - **RCAEval** main.py at rebuild 4's pin refuses Python 3.13: run it under 3.12. RE2-OB and RE2-TT
   unpack to 21 GB (logs.csv, traces.csv, metrics.csv per case) and filled the session's disk; metrics
-  methods read only `simple_metrics.csv`, so delete the rest after unpacking (456 MB left). main.py
+  methods read only `simple_metrics.csv` (and `inject_time.txt`), so unpack only those (RE2-TT: 531 MB). A zip unpacked
+  onto a full disk leaves a partial dataset that main.py scores without complaint (RE2-TT held 55 of 90 cases,
+  as rebuild 4's held 63): count `*/*/simple_metrics.csv` before trusting a number. main.py
   skips a download when the dataset directory exists, so a second cache can symlink `data/`.
 - Pick dependency versions at least ~2 weeks old (Cytoscape 3.34.4 was a day old; 3.34.3 was used),
   and check npm tarballs against the registry's integrity hash before vendoring.

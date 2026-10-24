@@ -159,7 +159,8 @@ def main() -> None:
                 SOSA + "observedProperty", LAG))
             check(obs[0][1] > 1.0, f"monitor: the observer records the lag from OpenTelemetry ({obs[0][1]:g} s)")
             anomaly = wait("an anomaly", lambda: q("select subject from api.claims where predicate = %s and object_entity = %s "
-                                                   "and attributed_to = 'urn:kk:agent:anomaly'", OA + "hasTarget", BELIEF))[0][0]
+                                                   "and attributed_to = 'urn:kk:agent:anomaly' and subject in (select subject from "
+                                                   "api.claims where object_entity = 'urn:kk:anomaly-kind:limit')", OA + "hasTarget", BELIEF))[0][0]
             check(anomaly.startswith("urn:kk:anomaly:"), "analyse: the lag over the limit is an anomaly on the belief model")
             queue = wait("a plan in the review queue", lambda: q("select id, ops from api.review_queue where attributed_to = 'urn:kk:agent:planner'"))
             check(len(queue) == 1, "plan: one plan, waiting for a person (the store forces review for plan steps)")

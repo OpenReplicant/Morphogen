@@ -78,7 +78,8 @@ def anomalies(observations: list[dict], limits: list[dict]) -> list[dict]:
             if z is not None and z > Z:
                 mean, flat = statistics.fmean(values), statistics.pstdev(values) == 0
                 add("zscore", f"{name}: {pname} {v:g} " + (
-                    f"departs from the flat value {mean:g} of the previous {len(values)} windows (score {z:.1f})."
+                    f"departs from the flat value {mean:g} of the previous {len(values)} windows by "
+                    + (f"{z:.1f} tenths of it." if mean else f"{z:g}.")
                     if flat else f"is {z:.1f} standard deviations from the mean {mean:g} of the previous "
                     f"{len(values)} windows."), [str(c["id"])] + [str(h["id"]) for h in history])
     return out
