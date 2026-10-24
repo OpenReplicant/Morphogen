@@ -15,18 +15,18 @@
     {
       "id": "m01",
       "correct": true,
-      "cited": 2,
+      "cited": 3,
       "resolved": true,
       "belief": true,
-      "answer": "Two providers fill lane-policy: record-postgres (claim 539f5f2c-5168-41c4-ad55-59ca089641fc, belief 0.50) and lane-autonomy (claim e5e33674-9b9c-4db4-8205-1ed0e50c0b99, belief 0.50)."
+      "answer": "Two providers fill the lane-policy slot: lane-autonomy (claim a28bdce6-ab03-4ed1-9e7c-7fb8a171b8d7, belief 0.50) and record-postgres (claim d1c73962-7a8d-4cbe-9496-0484a26357ae, belief 0.50). The slot's cardinality claim is \"one\" (claim feeb57be-e096-40f0-93fb-fbde4a9a5232, belief 0.50), so the two fillers conflict with it and the kernel does not say which one is correct."
     },
     {
       "id": "m02",
       "correct": true,
-      "cited": 2,
+      "cited": 3,
       "resolved": true,
       "belief": true,
-      "answer": "Two providers fill observer: observer-otel (claim d30c05b0-3fad-4cf0-bfd6-d4cfd768a360, belief 0.50) and observer-prometheus (claim c5f0334d-243d-4bd2-98b2-cdd5f0f721c2, belief 0.50)."
+      "answer": "Two providers fill the observer slot: observer-otel (claim 364d02ca-4906-4ab1-b86a-a08ddbbec936, belief 0.50) and observer-prometheus (claim 2b6ee493-45e1-4d22-8b2a-2fcbc5bdf466, belief 0.50). The slot's cardinality is \"many\" (claim ac3f0fc1-d1f4-4cda-ba03-8e238f35417b, belief 0.50), so both are allowed."
     },
     {
       "id": "m03",
@@ -34,7 +34,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "encoder-compose fills the system-encoder slot (claim 8298a286-ac56-4d9d-9121-3b1db19f30bd, belief 0.50)."
+      "answer": "The encoder-compose provider fills the system-encoder slot (claim 915d56cf-7f16-476a-8eb6-499d6f2b7e75, belief 0.50)."
     },
     {
       "id": "m04",
@@ -42,7 +42,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "prediction-verifier fills the outcome-verifier slot (claim 3d6dd922-4566-4b15-9c29-bf7081cbcc1e, belief 0.50). No other provider fills it in the claims returned."
+      "answer": "The prediction-verifier provider fills the outcome-verifier slot (claim d20b97f8-4850-4b93-9e33-b6da884983ce, belief 0.50)."
     },
     {
       "id": "m05",
@@ -50,7 +50,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "The morphogen distribution's owl:versionInfo is 0.1.0 (claim 4240725c-f1f9-48b6-b78a-5c88bee79130, belief 0.50)."
+      "answer": "The morphogen distribution is version 0.1.0 (claim baa245e3-a3f9-4d52-af29-fbacb20de4d6, belief 0.50)."
     },
     {
       "id": "m06",
@@ -58,7 +58,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "anomaly fills the analyser slot (claim d41974e7-0beb-40a2-9c3a-f9a0c52229f2, belief 0.50)."
+      "answer": "The anomaly provider fills the analyser slot (claim b9f3d6e0-78b1-4cc6-bc7b-e89fcdd4c0f3, belief 0.50)."
     },
     {
       "id": "m07",
@@ -66,15 +66,15 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "The system-encoder slot's cardinality is \"many\" (claim 8f1e1f04-170c-409e-bd65-4d42fdbab9ea, belief 0.50), so any number of providers may fill it at once."
+      "answer": "The system-encoder slot has cardinality \"many\", so any number of providers may fill it at once (claim 696756df-80f3-4df7-85f4-c0b63a7a6c75, belief 0.50)."
     },
     {
       "id": "m08",
       "correct": true,
-      "cited": 1,
+      "cited": 2,
       "resolved": true,
       "belief": true,
-      "answer": "In podinfo, the frontend connects to the backend (claim 266dc989-64ba-4a6a-a9f5-6a303986eba5, belief 0.50)."
+      "answer": "In podinfo, the frontend connects to the backend (claim a2550cbd-b371-4586-a80e-6e744518767a, belief 0.50). Its command also points at the backend URL (claim 8cb23781-74c4-4a04-a14b-9bd00843fa15, belief 0.50)."
     },
     {
       "id": "m09",
@@ -82,7 +82,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "The backend connects to redis, so backend is the service that connects to redis (claim b2387756-6ec8-4b9a-82a0-ac8d7d078265, belief 0.50)."
+      "answer": "The backend service connects to redis (claim f7c961e7-c491-4f18-8d7d-6a4b0a4c27ae, belief 0.50). No claim has the frontend connecting to redis."
     },
     {
       "id": "m10",
@@ -90,7 +90,7 @@
       "cited": 3,
       "resolved": true,
       "belief": true,
-      "answer": "The podinfo system has three services: frontend (claim 16c4b0b1-8bf4-425b-ab98-8b400478129f, belief 0.50), backend (claim f2414317-4f5c-4508-9755-b9c8f90a9fa4, belief 0.50) and redis (claim ae38a7f1-b4ec-4c92-9234-cdd43230bc9c, belief 0.50), each recorded as memberOf podinfo."
+      "answer": "The podinfo system has three services: frontend (claim 95a6a8b2-3a4e-4796-88cb-19c30e9a0fe3, belief 0.50), backend (claim 8b587350-4f03-4ca7-a06c-f6947cd953e8, belief 0.50) and redis (claim e92e21b8-5e4c-4851-a6fb-769f714141ca, belief 0.50). Each is linked to the system by a memberOf claim."
     },
     {
       "id": "m11",
@@ -98,7 +98,7 @@
       "cited": 2,
       "resolved": true,
       "belief": true,
-      "answer": "PODINFO_RANDOM_DELAY_MAX is set to \"600\" on podinfo:backend (claim 0467ee00-36ea-4e3e-a19b-11e73b8fa28f, belief 0.50). A companion claim gives PODINFO_RANDOM_DELAY_UNIT as \"ms\" (claim c27ae781-5ff4-42ae-8e7d-544d50c171d1, belief 0.50), so the unit is likely milliseconds, though the claims do not state that outright."
+      "answer": "PODINFO_RANDOM_DELAY_MAX is set to 600 on the podinfo backend (claim 30839687-50ee-43f3-a8d7-276f0c211a56, belief 0.50). Its unit is ms (claim 40fb124f-2bb0-4337-8bdf-70e74e48518a, belief 0.50)."
     },
     {
       "id": "m12",
@@ -106,7 +106,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "sandbox fills the sandbox slot (claim 94894e40-ed64-41a6-b7f0-2d5c63078e35, belief 0.50)."
+      "answer": "The sandbox provider fills the sandbox slot (claim a8459a5f-dc80-4cb6-b8a7-ae3a92cf339f, belief 0.50)."
     }
   ]
 }

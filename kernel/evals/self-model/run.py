@@ -20,13 +20,15 @@ answered from its self-model by an agent over the kernel MCP server, citing clai
 
 Graded as rebuild 4 graded it (scripts/eval_self.py):
   correct   every `expect` term (or the value `expect_from` reads, file:key) appears in the answer and is the
-            subject or object of a claim the answer cites (grounded); no `exclude` term is both named and
-            backed by a cited claim of the question's predicate
+            answer side of a cited claim that matches the question's evidence pattern (its predicate, its
+            fixed subject or object, its qualifiers) and was not made by the graded agent; no `exclude` term
+            is both named and the answer side of a cited claim of the question's predicate. Stricter than
+            rebuild 4, which took any cited claim's subject or object (R5-27 (c))
   cited     the answer cites at least one claim id, and every cited id resolves with `explain`
   belief    the answer shows belief (the word and a number)
 Passes (G7) at >= 90% correct, with every correct answer cited and showing belief. Rebuild 4's floor: 12/12
 with Claude Code (eval/self-model/runs/2026-10-16-claude-code.json). Answers are read and explained over
-MCP stdio as the agent's own login, which can read but not switch roles. Uses the PG* environment (a
+MCP stdio as the agent's own login, which cannot switch roles; a live agent gets only the read tools. Uses the PG* environment (a
 superuser) for setup and to locate the database.
 """
 from __future__ import annotations
@@ -81,12 +83,13 @@ def agent_login(db: str) -> str:
     ROLE = f"t_eval_self_{db}"[:63]                     # roles are the cluster's: one per database
     CACHE.mkdir(parents=True, exist_ok=True, mode=0o700)
     pw = secrets.token_urlsafe(24)
+    role = sql.Identifier(ROLE)
     with connect(url=f"dbname={db}") as su:
-        su.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{ROLE}') then "
-                   f"create role {ROLE} login; end if; end $$")
-        su.execute(sql.SQL("alter role {} password {}").format(sql.Identifier(ROLE), sql.Literal(pw)))
-        su.execute(f"grant kk_agent to {ROLE}")
-        su.execute(f'grant connect on database "{db}" to {ROLE}')
+        if su.execute("select 1 from pg_roles where rolname = %s", (ROLE,)).fetchone() is None:
+            su.execute(sql.SQL("create role {} login").format(role))
+        su.execute(sql.SQL("alter role {} password {}").format(role, sql.Literal(pw)))
+        su.execute(sql.SQL("grant kk_agent to {}").format(role))
+        su.execute(sql.SQL("grant connect on database {} to {}").format(sql.Identifier(db), role))
         su.execute("set role kk_owner")
         su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, %s, 'software', 'Self-model eval agent')"
                    " on conflict do nothing", (AGENT, ROLE))
@@ -103,6 +106,7 @@ def setup(db: str, distributions: list[str] = (), providers: list[str] = (), ins
     import install as kernel_install
     encoder = importlib.import_module("self_encoder.__main__")
     subprocess.run(["dropdb", "--if-exists", "--force", db], check=True)
+    subprocess.run(["dropuser", "--if-exists", f"t_eval_self_{db}"[:63]], check=True)   # a login left from before
     (install or (lambda d: kernel_install.install(d, PROVIDERS)))(db)
     os.environ["DATABASE_URL"] = f"dbname={db}"
     for r in encoder.scan(ROOT, list(distributions), [], list(providers)):
@@ -147,6 +151,10 @@ async def call_one(url: str, name: str, args: dict):
 
 
 # ------------------------------------------------------------------ answering and grading
+
+def expand(term: str) -> str:
+    return str(term)
+
 
 def local(iri: str) -> str:
     return re.split(r"[#/:]", str(iri).rstrip("/#"))[-1]
@@ -206,11 +214,16 @@ async def grade(url: str, questions: list[dict], answers: list[dict]) -> list[di
                 except (RuntimeError, KeyError, TypeError):
                     explained.append(None)
             resolved = bool(cited) and all(explained)
-            grounded = set().union(*({local(c["subject"]).lower(), obj(c).lower()} for c in explained if c))
-            pred = q["evidence"]["predicate"].split(":")[-1]
-            asserted = {(local(c["subject"]) if q["answer"] == "subject" else obj(c)).lower()
-                        for c in explained if c and re.split(r"[#/]", c["predicate"])[-1] == pred}
-            correct = all(e.lower() in words and e.lower() in grounded for e in expected(q)) and \
+            ev = q["evidence"]
+            pred = ev["predicate"].split(":")[-1]
+            side = (lambda c: local(c["subject"]).lower()) if q["answer"] == "subject" else (lambda c: obj(c).lower())
+            of_pred = [c for c in explained if c and re.split(r"[#/]", c["predicate"])[-1] == pred]
+            # Backing: a cited claim that answers this question (the evidence pattern's fixed side, its
+            # qualifiers), made by someone other than the agent being graded.
+            backing = {side(c) for c in of_pred if c.get("attributed_to") != AGENT and matches(c, ev)
+                       and all(local(c[k]) == local(expand(ev[k])) for k in ("subject", "object_entity") if k in ev)}
+            asserted = {side(c) for c in of_pred}
+            correct = all(e.lower() in words and e.lower() in backing for e in expected(q)) and \
                 not any(x.lower() in asserted and x.lower() in words for x in q.get("exclude", []))
             belief = bool(BELIEF.search(text))
             results.append({"id": q["id"], "correct": correct, "cited": len(cited), "resolved": resolved,
@@ -253,6 +266,10 @@ def prompt(questions: list[dict]) -> str:
     return PROMPT + "\n".join(f"- {q['id']}: {q['question']}" for q in questions)
 
 
+READ_TOOLS = ["search", "query_claims", "get_entity", "explain", "list_slots", "list_modules", "graph", "whoami"]
+WRITE_TOOLS = ["start_run", "submit_change_set", "finish_run", "review"]
+
+
 def claude(url: str, questions: list[dict], model: str) -> list[dict]:
     import tempfile
     env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", ""), "KK_DATABASE_URL": url,
@@ -264,8 +281,11 @@ def claude(url: str, questions: list[dict], model: str) -> list[dict]:
         f.touch(mode=0o600)
         f.write_text(json.dumps(config))
         out = subprocess.run(["claude", "-p", prompt(questions), "--model", model, "--mcp-config", str(f),
-                              "--strict-mcp-config", "--allowedTools", "mcp__kernel", "--output-format", "json"],
-                             capture_output=True, text=True, timeout=1800, cwd=d)
+                              "--strict-mcp-config", "--allowedTools", ",".join(f"mcp__kernel__{t}" for t in READ_TOOLS),
+                              "--disallowedTools", ",".join(f"mcp__kernel__{t}" for t in WRITE_TOOLS), "--output-format", "json"],
+                             capture_output=True, text=True, timeout=1800, cwd=d,
+                             env={k: v for k, v in os.environ.items()    # none of the record's settings
+                                  if not k.startswith(("PG", "KK_")) and k != "DATABASE_URL"})
     if out.returncode:
         raise SystemExit(f"claude -p failed: {(out.stderr or out.stdout)[-800:]}")
     result = json.loads(out.stdout)["result"]

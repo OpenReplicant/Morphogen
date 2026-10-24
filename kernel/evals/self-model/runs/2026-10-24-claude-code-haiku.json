@@ -2,8 +2,8 @@
   "set": "kernel/evals/self-model/questions.yaml",
   "agent": "claude-code-haiku",
   "questions": 12,
-  "correct": 12,
-  "accuracy": 1.0,
+  "correct": 11,
+  "accuracy": 0.9167,
   "citations_resolve": true,
   "belief_shown": true,
   "passed": true,
@@ -15,10 +15,10 @@
     {
       "id": "q01",
       "correct": true,
-      "cited": 1,
+      "cited": 2,
       "resolved": true,
       "belief": true,
-      "answer": "validator-shacl fills the validator slot (claim cdb77b49-814d-47a4-b08d-2e4db51e8b54, belief 0.50). It is the only fills claim for that slot in the kernel."
+      "answer": "validator-shacl fills the validator slot (claim 26b3534a-454c-4edc-b707-5c42266da0e3, belief 0.50; slot cardinality 'many', claim 65a557cf-5858-43b0-ae84-e12d9b0bb1df, belief 0.50)."
     },
     {
       "id": "q02",
@@ -26,7 +26,7 @@
       "cited": 4,
       "resolved": true,
       "belief": true,
-      "answer": "record-postgres fills four slots: record-store (claim 85f283d5-83d9-4136-9213-06d28957099c, belief 0.50), write-pipeline (claim 75f0fc13-13d9-4642-b36d-ebc33a754b21, belief 0.50), lane-policy (claim baaba242-a488-446d-9df7-4154837b2e57, belief 0.50), and change-feed (claim e226a1c9-a51c-4891-ad95-a6e0bb5fb73b, belief 0.50)."
+      "answer": "record-postgres fills four slots: record-store (claim 43612ce4-6cd6-4fd5-ace9-329cea314713, belief 0.50), write-pipeline (claim e885847b-631e-4fc1-91ed-b1526a6e196e, belief 0.50), lane-policy (claim 64f757a4-0fd7-4033-b007-1bbcb3260e9c, belief 0.50), and change-feed (claim 7200b554-9980-4dd0-91bc-eec00ee88907, belief 0.50)."
     },
     {
       "id": "q03",
@@ -34,7 +34,7 @@
       "cited": 2,
       "resolved": true,
       "belief": true,
-      "answer": "kernel-mcp provides the agent-interface slot (claim d962a8f1-e888-488b-a7cb-a7d12820042f, belief 0.50). The slot's contract is \"MCP tools (read + propose)\" (claim 8b7b9f87-d6d6-4840-bb6e-2a767bbed931, belief 0.50)."
+      "answer": "kernel-mcp provides the agent-interface slot (claim a71c0399-b5d9-49d0-bfd7-4b31ec122d35, belief 0.50). The slot's contract is 'MCP tools (read + propose)' (claim dac8edf2-79ec-4318-a8e2-2e9f31aea1db, belief 0.50)."
     },
     {
       "id": "q04",
@@ -42,7 +42,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "kernel-mcp is at version 0.8.0 (claim b06d8326-d8fc-4c70-9bbf-cfd00fb07564, belief 0.50)."
+      "answer": "kernel-mcp is at version 0.8.0 (claim bee9b5f4-da2d-42b9-bc15-b1ff42406853, belief 0.50)."
     },
     {
       "id": "q05",
@@ -50,7 +50,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "belief-corroboration is released under Apache-2.0, per its dcterms:license claim pointing to https://spdx.org/licenses/Apache-2.0 (claim 5604b4d6-90bc-41f8-8768-44d86966a7bd, belief 0.50)."
+      "answer": "belief-corroboration is released under Apache-2.0, per the SPDX license claim (claim 43d297f1-d6a1-44d5-8399-553a004067f5, belief 0.50)."
     },
     {
       "id": "q06",
@@ -58,7 +58,7 @@
       "cited": 2,
       "resolved": true,
       "belief": true,
-      "answer": "The belief-model slot has cardinality \"one\", so at most one provider may fill it at once (claim 57b2c241-f0cb-4a3b-92b8-8e2ae43f40f6, belief 0.50). belief-corroboration is the provider that fills it (claim 08b78bda-5c81-4537-8de6-d2abc4983b6d, belief 0.50)."
+      "answer": "The belief-model slot's cardinality is 'one', so at most one provider may fill it at once (claim fcac4616-2eba-4131-99fc-189c1f474ea5, belief 0.50). The only provider claiming to fill it is belief-corroboration (claim e5712260-21f3-4c4e-b840-358750e3a4c9, belief 0.50)."
     },
     {
       "id": "q07",
@@ -66,7 +66,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "pack-loader fills the vocabulary-pack slot (claim 5ec50ba2-726c-4638-a74f-ae14ac075bc1, belief 0.50)."
+      "answer": "pack-loader fills the vocabulary-pack slot (claim 7b9a3816-636e-4c91-9e13-1cffebcc0bb0, belief 0.50)."
     },
     {
       "id": "q08",
@@ -74,7 +74,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "verifier-quotes fills the verifier slot (claim e184432d-f187-4e1a-abc8-dc709a63b396, belief 0.50)."
+      "answer": "verifier-quotes fills the verifier slot (claim 9ee59835-7b1f-4773-928c-d3327fe0c0e5, belief 0.50)."
     },
     {
       "id": "q09",
@@ -82,7 +82,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "The recall slot declares \"Recall\" as its slotContract (claim 34d64dc3-b214-4c4e-9c0c-bc21696faf7e, belief 0.50)."
+      "answer": "The recall slot declares its slotContract as 'Recall' (claim f197a18b-04c5-435e-b544-e08e35c5640c, belief 0.50). The claims give no further detail on that contract's interface."
     },
     {
       "id": "q10",
@@ -90,7 +90,7 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "validator-shacl is at version 0.3.1 (claim 7a207799-cec8-4ae7-9619-27d9f42d3802, belief 0.50)."
+      "answer": "validator-shacl is at version 0.3.1 (claim b056e3e3-6e3b-47af-9535-7f09ca269292, belief 0.50)."
     },
     {
       "id": "q11",
@@ -98,15 +98,15 @@
       "cited": 1,
       "resolved": true,
       "belief": true,
-      "answer": "The validator slot has cardinality \"many\", so more than one provider may fill it at once (claim a65664dd-7f4d-4f39-8156-8c1599349517, belief 0.50)."
+      "answer": "The validator slot's cardinality is 'many', so any number of providers may fill it at once (claim 65a557cf-5858-43b0-ae84-e12d9b0bb1df, belief 0.50)."
     },
     {
       "id": "q12",
-      "correct": true,
+      "correct": false,
       "cited": 1,
-      "resolved": true,
+      "resolved": false,
       "belief": true,
-      "answer": "The evaluator provider fills the evaluator slot (claim e5a68018-4d68-4169-a8a8-201a5ee691f1, belief 0.50)."
+      "answer": "The evaluator provider fills the evaluator slot (claim ae1383fb-a863-48a8-8bff-1897a85d400d, belief 0.50)."
     }
   ]
 }

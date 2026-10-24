@@ -116,8 +116,9 @@ def scan(repo: Path, distributions: list[str], forget: list[str] = (), providers
                     "where attributed_to = %s and starts_with(idempotency_key, %s) and status = 'applied'",
                     (len(KEY) + 1, AGENT, KEY))
         current = {rel for rel, _ in seen}
-        gone = [rel for (rel,) in cur.fetchall() if rel not in current and rel.startswith(("kernel/blueprint/", *scanned))
-                and not (repo / rel).exists()]
+        gone = [rel for (rel,) in cur.fetchall() if rel not in current and not (repo / rel).exists()
+                and (rel == "kernel/blueprint/slots.yaml"           # a provider file, never a distribution under it
+                     or (Path(rel).name == "provider.yaml" and Path(rel).parent.parent.as_posix() + "/" in scanned))]
         gone += [str(Path(f).resolve().relative_to(repo.resolve())) for f in forget]
         for rel in sorted(set(gone)):
             results.append(record(cur, rel, None, [], {"file": rel, "removed": True}))
