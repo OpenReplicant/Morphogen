@@ -13,6 +13,9 @@ A node of a managed system (urn:kk:node:<system>:<service>, R5-25) is planned fo
 anomalous node first, then the nodes it connects to (kkt:connectsTo, breadth first, as recorded by the
 agents in KK_MAP_AGENTS), and the step goes to the first whose compose file sets the action's setting;
 the connections followed join the plan's premises.
+A plan whose reach exceeds the blast radius budget (autonomy.yaml guards.blast_radius_budget_slots) is refused
+before review: its reach is the node its step changes and every node that depends on it, transitively
+(kkt:dependsOn and its subproperties on the map, kk.graph; R5-32).
 A build request is answered by the candidates recorded for it (`<provider> dcterms:source <request>` by the agents
 in KK_BUILDER_AGENTS: the builder and catalog lookup, R5-30): the fastest the sandbox measured as better than the
 incumbent and within the limit becomes a replace plan.
@@ -32,6 +35,7 @@ from pathlib import Path
 
 import yaml
 
+from kk import graph
 from kk.lib import connect, follow, run, submit
 from morphogen.experiments import ROOT, provider_slots, run_name
 from morphogen import systems
@@ -97,11 +101,25 @@ def on_map(cur, intent: Path, start: str, name: str, mappers: list[str]):
     return None
 
 
+def beyond_budget(dependencies, target: str, budget) -> dict | None:
+    """A refusal when the step on `target` reaches more nodes than the budget allows, else None."""
+    if budget is None:
+        return None
+    dependents = graph.closure(dependencies, target, reverse=True)
+    if 1 + len(dependents) <= int(budget):
+        return None
+    return {"none": f"the step on {target} reaches {1 + len(dependents)} nodes (it and those depending on it: "
+                    f"{', '.join(sorted(dependents))}), over the blast radius budget of {budget}",
+            "reach": [target, *sorted(dependents)], "via": sorted({i for path in dependents.values() for i in path})}
+
+
 def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:encoder-compose",)) -> dict:
     acts, policy = actions(intent), autonomy(intent)
     lane = lambda risk: route(policy, level(policy, MODULE), risk)
+    budget = (policy.get("guards") or {}).get("blast_radius_budget_slots")
     report = {}
     with conn.cursor() as cur:
+        dependencies = graph.edges(cur, agents=list(mappers))
         claims = rows(cur, f"""select {COLUMNS} from api.claims where subject like 'urn:kk:anomaly:%%'
                                and status <> 'deprecated'""")
         anomalies: dict[str, dict] = {}
@@ -174,6 +192,10 @@ def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:e
                 report[a["iri"]] = got
                 continue
             p = got["plan"]
+            over = beyond_budget(dependencies, p["target"], budget)
+            if over:
+                report[a["iri"]] = over
+                continue
             with run(cur, MODULE, {"anomaly": a["iri"], "target": a["target"], "step_target": p["target"]},
                      used=p["premises"]) as (run_id, outputs):
                 res = submit(cur, change_set(p, AGENT, SCOPE, lane(p["risk"])), run_id)
