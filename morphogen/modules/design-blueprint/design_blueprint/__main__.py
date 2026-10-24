@@ -71,6 +71,8 @@ def propose(conn, name: str, intent: Path) -> dict:
         cur.execute(blueprint.MAP, blueprint.params(name))
         cols = [d.name for d in cur.description]
         claims = [dict(zip(cols, r)) for r in cur.fetchall()]
+        if not claims:
+            return {"refused": f"nothing is described for {name} yet"}
         try:
             text = blueprint.render(blueprint.described(claims, name), name)
         except blueprint.Conflict as e:
