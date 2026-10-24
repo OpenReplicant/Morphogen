@@ -41,7 +41,7 @@ slots:
   - id: observer
     phase: monitor
     cardinality: many
-    default: observer-otel                     # OTLP/HTTP receiver -> SOSA observations; observer-prometheus to port
+    default: observer-otel                     # OTLP/HTTP receiver -> SOSA observations; observer-prometheus scrapes metrics endpoints (R5-25)
     contract: provider-tests
     status: written
   - id: analyser

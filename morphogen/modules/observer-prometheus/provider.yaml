@@ -1,0 +1,11 @@
+id: urn:kk:provider:observer-prometheus
+name: 'Observer: Prometheus metrics endpoints'
+version: 0.1.0
+license: Apache-2.0
+slots: [observer]
+origin: rewrite (T9, R5-25) of OpenReplicant/kernel (rebuild 4) modules/observer-prometheus, which queried a Prometheus server; this one scrapes the services' own endpoints
+requires: Python 3.12+, psycopg, PyYAML
+migration: migration.sql
+service: python3 -m observer_prometheus
+tests: [python3 tests/test_observe.py]
+note: scrapes each target's metrics at every window boundary; each window becomes one change set of SOSA observations
