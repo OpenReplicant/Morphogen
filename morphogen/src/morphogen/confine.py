@@ -20,7 +20,13 @@ What a confined run can reach:
   processes  at most RLIMIT_NPROC of them, no core files, files up to RLIMIT_FSIZE; `Lease.kill_all`
              ends every process whose real uid is the leased user (kill(-1) from a process running as
              it, so setuid children too), until none is left.
-Not confined: the network. A run can reach any address the host can (R5-24 (f)).
+  network    only the addresses its lease allows (`lease(allow=...)`: the record's address, the telemetry
+             endpoint, a model API the operator names), by an nftables chain of the leased user's own
+             (table inet kk_confine, matched on the socket's uid); anything else is rejected, loopback
+             included, and with no lease the chain rejects everything. Names are resolved when the lease
+             starts and the code gets no DNS: give it addresses, or names /etc/hosts answers. Unix sockets
+             are files, not network (a Postgres socket directory stays reachable; the Docker socket is
+             closed by its mode).
 """
 from __future__ import annotations
 
@@ -31,6 +37,7 @@ import os
 import pwd
 import resource
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -144,10 +151,54 @@ class Lease:
                 p.chmod(0o700 if p.is_dir() or p.stat().st_mode & 0o111 else 0o600)
 
 
+TABLE = "kk_confine"
+
+
+def _nft(script: str) -> None:
+    try:
+        out = subprocess.run(["nft", "-f", "-"], input=script, capture_output=True, text=True)
+    except FileNotFoundError:
+        raise Unconfined("nft is not installed: a confined run's network cannot be limited (install nftables)") from None
+    if out.returncode:
+        raise Unconfined(f"nft refused the run user's chain: {out.stderr.strip()[-300:]}")
+
+
+def addresses(allow) -> list[tuple[str, int]]:
+    """(address, port) for each (host, port) allowed; a socket directory (a path) needs no address."""
+    out = set()
+    for host, port in allow:
+        host = str(host).strip("[]")
+        if not host or host.startswith("/"):
+            continue
+        try:
+            infos = socket.getaddrinfo(host, int(port), type=socket.SOCK_STREAM)
+        except (socket.gaierror, ValueError) as e:
+            raise Unconfined(f"cannot allow {host}:{port} to a confined run: {e}") from None
+        out |= {(i[4][0], int(port)) for i in infos}
+    return sorted(out)
+
+
+def fence(user: pwd.struct_passwd, allow=()) -> list[tuple[str, int]]:
+    """Set the user's chain: TCP to the allowed addresses, nothing else (no allow: nothing at all)."""
+    uid, chain = user.pw_uid, f"u{user.pw_uid}"
+    got = addresses(allow)
+    rules = "".join(f"add rule inet {TABLE} {chain} {'ip6' if ':' in a else 'ip'} daddr {a} tcp dport {p} accept\n"
+                    for a, p in got)
+    listed = subprocess.run(["nft", "list", "chain", "inet", TABLE, "out"], capture_output=True, text=True).stdout
+    jump = "" if f'comment "{chain}"' in listed else f'add rule inet {TABLE} out meta skuid {uid} jump {chain} comment "{chain}"\n'
+    _nft(f"add table inet {TABLE}\n"
+         f"add chain inet {TABLE} out {{ type filter hook output priority 0 ; policy accept ; }}\n"
+         f"add chain inet {TABLE} {chain}\nflush chain inet {TABLE} {chain}\n{jump}{rules}"
+         f"add rule inet {TABLE} {chain} meta l4proto tcp reject with tcp reset\n"
+         f"add rule inet {TABLE} {chain} reject\n")
+    return got
+
+
 @contextlib.contextmanager
-def lease():
-    """A run user nobody else holds, for the life of the context. A user that already has processes is
-    refused, not cleared: they may be another program's that shares its uid."""
+def lease(allow=()):
+    """A run user nobody else holds, for the life of the context, reaching only the (host, port) pairs in
+    `allow` over the network. A user that already has processes is refused, not cleared: they may be
+    another program's that shares its uid."""
     LOCKS.mkdir(mode=0o700, parents=True, exist_ok=True)
     if LOCKS.stat().st_uid != os.geteuid() or LOCKS.stat().st_mode & 0o077:
         raise Unconfined(f"{LOCKS} must be this process's own and closed to others")
@@ -164,10 +215,12 @@ def lease():
             raise Unconfined(f"run user {u.pw_name} (uid {u.pw_uid}) already has processes {busy[:5]}: its uid may "
                              "belong to something else on this host (end them, or give it a uid of its own)")
         try:
+            fence(u, allow)
             yield got
         finally:
             try:
                 got.kill_all()
+                fence(u)
             finally:
                 fcntl.flock(f, fcntl.LOCK_UN)
             f.close()
@@ -234,10 +287,11 @@ print(json.dumps({"found": found, "errors": errors}))
 """
 
 
-def check_cluster(su, run: Lease, host: str, port: str) -> None:
+def check_cluster(su, run: Lease, host: str, port: str, reach: bool = True) -> None:
     """Refuse unless the cluster asks every connection for a password. `su`: a connection to the cluster (a
     superuser's, to read pg_hba_file_rules; otherwise only the probe decides); host, port: where the
-    confined code connects (a socket directory or a host name)."""
+    confined code connects (a socket directory or a host name); reach=False when its lease does not allow
+    that address (then not reaching it is the expected answer)."""
     try:
         bad = su.execute("""select line_number, type, database, user_name, auth_method, error from pg_hba_file_rules
                             where error is not null or auth_method in ('trust', 'ident', 'peer')""").fetchall()
@@ -256,7 +310,7 @@ def check_cluster(su, run: Lease, host: str, port: str) -> None:
                 raise Unconfined(f"pg_hba.conf line {line} ({method}) could let {run.name} in as a database role")
     roles = [r[0] for r in su.execute("select rolname from pg_roles where rolcanlogin").fetchall()]
     dbs = [r[0] for r in su.execute("select datname from pg_database where datallowconn").fetchall()]
-    hosts = [(host, True)] + [(h, False) for h in ("127.0.0.1", "::1") if h != host]
+    hosts = [(host, reach)] + [(h, False) for h in ("127.0.0.1", "::1") if h != host]
     with run.home() as h:
         env = {"PATH": "/usr/bin:/bin", "HOME": str(h), "PGPASSFILE": os.devnull, "PGSERVICEFILE": os.devnull}
         out = run.run([sys.executable, "-I", "-c", PROBE,
@@ -268,6 +322,15 @@ def check_cluster(su, run: Lease, host: str, port: str) -> None:
         raise Unconfined(f"the cluster probe could not reach {host}:{port} as {run.name}: {got['errors'][0]}")
     if got["found"]:
         raise Unconfined(f"the cluster lets {run.name} in without a password: {', '.join(got['found'][:5])}")
+
+
+def endpoint(url: str) -> tuple[str, str] | None:
+    """(host, port) of an http(s) URL, or None."""
+    from urllib.parse import urlsplit
+    u = urlsplit(url or "")
+    if u.scheme not in ("http", "https") or not u.hostname:
+        return None
+    return u.hostname, str(u.port or (443 if u.scheme == "https" else 80))
 
 
 def where(conninfo: str = "") -> tuple[str, str]:

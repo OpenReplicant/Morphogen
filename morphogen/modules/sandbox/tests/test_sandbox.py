@@ -24,7 +24,7 @@ from psycopg.types.json import Jsonb  # noqa: E402
 from kk.lib import connect  # noqa: E402
 import yaml  # noqa: E402
 from morphogen import confine  # noqa: E402
-from sandbox.measure import contract, drop_login, experiment, fresh_login, service_cases  # noqa: E402
+from sandbox.measure import contract, drop_login, experiment, fresh_login, sandbox_cluster, service_cases  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -64,14 +64,15 @@ PROBE = """    import pathlib, pwd, psycopg
         pwd.getpwuid(os.getuid()).pw_name,
         _try(lambda: pathlib.Path(f"/proc/{{os.getppid()}}/environ").read_bytes()),
         _try(lambda: psycopg.connect(dbname="postgres", user="postgres", connect_timeout=5).close()),
-        _try(lambda: psycopg.connect(os.environ["DATABASE_URL"], dbname={record!r}, connect_timeout=5).close())]))
+        _try(lambda: psycopg.connect(os.environ["DATABASE_URL"], dbname={record!r}, host={rhost!r}, port={rport!r},
+                                     connect_timeout=5).close())]))
 """
 
 
 def confined(provider: Path, db: str) -> tuple[dict, dict]:
     """The rule and service cases on one provider directory, run as measure() runs them."""
     bench = yaml.safe_load((ROOT / "morphogen" / "contract" / "slots" / "analyser" / "benchmark.yaml").read_text())
-    with confine.workspace() as ws, confine.lease() as run, run.home() as h:
+    with sandbox_cluster(), confine.workspace() as ws, confine.lease(allow=[confine.where()]) as run, run.home() as h:
         (ws / "p").mkdir(mode=0o755)
         copy = ws / "p" / provider.name
         confine.copy_tree(provider, copy)
@@ -105,7 +106,7 @@ def main() -> None:
     probe = drop / "probe.txt"
     m = exp / "anomaly-recent" / "anomaly_recent" / "__main__.py"
     hook = 'def one_pass(conn, seen: dict | None = None) -> dict:\n'
-    m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe), record=DB), 1))
+    m.write_text(m.read_text().replace(hook, hook + PROBE.format(path=str(probe), record=DB, rhost=confine.where()[0], rport=confine.where()[1]), 1))
     broken = tmp / "broken" / "anomaly-recent"
     shutil.copytree(exp / "anomaly-recent", broken)
     d = broken / "anomaly_recent" / "detect.py"
@@ -164,6 +165,19 @@ def main() -> None:
     priv.mkdir(mode=0o700)
     old_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
+    # Provider code is measured only on a cluster of its own (R5-26): not without one, not on the record's.
+    sbx = os.environ.pop("KK_SANDBOX_CLUSTER")
+    for given, why in ((None, "is not set"), (f"host={confine.where()[0]} port={confine.where()[1]} user={os.environ['PGUSER']} "
+                                                       f"password={os.environ.get('PGPASSWORD', '')}", "is the record's cluster")):
+        if given:
+            os.environ["KK_SANDBOX_CLUSTER"] = given
+        try:
+            with connect("kkm_sandbox", url) as record:
+                experiment(cheat_exp, record, priv)
+            check(False, "the sandbox measures on the record's cluster")
+        except confine.Unconfined as e:
+            check(why in str(e), f"the sandbox refuses to measure when KK_SANDBOX_CLUSTER {why} ({e})")
+    os.environ["KK_SANDBOX_CLUSTER"] = sbx
     run_as = os.environ.pop("KK_RUN_AS")
     try:
         with connect("kkm_sandbox", url) as record:
@@ -185,6 +199,24 @@ def main() -> None:
     pid = int(left_pid.read_text())
     check(not Path(f"/proc/{pid}").exists() or "zombie" in Path(f"/proc/{pid}/status").read_text().lower(),
           "a process the candidate started in a session of its own does not outlive its run")
+
+    # The network (R5-26): a confined run reaches the addresses its lease allows and nothing else, loopback
+    # included; once the lease ends its user reaches nothing.
+    import socket
+    ok, no = socket.create_server(("127.0.0.1", 0)), socket.create_server(("127.0.0.1", 0))
+    reach = (f"import socket\nfor h, p in [('127.0.0.1', {ok.getsockname()[1]}), ('127.0.0.1', {no.getsockname()[1]}), "
+             "('1.1.1.1', 443)]:\n    try:\n        socket.create_connection((h, p), timeout=3).close(); print('open')\n"
+             "    except OSError:\n        print('closed')\n")
+    try:
+        with confine.lease(allow=[("127.0.0.1", ok.getsockname()[1])]) as run:
+            got = run.run([sys.executable, "-I", "-c", reach], {"PATH": "/usr/bin:/bin"}, timeout=60, cwd="/").stdout.split()
+            check(got == ["open", "closed", "closed"], f"a confined run reaches only the address its lease allows ({got})")
+            user = run.user
+        rest = subprocess.run([sys.executable, "-I", "-c", reach], user=user.pw_uid, group=user.pw_gid, extra_groups=[],
+                              env={"PATH": "/usr/bin:/bin"}, cwd="/", capture_output=True, text=True, timeout=60).stdout.split()
+        check(rest == ["closed"] * 3, f"after its lease the run user reaches nothing ({rest})")
+    finally:
+        ok.close(), no.close()
 
     # A process already running as a run user (another program sharing its uid) is refused, never killed.
     first = confine.pool()[0]
@@ -233,16 +265,18 @@ def main() -> None:
     check(who.startswith("kk_sbx_") and set(creds.split(",")) <= {"-", "PGHOST", "PGPORT"} and sees == "False",
           f"the candidate runs as a login made for its run ({who}), with no other credentials ({creds}), "
           "and cannot see the run files")
-    check(record == "closed", "that login cannot connect to the record's database")
+    check(record == "closed", "that login cannot reach the record's cluster")
     check(os_user in os.environ["KK_RUN_AS"].split(",") and parent_env == "closed" and superuser == "closed",
           f"the candidate runs as the OS user {os_user}: it cannot read the sandbox's environment ({parent_env}) "
           f"or connect as postgres without a password ({superuser})")
-    roles = subprocess.run(["psql", "-d", "postgres", "-qAtc", "select count(*) from pg_roles where rolname like 'kk_sbx_%'"],
-                           capture_output=True, text=True).stdout.strip()
-    check(roles == "0", "the logins made for the runs are dropped")
-    left = subprocess.run(["psql", "-d", "postgres", "-qAtc", "select count(*) from pg_database where datname like 'kk_sbx_%'"],
-                          capture_output=True, text=True).stdout.strip()
-    check(left == "0", "the sandbox databases are dropped")
+    count = lambda q: subprocess.run(["psql", "-d", "postgres", "-qAtc", q], capture_output=True, text=True).stdout.strip()
+    with sandbox_cluster():
+        roles = count("select count(*) from pg_roles where rolname like 'kk_sbx_%'")
+        left = count("select count(*) from pg_database where datname like 'kk_sbx_%'")
+    check(roles == "0" and count("select count(*) from pg_roles where rolname like 'kk_sbx_%'") == "0",
+          "the logins made for the runs are dropped (and none was ever made on the record's cluster)")
+    check(left == "0" and count("select count(*) from pg_database where datname like 'kk_sbx_%'") == "0",
+          "the sandbox databases are dropped (and none was made on the record's cluster)")
     shutil.rmtree(tmp)
 
 

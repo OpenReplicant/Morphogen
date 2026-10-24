@@ -11,6 +11,13 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+      sandbox-postgres:                              # the sandbox's cluster: provider code never touches the record's (R5-26)
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       PGHOST: localhost
       PGUSER: postgres
@@ -19,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false                 # no token in .git/config: the run users read the checkout
-      - run: sudo apt-get install -y -q postgresql-client python3-venv
+      - run: sudo apt-get install -y -q postgresql-client python3-venv nftables
       - name: Contract requirements
         run: |
           python3 -m venv /tmp/kk-venv
@@ -49,15 +56,22 @@ jobs:
           done
       - name: Morphogen modules, the full loop (T5), G2 and G3, as root so they can start code as the run users
         run: |
-          # The password above is in this file, which the run users can read: replace it with one they cannot.
-          export PGPASSWORD_NEW=$(openssl rand -hex 24)
+          # The passwords above are in this file, which the run users can read: replace them with ones they cannot.
+          # The same for the sandbox's cluster.
+          export PGPASSWORD_NEW=$(openssl rand -hex 24) SBX_PASSWORD=$(openssl rand -hex 24)
           echo "alter role postgres password '$PGPASSWORD_NEW'" | psql -d postgres -q
+          echo "alter role postgres password '$SBX_PASSWORD'" | psql -p 5434 -d postgres -q
           export PGPASSWORD=$PGPASSWORD_NEW
           unset PGPASSWORD_NEW
           # The image trusts its local socket; confined runs refuse a cluster that trusts any connection.
-          docker exec ${{ job.services.postgres.id }} sh -c \
-            'sed -i -E "s/[[:space:]]trust$/ scram-sha-256/" "$PGDATA/pg_hba.conf" && ! grep -Eq "^[^#].*[[:space:]]trust$" "$PGDATA/pg_hba.conf"'
+          for c in ${{ job.services.postgres.id }} ${{ job.services.sandbox-postgres.id }}; do
+            docker exec $c sh -c \
+              'sed -i -E "s/[[:space:]]trust$/ scram-sha-256/" "$PGDATA/pg_hba.conf" && ! grep -Eq "^[^#].*[[:space:]]trust$" "$PGDATA/pg_hba.conf"'
+          done
           psql -d postgres -qAtc "select pg_reload_conf()"
+          PGPASSWORD=$SBX_PASSWORD psql -p 5434 -d postgres -qAtc "select pg_reload_conf()"
+          export KK_SANDBOX_CLUSTER="host=localhost port=5434 user=postgres password=$SBX_PASSWORD"
+          unset SBX_PASSWORD
           sudo -E env "PATH=$PATH" KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4 KK_REQUIRE_DOCKER=1 /tmp/kk-venv/bin/python morphogen/modules/test.py
       - name: Boundary
         run: python3 scripts/check_boundary.py

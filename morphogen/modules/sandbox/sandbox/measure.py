@@ -42,8 +42,11 @@ login's database sessions before it drops the databases, so no provider code is 
 run files are written. This process needs CAP_SETUID and CAP_SETGID (root) to start it.
 
 The sandbox writes no claims itself: the evaluator records the scores, and this module's run records
-what it did. Creating databases needs a superuser login for the sandbox's cluster (the PG* environment);
-the record is read through DATABASE_URL as KK_ROLE.
+what it did. The record is read through DATABASE_URL as KK_ROLE. Everything provider code touches is on
+a cluster of its own (R5-26): KK_SANDBOX_CLUSTER, a conninfo for a superuser of that cluster, which the
+PG* environment points to while an experiment runs (`sandbox_cluster`). The sandbox refuses to measure
+without it, or when it is the record's cluster (same system identifier), so no provider code ever has a
+login on the record's cluster or an address that reaches it.
 """
 from __future__ import annotations
 
@@ -64,6 +67,7 @@ from pathlib import Path
 
 import yaml
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 
 from kk.lib import connect
@@ -134,11 +138,55 @@ def slot_code(slot: str):
     return svc
 
 
+CLUSTER_ENV = {"host": "PGHOST", "port": "PGPORT", "user": "PGUSER", "password": "PGPASSWORD", "sslmode": "PGSSLMODE"}
+_on_sandbox = [0]
+
+
+@contextlib.contextmanager
+def sandbox_cluster():
+    """Point the PG* environment at KK_SANDBOX_CLUSTER for the life of the context (nested uses share it);
+    refused unless it is set and is not the cluster PG* points to now (the record's)."""
+    if _on_sandbox[0]:
+        _on_sandbox[0] += 1
+        try:
+            yield
+        finally:
+            _on_sandbox[0] -= 1
+        return
+    info = os.environ.get("KK_SANDBOX_CLUSTER", "")
+    if not info:
+        raise confine.Unconfined("KK_SANDBOX_CLUSTER is not set: provider code is measured only on a cluster of its "
+                                 "own, never the record's")
+    given = conninfo_to_dict(info)
+    if extra := sorted(set(given) - set(CLUSTER_ENV)):
+        raise confine.Unconfined(f"KK_SANDBOX_CLUSTER: only {', '.join(CLUSTER_ENV)} (not {', '.join(extra)})")
+    ident = "select system_identifier from pg_control_system()"
+    with connect(url="dbname=postgres") as su:
+        record_id = su.execute(ident).fetchone()[0]
+    saved = {v: os.environ.get(v) for v in [*CLUSTER_ENV.values(), "PGPASSFILE", "PGSERVICE"]}
+    for v in saved:
+        os.environ.pop(v, None)
+    os.environ.update({CLUSTER_ENV[k]: str(v) for k, v in given.items()})
+    _on_sandbox[0] = 1
+    try:
+        with connect(url="dbname=postgres") as su:
+            if su.execute(ident).fetchone()[0] == record_id:
+                raise confine.Unconfined("KK_SANDBOX_CLUSTER is the record's cluster: give the sandbox a cluster of its own")
+        yield
+    finally:
+        _on_sandbox[0] = 0
+        for v, x in saved.items():
+            os.environ.pop(v, None) if x is None else os.environ.__setitem__(v, x)
+
+
 def fresh_login(role: str) -> tuple[str, str, str]:
     """(role, login, password): a login for one provider's runs, a member of `role` without its rights by
-    inheritance (so CONNECT is only what `allow` grants it)."""
+    inheritance (so CONNECT is only what `allow` grants it). On a fresh sandbox cluster the role is made
+    as its migration makes it (nologin); the install that follows gives it its grants."""
     name, pw = f"kk_sbx_{secrets.token_hex(6)}", secrets.token_urlsafe(24)
-    with connect(url="dbname=postgres") as su:
+    with connect(url="dbname=postgres") as su, su.transaction():      # all or nothing: no login left half made
+        if su.execute("select 1 from pg_roles where rolname = %s", (role,)).fetchone() is None:
+            su.execute(sql.SQL("create role {} nologin").format(sql.Identifier(role)))
         su.execute(sql.SQL("create role {} login noinherit password {}").format(sql.Identifier(name), sql.Literal(pw)))
         su.execute(sql.SQL("grant {} to {}").format(sql.Identifier(role), sql.Identifier(name)))
     return role, name, pw
@@ -430,7 +478,8 @@ def experiment(exp_dir: Path, record, private: Path) -> list[Path]:
         raise ValueError(f"{spec['incumbent']} declares no agent (provider.yaml agent): its outputs cannot be judged")
     ops = inputs(record, bench["inputs"])
     results = {}
-    with confine.lease() as run, confine.workspace("kk-sbx-code-") as work:   # readable by the run user; `private` is not
+    with (sandbox_cluster(), confine.lease(allow=[confine.where()]) as run,
+          confine.workspace("kk-sbx-code-") as work):    # `private` is not readable by the run user
         reachable(run)
         for role, d in (("incumbent", incumbent), ("candidate", exp_dir / spec["candidate"])):
             (work / role).mkdir(mode=0o755)

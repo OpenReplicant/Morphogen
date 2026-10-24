@@ -23,6 +23,17 @@ description: Set up the environment and run every check for this repo (Postgres 
    `for i in 1 2 3 4; do useradd --uid $((2900 + i)) --no-create-home --shell /usr/sbin/nologin kkrun$i; done`
    (uids nothing else runs as: `--system` can hand out 999, Postgres's uid in its container image),
    then `export KK_RUN_AS=kkrun1,kkrun2,kkrun3,kkrun4`; the module tests run as root so they can start code as them.
+   Confined runs reach only the addresses their lease allows (R5-26): `nft` must be installed (`apt-get install -y nftables`).
+   The sandbox measures provider code on a cluster of its own (R5-26), made the same way on port 5434:
+   ```sh
+   mkdir -p /var/tmp/kpg-sbx && chown postgres /var/tmp/kpg-sbx
+   (umask 077; openssl rand -hex 24 > /root/.kk-pgpw-sbx)
+   install -o postgres -m 600 /root/.kk-pgpw-sbx /var/tmp/kpg-sbx-pw
+   su postgres -c "/usr/lib/postgresql/16/bin/initdb -D /var/tmp/kpg-sbx/data -A scram-sha-256 -U postgres --pwfile=/var/tmp/kpg-sbx-pw"
+   rm /var/tmp/kpg-sbx-pw
+   su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/tmp/kpg-sbx/data -o '-p 5434 -k /var/tmp/kpg-sbx' -l /var/tmp/kpg-sbx/log start"
+   export KK_SANDBOX_CLUSTER="host=/var/tmp/kpg-sbx port=5434 user=postgres password=$(cat /root/.kk-pgpw-sbx)"
+   ```
 2. Python deps: `python3 -m venv /var/tmp/kk-venv && /var/tmp/kk-venv/bin/pip install -r kernel/contract/requirements.txt -r kernel/providers/kernel-mcp/requirements.txt -r morphogen/modules/observer-otel/requirements.txt`, then `export KK_PYTHON=/var/tmp/kk-venv/bin/python` (a place the run user can read: not a private scratch directory).
    `sh kernel/contract/run.sh` → every provider passes every case for its slots.
 3. `python3 scripts/check_boundary.py` → boundary ok.
