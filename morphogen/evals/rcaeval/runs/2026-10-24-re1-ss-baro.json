@@ -1,0 +1,28 @@
+{
+  "benchmark": "RCAEval",
+  "dataset": "re1-ss",
+  "method": "baro",
+  "avg@5": {
+    "CPU": 0.55,
+    "MEM": 0.71,
+    "DISK": 0.5,
+    "DELAY": 0.58,
+    "LOSS": 0.54
+  },
+  "avg@5_mean": 0.576,
+  "chance@5": {
+    "CPU": 0.17,
+    "MEM": 0.17,
+    "DISK": 0.19,
+    "DELAY": 0.17,
+    "LOSS": 0.17
+  },
+  "floor": {
+    "rebuild4_kernel_w60": 0.922
+  },
+  "rcaeval": {
+    "commit": "259ea4167160256a74ad30004aa3d96a998c846e",
+    "main_sha256": "4e527f1f16736ef8353f7372bdbbd24270e6a383edb00f3a34b7a599d429e0e0",
+    "package": "RCAEval 1.8.1 (PyPI)"
+  }
+}
