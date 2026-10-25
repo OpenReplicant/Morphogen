@@ -222,7 +222,7 @@ def grade(db: str, label: str) -> dict:
         got, conflict = shape(got_described), None
     except blueprint.Conflict as e:
         got_described, got, conflict = {}, {}, str(e)
-    entry = next((n for n, d in got_described.items() if d["image"] == "ghcr.io/example/notes-web:1.4.2"), None)
+    entry = next((n for n, d in got_described.items() if str(d["image"]) == "ghcr.io/example/notes-web:1.4.2" or str(d["image"]).startswith("ghcr.io/example/notes-web:1.4.2@")), None)
     result = {
         "applied": bool(sets) and all(s == "applied" for s, _ in sets),
         "quotes": set(verdicts) == {"supported"},

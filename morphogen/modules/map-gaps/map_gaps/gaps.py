@@ -10,6 +10,8 @@ A gap is a question to ask next:
 
   unknown-peer  a connection to something not on the map            "shop connects to payments, ..."
   no-image      a service with no image setting                      "Which container image runs shop?"
+  unpinned-image  a service whose image is not pinned by digest (name@sha256:...): the compose runner runs only
+                pinned images, so what runs is what was approved
   unconnected   in a system of two or more services, one nothing connects to and that connects to nothing
   no-limit      an entry point (a service no other service of its system connects to) with no documented limit;
                 or, when every service of a system is called by another (a cycle), the system itself while none
@@ -21,6 +23,7 @@ peer, oa:bodyValue the question), derived from the claims that make its target p
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import defaultdict
 
 KKT = "https://w3id.org/knowledge-kernel/tosca#"
@@ -31,7 +34,8 @@ PROP = "http://www.w3.org/ns/sosa/observedProperty"
 NODE, MEMBER, CONNECTS, VALUE, NAME = (KKT + t for t in ("NodeTemplate", "memberOf", "connectsTo", "propertyValue", "propertyName"))
 PREDICATES = [RDF_TYPE, LABEL, MEMBER, CONNECTS, VALUE, MAX]
 KIND = "urn:kk:gap-kind:"
-ORDER = ["unknown-peer", "no-image", "unconnected", "no-limit"]
+ORDER = ["unknown-peer", "no-image", "unpinned-image", "unconnected", "no-limit"]
+DIGEST = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}")      # as morphogen/deploy/compose.py requires
 
 
 def gaps(claims: list[dict]) -> list[dict]:
@@ -40,7 +44,8 @@ def gaps(claims: list[dict]) -> list[dict]:
     nodes: dict[str, list[str]] = defaultdict(list)       # service -> the claims that put it on the map
     system: dict[str, str] = {}
     out_: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))   # caller -> callee -> claim ids
-    typed, images, limited = set(), set(), set()
+    typed, limited = set(), set()
+    images: dict[str, list[tuple[str, str]]] = defaultdict(list)   # service -> (image, claim id)
     for c in claims:
         s, p, o, q = c["subject"], c["predicate"], c.get("object_entity"), c.get("qualifiers") or {}
         if p == LABEL:
@@ -56,7 +61,7 @@ def gaps(claims: list[dict]) -> list[dict]:
         elif p == CONNECTS and o:
             out_[s][o].append(str(c["id"]))
         elif p == VALUE and q.get(NAME) == "image":
-            images.add(s)
+            images[s].append((str((c.get("object_value") or {}).get("@value", "")), str(c["id"])))
         elif p == MAX and set(q) == {PROP}:
             limited.add(s)
     name = lambda x: label.get(x) or x.rsplit(":", 1)[-1]  # noqa: E731
@@ -82,6 +87,11 @@ def gaps(claims: list[dict]) -> list[dict]:
     for s in sorted(typed):
         if s not in images:
             add("no-image", s, f"Which container image runs {name(s)}?", nodes[s])
+        elif not any(DIGEST.fullmatch(v) for v, _ in images[s]):
+            shown = ", ".join(sorted({v for v, _ in images[s]}))
+            add("unpinned-image", s, f"Which digest pins {name(s)}'s image {shown}? (`docker buildx imagetools inspect "
+                f"{shown.split(', ')[0]}` shows it; Morphogen runs only images pinned as name@sha256:...)",
+                nodes[s] + [i for _, i in images[s]])
         linked = bool(out_.get(s)) or bool(called.get(s))
         if not linked and size[system.get(s)] > 1:
             add("unconnected", s, f"What does {name(s)} call, or what calls it?", nodes[s])

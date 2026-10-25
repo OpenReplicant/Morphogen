@@ -14,7 +14,7 @@ sys.path[:0] = [str(HERE), str(ROOT / "morphogen" / "src"), str(ROOT / "kernel" 
 from encoder_compose import encode  # noqa: E402
 from morphogen import blueprint  # noqa: E402
 
-from design_blueprint.__main__ import ACTION, plan  # noqa: E402
+from design_blueprint.__main__ import ACTION, plan, runner  # noqa: E402
 
 KKT, T = blueprint.KKT, blueprint.RDF_TYPE
 N = "urn:kk:node:notes:"
@@ -80,4 +80,11 @@ check(cs["lane"] == "review" and get("http://purl.org/dc/terms/type")[1] == {"en
 check(text in get("http://www.w3.org/2000/01/rdf-schema#label")[0]["value"]["@value"]
       and all(op["derived_from"] == sorted(x["id"] for x in claims) for op in cs["ops"]),
       "the plan's label is the file's whole text (what a person approves), derived from the map claims")
+# What the compose runner would refuse is never proposed: an image named by tag only is refused; pinned, it runs.
+why = runner.refusal(text)
+check(why is not None and "pinned by digest" in why, f"a file with images named by tag only would be refused ({why})")
+pinned = [dict(x, object_value={"@value": x["object_value"]["@value"] + "@sha256:" + "ab" * 32})
+          if (x["qualifiers"] or {}).get(KKT + "propertyName") == "image" else x for x in claims]
+check(runner.refusal(blueprint.render(blueprint.described(pinned, "notes"), "notes")) is None,
+      "with every image pinned by digest, the compose runner would run it")
 print("design-blueprint checks passed")

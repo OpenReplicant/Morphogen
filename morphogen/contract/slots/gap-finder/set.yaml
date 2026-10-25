@@ -2,7 +2,7 @@
 # (rebuild 4's map-gaps asked about organisation and process maps). The slot's own runner (runner.py) builds each
 # case's claims, runs the provider's <package>.gaps.gaps(claims) in a child process and judges what it answers.
 #
-# input.services: {<system>/<service>: {image: bool, settings: {name: value}, connects: [<system>/<service>],
+# input.services: {<system>/<service>: {image: true (pinned by digest) or the image as written, settings: {name: value}, connects: [<system>/<service>],
 #                  limit: bool (a documented limit: bbo:maxValue qualified by the observed property only),
 #                  prediction: bool (a plan's prediction: the same, with one more qualifier)}}
 #   every service is a kkt:NodeTemplate, kkt:memberOf urn:kk:system:<system>; a connection to a name not listed is
@@ -11,10 +11,11 @@
 # then (optional):  {services: {...}} merged into the input (a person's answers), and expect: every gap after it
 slot: gap-finder
 runner: runner.py
-version: 0.2.0
+version: 0.3.0
 rules: >-
   For a system map: a connection to something not on the map is a gap (unknown-peer, on the peer); a service with
-  no image setting is a gap (no-image); in a system of two or more services, a service nothing connects to and
+  no image setting is a gap (no-image); a service whose images are none pinned by digest (name@sha256:<64 hex>) is
+  a gap (unpinned-image); in a system of two or more services, a service nothing connects to and
   that connects to nothing is a gap (unconnected); a service no other service of its system connects to (an entry
   point) with no documented limit is a gap (no-limit), and a plan's prediction is not a documented limit; a system
   each of whose services is called by another of its services, none with a limit, is a gap on the system (no-limit).

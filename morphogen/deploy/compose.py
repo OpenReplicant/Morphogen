@@ -3,6 +3,13 @@ intent, and again whenever the commit changes it. The orchestrator for systems M
 the intent actuator only commits to intent/systems/<system>/compose.yaml; this makes the system match.
 
   python3 morphogen/deploy/compose.py --intent DIR --system NAME [--project NAME]
+  python3 morphogen/deploy/compose.py --intent DIR --all        every system at HEAD, as project kk-<system>
+
+With --all, a system committed later (a described system the intent actuator wrote once a person approved its
+file, R5-29) starts without anyone starting a runner for it: the design loop ends with the system running. A
+commit under systems/ is the approval: point --all at an intent repository only the intent actuator and people
+commit to (morphogen/deploy/local.py keeps its own). One system's failure (a refused file, an `up` that fails or
+hangs past its timeout) is that system's event; the others carry on.
 
 The file is read from the commit at HEAD, never the work tree, and refused unless it is on the allow list
 (`refusal`): only `services`; per service only image (pinned by digest), command, entrypoint,
@@ -35,6 +42,7 @@ NAME = re.compile(r"[a-z0-9][a-z0-9_.-]*")
 SERVICE_KEYS = {"image", "command", "entrypoint", "environment", "ports", "depends_on", "healthcheck", "restart",
                 "labels", "working_dir", "user"}
 DIGEST = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}")
+RETRY_SECONDS = float(os.environ.get("KK_COMPOSE_RETRY_SECONDS", "60"))
 PORT = re.compile(r"127\.0\.0\.1:(\d{1,5})?:\d{1,5}(/(tcp|udp))?")
 
 
@@ -90,47 +98,81 @@ def apply(project: str, text: bytes) -> subprocess.CompletedProcess:
         return compose(project, workdir, "up", "-d", "--wait", "--remove-orphans")
 
 
+def systems(intent: Path) -> list[str]:
+    """The systems with a directory under systems/ at HEAD (names compose accepts only)."""
+    out = subprocess.run(["git", "-C", str(intent), "ls-tree", "-d", "-z", "--name-only", "HEAD:./systems"],
+                         capture_output=True, text=True)
+    return sorted(n for n in out.stdout.split("\0") if NAME.fullmatch(n)) if out.returncode == 0 else []
+
+
+class System:
+    """One managed system: apply its committed file when it changes, say each event once. A file whose apply
+    failed is tried again after RETRY_SECONDS, or at once when HEAD changes it."""
+
+    def __init__(self, intent: Path, name: str, project: str, say):
+        self.intent, self.name, self.project = intent, name, project
+        self.say = lambda **e: say(system=name, **e)
+        self.applied, self.said, self.failed_at = None, None, 0.0
+
+    def step(self) -> None:
+        text = committed(self.intent, self.name)
+        digest = hashlib.sha256(text).hexdigest()[:16] if text is not None else None
+        if text is None:
+            if self.said != "unmanaged":
+                self.say(event="unmanaged", reason="no compose file at HEAD: the system is left as it runs")
+                self.said = "unmanaged"
+        elif digest != self.applied:
+            why = refusal(text.decode("utf-8", "replace"))
+            if why:
+                if self.said != f"refused:{digest}":
+                    self.say(event="refused", intent=digest, reason=why)
+                    self.said = f"refused:{digest}"
+            elif self.said != f"failed:{digest}" or time.monotonic() - self.failed_at >= RETRY_SECONDS:
+                try:
+                    out = apply(self.project, text)
+                    ok, error = out.returncode == 0, (out.stderr or out.stdout).strip()[-300:]
+                except (subprocess.SubprocessError, OSError) as e:      # a hung `up --wait`, no docker: this system only
+                    ok, error = False, str(e)[-300:]
+                if ok:
+                    self.say(event="started" if self.applied is None else "updated", intent=digest, project=self.project)
+                    self.applied, self.said = digest, None
+                else:
+                    if self.said != f"failed:{digest}":
+                        self.say(event="failed", intent=digest, error=error)
+                    self.said, self.failed_at = f"failed:{digest}", time.monotonic()
+
+
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Run a managed system as its committed compose file says.")
+    ap = argparse.ArgumentParser(description="Run managed systems as their committed compose files say.")
     ap.add_argument("--intent", required=True)
-    ap.add_argument("--system", required=True)
-    ap.add_argument("--project", help="the compose project name (default kk-<system>)")
+    which = ap.add_mutually_exclusive_group(required=True)
+    which.add_argument("--system", help="one system")
+    which.add_argument("--all", action="store_true",
+                       help="every system under systems/ at HEAD, each as project kk-<system>, one committed later included")
+    ap.add_argument("--project", help="the compose project name (with --system; default kk-<system>)")
     a = ap.parse_args(argv)
-    if not NAME.fullmatch(a.system):
+    if a.system is not None and not NAME.fullmatch(a.system):
         ap.error("--system: a lower-case name")
-    project = a.project or f"kk-{a.system}"
-    if not NAME.fullmatch(project):
+    if a.all and a.project:
+        ap.error("--project goes with --system")
+    project = a.project or (f"kk-{a.system}" if a.system is not None else None)
+    if project and not NAME.fullmatch(project):
         ap.error("--project: a lower-case name")
     intent = Path(a.intent).resolve()
     every = float(os.environ.get("KK_RECONCILE_SECONDS", "2"))
-    say = lambda **e: print(json.dumps({"t": round(time.time(), 3), "system": a.system, **e}), flush=True)
+    say = lambda **e: print(json.dumps({"t": round(time.time(), 3), **e}), flush=True)  # noqa: E731
 
     def terminate(*_):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, terminate)
-    applied, said = None, None
+    managed: dict[str, System] = {}
     try:
         while True:
-            text = committed(intent, a.system)
-            digest = hashlib.sha256(text).hexdigest()[:16] if text is not None else None
-            if text is None:
-                if said != "unmanaged":
-                    say(event="unmanaged", reason="no compose file at HEAD: the system is left as it runs")
-                    said = "unmanaged"
-            elif digest != applied:
-                why = refusal(text.decode("utf-8", "replace"))
-                if why:
-                    if said != f"refused:{digest}":
-                        say(event="refused", intent=digest, reason=why)
-                        said = f"refused:{digest}"
-                else:
-                    out = apply(project, text)
-                    if out.returncode == 0:
-                        say(event="started" if applied is None else "updated", intent=digest, project=project)
-                        applied, said = digest, None
-                    elif said != f"failed:{digest}":
-                        say(event="failed", intent=digest, error=(out.stderr or out.stdout).strip()[-300:])
-                        said = f"failed:{digest}"
+            names = systems(intent) if a.all else [a.system]
+            for name in sorted(set(names) | set(managed)):     # one gone from HEAD says so, and is left running
+                if name not in managed:
+                    managed[name] = System(intent, name, project or f"kk-{name}", say)
+                managed[name].step()
             time.sleep(every)
     except KeyboardInterrupt:
         pass
