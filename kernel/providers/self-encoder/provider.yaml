@@ -6,6 +6,7 @@ slots: [self-encoder]
 origin: rewrite (T4) of OpenReplicant/kernel (rebuild 4) modules/self-encoder, which scanned module manifests, compose files and packages
 requires: Python 3.12+, psycopg, PyYAML; the kk-core and dcterms packs (pack-loader)
 migration: migration.sql
+role: kkm_self_encoder
 command: python3 -m self_encoder scan --repo <repository> [--distribution <file>]   |   python3 -m self_encoder answer [slot ...]
 tests:
   - python3 tests/test_encode.py

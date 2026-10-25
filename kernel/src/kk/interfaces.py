@@ -110,7 +110,8 @@ class WritePipeline(Protocol):
     def start_run(self, module: str, plan_step: Optional[str] = None,
                   used: Sequence[str] = (), info: Optional[JSON] = None) -> str: ...
     def finish_run(self, run_id: str, status: Literal["succeeded", "failed", "cancelled"],
-                   cost: Optional[JSON] = None) -> None: ...
+                   cost: Optional[JSON] = None, outputs: Optional[JSON] = None,
+                   feed_seq: Optional[int] = None) -> None: ...   # cost: what it spent; feed_seq: a watcher's cursor
     def submit(self, change_set: ChangeSet) -> Submitted: ...
 
 

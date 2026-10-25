@@ -10,12 +10,14 @@
 # hook        = where in the write pipeline or read path the slot attaches
 # cardinality = one (one active provider; alternatives run in shadow until the evaluator promotes one) | many
 # interface   = kernel/src/kk/interfaces.py
-# contract    = what every provider must pass (R5-21): a case set (invariants.yaml, contract/slots/<slot>),
-#               provider-tests (no shared cases yet: only each provider's own tests, a declared gap), or
-#               none (an unfilled slot). Paths are relative to this file. kernel/contract/run.py checks it.
+# contract    = what every provider must pass (R5-21): a case set (invariants.yaml, contract/slots/<slot>), or
+#               none (an unfilled slot). Paths are relative to this file. kernel/contract/run.py checks it, and with
+#               cases_required (T25, R5-42 (b)) refuses provider-tests (only one provider's own tests) for a slot
+#               here: a replacement must have shared cases to pass. A distribution's blueprint may still declare it.
 # default     = the provider installed by default; none = declared but unfilled (`why` says what the slot is
 #               for and when a distribution would fill it). Nothing depends on an unfilled slot.
-version: 0.1.0
+version: 0.2.0
+cases_required: true
 
 slots:
   # ---- core
@@ -40,7 +42,7 @@ slots:
     cardinality: many
     interface: IntakeFilter
     default: filter-gitleaks          # rebuild 4: modules/ingest-filter-gitleaks; files (kk.lib.ingest_filter), and proposals when a caller runs filter() (R5-29)
-    contract: provider-tests
+    contract: ../contract/slots/intake-filter
     status: ported
   - id: validator
     hook: validation
@@ -53,8 +55,8 @@ slots:
     hook: lane
     cardinality: one
     interface: LanePolicy
-    default: review-rules             # rebuild 4: settings review_predicates / review_types
-    contract: provider-tests
+    default: record-postgres          # its review rules (settings review_predicates / review_types, rebuild 4 review-rules)
+    contract: ../contract/slots/lane-policy
     status: ported-in-schema
 
   # ---- after the commit
@@ -76,15 +78,15 @@ slots:
     hook: feed
     cardinality: many
     interface: Verifier
-    default: verifier-quotes          # a feed consumer; its own tests (tests/test_check.py)
-    contract: provider-tests
+    default: verifier-quotes          # a feed consumer; its method's own cases stay in its tests (tests/test_check.py)
+    contract: ../contract/slots/verifier
     status: ported
   - id: truth-maintenance
     hook: feed
     cardinality: one
     interface: FeedConsumer
     default: truth-maintenance        # rebuild 4 modules/truth-maintenance (D-89), plan.py unchanged, follows the feed
-    contract: provider-tests
+    contract: ../contract/slots/truth-maintenance
     status: ported
     why: >-
       Marks claims derived from a premise that was later superseded, refuted, retracted or redacted (directly or
@@ -98,14 +100,14 @@ slots:
     cardinality: many
     interface: Recall
     default: recall-bm25              # SciFact nDCG@10 0.6606 (rebuild 4 floor 0.6594); dense and re-ranking opt-in, not ported
-    contract: provider-tests
+    contract: ../contract/slots/recall
     status: ported
   - id: agent-interface
     hook: read
     cardinality: many
     interface: MCP tools (read + propose)
     default: kernel-mcp               # operator tools; the memory profile is not ported (R5-12)
-    contract: provider-tests
+    contract: ../contract/slots/agent-interface
     status: ported
   - id: context-assembler
     hook: read
@@ -125,26 +127,31 @@ slots:
     cardinality: many
     interface: pack (kernel/packs/packs.yaml)
     default: pack-loader              # packs.sql generated from kernel/packs, reviewed as code
-    contract: provider-tests
+    contract: ../contract/slots/vocabulary-pack
     status: ported
   - id: self-encoder
     cardinality: one
     interface: Encoder
     default: self-encoder             # encodes this file, provider manifests and a distribution file as claims
-    contract: provider-tests
+    contract: ../contract/slots/self-encoder
     status: written
   - id: evaluator
     cardinality: one
     interface: Evaluator
     default: evaluator                # records eval runs as DQV measurements; candidate vs incumbent in G2
-    contract: provider-tests
+    contract: ../contract/slots/evaluator
     status: ported
   - id: harness-adapter
     cardinality: many
     interface: HarnessAdapter
-    default: claude-code
-    contract: provider-tests
-    status: to-port
+    default: none
+    contract: none
+    status: unfilled
+    why: >-
+      Maps the kernel's hook events onto an agent harness (rebuild 4's Claude Code hooks: recall cues, attributing
+      tool calls). A distribution can run its harness with the kernel MCP server as its only way to the record and
+      need no hooks (Morphogen runs Claude Code so, T23, T24). Fill it when a harness needs the kernel's hooks, or when
+      a UI needs a harness's events (the interview in the UI, R5-O14).
 
 couplings:
   # who feeds whom; every coupling's contract is the change-set schema or an interface above

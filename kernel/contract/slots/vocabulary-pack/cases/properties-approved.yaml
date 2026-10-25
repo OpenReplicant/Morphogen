@@ -1,0 +1,3 @@
+id: urn:kk:contract:vocabulary-pack/properties-approved
+description: Every property a pack types (rdf:Property, owl:ObjectProperty, owl:DatatypeProperty, owl:AnnotationProperty)
+  is approved.

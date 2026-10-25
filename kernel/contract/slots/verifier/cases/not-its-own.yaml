@@ -1,0 +1,3 @@
+id: urn:kk:contract:verifier/not-its-own
+description: 'A claim attributed to the verifier''s own agent gets no verdict from it (invariant 5: no method verifies its
+  own output).'

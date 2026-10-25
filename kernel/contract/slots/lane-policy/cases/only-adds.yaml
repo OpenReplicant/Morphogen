@@ -1,0 +1,2 @@
+id: urn:kk:contract:lane-policy/only-adds
+description: Installing the provider removes none of the record store's default review rules.

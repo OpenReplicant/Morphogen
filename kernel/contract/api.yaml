@@ -1,0 +1,212 @@
+# The kernel's wire API, versioned (T25, R5-42 (b)): what a provider, a distribution or an agent built against the
+# record store may rely on. kernel/contract/api.yaml lists it, read from a fresh record (record-postgres's schema, no
+# provider installed):
+#
+#   functions  every function in schema api, and every non-trigger function in schema kernel that kk_agent may execute,
+#              with its arguments and result
+#   relations  every view in schema api, and every table or view in schema kernel that kk_agent may read, with its columns
+#   version    semantic: a change that removes or changes anything listed is a major version, an addition a minor one;
+#              api.version() returns it, so a client can check what it talks to
+#   change_set the change-set schema's $id (kernel/schemas/change_set.schema.json); the MCP tools agents rely on are the
+#              agent-interface slot's (contract/slots/agent-interface/set.yaml `tools`)
+#
+version: 1.0.0
+functions:
+  api.claims_as_of(valid_at timestamp with time zone, known_at timestamp with time zone): SETOF api.claims
+  api.explain(claim_id uuid): jsonb
+  api.feed(after_seq bigint, max_rows integer): TABLE(seq bigint, kind text, change_set_id uuid, scope text, applied_at timestamp with time zone, claim_ids uuid[], predicates text[], target_kind text, target_id
+    text)
+  api.finish_run(run_id uuid, status text, cost jsonb, outputs jsonb, feed_seq bigint): void
+  api.record_validation(change_set_id uuid, ok boolean, report jsonb): text
+  api.redact(target_kind text, target_id text, reason text, run uuid): uuid
+  api.review(change_set_id uuid, approve boolean, note text): text
+  api.start_run(module text, plan_step text, used jsonb, info jsonb): uuid
+  api.submit_change_set(cs jsonb): jsonb
+  api.version(): text
+  kernel.can_read(p_scope text): boolean
+  kernel.claim_visible(p_claim uuid): boolean
+  kernel.current_status(p_claim uuid): text
+  kernel.expand(term text): text
+  kernel.is_approved_property(p_iri text): boolean
+  kernel.my_agent(): text
+  kernel.needs_review(p_ops jsonb): boolean
+  kernel.readers_subset(p_target text, p_input text): boolean
+  kernel.role_can_write(p_role name, p_scope text): boolean
+  kernel.statement_key(p_subject text, p_predicate text, p_object_entity text, p_object_value jsonb, p_qualifiers jsonb): text
+relations:
+  api.change_sets:
+  - id uuid
+  - idempotency_key text
+  - submitted_by name
+  - attributed_to text
+  - generated_by uuid
+  - target_scope text
+  - lane text
+  - status text
+  - validated_by name
+  - validation_report jsonb
+  - decided_by name
+  - decided_at timestamp with time zone
+  - review_note text
+  - submitted_at timestamp with time zone
+  - applied_at timestamp with time zone
+  - op_count integer
+  api.claims:
+  - id uuid
+  - subject text
+  - predicate text
+  - object_entity text
+  - object_value jsonb
+  - qualifiers jsonb
+  - valid_from timestamp with time zone
+  - valid_to timestamp with time zone
+  - scope text
+  - evidence_type text
+  - attributed_to text
+  - generated_by uuid
+  - change_set uuid
+  - statement_key text
+  - recorded_at timestamp with time zone
+  - redacted_at timestamp with time zone
+  - status text
+  - belief real
+  api.review_decisions:
+  - id uuid
+  - target_scope text
+  - submitted_by name
+  - decided_by name
+  - decided_at timestamp with time zone
+  api.review_queue:
+  - id uuid
+  - attributed_to text
+  - target_scope text
+  - ops jsonb
+  - validation_report jsonb
+  - submitted_at timestamp with time zone
+  kernel.agent:
+  - iri text
+  - db_role name
+  - kind text
+  - label text
+  - created_at timestamp with time zone
+  kernel.artifact:
+  - sha256 text
+  - media_type text
+  - byte_size bigint
+  - location text
+  - scope text
+  - source_uri text
+  - retrieved_at timestamp with time zone
+  - generated_by uuid
+  - change_set uuid
+  - recorded_at timestamp with time zone
+  - redacted_at timestamp with time zone
+  kernel.belief:
+  - claim_id uuid
+  - model text
+  - value real
+  - explanation jsonb
+  - computed_by uuid
+  - change_set uuid
+  - computed_at timestamp with time zone
+  kernel.change_set:
+  - id uuid
+  - idempotency_key text
+  - submitted_by name
+  - attributed_to text
+  - generated_by uuid
+  - target_scope text
+  - lane text
+  - ops jsonb
+  - status text
+  - validated_by name
+  - validation_report jsonb
+  - decided_by name
+  - decided_at timestamp with time zone
+  - review_note text
+  - submitted_at timestamp with time zone
+  - applied_at timestamp with time zone
+  kernel.claim:
+  - id uuid
+  - subject text
+  - predicate text
+  - object_entity text
+  - object_value jsonb
+  - qualifiers jsonb
+  - valid_from timestamp with time zone
+  - valid_to timestamp with time zone
+  - scope text
+  - evidence_type text
+  - attributed_to text
+  - generated_by uuid
+  - change_set uuid
+  - statement_key text
+  - recorded_at timestamp with time zone
+  - redacted_at timestamp with time zone
+  kernel.claim_derivation:
+  - claim_id uuid
+  - derived_from uuid
+  kernel.claim_reference:
+  - claim_id uuid
+  - artifact text
+  - source_uri text
+  - quote text
+  - quote_prefix text
+  - quote_suffix text
+  - span jsonb
+  kernel.claim_status:
+  - claim_id uuid
+  - status text
+  - reason text
+  - replaced_by uuid
+  - invalidated_by_run uuid
+  - change_set uuid
+  - recorded_at timestamp with time zone
+  kernel.entity:
+  - iri text
+  - created_at timestamp with time zone
+  kernel.feed:
+  - seq bigint
+  - change_set uuid
+  - redaction uuid
+  - target_kind text
+  - target_id text
+  - scope text
+  - applied_at timestamp with time zone
+  kernel.prefix:
+  - prefix text
+  - namespace text
+  kernel.run:
+  - id uuid
+  - agent text
+  - module text
+  - plan_step text
+  - started_at timestamp with time zone
+  - ended_at timestamp with time zone
+  - status text
+  - used jsonb
+  - cost jsonb
+  - outputs jsonb
+  - feed_seq bigint
+  - info jsonb
+  kernel.scope:
+  - iri text
+  - label text
+  - created_at timestamp with time zone
+  kernel.scope_grant:
+  - scope text
+  - db_role name
+  - can_read boolean
+  - can_write boolean
+  kernel.setting:
+  - key text
+  - value jsonb
+  kernel.verification:
+  - claim_id uuid
+  - verdict text
+  - method text
+  - run uuid
+  - details jsonb
+  - change_set uuid
+  - recorded_at timestamp with time zone
+change_set: https://w3id.org/knowledge-kernel/schemas/change_set.schema.json

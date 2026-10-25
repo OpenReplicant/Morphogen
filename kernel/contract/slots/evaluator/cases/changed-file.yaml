@@ -1,0 +1,2 @@
+id: urn:kk:contract:evaluator/changed-file
+description: A changed file with the same run name supersedes the run's earlier scores; only the new ones are current.

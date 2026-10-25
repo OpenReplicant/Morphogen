@@ -1,0 +1,2 @@
+id: urn:kk:contract:lane-policy/mapping-reviewed
+description: A mapping or hierarchy claim between terms (rdfs:subPropertyOf, skos:exactMatch) is routed to review.

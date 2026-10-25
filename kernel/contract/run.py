@@ -3,7 +3,8 @@ slots it fills. Each slot's contract is declared in its blueprint (`contract:`, 
 
   a .yaml file (invariants.yaml)  -> every case it names (the record store, write pipeline, change feed)
   a directory with set.yaml        -> every case file in <dir>/cases (kernel/contract/slots/<slot>)
-  provider-tests                   -> no shared cases yet: only the provider's own tests (a declared gap)
+  provider-tests                   -> no shared cases yet: only the provider's own tests (a declared gap; refused by a
+                                      blueprint with `cases_required: true`, as the kernel's is)
   none                             -> an unfilled slot (default: none); declared when a provider fills it
 
 Paths are relative to the blueprint file. Usage:
@@ -15,8 +16,8 @@ Defaults: the kernel's blueprint and kernel/providers. A distribution passes its
 A provider's runner (provider.yaml `runner`, run in its directory, with KK_CASES naming the slot's case
 set directory when there is one) prints "ok: <case>" at the start of a line (or after a psql NOTICE
 prefix) per passing case. A case set may name its own runner (set.yaml `runner:`, relative to the set,
-run with the provider's directory as its argument): then the provider's runner is not used, so a provider
-cannot certify itself (R5-21). Fails on a slot two blueprints declare, a provider slot no blueprint
+run with the provider's directory as its argument): that set is run by its runner, never the provider's, so a
+provider cannot certify itself (R5-21); a provider filling several slots runs every one of their contracts. Fails on a slot two blueprints declare, a provider slot no blueprint
 declares, a slot with no `contract:`, a contract path that does not exist, a case set with no cases, a provider whose
 slot has cases but no runner, or no providers at all. Lists the slots whose contract is provider-tests.
 """
@@ -40,10 +41,13 @@ def contracts(blueprints: list[Path]) -> dict[str, object]:
     """slot -> its contract: a resolved Path, or "provider-tests" / "none". Raises on a missing field."""
     out: dict[str, object] = {}
     for bp in blueprints:
-        for s in yaml.safe_load(bp.read_text())["slots"]:
+        spec = yaml.safe_load(bp.read_text())
+        for s in spec["slots"]:
             c = s.get("contract")
             if c is None:
                 raise SystemExit(f"{bp}: slot {s['id']} declares no contract (a case set, provider-tests or none)")
+            if c == "provider-tests" and spec.get("cases_required"):
+                raise SystemExit(f"{bp}: slot {s['id']} has no shared case set (provider-tests), which this blueprint refuses")
             if s["id"] in out:
                 raise SystemExit(f"{bp}: slot {s['id']} is already declared by another blueprint")
             if c == "none" and s.get("default") not in ("none", None):
@@ -87,6 +91,8 @@ def expected(slots: list[str], blueprints: list[Path] = None) -> list[str]:
 
 
 def check(d: Path, blueprints: list[Path]) -> bool:
+    """Run every contract of the slots a provider fills: each case set with a runner of its own through that runner
+    (so the provider cannot certify itself), the rest through the provider's runner once."""
     name = d.name
     meta = yaml.safe_load((d / "provider.yaml").read_text())
     table = contracts(blueprints)
@@ -94,33 +100,45 @@ def check(d: Path, blueprints: list[Path]) -> bool:
     if unknown:
         print(f"{name}: FAIL: slots no blueprint declares: {unknown}")
         return False
-    cases = expected(meta["slots"], blueprints)
-    if not cases:
+    groups: dict[str, tuple] = {}
+    for s in meta["slots"]:
+        if table[s] not in SPECIAL:
+            groups.setdefault(str(table[s]), (table[s], s))
+    if not groups:
         print(f"{name}: no contract cases for slots {meta['slots']} (provider-tests)")
         return True
-    sets = [c for c in (table[s] for s in meta["slots"]) if isinstance(c, Path) and c.is_dir()]
-    own = [c / r for c in sets if (r := (yaml.safe_load((c / "set.yaml").read_text()) or {}).get("runner"))]
-    if own:
-        cmd = [sys.executable, str(own[0]), str(d.resolve())]
-    elif not meta.get("runner"):
-        print(f"{name}: FAIL: slots {meta['slots']} have contract cases but the provider has no runner")
-        return False
-    else:
+    cmds, theirs, cases = [], [], []
+    for contract, slot in groups.values():
+        cases += cases_of(slot, contract)
+        path = Path(contract)
+        own = path.is_dir() and (yaml.safe_load((path / "set.yaml").read_text()) or {}).get("runner")
+        if own:
+            cmds.append(([sys.executable, str(path / own), str(d.resolve())], {}))
+        else:
+            theirs.append(path)
+    if theirs:
+        if not meta.get("runner"):
+            print(f"{name}: FAIL: slots {meta['slots']} have contract cases but the provider has no runner")
+            return False
         cmd = shlex.split(meta["runner"])
-    if cmd[0] == "python3":
-        cmd[0] = sys.executable   # the interpreter that has the contract requirements
-    env = {**os.environ, **({"KK_CASES": str(sets[0])} if len(sets) == 1 else {})}
-    out = subprocess.run(cmd, cwd=d, capture_output=True, text=True, env=env)
-    log = out.stdout + out.stderr
-    passed = set(OK.findall(log))
+        if cmd[0] == "python3":
+            cmd[0] = sys.executable   # the interpreter that has the contract requirements
+        sets = [p for p in theirs if p.is_dir()]
+        cmds.append((cmd, {"KK_CASES": str(sets[0])} if len(sets) == 1 else {}))
+    passed, ok = set(), True
+    for cmd, extra in cmds:
+        out = subprocess.run(cmd, cwd=d, capture_output=True, text=True, env={**os.environ, **extra})
+        log = out.stdout + out.stderr
+        passed |= set(OK.findall(log))
+        if out.returncode:
+            print(log[-3000:])
+            print(f"{name}: FAIL: {Path(cmd[1]).name if len(cmd) > 1 else cmd[0]} exited {out.returncode}")
+            ok = False
     missing = [c for c in cases if c not in passed]
-    if out.returncode:
-        print(log[-3000:])
-        print(f"{name}: FAIL: runner exited {out.returncode}")
     for c in missing:
         print(f"{name}: MISSING: {c}")
     print(f"{name}: {len(cases) - len(missing)}/{len(cases)} contract cases passed")
-    return not missing and out.returncode == 0
+    return ok and not missing
 
 
 def main(argv=None) -> int:

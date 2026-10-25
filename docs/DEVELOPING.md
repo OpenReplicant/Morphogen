@@ -107,7 +107,12 @@ Every concern is a slot with an interface and a swappable default provider. Noth
 - Kernel slots: `kernel/blueprint/slots.yaml`. Interfaces: `kernel/src/kk/interfaces.py`.
 - Morphogen's application slots and its choice of providers: `morphogen/distribution.yaml`.
 - Each slot names its `contract`: a case set every provider must pass (`kernel/contract/slots/<slot>`,
-  `morphogen/contract/slots/<slot>`), or `provider-tests` for slots without one yet.
+  `morphogen/contract/slots/<slot>`), or `provider-tests` for Morphogen slots without one yet. Every filled kernel
+  slot has a case set (T25): the kernel's blueprint says `cases_required: true`, and the runner refuses
+  `provider-tests` there.
+- The record store's wire API (the `api` schema, what `kk_agent` may read and call in `kernel`, the change-set
+  schema's id) is listed in `kernel/contract/api.yaml` with a version `api.version()` returns; `run.sh` fails when
+  the two differ. Removing or changing anything listed is a major version, adding is a minor one.
 
 **The split rule.** Anything another distribution could use lives under `kernel/`. Only Morphogen-specific
 parts live under `morphogen/`. `kernel/` never imports or references `morphogen/`, and
@@ -171,8 +176,13 @@ role: kkm_anomaly                    # its Postgres role
 login: kkm_anomaly_login             # a login that may switch only to that role
 agent: urn:kk:agent:anomaly
 tests: [python3 tests/test_detect.py, python3 tests/test_service.py]
-runner: python3 tests/contract.py    # kernel providers with a case set: prints "ok: <case>" per case
+runner: python3 tests/contract.py    # only for a case set without a runner of its own: prints "ok: <case>" per case
+entry: my_filter.__main__:filter     # a function-level slot's boundary (the intake filter's proposals)
+applies_to: [extracted]              # a verifier: the evidence types or predicates it gives verdicts on
 ```
+
+`role:` is what a slot's runner runs the provider's service or command as (through a login of its own that may
+switch only to that role), so a kernel provider with a service or command names it too.
 
 ### The migration
 
@@ -200,16 +210,19 @@ def one_pass(conn):
 
 def main():
     conn = connect("kkm_my_provider")               # DATABASE_URL, then SET ROLE
-    follow(conn, one_pass)                          # now, then each time the change feed moves
+    follow(conn, one_pass)                          # now, then each time the change feed moves; KK_ONCE=1: one pass
 ```
+
+A slot's case set runs the service with `KK_ONCE=1` (one pass, then exit), so `follow` must be how it waits.
 
 Rules that keep a provider correct:
 
 - **Idempotency keys.** Key each change set by what it is about (`verdict:<prediction id>`), so a restart
   submits nothing twice.
 - **Act once per change.** A watcher that must act on each feed entry once keeps a durable cursor:
-  `resume(conn, MODULE)` reads the `feed_seq` its last succeeded run recorded, and `feed_since` pages
-  through what came after (R5-34; the anomaly service is the example).
+  `resume(conn, MODULE)` reads the `feed_seq` its last succeeded run recorded (set `outputs["feed_seq"]` in
+  `kk.lib.run`; it goes to the run's own column, apart from `cost` and the other outputs, T25), and `feed_since`
+  pages through what came after (R5-34; the anomaly service is the example).
 - **Cite what you used.** Inferred claims carry `derived_from` with the claim ids they came from. Extracted
   claims carry the quote and its source.
 - **Narrow scopes.** A claim's scope must be at least as restrictive as everything it was made from.
@@ -244,15 +257,19 @@ Rules that keep a provider correct:
 1. Declare it in `kernel/blueprint/slots.yaml` (a kernel concern) or `morphogen/distribution.yaml`
    (Morphogen's), with its default provider and its `contract:`.
 2. Add its interface to `kernel/src/kk/interfaces.py` if it is a kernel slot.
-3. Prefer a case set (`contract/slots/<slot>/set.yaml`, `cases/*.yaml`, a slot-owned `runner.py`) over
-   `provider-tests`. The slot owns the runner, so a candidate provider cannot certify itself.
+3. Give it a case set (`contract/slots/<slot>/set.yaml`, `cases/*.yaml`, a slot-owned `runner.py`); a kernel slot
+   must. The slot owns the runner, so a candidate provider cannot certify itself. A kernel slot's runner builds its
+   record with `kernel/contract/slots/harness.py` (a fresh database, the provider's migration, its service run once
+   as its own role, refused when that role is a superuser or holds more than an agent's rights) and never imports the
+   provider. The harness trusts the provider's code (it runs as the harness's OS user): run a model-written candidate
+   confined. Two runs of the same set at once collide on its fixed names.
 4. Record the decision in `docs/decisions.md`, checked against rebuild 4's decisions first.
 
 ## 4. Testing
 
 | Command | What it checks | Needs |
 | --- | --- | --- |
-| `sh kernel/contract/run.sh` | each kernel provider against its slot's cases: 66 record, 13 validator, 17 belief | Postgres |
+| `sh kernel/contract/run.sh` | the API against `api.yaml`, then each kernel provider against its slots' cases: 66 record, 6 lane policy, 13 validator, 17 belief, 9 intake filter, 8 verifier, 11 truth maintenance, 8 recall, 8 agent interface, 6 vocabulary pack, 7 self-encoder, 6 evaluator | Postgres |
 | `python3 kernel/contract/mutants.py` | every mutant fails the contract | Postgres |
 | `python3 kernel/providers/test.py` | each kernel provider's own tests, then the services end to end | Postgres |
 | `sh morphogen/contract/run.sh [--mutants]` | Morphogen's slot contracts (analyser, gap-finder) | Postgres for the analyser's service cases |
@@ -311,6 +328,7 @@ By hand:
 | --- | --- |
 | `DATABASE_URL` | a provider's connection; `connect(role)` then switches to its role |
 | `KK_ROLE` | override the role a service switches to |
+| `KK_ONCE` | `1`: a feed consumer's service makes one pass and exits (slot case sets run it so) |
 | `KK_PYTHON` | the Python the contract runner and confined runs use |
 | `KK_RUN_AS` | OS users for model-written code, comma-separated |
 | `KK_SANDBOX_CLUSTER` | the sandbox's own cluster (a superuser's conninfo) |

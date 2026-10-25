@@ -10,4 +10,4 @@ tests:
   - python3 tests/test_mcp.py
 not_ported: >-
   The memory profile (remember, recall briefings, changes_since), the briefing (context-assembler, unfilled),
-  recall cues and the Claude Code hooks (harness-adapter slot, to port), dense recall and re-ranking (R5-12).
+  recall cues and the Claude Code hooks (harness-adapter slot, unfilled: T25), dense recall and re-ranking (R5-12).

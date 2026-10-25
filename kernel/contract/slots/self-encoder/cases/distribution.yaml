@@ -1,0 +1,3 @@
+id: urn:kk:contract:self-encoder/distribution
+description: The distribution has as parts each kernel slot it uses and each slot it declares; a declared slot is a kk:Slot
+  part of it.

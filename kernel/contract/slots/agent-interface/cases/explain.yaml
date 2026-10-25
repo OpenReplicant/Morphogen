@@ -1,0 +1,2 @@
+id: urn:kk:contract:agent-interface/explain
+description: explain gives a claim's sources and the claims it was derived from.

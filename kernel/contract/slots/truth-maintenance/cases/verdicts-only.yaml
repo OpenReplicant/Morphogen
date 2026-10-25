@@ -1,0 +1,2 @@
+id: urn:kk:contract:truth-maintenance/verdicts-only
+description: 'Every change set it has applied holds add_verification ops only: no claim is written and nothing deleted.'

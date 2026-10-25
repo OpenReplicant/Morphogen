@@ -1,0 +1,10 @@
+# The truth-maintenance slot's contract (T25, R5-42 (b); rebuild 4 D-89, R5-31): when a premise of a derived claim is
+# withdrawn (superseded, refuted, retracted or redacted), every current claim built on it, directly or through other
+# derived claims, gets the verdict inconclusive naming the withdrawn premises (details.withdrawn: claim ids); when its
+# premises are current again it gets supported; nothing else changes. The belief model caps a claim whose latest verdict
+# from this method is inconclusive (contract slots/belief-model). The slot's own runner (runner.py) builds a record
+# (kernel/contract/slots/harness.py), changes premises step by step, runs the provider's service once (KK_ONCE=1) as its
+# own role after each step, and judges the verdicts it recorded.
+slot: truth-maintenance
+runner: runner.py
+version: 0.1.0

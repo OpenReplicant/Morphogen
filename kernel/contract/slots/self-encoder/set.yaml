@@ -1,0 +1,14 @@
+# The self-encoder slot's contract (T25, R5-42 (b); R5-14): the self-model every self-encoder records, which the
+# self-model questions (G7), kernel-mcp and a distribution's planner read. The boundary is the provider's command
+# (provider.yaml `command:` and `role:`), run as `python3 -m <package> scan --repo <dir> [--distribution <dir>/<file>]` as its
+# own role, over a repository with kernel/blueprint/slots.yaml, kernel/providers/*/provider.yaml and a distribution file:
+#   urn:kk:slot:<id>        a kk:Slot ; rdfs:label <id> ; kk:cardinality ; kk:slotContract ; dcterms:isPartOf the blueprint
+#                           (urn:kk:blueprint:kernel) or the distribution that declares it
+#   urn:kk:provider:<name>  kk:fills urn:kk:slot:<id>, one per slot it declares ; owl:versionInfo
+#   urn:kk:distribution:<id> dcterms:hasPart each slot it uses or declares
+# every claim deterministic, citing its file (file:<path relative to the repository>) and the line it comes from
+# (FragmentSelector line=N, RFC 5147). The slot's own runner (runner.py) builds a record and a repository, runs the
+# command and reads what it recorded; it never imports the provider.
+slot: self-encoder
+runner: runner.py
+version: 0.1.0

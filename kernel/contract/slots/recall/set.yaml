@@ -1,0 +1,10 @@
+# The recall slot's contract (T25, R5-42 (b)): what every recall provider holds. The read boundary is
+# `api.recall(text, limit int) -> jsonb`, a list of claims (api.claims columns, at least id and belief, plus rank) best
+# first, run as the reader's own role so the store's clearance applies (kk.recall and kernel-mcp's `search` call it when
+# it exists). A provider that keeps an index keeps it from the change feed: its service (provider.yaml `service:` and
+# `role:`) is run once (KK_ONCE=1) after the record changes. Ranking quality is measured by the evals (SciFact,
+# LongMemEval), not here. The slot's own runner (runner.py) builds a record (kernel/contract/slots/harness.py), seeds it,
+# runs the service and queries as a reader; it never imports the provider.
+slot: recall
+runner: runner.py
+version: 0.1.0

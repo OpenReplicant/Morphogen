@@ -1,0 +1,13 @@
+# The evaluator slot's contract (T25, R5-42 (b)): what every evaluator holds. The boundary is the provider's command
+# (provider.yaml `command:` and `role:`), run as `python3 -m <package> --suite <suite> --artifacts <dir> <run.json>...`
+# as its own role: each eval run file becomes DQV measurements (D-71), which the planner and the sandbox read to compare
+# a candidate with the incumbent (G2):
+#   urn:kk:eval:<suite>:<run>  dqv:value <number>
+#       {dqv:isMeasurementOf urn:kk:metric:<suite>:<dotted path>, dqv:computedOn urn:kk:dataset:<suite>[:<split>]}
+# one per number in the file (lists and booleans are not measurements, `models` is not a score), observed, referencing
+# the stored file (an artifact whose bytes hash to it); a run naming its provider says so (dcterms:subject). The slot's
+# own runner (runner.py) builds a record (kernel/contract/slots/harness.py), runs the command and reads what it recorded;
+# it never imports the provider.
+slot: evaluator
+runner: runner.py
+version: 0.1.0

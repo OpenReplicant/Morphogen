@@ -7,5 +7,7 @@ origin: OpenReplicant/kernel (rebuild 4) modules/verifier-quotes; check.py uncha
 requires: Python 3.12+, psycopg (service)
 migration: migration.sql
 service: python3 -m verifier_quotes
+role: kkm_verifier_quotes
+applies_to: [extracted]          # evidence types (or predicate IRIs) it gives verdicts on (contract slots/verifier)
 tests:
   - python3 tests/test_check.py

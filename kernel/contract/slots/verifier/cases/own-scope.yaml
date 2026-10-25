@@ -1,0 +1,3 @@
+id: urn:kk:contract:verifier/own-scope
+description: A verdict is recorded in its claim's own scope, so it is never visible more widely than the claim (invariant
+  3).

@@ -22,4 +22,4 @@ end-to-end service test (`tests/test_services.py`). Services share `kk.lib` (`..
 | pack-loader | vocabulary-pack | Ported from rebuild 4 (T4): `packs.sql` identical but for file paths; the pack checks pass |
 | self-encoder | self-encoder | Rewritten (T4): blueprint, provider manifests and a distribution as claims; `answer` says which provider fills each slot, citing file and line |
 | evaluator | evaluator | Ported from rebuild 4 unchanged (T3): eval runs as DQV measurements. Candidate-vs-incumbent scoring comes with G2 |
-| claude-code | harness-adapter | To port (`kernel-mcp/hooks`) |
+| (none) | harness-adapter | Unfilled (T25): Morphogen runs Claude Code directly with kernel-mcp and needs no hooks; rebuild 4's `kernel-mcp/hooks` stay unported until a harness or the UI (R5-O14) needs them |

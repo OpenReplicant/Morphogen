@@ -1,0 +1,2 @@
+id: urn:kk:contract:recall/no-match
+description: A question sharing no word with any claim returns nothing.

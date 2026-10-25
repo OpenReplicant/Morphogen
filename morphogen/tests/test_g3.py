@@ -186,7 +186,7 @@ def main() -> None:
             person.execute("select api.review(%s, true, 'go ahead')", (cs_id,))
             check(q("select status from api.change_sets where id = %s", cs_id)[0][0] == "applied", "approve: a person approves the plan")
             run_row = wait("the actuator to carry out the step", lambda: q(
-                "select status, cost from kernel.run where agent = 'urn:kk:agent:intent-actuator' and plan_step = %s and ended_at is not null", step))
+                "select status, outputs from kernel.run where agent = 'urn:kk:agent:intent-actuator' and plan_step = %s and ended_at is not null", step))
             check(run_row[0][0] == "succeeded" and run_row[0][1]["before"] == "600", "execute: the intent actuator carried out the step")
             msg = git(intent, "log", "-1", "--format=%B")
             check(msg.startswith(f"change-set:{cs_id} plan-step:{step}")

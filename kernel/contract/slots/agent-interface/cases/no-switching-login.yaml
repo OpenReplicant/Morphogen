@@ -1,0 +1,2 @@
+id: urn:kk:contract:agent-interface/no-switching-login
+description: 'A login that could switch to other roles (a superuser) is refused: whoever holds it could act as anyone.'

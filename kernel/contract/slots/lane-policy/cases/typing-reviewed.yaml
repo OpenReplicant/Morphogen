@@ -1,0 +1,3 @@
+id: urn:kk:contract:lane-policy/typing-reviewed
+description: 'A claim typing a property is routed to review although the auto lane was asked for: defining vocabulary is a
+  person''s call.'

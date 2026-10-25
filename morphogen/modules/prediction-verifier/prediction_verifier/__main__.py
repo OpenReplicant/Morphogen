@@ -58,7 +58,7 @@ def one_pass(conn, windows: int, settle: int, observers: list[str], actuators: l
             steps = [r["subject"] for r in rows(cur, """select subject from api.claims where predicate = %s
                       and object_entity = %s and status <> 'deprecated'""", (STEP_OF, plan))]
             trusted = lambda names: [a for a in names if a not in (AGENT, p["attributed_to"])]
-            runs = rows(cur, """select status, ended_at, coalesce(cost->>'refused', cost->>'error') as reason
+            runs = rows(cur, """select status, ended_at, coalesce(outputs->>'refused', outputs->>'error') as reason
                                 from kernel.run where plan_step = any(%s) and agent = any(%s)""",
                         (steps, trusted(actuators)))
             obs = rows(cur, f"""select {COLUMNS} from api.claims where predicate = %s and subject = %s

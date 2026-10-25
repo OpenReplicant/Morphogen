@@ -7,6 +7,7 @@ origin: OpenReplicant/kernel (rebuild 4) modules/truth-maintenance (D-89, M6-T12
 requires: Python 3.12+, psycopg (service)
 migration: migration.sql
 service: python3 -m truth_maintenance
+role: kkm_truth_maintenance
 tests:
   - python3 tests/test_plan.py
   - python3 tests/test_service.py

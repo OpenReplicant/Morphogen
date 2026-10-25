@@ -1,0 +1,10 @@
+# The vocabulary-pack slot's contract (T25, R5-42 (b)): what every pack provider holds for the packs the kernel ships
+# (kernel/packs/packs.yaml entries with a `file`). The boundary is the provider's migration (provider.yaml `migration:`),
+# applied as a superuser on a record with nothing else installed: afterwards every triple of every pack file is a
+# current, deterministic claim in urn:kk:scope:vocab by the provider's agent, referencing its file pinned by the file's
+# sha256 as it is now (file:kernel/packs/<file>#sha256=<hex>), so a pack edited without regenerating fails; every property
+# a pack types is approved (kernel.is_approved_property) and nothing else is. The slot's own runner (runner.py) reads the
+# pack files with rdflib and the record with SQL; it never imports the provider.
+slot: vocabulary-pack
+runner: runner.py
+version: 0.1.0

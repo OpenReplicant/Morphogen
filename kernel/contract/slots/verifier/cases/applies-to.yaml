@@ -1,0 +1,3 @@
+id: urn:kk:contract:verifier/applies-to
+description: Each seeded claim of a kind the verifier declares (applies_to), whose source it can read, gets exactly one verdict
+  from it after one pass.

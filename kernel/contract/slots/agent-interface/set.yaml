@@ -1,0 +1,11 @@
+# The agent-interface slot's contract (T25, R5-42 (b)): what every agent interface holds. The boundary is MCP over stdio:
+# the provider's service (provider.yaml `service: python3 -m <package>`) started with KK_DATABASE_URL naming the agent's
+# own login, as an agent harness (Claude Code) starts it. Tools every provider offers, by these names, because agents,
+# the evals (self-model, design) and the UI call them: whoami, query_claims, search, explain, start_run,
+# submit_change_set, get_change_set, finish_run. The store decides clearance and attribution; the interface must not
+# widen either. The slot's own runner (runner.py) builds a record (kernel/contract/slots/harness.py) and talks MCP to the
+# provider as two agents; it never imports the provider.
+slot: agent-interface
+runner: runner.py
+version: 0.1.0
+tools: [whoami, query_claims, search, explain, start_run, submit_change_set, get_change_set, finish_run]

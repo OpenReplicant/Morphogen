@@ -1,5 +1,5 @@
-"""Mutants for the truth-maintenance provider (run by kernel/contract/mutants.py; the slot has no case set, so
-the provider's own tests must fail on each)."""
+"""Mutants for the truth-maintenance provider (run by kernel/contract/mutants.py): the slot's case set
+(kernel/contract/slots/truth-maintenance) must fail on each."""
 
 PLAN = "truth_maintenance/plan.py"
 MAIN = "truth_maintenance/__main__.py"
