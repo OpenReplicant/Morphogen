@@ -256,7 +256,7 @@ Rules that keep a provider correct:
 | `python3 kernel/contract/mutants.py` | every mutant fails the contract | Postgres |
 | `python3 kernel/providers/test.py` | each kernel provider's own tests, then the services end to end | Postgres |
 | `sh morphogen/contract/run.sh [--mutants]` | Morphogen's slot contracts (analyser, gap-finder) | Postgres for the analyser's service cases |
-| `python3 morphogen/modules/test.py` | each module's tests, then the full loop (T5), G2, G3, the design agent, catalog lookup, the UI and the local bring-up | everything in section 1, as root |
+| `python3 morphogen/modules/test.py` | each module's tests, then the full loop (T5), G2, G3, the design agent, catalog lookup, the UI, the local bring-up and the container image | everything in section 1, as root |
 | `python3 scripts/check_boundary.py` | `kernel/` never depends on `morphogen/` | nothing |
 
 The module suite takes several minutes. Pass it the full environment:
@@ -290,8 +290,10 @@ Rules:
 
 ## 5. Running it
 
-The quickest way is `morphogen/deploy/local.py up` (`morphogen/deploy/LOCAL.md`): it does all of the below for
-you, with Postgres in Docker. By hand:
+The quickest ways (`morphogen/deploy/LOCAL.md`): the container image (`morphogen/deploy/container/Containerfile`,
+run by `morphogen/deploy/container.py`), or `morphogen/deploy/local.py up` on the machine itself, with Postgres in
+Docker or, with `MORPHOGEN_DB=embedded`, from the machine's own binaries. Either does all of the below for you.
+By hand:
 
 - **Install into a database:** `python3 morphogen/modules/install.py <db>` installs the kernel, the kernel
   providers Morphogen uses, and every module.
@@ -319,6 +321,8 @@ you, with Postgres in Docker. By hand:
 | `KK_JWT_SECRET`, `KK_LOGIN_URL` | the UI's token secret (32+ characters) and where a person's login connects |
 | `KK_RERANK` | `1`: cross-encoder re-ranking in recall (the model must be in `KK_EMBED_CACHE`) |
 | `KK_EVAL_CACHE`, `KK_EMBED_CACHE` | where evals keep datasets and models |
+| `MORPHOGEN_HOME`, `MORPHOGEN_DB`, `MORPHOGEN_PGDATA`, `MORPHOGEN_COMPOSE`, `MORPHOGEN_UI_HOST` | `local.py`: where an instance lives, `embedded` Postgres and its data, `external` when someone else runs the compose runner, where the UI listens (`KK_UI_HOST` to `serve.py`) |
+| `KK_CONTAINER_IMAGE`, `KK_BUILD_CA` | `test_container.py`: an image already built, or a CA bundle to build behind a proxy that re-signs TLS |
 
 Each module's `__main__.py` docstring lists the rest of its settings.
 
@@ -344,7 +348,8 @@ Recommend one option and keep moving on everything else.
 
 Other rules:
 
-- Pin exact versions at least two weeks old. Look external tools up rather than relying on memory.
+- Pin exact versions, checked by hash or digest, and take the latest release, security fixes included (R5-41).
+  Look external tools up rather than relying on memory.
 - cognee and Graphiti are baselines to reproduce, never dependencies.
 - Port from rebuild 4 (`OpenReplicant/kernel`, read-only) rather than rewriting from memory.
 - No redesign of the kernel before gate G1 (contract) passes. No redesign of Morphogen before G2

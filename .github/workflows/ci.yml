@@ -71,13 +71,20 @@ jobs:
                      $(grep -o '^IMAGE = "[^"]*"' morphogen/deploy/local.py | cut -d'"' -f2); do
             for i in 1 2 3 4; do docker pull -q "$img" && break; sleep $((i * 15)); done
           done
+      - name: The container image (T24), every download pinned, built with retries (snapshot.debian.org is slow at times)
+        run: |
+          for i in 1 2 3; do
+            docker build -q -f morphogen/deploy/container/Containerfile -t morphogen:ci . && break
+            [ $i = 3 ] && exit 1; sleep $((i * 30))
+          done
+          echo "KK_CONTAINER_IMAGE=morphogen:ci" >> "$GITHUB_ENV"
       - name: A browser for the UI test (T21), Playwright pinned
         run: |
           npm install --prefix /tmp/pw --no-save --no-audit --no-fund playwright@1.56.1
           PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
           echo "NODE_PATH=/tmp/pw/node_modules" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers" >> "$GITHUB_ENV"
-      - name: Morphogen modules, the full loop (T5), G2, G3, the UI (T21) and the local bring-up (T23), as root so they can start code as the run users
+      - name: Morphogen modules, the full loop (T5), G2, G3, the UI (T21), the local bring-up (T23) and the container image (T24), as root so they can start code as the run users
         run: |
           # The passwords above are in this file, which the run users can read: replace them with ones they cannot.
           # The same for the sandbox's cluster.

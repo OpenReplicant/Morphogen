@@ -1,0 +1,9 @@
+# Downloads the image takes, each checked by sha256 (fetch.py): name, Debian architecture, sha256, URL.
+gitleaks.tgz        amd64 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+gitleaks.tgz        arm64 e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080 https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_arm64.tar.gz
+docker.tgz          amd64 33e1ab8b63d14bca449f7a3d30d7f6aa669daa544e60a86b17fec87f61afe2b4 https://download.docker.com/linux/static/stable/x86_64/docker-29.9.0.tgz
+docker.tgz          arm64 811f6eee271678fc98dbe5c4d896c00fc5fe2daa4f7a37069c17abc036eab85b https://download.docker.com/linux/static/stable/aarch64/docker-29.9.0.tgz
+docker-compose      amd64 40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64
+docker-compose      arm64 733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2 https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-aarch64
+claude              amd64 ea38ee1a1f946eea9bc6e97fb912dbe71fc379b25cc605d91b308afa1ca08be7 https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/2.1.290/linux-x64/claude
+claude              arm64 24c31a685e363190c165353f10b4e8434fd22647c1dd76eb6d2a05634eb60b95 https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/2.1.290/linux-arm64/claude

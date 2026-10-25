@@ -1,0 +1,10 @@
+# The container image (morphogen/deploy/container/Containerfile) takes the source only.
+*
+!kernel
+!morphogen
+!scripts
+!LICENSE
+**/__pycache__
+**/*.pyc
+**/_mutant
+**/node_modules

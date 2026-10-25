@@ -101,6 +101,16 @@ try:
         except OSError:
             return False
     wait("the UI", answers, timeout=60)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as u:     # this machine's address on its network
+        u.connect(("10.255.255.255", 1))
+        lan = u.getsockname()[0]
+    def reaches(host):
+        try:
+            with socket.create_connection((host, s["ui_port"]), timeout=2):
+                return True
+        except OSError:
+            return False
+    check(lan != "127.0.0.1" and not reaches(lan), f"the UI listens on 127.0.0.1 only, not on {lan}")
     st = local("status").stdout
     check(all(f"{p}: running" in st for p in ("reconcile", "observer-otel", "compose", "ui")), "status: every process runs")
     sys.path.insert(0, str(LOCAL.parent))

@@ -7,8 +7,16 @@ described system.
   python3 morphogen/deploy/local.py agent NAME         an agent's own login, and an MCP config for Claude Code
   python3 morphogen/deploy/local.py record FILE --source NAME   a conversation (JSON lines) as notes, for an interview
   python3 morphogen/deploy/local.py propose SYSTEM     a described system's compose file, to review in the UI
+  python3 morphogen/deploy/local.py claude NAME        Claude Code as the agent NAME, its MCP config given
   python3 morphogen/deploy/local.py status             what runs, and where
   python3 morphogen/deploy/local.py down [--db]        stop the services (and Postgres, with --db)
+
+`up --foreground` stays in the foreground, stops everything on SIGTERM and exits when a process it started does
+(the container image's supervisor, T24). Settings by environment: MORPHOGEN_DB=embedded runs Postgres from this
+machine's own binaries (initdb, pg_ctl) in MORPHOGEN_PGDATA (default MORPHOGEN_HOME/pgdata) instead of in Docker;
+MORPHOGEN_COMPOSE=external leaves the compose runner to someone else (the image runs it as the one process that
+holds the container socket); MORPHOGEN_UI_HOST (default 127.0.0.1) is where the UI listens;
+MORPHOGEN_OPERATOR_NAME and MORPHOGEN_OPERATOR_EMAIL name who brought the instance up, when git does not.
 
 Everything it keeps is in MORPHOGEN_HOME (default ~/.local/state/morphogen), readable by you alone:
   secrets.json   the database superuser's password, the services' and the UI's logins, the UI's token secret,
@@ -50,6 +58,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")]
 HOME = Path(os.environ.get("MORPHOGEN_HOME", Path.home() / ".local" / "state" / "morphogen"))
+EMBEDDED = os.environ.get("MORPHOGEN_DB") == "embedded"
+PGDATA = Path(os.environ.get("MORPHOGEN_PGDATA", HOME / "pgdata"))
+COMPOSE = os.environ.get("MORPHOGEN_COMPOSE") != "external"
 DB = "morphogen"
 IMAGE = "postgres:16.9@sha256:ddfe3e8713e3ee5b8f286082cb12512488dfbf3f5a1ecb0b74a42e6055af0a5f"
 ENV = "local"
@@ -143,10 +154,12 @@ def alive(pid: int) -> bool:
 def preflight() -> None:
     if sys.version_info < (3, 12):
         die(f"Python 3.12 or newer is needed (this is {sys.version.split()[0]})")
-    missing = [t for t in ("docker", "git", "psql") if not shutil.which(t)]
+    docker = COMPOSE or not EMBEDDED
+    want = ["git", "psql", *(["docker"] if docker else []), *(["initdb", "pg_ctl"] if EMBEDDED else [])]
+    missing = [t for t in want if not shutil.which(t)]
     if missing:
         die(f"not on PATH: {', '.join(missing)} (docs/DEVELOPING.md, section 1)")
-    if subprocess.run(["docker", "info"], capture_output=True).returncode:
+    if docker and subprocess.run(["docker", "info"], capture_output=True).returncode:
         die("Docker does not answer: start it first")
     import importlib.util
     lost = [m for m in NEEDS if importlib.util.find_spec(m) is None]
@@ -160,6 +173,8 @@ def preflight() -> None:
 
 # ------------------------------------------------------------------ Postgres
 def postgres(s: dict) -> None:
+    if EMBEDDED:
+        return postgres_embedded(s)
     state = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container(s)], capture_output=True, text=True)
     if state.returncode:
         say(f"starting Postgres ({IMAGE.split('@')[0]}) on 127.0.0.1:{s['db_port']}")
@@ -172,6 +187,34 @@ def postgres(s: dict) -> None:
     elif state.stdout.strip() != "true":
         pw_file(s)                    # Docker checks a bind mount's source at every start, not only the first
         subprocess.run(["docker", "start", container(s)], check=True, capture_output=True)
+    answers(s)
+
+
+def postgres_embedded(s: dict) -> None:
+    """Postgres from this machine's binaries, as you: the data in PGDATA, listening on 127.0.0.1 and on a socket in
+    MORPHOGEN_HOME/run (yours alone), asking every login for its password as the container does."""
+    run, logs = HOME / "run", HOME / "logs"
+    for d in (run, logs):
+        d.mkdir(exist_ok=True, mode=0o700)
+    if not (PGDATA / "PG_VERSION").exists():
+        say(f"initialising Postgres in {PGDATA}")
+        pw = pw_file(s, mode=0o600)
+        try:
+            out = subprocess.run(["initdb", "-D", str(PGDATA), "-U", "postgres", "--auth=scram-sha-256", f"--pwfile={pw}",
+                                  "-E", "UTF8", "--locale=C.UTF-8"], capture_output=True, text=True)
+        finally:
+            pw.unlink(missing_ok=True)
+        if out.returncode:
+            die(f"initdb failed: {out.stderr.strip()[-400:]}")
+    if subprocess.run(["pg_ctl", "-D", str(PGDATA), "status"], capture_output=True).returncode:
+        out = subprocess.run(["pg_ctl", "-D", str(PGDATA), "-w", "-l", str(logs / "postgres.log"), "-o",
+                              f"-c listen_addresses=127.0.0.1 -p {s['db_port']} -k {run}", "start"], capture_output=True, text=True)
+        if out.returncode:
+            die(f"Postgres did not start: {logs / 'postgres.log'}")
+    answers(s)
+
+
+def answers(s: dict) -> None:
     import psycopg
     try:
         for _ in range(60):
@@ -181,17 +224,18 @@ def postgres(s: dict) -> None:
                 return
             except psycopg.OperationalError:
                 time.sleep(1)
-        die(f"Postgres did not answer on 127.0.0.1:{s['db_port']}: docker logs {container(s)}")
+        die(f"Postgres did not answer on 127.0.0.1:{s['db_port']}: " + (str(HOME / "logs" / "postgres.log") if EMBEDDED else f"docker logs {container(s)}"))
     finally:
         (HOME / "pg-password").unlink(missing_ok=True)          # read at start only; secrets.json keeps it
 
 
-def pw_file(s: dict) -> Path:
+def pw_file(s: dict, mode: int = 0o644) -> Path:
     """The superuser's password as a file the container reads at init (never an argument or a variable), there
     only while the container starts. Readable inside the container (its postgres user reads it); on this machine
-    MORPHOGEN_HOME, yours alone, keeps other users out."""
+    MORPHOGEN_HOME, yours alone, keeps other users out. initdb, run as you, gets it at 0600."""
     f = HOME / "pg-password"
-    f.touch(mode=0o644)
+    f.touch(mode=mode)
+    f.chmod(mode)
     f.write_text(s["superuser"])
     return f
 
@@ -261,12 +305,13 @@ def own(s: dict, every: dict, name: str) -> str:
 
 # ------------------------------------------------------------------ intent
 def operator() -> tuple[str, str]:
-    """Who runs `up`: their own git identity, else their login name on this host."""
+    """Who runs `up`: MORPHOGEN_OPERATOR_NAME/EMAIL, else their own git identity, else their login name here."""
     import getpass
     import socket
     get = lambda k: subprocess.run(["git", "config", "--get", k], capture_output=True, text=True).stdout.strip()  # noqa: E731
     user = getpass.getuser()
-    return get("user.name") or user, get("user.email") or f"{user}@{socket.gethostname()}"
+    return (os.environ.get("MORPHOGEN_OPERATOR_NAME") or get("user.name") or user,
+            os.environ.get("MORPHOGEN_OPERATOR_EMAIL") or get("user.email") or f"{user}@{socket.gethostname()}")
 
 
 def git(repo: Path, *args: str) -> str:
@@ -352,12 +397,14 @@ def up(a) -> None:
                                 "KK_OTLP_PORT": str(s["otlp_port"]), "KK_OTLP_SECRET": s["otlp"],
                                 "KK_OTLP_SOURCE": f"{otlp}/v1/metrics", "KK_OTLP_SERVICES": ",".join(SERVICES)},
                                cwd=ROOT / "morphogen" / "modules" / "observer-otel"),
-        "compose": start("compose", [sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(repo), "--all"],
-                         {**base, **({"DOCKER_HOST": os.environ["DOCKER_HOST"]} if "DOCKER_HOST" in os.environ else {})}),
         "ui": start("ui", [sys.executable, str(ROOT / "morphogen" / "ui" / "serve.py")],
                     {**base, "DATABASE_URL": auth, "KK_JWT_SECRET": s["jwt"], "PORT": str(s["ui_port"]),
+                     "KK_UI_HOST": os.environ.get("MORPHOGEN_UI_HOST", "127.0.0.1"),
                      "KK_LOGIN_URL": f"host=127.0.0.1 port={s['db_port']} dbname={DB}"}),   # a person's own name and password
     }
+    if COMPOSE:
+        started["compose"] = start("compose", [sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(repo), "--all"],
+                                   {**base, **({"DOCKER_HOST": os.environ["DOCKER_HOST"]} if "DOCKER_HOST" in os.environ else {})})
     f = HOME / "pids.json"
     f.write_text(json.dumps(started, indent=2) + "\n")
     time.sleep(3)
@@ -367,6 +414,24 @@ def up(a) -> None:
     say(f"Morphogen is up. The UI: http://127.0.0.1:{s['ui_port']}/ui/")
     if not any((repo / "systems").glob("*/compose.yaml")):
         say("next: `local.py person <your name>` to sign in, then describe a system (morphogen/deploy/LOCAL.md)")
+    if a.foreground:
+        foreground(started)
+
+
+def foreground(started: dict) -> None:
+    """Stay up until SIGTERM (or SIGINT), or until a process `up` started exits; then stop everything, Postgres
+    included when it is embedded. Exits 0 on a signal, 1 when a process stopped by itself."""
+    stop = []
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda n, _f: stop.append(n))
+    gone = []
+    while not stop and not gone:
+        time.sleep(1)
+        gone = [k for k, v in started.items() if not ours(v)]
+    if gone:
+        say(f"stopped by itself: {', '.join(gone)} (see {HOME / 'logs'}); stopping the rest")
+    down(argparse.Namespace(db=True))
+    sys.exit(1 if gone else 0)
 
 
 def down(a) -> None:
@@ -375,7 +440,11 @@ def down(a) -> None:
             os.killpg(entry["pid"], signal.SIGTERM)
             say(f"stopped {name}")
     (HOME / "pids.json").unlink(missing_ok=True)
-    if a.db:
+    if a.db and EMBEDDED:
+        if subprocess.run(["pg_ctl", "-D", str(PGDATA), "status"], capture_output=True).returncode == 0:
+            subprocess.run(["pg_ctl", "-D", str(PGDATA), "-w", "-m", "fast", "stop"], capture_output=True)
+            say(f"stopped Postgres (the data stays in {PGDATA})")
+    elif a.db:
         s = secret()
         subprocess.run(["docker", "stop", container(s)], capture_output=True)
         say(f"stopped Postgres (the data stays in the volume {volume(s)})")
@@ -383,10 +452,17 @@ def down(a) -> None:
 
 def status(a) -> None:
     s = secret()
-    db = subprocess.run(["docker", "inspect", "-f", "{{.State.Status}}", container(s)], capture_output=True, text=True)
-    say(f"Postgres: {db.stdout.strip() or 'not created'} (127.0.0.1:{s['db_port']})")
+    if EMBEDDED:
+        db = subprocess.run(["pg_ctl", "-D", str(PGDATA), "status"], capture_output=True, text=True)
+        state = "running" if db.returncode == 0 else ("stopped" if (PGDATA / "PG_VERSION").exists() else "not created")
+    else:
+        db = subprocess.run(["docker", "inspect", "-f", "{{.State.Status}}", container(s)], capture_output=True, text=True)
+        state = db.stdout.strip() or "not created"
+    say(f"Postgres: {state} (127.0.0.1:{s['db_port']})")
     for name, entry in pids().items():
         say(f"{name}: {'running' if ours(entry) else 'stopped'} (pid {entry['pid']}, log {HOME / 'logs' / (name + '.log')})")
+    if not COMPOSE:
+        say(f"compose: run by the container's supervisor (log {HOME / 'logs' / 'compose.log'})")
     say(f"UI: http://127.0.0.1:{s['ui_port']}/ui/   intent: {HOME / 'intent'}")
 
 
@@ -405,14 +481,38 @@ def person(a) -> None:
 
 
 def agent(a) -> None:
-    """An agent's own login (kk_agent: it proposes, it never reviews) and an MCP config that serves the record to it."""
+    if a.print:
+        config, iri = agent_config(a.name, only=a.only)
+        print(json.dumps(config))
+        return
+    f, iri = make_agent(a.name)
+    say(f"{iri} has its own login. For Claude Code: claude --mcp-config {f}  (or `local.py claude {a.name}`)\n"
+        f"(the interview skill: morphogen/skills/interview/SKILL.md)")
+
+
+def make_agent(name: str) -> tuple[Path, str]:
+    """An agent's own login and its MCP config, written to MORPHOGEN_HOME/mcp (0600)."""
+    config, iri = agent_config(name)
+    d = HOME / "mcp"
+    d.mkdir(exist_ok=True, mode=0o700)
+    f = d / f"{name}.json"
+    f.touch(mode=0o600)
+    f.write_text(json.dumps(config, indent=2) + "\n")
+    return f, iri
+
+
+def agent_config(name: str, only: bool = False) -> tuple[dict, str]:
+    """An agent's own login (kk_agent: it proposes, it never reviews) and an MCP config that serves the record to it.
+    A new password each time: an older config stops working. `only`: every other agent's login stops working too
+    (password removed, sessions ended), for agents that share one OS user, as in the container, where one could
+    otherwise keep another's config and propose as it."""
     import re
     import psycopg
     from psycopg import sql
-    if not re.fullmatch(r"[a-z][a-z0-9_]{0,30}", a.name):
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,30}", name):
         die("an agent's name: lower-case letters, digits and _, starting with a letter")
     s = secret()
-    role, iri, pw = f"agent_{a.name}", f"urn:kk:agent:{a.name.replace('_', '-')}", secrets.token_urlsafe(32)
+    role, iri, pw = f"agent_{name}", f"urn:kk:agent:{name.replace('_', '-')}", secrets.token_urlsafe(32)
     with psycopg.connect(conninfo(s), autocommit=True) as su:
         other = su.execute("select db_role from kernel.agent where iri = %s", (iri,)).fetchone()
         if other and other[0] != role:
@@ -426,25 +526,63 @@ def agent(a) -> None:
             sql.SQL("alter" if exists else "create"), sql.Identifier(role), sql.Literal(verifier)))
         su.execute(sql.SQL("grant kk_agent to {}").format(sql.Identifier(role)))
         su.execute(sql.SQL("grant connect on database {} to {}").format(sql.Identifier(DB), sql.Identifier(role)))
+        if only:
+            others = [r[0] for r in su.execute("select db_role from kernel.agent where db_role like 'agent\\_%%' and db_role <> %s",
+                                               (role,)).fetchall()]
+            for o in others:
+                su.execute(sql.SQL("alter role {} password null").format(sql.Identifier(o)))
+            su.execute("select pg_terminate_backend(pid) from pg_stat_activity where usename = any(%s)", (others,))
         su.execute("set role kk_owner")
         su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, %s, 'software', %s) on conflict (iri) do nothing",
-                   (iri, role, a.name))
+                   (iri, role, name))
     env = {"KK_DATABASE_URL": conninfo(s, user=role, password=pw),
            "PYTHONPATH": os.pathsep.join([str(ROOT / "kernel" / "src"), str(ROOT / "kernel" / "providers" / "kernel-mcp")])}
-    config = {"mcpServers": {"morphogen": {"command": sys.executable, "args": ["-m", "kernel_mcp"], "env": env}}}
-    d = HOME / "mcp"
-    d.mkdir(exist_ok=True, mode=0o700)
-    f = d / f"{a.name}.json"
-    f.touch(mode=0o600)
-    f.write_text(json.dumps(config, indent=2) + "\n")
-    say(f"{iri} has its own login. For Claude Code: claude --mcp-config {f}\n"
-        f"(the interview skill: morphogen/skills/interview/SKILL.md)")
+    return {"mcpServers": {"morphogen": {"command": sys.executable, "args": ["-m", "kernel_mcp"], "env": env}}}, iri
+
+
+# What `claude` passes on from its own environment: nothing that opens the record or the services.
+CLAUDE_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "TERM", "COLORTERM", "TZ", "TMPDIR", "USER", "SHELL",
+              "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "NODE_EXTRA_CA_CERTS")
+
+
+# Which endpoint and models Claude Code uses (a gateway such as LiteLLM, another provider's models): passed on to
+# Claude Code alone, never to a service. ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY are the gateway's or the API's key.
+CLAUDE_MODEL_ENV = ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL",
+                    "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                    "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC")
+
+
+def claude_env(base: dict) -> dict:
+    """Claude Code's environment: `base` filtered to CLAUDE_ENV and CLAUDE_MODEL_ENV. It signs in as it always does
+    (CLAUDE_CONFIG_DIR, or ~/.claude)."""
+    return {k: v for k, v in base.items() if k in CLAUDE_ENV or k in CLAUDE_MODEL_ENV or k == "CLAUDE_CONFIG_DIR"}
+
+
+def claude(a) -> None:
+    """Claude Code as the agent NAME: its own login (a new one each time, `make_agent`) and the record over MCP,
+    signed in as you are. Runs as you: on this machine it could read MORPHOGEN_HOME, so the container image, where
+    it runs as a user of its own, is the stronger way (T24)."""
+    f, iri = make_agent(a.name)
+    binary = os.environ.get("MORPHOGEN_CLAUDE", "claude")
+    if not shutil.which(binary):
+        die(f"Claude Code is not on PATH ({binary})")
+    say(f"Claude Code as {iri}; the interview skill: {ROOT / 'morphogen' / 'skills' / 'interview' / 'SKILL.md'}")
+    os.execvpe(binary, [binary, "--mcp-config", str(f), *a.args], claude_env(dict(os.environ)))
 
 
 def record(a) -> None:
+    """`-` reads the conversation from standard input (as from outside a container)."""
     s = secret()
     (HOME / "artifacts").mkdir(exist_ok=True, mode=0o700)
-    out = subprocess.run([sys.executable, "-m", "interview_encoder", "--source", a.source, str(Path(a.file).resolve())],
+    path = Path(a.file).resolve()
+    if a.file == "-":
+        import re
+        if not re.fullmatch(r"[a-z0-9-]{1,40}", a.source):
+            die("--source: a-z, 0-9 and -")
+        (HOME / "inbox").mkdir(exist_ok=True, mode=0o700)
+        path = HOME / "inbox" / f"{a.source}.jsonl"
+        path.write_text(sys.stdin.read())
+    out = subprocess.run([sys.executable, "-m", "interview_encoder", "--source", a.source, str(path)],
                          cwd=ROOT / "morphogen" / "modules" / "interview-encoder",
                          env={**os.environ, "DATABASE_URL": own(s, logins(s), "interview-encoder"),
                               "KK_ARTIFACTS": str(HOME / "artifacts"),
@@ -468,7 +606,9 @@ def propose(a) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Morphogen on a machine of your own.")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("up").set_defaults(f=up)
+    u = sub.add_parser("up")
+    u.add_argument("--foreground", action="store_true", help="stay up; stop everything on SIGTERM")
+    u.set_defaults(f=up)
     d = sub.add_parser("down")
     d.add_argument("--db", action="store_true", help="stop Postgres too")
     d.set_defaults(f=down)
@@ -478,7 +618,13 @@ def main(argv=None) -> int:
     p.set_defaults(f=person)
     g = sub.add_parser("agent")
     g.add_argument("name")
+    g.add_argument("--print", action="store_true", help="print the MCP config instead of writing it")
+    g.add_argument("--only", action="store_true", help="every other agent's login stops working")
     g.set_defaults(f=agent)
+    c = sub.add_parser("claude")
+    c.add_argument("name")
+    c.add_argument("args", nargs=argparse.REMAINDER, help="passed on to Claude Code")
+    c.set_defaults(f=claude)
     r = sub.add_parser("record")
     r.add_argument("file")
     r.add_argument("--source", required=True, help="a short name for the conversation (a-z, 0-9, -)")
