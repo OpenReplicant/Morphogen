@@ -1,0 +1,11 @@
+# The lane-policy slot's contract (T25, R5-42 (b)): what every lane policy holds. A lane policy routes a valid change set
+# to the auto lane or to review and applies nothing itself (kernel/src/kk/interfaces.py LanePolicy). In this kernel the
+# store routes, by its review rules (kernel.setting review_predicates and review_types, read by kernel.needs_review); a
+# provider sets those rules (the record store's defaults, record-postgres; a distribution's, such as Morphogen's lane-autonomy, may add review)
+# and may only add review, never remove it. The boundary is the provider's install: the record store's own schema when
+# the provider is one (schema/), else its migration (provider.yaml `migration:`) on a record. The slot's own runner
+# (runner.py) builds a record (kernel/contract/slots/harness.py), installs the provider and submits change sets; it never
+# imports the provider.
+slot: lane-policy
+runner: runner.py
+version: 0.1.0

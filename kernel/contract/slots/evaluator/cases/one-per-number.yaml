@@ -1,0 +1,3 @@
+id: urn:kk:contract:evaluator/one-per-number
+description: Each number in the run file becomes one current dqv:value claim on the run, with the right value, metric and
+  dataset; nothing else does.

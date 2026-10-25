@@ -172,7 +172,7 @@ def setup(db: str, n: int) -> None:
                 cs = {"idempotency_key": f"lme:{h(q['question_id'])}:{i // BATCH}", "attributed_to": AGENT,
                       "generated_by": str(run), "target_scope": scope(q), "ops": ops[i:i + BATCH]}
                 ids.append(admin.execute("select api.submit_change_set(%s)->>'id'", (Jsonb(cs),)).fetchone()[0])
-        admin.execute("select api.finish_run(%s, 'succeeded', %s)", (run, Jsonb({"claims": claims})))
+        admin.execute("select api.finish_run(%s, 'succeeded', outputs => %s)", (run, Jsonb({"claims": claims})))
         submitted = time.time() - t0
         # Applied (the validator) and indexed (the recall index) before retrieval is measured.
         with connect("kkm_validator", url) as val:

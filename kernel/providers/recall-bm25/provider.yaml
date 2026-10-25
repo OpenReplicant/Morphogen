@@ -7,6 +7,7 @@ origin: OpenReplicant/kernel (rebuild 4) modules/recall-index (index and api.rec
 requires: PostgreSQL 16+ (no extension), Python 3.12+, psycopg
 migration: migration.sql
 service: python3 -m recall_bm25
+role: kkm_recall_index
 tests:
   - python3 tests/test_index.py
 eval: ../../evals/scifact (retrieval; rebuild 4 floor nDCG@10 0.659)

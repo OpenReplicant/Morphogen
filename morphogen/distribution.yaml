@@ -21,7 +21,6 @@ uses_kernel_slots:
   - vocabulary-pack
   - self-encoder
   - evaluator
-  - harness-adapter
 
 # The MAPE-K loop and design path. status: to-port (from rebuild 4) | to-rewrite | new | ported | written
 # Providers live in modules/<name>/ (provider.yaml); morphogen/tests/test_loop.py runs the loop (T5).

@@ -97,7 +97,9 @@ create table kernel.run (                     -- prov:Activity
   status     text not null default 'running'
              check (status in ('running','succeeded','failed','cancelled')),
   used       jsonb not null default '[]',                    -- prov:used (artifact hashes, claim ids, entity IRIs)
-  cost       jsonb not null default '{}',                    -- tokens, money, cpu seconds
+  cost       jsonb not null default '{}',                    -- what the run spent: tokens, money, cpu seconds
+  outputs    jsonb not null default '{}',                    -- what the run reports (counts, refusals, errors)
+  feed_seq   bigint,                                         -- the feed seq a watcher reached (its durable cursor, R5-18)
   info       jsonb not null default '{}'
 );
 
@@ -868,7 +870,7 @@ grant select on kernel.prefix, kernel.setting, kernel.agent, kernel.scope, kerne
                 kernel.change_set, kernel.feed to kk_agent;
 grant insert (iri) on kernel.entity to kk_agent;     -- identifiers only; meaning comes from claims
 grant insert (module, plan_step, used, info) on kernel.run to kk_agent;
-grant update (status, ended_at, cost, info) on kernel.run to kk_agent;
+grant update (status, ended_at, cost, outputs, feed_seq, info) on kernel.run to kk_agent;
 grant insert (idempotency_key, attributed_to, generated_by, target_scope, lane, ops)
   on kernel.change_set to kk_agent;
 grant update (status, validation_report, validated_by) on kernel.change_set to kk_validator;
@@ -923,10 +925,12 @@ begin
   return v;
 end $$;
 
-create function api.finish_run(run_id uuid, status text, cost jsonb default '{}')
+create function api.finish_run(run_id uuid, status text, cost jsonb default '{}', outputs jsonb default '{}',
+                               feed_seq bigint default null)
 returns void language plpgsql as $$
 begin
-  update kernel.run set status = finish_run.status, cost = finish_run.cost where id = run_id;
+  update kernel.run set status = finish_run.status, cost = finish_run.cost, outputs = finish_run.outputs,
+                        feed_seq = finish_run.feed_seq where id = run_id;
   if not found then
     raise exception 'kernel: run % not found among your running runs', run_id using errcode = 'KK003';
   end if;
@@ -974,6 +978,9 @@ returns uuid language sql as $$
   insert into kernel.redaction(target_kind, target_id, reason, run)
   values (target_kind, target_id, reason, run) returning id
 $$;
+
+-- The version of this API (kernel/contract/api.yaml, T25): what a provider or distribution built against it can rely on.
+create function api.version() returns text language sql immutable as $$ select '1.0.0' $$;
 
 -- Everything needed to explain a claim: sources, lineage, status history, belief, verification.
 create function api.explain(claim_id uuid) returns jsonb
@@ -1048,7 +1055,7 @@ grant usage on schema api to kk_agent;
 grant select on api.claims, api.change_sets to kk_agent;
 grant select on api.review_queue to kk_reviewer;
 grant select on api.review_decisions to kk_agent;
-grant execute on function api.start_run(text, text, jsonb, jsonb), api.finish_run(uuid, text, jsonb),
+grant execute on function api.version(), api.start_run(text, text, jsonb, jsonb), api.finish_run(uuid, text, jsonb, jsonb, bigint),
                           api.submit_change_set(jsonb), api.explain(uuid),
                           api.feed(bigint, int), api.claims_as_of(timestamptz, timestamptz) to kk_agent;
 grant execute on function api.record_validation(uuid, boolean, jsonb) to kk_validator;

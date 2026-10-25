@@ -29,6 +29,7 @@ AGENT = "urn:kk:agent:verifier-quotes"
 MODULE = "urn:kk:module:verifier-quotes"
 PENDING = """select c.id, c.scope, c.attributed_to from api.claims c
              where c.evidence_type = 'extracted' and c.redacted_at is null and not (c.id::text = any(%(skip)s::text[]))
+               and c.attributed_to <> kernel.my_agent()   -- never its own (invariant 5: the store refuses the whole set)
                and not exists (select 1 from api.verifications v where v.claim_id = c.id and v.method = %(m)s)
              order by c.recorded_at limit 500"""
 

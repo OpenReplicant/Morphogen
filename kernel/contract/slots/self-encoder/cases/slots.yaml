@@ -1,0 +1,2 @@
+id: urn:kk:contract:self-encoder/slots
+description: Each slot of the blueprint is a kk:Slot with its label, cardinality, contract and blueprint.

@@ -1,0 +1,2 @@
+id: urn:kk:contract:intake-filter/files-clean-pass
+description: Files with no secret come back as clean paths and nothing is blocked.

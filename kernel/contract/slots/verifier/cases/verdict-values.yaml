@@ -1,0 +1,2 @@
+id: urn:kk:contract:verifier/verdict-values
+description: Every verdict is supported, refuted or inconclusive, and names a method.

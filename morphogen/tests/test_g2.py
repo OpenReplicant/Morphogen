@@ -193,7 +193,7 @@ def main() -> None:
             person.execute("select api.review(%s, true, 'measured and better: go ahead')", (cs_id,))
             check(q("select status from api.change_sets where id = %s", cs_id)[0][0] == "applied", "approve: a person approves")
             step = next(o["subject"] for o in ops if o["predicate"].endswith("hasFeatureOfInterest"))
-            done = wait("the actuator", lambda: q("select status, cost from kernel.run where agent = 'urn:kk:agent:intent-actuator' "
+            done = wait("the actuator", lambda: q("select status, outputs from kernel.run where agent = 'urn:kk:agent:intent-actuator' "
                                                   "and plan_step = %s and ended_at is not null", step))
             check(done[0][0] == "succeeded" and git(intent, "log", "-1", "--format=%s").startswith(f"change-set:{cs_id}")
                   and CANDIDATE.rsplit(":", 1)[-1] in (intent / "environments" / "sandbox" / "anomaly.yaml").read_text(),

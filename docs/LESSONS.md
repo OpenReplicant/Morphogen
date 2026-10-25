@@ -96,6 +96,10 @@ tools here were checked by experiment (details in `docs/spikes/` and the decisio
   first mount is writable: let the first service to start (init) mount it read-write (D-69).
 - An installed stack is not upgraded by a newer checkout unless `kk init` installs what was added and the
   image is rebuilt: `kk up` builds every time (cached layers) and `kk init` adds new modules (D-69).
+- Rebuild 5's schema files are edited in place until a release (T25 added `kernel.run.outputs` and `feed_seq` and
+  changed `api.finish_run`'s arguments). A record built from an older checkout lacks them: rebuild it, or bring
+  the change over by hand; there are no migrations between schema versions yet. `kernel/contract/api.py check`
+  says when the API a checkout expects differs from api.yaml (R5-43).
 - Free model endpoints are rate-limited upstream per model (429 from a shared pool even with quota
   left); probe a few and record which model answered.
 
@@ -103,8 +107,19 @@ tools here were checked by experiment (details in `docs/spikes/` and the decisio
   `{"kkt:propertyName": "image"}` is accepted and applied, and then nothing that reads
   `qualifiers->>'https://w3id.org/knowledge-kernel/tosca#propertyName'` finds it. Write qualifier keys as full IRIs
   (the interview skill says so; found by submitting the skill's own example, T13).
+- The store refuses a **whole** change set when one op breaks a rule (an `add_verification` on the submitter's own
+  claim, invariant 5): every other op in it is lost too, and a service that sends one change set per scope stops
+  verifying that scope. Filter what the store would refuse before submitting (verifier-quotes judged its own claims
+  until the verifier slot's shared cases caught it, T25).
+- `api.record_validation` and the other `update ... where id = ...` functions return nothing, not an error, when row
+  security hides the row: a validator without a grant on a scope silently validates nothing there. Check the status
+  it returns (T25's case-set harness does).
 
 ## Tests
+
+- A case set judged only on the provider it was written for can pass vacuously: seed each case so it would fail if
+  the behaviour were missing (redact a claim only after it was indexed, or the "redacted" case proves nothing), and
+  keep a mutant per case (T25).
 
 - Gate checks that read a live system must tolerate other modules writing meanwhile: assert "every
   claim older than 10 s has a belief", not "zero unscored right now".

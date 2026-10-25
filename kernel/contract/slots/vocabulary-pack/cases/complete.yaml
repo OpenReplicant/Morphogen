@@ -1,0 +1,3 @@
+id: urn:kk:contract:vocabulary-pack/complete
+description: Every triple of every pack file is a current claim (subject, predicate, and the same object or value) in the
+  vocabulary scope; no claim is there that no pack says.

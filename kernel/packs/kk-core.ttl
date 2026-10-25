@@ -24,7 +24,7 @@
 <https://w3id.org/knowledge-kernel/ns>
     a owl:Ontology ;
     rdfs:label "Knowledge Kernel core vocabulary" ;
-    owl:versionInfo "0.4.3" ;
+    owl:versionInfo "0.4.4" ;
     dcterms:license <https://www.apache.org/licenses/LICENSE-2.0> ;
     owl:imports <http://www.w3.org/ns/prov-o> .
 
@@ -42,7 +42,7 @@ kk:Module a owl:Class ;
 
 kk:Slot a owl:Class ;
     rdfs:label "slot" ;
-    skos:definition "A role in the platform with a contract, filled by modules (ontology/slots.yaml)." .
+    skos:definition "A role in the platform with a contract, filled by providers (kernel/blueprint/slots.yaml, a distribution's own file)." .
 
 kk:fills a owl:ObjectProperty ;
     rdfs:domain kk:Module ; rdfs:range kk:Slot ;

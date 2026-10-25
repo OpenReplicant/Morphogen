@@ -1,0 +1,2 @@
+id: urn:kk:contract:verifier/outside-applies-to
+description: A claim of a kind the verifier does not declare gets no verdict from it.

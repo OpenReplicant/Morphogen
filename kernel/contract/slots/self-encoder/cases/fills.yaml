@@ -1,0 +1,2 @@
+id: urn:kk:contract:self-encoder/fills
+description: Each provider fills each slot its manifest declares, and only those, with its version.

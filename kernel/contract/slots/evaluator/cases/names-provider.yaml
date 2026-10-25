@@ -1,0 +1,2 @@
+id: urn:kk:contract:evaluator/names-provider
+description: A run that names the provider it measured says so (dcterms:subject), so a candidate and an incumbent can be compared.

@@ -69,3 +69,22 @@ prov.mkdir(parents=True)
 check(not run.check(prov, [d / "bp.yaml"]), "a provider whose own runner prints every case still fails the slot's runner")
 (prov / "good").write_text("")
 check(run.check(prov, [d / "bp.yaml"]), "the slot's runner, given the provider's directory, passes it")
+
+# A blueprint with cases_required refuses provider-tests (the kernel's does, T25): every slot has shared cases.
+check(refused("cases_required: true\nslots:\n  - {id: s, default: p, contract: provider-tests}\n"),
+      "provider-tests is refused where cases are required")
+check(not refused("cases_required: true\nslots:\n  - {id: s, default: none, contract: none}\n"),
+      "an unfilled slot is allowed where cases are required")
+check("provider-tests" not in {str(c) for c in kernel.values()}, "no kernel slot is left with provider-tests")
+
+# A provider filling two slots runs both contracts: the slot's own runner, and its own runner for the other set.
+(d / "other").mkdir()
+(d / "other" / "cases").mkdir()
+(d / "other" / "set.yaml").write_text("slot: t\n")
+(d / "other" / "cases" / "b.yaml").write_text("id: urn:x:case/b\n")
+(d / "two.yaml").write_text("slots:\n  - {id: s, default: p, contract: set}\n  - {id: t, default: p, contract: other}\n")
+(prov / "provider.yaml").write_text("id: urn:kk:provider:p\nslots: [s, t]\nrunner: python3 claims.py\n")
+(prov / "claims.py").write_text("print('ok: urn:x:case/b')\n")
+check(run.check(prov, [d / "two.yaml"]), "both contracts of a provider that fills two slots are run")
+(prov / "claims.py").write_text("print('nothing')\n")
+check(not run.check(prov, [d / "two.yaml"]), "a provider missing the other slot's cases fails, though the first slot's runner passes it")

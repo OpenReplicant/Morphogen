@@ -158,7 +158,12 @@ def main() -> None:
             cur.execute("select api.start_run(%s, null, '[]', '{}')", (CURSOR,))   # left running, as by a crash
             with run(cur, "urn:kk:module:test-other") as (_, out):
                 out["feed_seq"] = 99
-        check(resume(ex, CURSOR) == 5, "a failed or unfinished run, or another module's, does not move it")
+            with run(cur, CURSOR) as (spent, out):
+                out.update(cost={"tokens": 7, "feed_seq": 99}, windows=3)
+        check(resume(ex, CURSOR) == 5, "a failed or unfinished run, another module's, or a cost naming feed_seq does not move it")
+        check(ex.execute("select cost, outputs, feed_seq from kernel.run where id = %s", (spent,)).fetchone()
+              == ({"tokens": 7, "feed_seq": 99}, {"windows": 3}, None),
+              "what a run spent, what it reports and its cursor are kept apart")
         label = "http://www.w3.org/2000/01/rdf-schema#label"
         reached, entries = feed_since(ex, 0, {label}, page=1)
         made = ex.execute("select change_set, array_agg(id::text) from api.claims where predicate = %s "

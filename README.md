@@ -45,7 +45,7 @@ convention:
 
 | Area | State |
 | --- | --- |
-| Kernel record, validation, belief, change feed | Conformance suite passes: 66 record, 13 validator, 17 belief cases |
+| Kernel record, validation, belief, change feed | Conformance suite passes: 72 record, 13 validator, 17 belief cases; every kernel slot has a shared case set (69 cases), 80 mutants killed; the wire API is versioned (1.0.0) |
 | The loop on Morphogen itself (T5) | Observe, analyse, plan, approve, act, verify |
 | Self-modification (gate G2) | A faster analyser was requested, built, measured, approved and verified live |
 | A system Morphogen did not build (gate G3) | podinfo with Redis: mapped from its compose file, watched, settings changed through review |

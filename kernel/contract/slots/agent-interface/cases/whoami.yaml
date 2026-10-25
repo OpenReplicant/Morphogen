@@ -1,0 +1,2 @@
+id: urn:kk:contract:agent-interface/whoami
+description: whoami names the agent of the login the interface was started with.

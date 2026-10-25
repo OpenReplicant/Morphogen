@@ -1,0 +1,11 @@
+# The verifier slot's contract (T25, R5-42 (b)): what every verifier holds, whatever its method. A verifier is a
+# feed consumer (kernel/src/kk/interfaces.py Verifier) that records verdicts on claims of the kinds it declares
+# (provider.yaml `applies_to`: evidence types or predicate IRIs) and never writes claims. Its own method's cases (a
+# quote found, a paraphrase refuted, ...) stay in its own tests. The slot's own runner (runner.py) builds a record
+# with kernel/contract/slots/harness.py, seeds it, runs the provider's service once (KK_ONCE=1) as its own role, and
+# judges what it recorded. Seeded claims: extracted claims quoting a file under KK_SOURCE_ROOT (one quote found, one
+# not), testimony and deterministic claims, one extracted claim attributed to the verifier itself, one redacted,
+# one in a second scope.
+slot: verifier
+runner: runner.py
+version: 0.1.0

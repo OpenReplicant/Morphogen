@@ -1,0 +1,3 @@
+id: urn:kk:contract:self-encoder/cites-lines
+description: Every claim is deterministic and cites its file and a line, and that line of the file names the fact (the slot's
+  id, the provider's slots, the version).

@@ -96,7 +96,9 @@ def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
     `channels` also wake it on NOTIFY between polls (e.g. kernel_redaction); the feed alone misses nothing.
     `poll` defaults to KK_POLL_SECONDS (default 1). With OpenTelemetry configured (kk.telemetry) it
     reports kk.feed.lag, the seconds from an entry's commit to this consumer reading it, and
-    kk.step.duration."""
+    kk.step.duration. KK_ONCE=1 runs one step and returns, as `once` does: a slot's case set runs a
+    provider's service that way (kernel/contract/slots/harness.py)."""
+    once = once or os.environ.get("KK_ONCE") == "1"
     sweep = sweep_seconds(sweep)
     poll = poll if poll is not None else float(os.environ.get("KK_POLL_SECONDS", "1"))
     m = metrics(conn.execute("select current_user").fetchone()[0])
@@ -128,14 +130,14 @@ def follow(conn: psycopg.Connection, step: Callable[[psycopg.Connection], object
 
 
 def resume(conn: psycopg.Connection, module: str) -> int:
-    """The durable cursor of a watcher that must act on each feed entry once (R5-18): the `feed_seq` in the
-    outputs of this agent's last succeeded run of `module` that recorded one, else 0. A failed or unfinished
-    run does not move it, so what that run handled is handled again; the change sets' idempotency keys keep a
-    second pass from acting twice."""
-    row = conn.execute("""select (cost->>'feed_seq')::bigint from kernel.run
+    """The durable cursor of a watcher that must act on each feed entry once (R5-18): the `feed_seq` this
+    agent's last succeeded run of `module` reached (its own column, never a key in what the run spent or
+    reported), else 0. A failed or unfinished run does not move it, so what that run handled is handled again;
+    the change sets' idempotency keys keep a second pass from acting twice."""
+    row = conn.execute("""select feed_seq from kernel.run
                            where agent = kernel.my_agent() and module = %s and status = 'succeeded'
-                             and cost ? 'feed_seq'
-                           order by (cost->>'feed_seq')::bigint desc limit 1""", (module,)).fetchone()
+                             and feed_seq is not null
+                           order by feed_seq desc limit 1""", (module,)).fetchone()
     return row[0] if row else 0
 
 
@@ -160,16 +162,21 @@ def run(cur, module: str, params: Optional[dict] = None, plan_step: Optional[str
         used: Optional[list] = None) -> Iterator[tuple[str, dict]]:
     """A run of `module` (prov:Activity), optionally carrying out `plan_step` (p-plan:correspondsToStep)
     and using `used` (prov:used: claim ids, artifacts, entities). Fill `outputs`; the run finishes
-    succeeded, or failed if the block raises."""
+    succeeded, or failed if the block raises. Two keys of `outputs` go to columns of their own: `feed_seq` (the
+    seq a watcher reached, read back by resume) and `cost` (what the run spent: tokens, money, cpu seconds)."""
     cur.execute("select api.start_run(%s, %s, %s, %s)", (module, plan_step, Jsonb(used or []), Jsonb(params or {})))
     run_id = str(cur.fetchone()[0])
     outputs: dict = {}
+    def finish(status: str) -> None:
+        rest = {k: v for k, v in outputs.items() if k not in ("feed_seq", "cost")}
+        cur.execute("select api.finish_run(%s, %s, %s, %s, %s)",
+                    (run_id, status, Jsonb(outputs.get("cost") or {}), Jsonb(rest), outputs.get("feed_seq")))
     try:
         yield run_id, outputs
     except Exception:
-        cur.execute("select api.finish_run(%s, 'failed', %s)", (run_id, Jsonb(outputs)))
+        finish("failed")
         raise
-    cur.execute("select api.finish_run(%s, 'succeeded', %s)", (run_id, Jsonb(outputs)))
+    finish("succeeded")
 
 
 def submit(cur, change_set: dict, run_id: str) -> dict:

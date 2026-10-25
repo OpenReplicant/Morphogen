@@ -1,0 +1,2 @@
+id: urn:kk:contract:intake-filter/files-outside-root
+description: 'A path outside the given root is never passed: the filter exits non-zero (fail closed).'

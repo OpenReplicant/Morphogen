@@ -1,0 +1,2 @@
+id: urn:kk:contract:agent-interface/clearance
+description: A claim in a scope the agent may not read is not in search, not in query_claims, and explain does not give it.

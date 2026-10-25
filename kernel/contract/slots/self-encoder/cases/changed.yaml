@@ -1,0 +1,2 @@
+id: urn:kk:contract:self-encoder/changed
+description: 'A changed file supersedes what it said before: a slot''s new cardinality is current and the old one is not.'

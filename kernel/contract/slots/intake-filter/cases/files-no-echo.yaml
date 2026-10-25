@@ -1,0 +1,2 @@
+id: urn:kk:contract:intake-filter/files-no-echo
+description: The filter's output never contains the secret itself.

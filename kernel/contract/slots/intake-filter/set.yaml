@@ -1,0 +1,12 @@
+# The intake-filter slot's contract (T25, R5-42 (b)): what every intake filter holds. Two boundaries, both used today:
+#   files      the provider's command (provider.yaml `command: python3 -m <package> ...`) run as
+#              `python3 -m <package> --repo <dir>` with the JSON list of paths (relative to <dir>) on stdin, printing
+#              {"paths": [clean paths], "blocked": [{"path", "line", "rule"}]}; kk.lib.ingest_filter runs it
+#              (KK_INGEST_FILTER swaps it), and a non-zero exit stops the ingest (fail closed)
+#   proposals  provider.yaml `entry: <module>:<function>`, called with a change set; it returns a FilterResult
+#              (kernel/src/kk/interfaces.py IntakeFilter): pass, transform (with the change set to submit instead) or drop
+# The secret used is an AWS access key id in the documented format (gitleaks rule aws-access-token). The slot's own
+# runner (runner.py) runs both boundaries in child processes; it never imports the provider.
+slot: intake-filter
+runner: runner.py
+version: 0.1.0

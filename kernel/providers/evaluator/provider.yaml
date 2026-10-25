@@ -6,7 +6,8 @@ slots: [evaluator]
 origin: OpenReplicant/kernel (rebuild 4) modules/evaluator, unchanged
 requires: Python 3.12+, psycopg; the dqv pack (dqv:value must be an approved property)
 migration: migration.sql
-command: python3 -m evaluator --suite <name> <run.json>...
+command: python3 -m evaluator --suite <name> [--artifacts <dir>] <run.json>...
+role: kkm_evaluator
 tests:
   - python3 tests/test_measure.py
 todo:
