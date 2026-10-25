@@ -1,0 +1,44 @@
+// The browser half of test_ui.py: headless Chromium signs in to Morphogen's UI as a person, reads the plan
+// waiting for review and the claims it cites, approves it, then opens the loop and the systems view. Prints one
+// JSON line of what it saw. Env: UI (the page), NAME, PASSWORD, PLAN (the plan's label); SHOT, a file for a
+// screenshot of the review lane.
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  try {
+    await page.goto(process.env.UI);
+    await page.getByLabel('Name').fill(process.env.NAME);
+    await page.getByLabel('Password').fill(process.env.PASSWORD);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    const card = page.locator('article.card', { hasText: process.env.PLAN });
+    await card.waitFor({ timeout: 30000 });
+    await card.locator('tr[data-claim]').first().waitFor();
+    if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT, fullPage: true });
+    const agent = await page.locator('[data-test=agent]').innerText();
+    const prediction = await card.locator('[data-test=prediction]').innerText();
+    const cited = await card.locator('tr[data-claim]').evaluateAll(rows =>
+      rows.map(r => [r.dataset.claim, r.querySelector('td.num').innerText]));
+    await card.getByRole('button', { name: 'Approve' }).click();
+    await page.getByText('Nothing is waiting for your review.').waitFor({ timeout: 30000 });
+    const after = await page.locator('article.card').count();
+    await page.getByRole('button', { name: 'Loop' }).click();
+    await page.locator('section[aria-label=Loop] tbody tr').first().waitFor({ timeout: 30000 });
+    const loop = await page.locator('section[aria-label=Loop] tbody tr').allInnerTexts();
+    await page.getByRole('button', { name: 'Systems' }).click();
+    await page.waitForFunction(() => Number(document.getElementById('cy').dataset.nodes) > 0, null, { timeout: 30000 });
+    const nodes = await page.locator('#cy').getAttribute('data-nodes');
+    if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
+    console.log(JSON.stringify({ agent, prediction, cited, after, loop, nodes }));
+  } catch (e) {
+    await page.screenshot({ path: (process.env.TMPDIR || '/tmp') + '/kk_ui_test.png' }).catch(() => {});
+    console.error(String(e), errors.join(' | '));
+    process.exitCode = 1;
+  } finally {
+    await browser.close();
+  }
+})();
