@@ -1,0 +1,55 @@
+# Morphogen's container image (T24): the record (Postgres 16.9, run inside), every service, the UI, the compose
+# runner and Claude Code, each part as a user of its own (morphogen/deploy/container.py). Everything is pinned:
+# the base by digest, Debian packages by a snapshot date, Python packages by version and hash, downloads by sha256.
+#
+#   docker build -f morphogen/deploy/container/Containerfile -t morphogen:dev .       (or podman build; from the repo root)
+#
+# Behind a proxy that re-signs TLS, pass its CA as a build secret: --secret id=ca,src=<ca bundle>.
+FROM postgres:16.9@sha256:ddfe3e8713e3ee5b8f286082cb12512488dfbf3f5a1ecb0b74a42e6055af0a5f AS base
+FROM base AS os
+# Python 3.13 and git from Debian trixie as of a fixed date (snapshot.debian.org); the CA secret only if given.
+RUN --mount=type=secret,id=ca,required=false \
+    rm -f /etc/apt/sources.list.d/*; \
+    if [ -s /run/secrets/ca ]; then url=https; ca="-o Acquire::https::CAInfo=/run/secrets/ca -o APT::Sandbox::User=root"; \
+    else url=http; ca=; fi; \
+    echo "deb [check-valid-until=no] $url://snapshot.debian.org/archive/debian/20261001T000000Z trixie main" > /etc/apt/sources.list \
+ && apt-get $ca update -q && apt-get $ca install -yq --no-install-recommends python3 python3-venv git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# ---- downloads (downloads.txt), each checked by sha256 for this architecture (amd64 or arm64)
+FROM os AS dl
+COPY morphogen/deploy/container/fetch.py morphogen/deploy/container/downloads.txt /dl/
+RUN --mount=type=secret,id=ca,required=false \
+    python3 /dl/fetch.py /dl/downloads.txt /dl/got && mkdir /out \
+ && tar xzf /dl/got/gitleaks.tgz -C /out gitleaks && tar xzf /dl/got/docker.tgz -C /tmp docker/docker \
+ && mv /tmp/docker/docker /out/docker && mv /dl/got/docker-compose /dl/got/claude /out/ && chmod 0755 /out/*
+
+# ---- the image
+FROM os
+COPY --from=dl /out/gitleaks /out/docker /out/claude /usr/local/bin/
+COPY --from=dl /out/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
+# Every package, transitive ones included, by version and hash (requirements.lock), wheels only.
+COPY morphogen/deploy/container/requirements.lock /tmp/requirements.lock
+RUN --mount=type=secret,id=ca,required=false \
+    python3 -m venv /opt/venv \
+ && if [ -s /run/secrets/ca ]; then export PIP_CERT=/run/secrets/ca; fi \
+ && /opt/venv/bin/pip install -q --no-cache-dir --disable-pip-version-check --require-hashes --no-deps \
+      --only-binary :all: -r /tmp/requirements.lock \
+ && rm /tmp/requirements.lock
+COPY --chown=root:root . /opt/morphogen
+# morphogen runs the record, the services and the UI; agent runs Claude Code. /run/morphogen-socket and
+# /run/morphogen-claude are root's alone: the container socket and your ~/.claude are mounted inside them.
+RUN useradd --uid 10001 --user-group --home-dir /var/lib/morphogen --no-create-home --shell /usr/sbin/nologin morphogen \
+ && useradd --uid 10002 --user-group --home-dir /home/agent --no-create-home --shell /bin/bash agent \
+ && install -d -o morphogen -g morphogen -m 0700 /var/lib/morphogen \
+ && install -d -o agent -g agent -m 0700 /home/agent \
+ && install -d -o root -g root -m 0700 /run/morphogen-socket /run/morphogen-claude \
+ && chown morphogen:morphogen /var/lib/postgresql/data && chmod 0700 /var/lib/postgresql/data \
+ && chmod -R go-w /opt/morphogen \
+ && printf '#!/bin/sh\nexec /opt/venv/bin/python3 /opt/morphogen/morphogen/deploy/container.py "$@"\n' > /usr/local/bin/morphogen \
+ && chmod 0755 /usr/local/bin/morphogen
+ENV PATH=/opt/venv/bin:$PATH MORPHOGEN_HOME=/var/lib/morphogen MORPHOGEN_PGDATA=/var/lib/postgresql/data
+EXPOSE 8470
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/local/bin/morphogen"]
+CMD ["serve"]

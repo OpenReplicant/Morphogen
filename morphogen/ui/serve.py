@@ -14,7 +14,8 @@ Content-Security-Policy (scripts from this origin only; Alpine.js needs 'unsafe-
 
 Env: DATABASE_URL (kk_authenticator's login: kernel-mcp switches to each token's role), KK_JWT_SECRET (at least
 32 characters), KK_LOGIN_URL (where a person's login connects, default DATABASE_URL with their name and
-password), PORT (default 8000), KK_MCP_ALLOWED_HOSTS, KK_SITE (kernel-mcp's).
+password), PORT (default 8000), KK_UI_HOST (where it listens, default 127.0.0.1; 0.0.0.0 inside a container
+whose port is published on 127.0.0.1), KK_MCP_ALLOWED_HOSTS, KK_SITE (kernel-mcp's).
 """
 from __future__ import annotations
 
@@ -122,4 +123,4 @@ if __name__ == "__main__":
     from morphogen.logins import undumpable
     undumpable()                       # KK_JWT_SECRET signs every person's token: not readable from /proc by other processes
     from kernel_mcp.__main__ import http
-    http(extra_routes=routes())
+    http(host=os.environ.get("KK_UI_HOST", "127.0.0.1"), extra_routes=routes())

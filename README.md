@@ -52,7 +52,7 @@ convention:
 | Design agent (T13) | An interview becomes a system map; gaps become questions; a complete map becomes a compose file |
 | Catalog lookup (T14, T20) | Components found by stated requirements, matched deterministically |
 | Review and loop UI (T21) | People sign in with their own login, approve or refuse plans, follow each plan to its verdict |
-| Running locally (T22, T23) | One command brings it up; a described system ends running once a person approves its file |
+| Running locally (T22, T23, T24) | One command brings it up, in a container image or on the machine; a described system ends running once a person approves its file; Claude Code runs inside as a user of its own |
 | Evals | SciFact recall, LongMemEval, RCAEval, self-model questions: see `docs/rebuild-5.md` for numbers and open gaps |
 
 Plans and open items: `docs/rebuild-5.md` ("First tasks").
@@ -77,13 +77,27 @@ python3 scripts/check_boundary.py      # kernel/ never depends on morphogen/
 
 ## Run it on your own machine
 
+In a container (rootless Podman or Docker; nothing else to install):
+
+```sh
+podman build -f morphogen/deploy/container/Containerfile -t morphogen:dev .
+podman run -d --init --name morphogen -p 127.0.0.1:8470:8470 -v morphogen:/var/lib/morphogen \
+  -v morphogen-db:/var/lib/postgresql/data -v morphogen-agent:/home/agent \
+  -v $XDG_RUNTIME_DIR/podman/podman.sock:/run/morphogen-socket/docker.sock morphogen:dev
+podman exec -it morphogen morphogen person alice   # then open http://127.0.0.1:8470/ui/
+podman exec -it morphogen morphogen login          # Claude Code's sign-in inside the container, once
+podman exec -it morphogen morphogen claude interviewer
+```
+
+Or on the machine itself:
+
 ```sh
 python3 morphogen/deploy/local.py up             # Postgres in Docker, the record, the services, the compose runner, the UI
 python3 morphogen/deploy/local.py person alice   # you, as a person who reviews; then open http://127.0.0.1:8470/ui/
 ```
 
-`morphogen/deploy/LOCAL.md` walks through describing a system with an agent (Claude Code), approving its compose
-file in the UI, and watching Morphogen start it.
+`morphogen/deploy/LOCAL.md` covers both: describing a system with an agent (Claude Code), approving its compose
+file in the UI, watching Morphogen start it, and what each way trusts.
 
 ## Repository map
 
