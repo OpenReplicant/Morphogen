@@ -401,7 +401,7 @@ def answer(db: str, n: int, k: int, label: str, mode: str = "kernel") -> dict:
     qs = sample(n)
     path = CACHE / "answers" / f"{label}.answers.jsonl"
     path.parent.mkdir(exist_ok=True)
-    done = {json.loads(line)["question_id"] for line in path.open()} if path.exists() else set()
+    done = {k for k, a in latest_answers(path).items() if a["hypothesis"]} if path.exists() else set()   # empty: asked again
     with connect(url=f"dbname={db}") as admin, path.open("a") as out:
         for q in qs:
             if q["question_id"] in done:
@@ -417,10 +417,19 @@ def answer(db: str, n: int, k: int, label: str, mode: str = "kernel") -> dict:
     return {"answers": str(path)}
 
 
+def latest_answers(path: Path) -> dict[str, dict]:
+    """Each question's last answer that is not empty, else its last one."""
+    out: dict[str, dict] = {}
+    for line in path.open():
+        a = json.loads(line)
+        if a["hypothesis"] or a["question_id"] not in out:
+            out[a["question_id"]] = a
+    return out
+
+
 def judge_prompts(label: str) -> None:
     data = {q["question_id"]: q for q in json.loads(DATA.read_text())}
-    for line in (CACHE / "answers" / f"{label}.answers.jsonl").open():
-        a = json.loads(line)
+    for a in latest_answers(CACHE / "answers" / f"{label}.answers.jsonl").values():
         q = data[a["question_id"]]
         kind = "abstention" if q["question_id"].endswith("_abs") else q["question_type"]
         print(json.dumps({"question_id": q["question_id"],
@@ -429,7 +438,7 @@ def judge_prompts(label: str) -> None:
 
 def score_qa(label: str, judgments: str) -> dict:
     data = {q["question_id"]: q for q in json.loads(DATA.read_text())}
-    answers = {json.loads(line)["question_id"]: json.loads(line) for line in (CACHE / "answers" / f"{label}.answers.jsonl").open()}
+    answers = latest_answers(CACHE / "answers" / f"{label}.answers.jsonl")
     verdicts = {}
     for line in Path(judgments).read_text().splitlines():
         if line.strip():

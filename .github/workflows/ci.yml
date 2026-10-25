@@ -70,7 +70,13 @@ jobs:
           for img in $(grep -ho 'image: .*' morphogen/intent/systems/*/compose.yaml | cut -d' ' -f2); do
             for i in 1 2 3 4; do docker pull -q "$img" && break; sleep $((i * 15)); done
           done
-      - name: Morphogen modules, the full loop (T5), G2 and G3, as root so they can start code as the run users
+      - name: A browser for the UI test (T21), Playwright pinned
+        run: |
+          npm install --prefix /tmp/pw --no-save --no-audit --no-fund playwright@1.56.1
+          PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+          echo "NODE_PATH=/tmp/pw/node_modules" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers" >> "$GITHUB_ENV"
+      - name: Morphogen modules, the full loop (T5), G2, G3 and the UI (T21), as root so they can start code as the run users
         run: |
           # The passwords above are in this file, which the run users can read: replace them with ones they cannot.
           # The same for the sandbox's cluster.
