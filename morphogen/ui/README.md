@@ -1,6 +1,6 @@
 # Morphogen's UI (T21, R5-36)
 
-The review lane, the loop and the managed systems, in a browser. The page is an MCP client of kernel-mcp: every
+The review lane, the loop (each plan with who decided it, the run that carried it out and the verifier's verdict) and the managed systems, in a browser. The page is an MCP client of kernel-mcp: every
 call carries the signed-in person's own token, so the record decides what they see and what they may approve.
 
 ```sh

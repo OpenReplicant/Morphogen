@@ -1,7 +1,8 @@
 // The browser half of test_ui.py: headless Chromium signs in to Morphogen's UI as a person, reads the plan
 // waiting for review and the claims it cites, approves it, then opens the loop and the systems view. Prints one
 // JSON line of what it saw. Env: UI (the page), NAME, PASSWORD, PLAN (the plan's label); SHOT, a file for a
-// screenshot of the review lane.
+// screenshot of the review lane. With STEP=plans it only signs in and reads the plan's row in the loop (who
+// decided it, its run, its verdict), then opens the verdict.
 const { chromium } = require('playwright');
 
 (async () => {
@@ -15,6 +16,21 @@ const { chromium } = require('playwright');
     await page.getByLabel('Name').fill(process.env.NAME);
     await page.getByLabel('Password').fill(process.env.PASSWORD);
     await page.getByRole('button', { name: 'Sign in' }).click();
+    if (process.env.STEP === 'plans') {
+      await page.locator('[data-test=agent]').waitFor({ timeout: 30000 });
+      await page.getByRole('button', { name: 'Loop' }).click();
+      const row = page.locator('tr[data-plan]', { hasText: process.env.PLAN });
+      await row.locator('[data-test=verdict].click').waitFor({ timeout: 30000 });
+      if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT, fullPage: true });
+      const cell = async t => row.locator(`[data-test=${t}]`).innerText();
+      const [decided, run, verdict] = [await cell('decided'), await cell('run'), await cell('verdict')];
+      await row.locator('[data-test=verdict]').click();
+      await page.waitForFunction(() => document.querySelector('aside.detail pre').innerText.length > 2, null, { timeout: 30000 });
+      const detail = await page.locator('aside.detail pre').innerText();
+      if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
+      console.log(JSON.stringify({ decided, run, verdict, detail: JSON.parse(detail) }));
+      return;
+    }
     const card = page.locator('article.card', { hasText: process.env.PLAN });
     await card.waitFor({ timeout: 30000 });
     await card.locator('tr[data-claim]').first().waitFor();

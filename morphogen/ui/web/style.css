@@ -39,3 +39,5 @@ h2 { font-size:16px; margin:0 0 8px; }
 .risk-high, .risk-irreversible { color:var(--bad); border-color:var(--bad); }
 td.num { text-align:right; font-variant-numeric:tabular-nums; }
 details summary { cursor:pointer; color:var(--muted); margin:8px 0; }
+.verdict-holds { color:var(--accent); } .verdict-fails { color:var(--bad); } .verdict-untested { color:var(--muted); }
+section > h2 { margin:16px 0 8px; }

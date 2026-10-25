@@ -96,6 +96,23 @@
   </section>
 
   <section x-show="me && tab === 'loop'" aria-label="Loop">
+    <h2 x-show="plans.length">Plans</h2>
+    <table x-show="plans.length" class="plans">
+      <thead><tr><th>Plan</th><th>Risk</th><th>Decided</th><th>Carried out</th><th>Prediction</th></tr></thead>
+      <tbody>
+        <template x-for="p in plans" :key="p.iri">
+          <tr :data-plan="p.iri">
+            <td x-text="p.label" :title="p.iri"></td>
+            <td><span class="pill" :class="'risk-' + p.risk" x-text="p.risk"></span></td>
+            <td data-test="decided" x-text="p.decidedBy ? p.status + ' by ' + p.decidedBy + ' · ' + String(p.decidedAt).slice(0, 16).replace('T', ' ') + (p.note ? ' (' + p.note + ')' : '') : p.status"></td>
+            <td data-test="run" x-text="p.run ? p.run.status + ' by ' + short(p.run.agent) + ' · ' + String(p.run.ended_at || '').slice(0, 16).replace('T', ' ') : 'not yet'"></td>
+            <td data-test="verdict" :class="p.verdict ? 'click verdict-' + p.verdict.kind : 'muted'" @click="p.verdict && explain(p.verdict.id)"
+                x-text="p.verdict ? p.verdict.kind + ': ' + p.verdict.text + ' (belief ' + belief(p.verdict.belief) + ')' : (p.run ? 'no verdict yet' : 'checked after it is carried out')"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+    <h2 x-show="loop.length">Recorded</h2>
     <p class="muted" x-show="!busy && !loop.length">Nothing recorded yet.</p>
     <table x-show="loop.length">
       <thead><tr><th>When</th><th>Kind</th><th>About</th><th>What</th><th>Belief</th></tr></thead>

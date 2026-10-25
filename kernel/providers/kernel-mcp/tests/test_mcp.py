@@ -57,7 +57,7 @@ async def call(s: ClientSession, tool: str, args: dict | None = None):
     return sc.get("result", sc) if isinstance(sc, dict) else json.loads(res.content[0].text)
 
 
-async def agent_session(login: str) -> None:
+async def agent_session(login: str) -> str:
     async with stdio_client(server(login)) as (r, w), ClientSession(r, w) as s:
         await s.initialize()
         names = {t.name for t in (await s.list_tools()).tools}
@@ -93,7 +93,19 @@ async def agent_session(login: str) -> None:
               "explain (by the first characters of the id) shows the source and the run")
         status = await call(s, "get_change_set", {"change_set_id": cs["id"]})
         check(status["status"] == "applied", "get_change_set shows it applied")
+        mine = {c["id"]: c for c in await call(s, "list_change_sets")}
+        check(mine.get(cs["id"], {}).get("op_count") == 1 and mine[cs["id"]]["decided_by"] is None,
+              "list_change_sets lists it with its op count, decided by no one")
+        held = await call(s, "submit_change_set", {"change_set": {
+            "idempotency_key": "mcp:review", "attributed_to": AGENT, "generated_by": run_id,
+            "target_scope": "urn:kk:scope:default", "lane": "review",
+            "ops": [{"op": "add_claim", "subject": "urn:x:billing", "predicate": "rdfs:comment",
+                     "object": {"value": {"@value": "Reviewed by a person."}}, "evidence_type": "testimony",
+                     "references": [{"source_uri": "https://example.org/services"}]}]}})
+        with connect("kkm_validator", f"dbname={DB}") as val:
+            validator.drain(val)
         await call(s, "finish_run", {"run_id": run_id})
+        return held["id"]
 
 
 async def refused(login: str, what: str) -> None:
@@ -103,11 +115,15 @@ async def refused(login: str, what: str) -> None:
         check("error" in res and "own login" in res["error"], f"{what} is refused")
 
 
-async def reviewer_session(login: str) -> None:
+async def reviewer_session(login: str, held: str) -> None:
     async with stdio_client(server(login)) as (r, w), ClientSession(r, w) as s:
         await s.initialize()
         me = await call(s, "whoami")
-        check(me.get("awaiting_review") == 0, "whoami shows a reviewer what waits for review")
+        check(me.get("awaiting_review") == 1, "whoami shows a reviewer what waits for review")
+        await call(s, "review", {"change_set_id": held, "approve": True, "note": "fine"})
+        seen = {c["id"]: c for c in await call(s, "list_change_sets")}.get(held, {})
+        check(seen.get("decided_by") == "t_mcp_reviewer" and seen.get("decided_at") and seen.get("review_note") == "fine"
+              and seen.get("op_count") == 1, "list_change_sets shows who decided a reviewed change set, when, and their note")
 
 
 def main() -> None:
@@ -127,13 +143,13 @@ def main() -> None:
                    " ('urn:kk:agent:test-mcp-switcher', 't_mcp_switcher', 'software', 'switcher'),"
                    " ('urn:kk:agent:test-mcp-reviewer', 't_mcp_reviewer', 'person', 'reviewer')"
                    " on conflict do nothing", (AGENT, ROLE))
-    asyncio.run(agent_session(f"dbname={DB} user={ROLE} password={AGENT_PASSWORD}"))
+    held = asyncio.run(agent_session(f"dbname={DB} user={ROLE} password={AGENT_PASSWORD}"))
     superuser = f"dbname={DB} user={os.environ.get('PGUSER', 'postgres')}" + (
         f" password={os.environ['PGPASSWORD']}" if os.environ.get("PGPASSWORD") else "")
     asyncio.run(refused(superuser, "a superuser login"))
     asyncio.run(refused(f"dbname={DB} user=t_mcp_switcher password=t_mcp_switcher",
                         "a login that holds another agent's role"))
-    asyncio.run(reviewer_session(f"dbname={DB} user=t_mcp_reviewer password=t_mcp_reviewer"))
+    asyncio.run(reviewer_session(f"dbname={DB} user=t_mcp_reviewer password=t_mcp_reviewer", held))
     subprocess.run(["dropdb", "--force", DB], check=True)
     print("ALL MCP TESTS PASSED")
 

@@ -77,7 +77,7 @@ function readPlan(ops) {
 function shell() {
   return {
     tab: 'review', token: '', name: '', password: '', me: null, error: '', busy: false,
-    queue: [], notes: {}, loop: [], systems: [], system: '', graphInfo: '', rows: [], query: '', searched: false,
+    queue: [], notes: {}, loop: [], plans: [], systems: [], system: '', graphInfo: '', rows: [], query: '', searched: false,
     detail: null,
 
     async init() {
@@ -106,7 +106,7 @@ function shell() {
       if (this.token) await this.signIn();
     },
     signOut(keepError = false) {
-      this.token = ''; this.me = null; this.queue = []; this.loop = []; this.rows = []; this.detail = null; KK.token = '';
+      this.token = ''; this.me = null; this.queue = []; this.loop = []; this.plans = []; this.rows = []; this.detail = null; KK.token = '';
       if (!keepError) this.error = '';
       try { sessionStorage.removeItem('kk_token'); } catch (e) { /* storage blocked */ }
     },
@@ -142,12 +142,16 @@ function shell() {
     },
 
     // The loop: what the analyser, planner and verifier recorded, newest first: each annotation's kind, target
-    // and sentence (anomalies, build requests, gaps, verdicts).
+    // and sentence (anomalies, build requests, gaps, verdicts); and each plan from proposal to verdict.
     async loadLoop() {
-      const [bodies, types, targets] = await Promise.all([
+      const [bodies, types, targets, plans, labels, steps, sets] = await Promise.all([
         KK.call('query_claims', { predicate: NS.body, limit: 500 }),
         KK.call('query_claims', { predicate: NS.dctType, limit: 1000 }),
-        KK.call('query_claims', { predicate: NS.target, limit: 1000 })]);
+        KK.call('query_claims', { predicate: NS.target, limit: 1000 }),
+        KK.call('query_claims', { predicate: NS.rdfType, object_entity: NS.plan, limit: 200 }),
+        KK.call('query_claims', { predicate: NS.label, limit: 1000 }),
+        KK.call('query_claims', { predicate: NS.stepOf, limit: 1000 }),
+        KK.call('list_change_sets', { limit: 500 })]);
       const typeOf = Object.fromEntries(types.map(c => [c.subject, c.object_entity]));
       const targetOf = Object.fromEntries(targets.map(c => [c.subject, c.object_entity]));
       const kind = t => (t || '').replace(/^urn:kk:/, '').replace(/:/g, ' · ');
@@ -155,6 +159,30 @@ function shell() {
                                      target: targetOf[c.subject] || '', text: value(c.object_value ? { value: c.object_value } : null),
                                      belief: c.belief, at: c.valid_from || c.recorded_at || '' }))
         .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      this.plans = await this.readPlans(plans, labels, steps, sets, typeOf);
+    },
+
+    // Each plan: who decided it (the change set that recorded it, reviewed by a person), whether a step was
+    // carried out (a run naming the step: the actuator records what it did as runs, never claims), and the
+    // verifier's verdict on its prediction (an annotation targeting the plan). The record links them; the page
+    // only puts them side by side.
+    async readPlans(plans, labels, steps, sets, typeOf) {
+      const labelOf = Object.fromEntries(labels.map(c => [c.subject, value({ value: c.object_value })]));
+      const setOf = Object.fromEntries(sets.map(s => [s.id, s]));
+      const verdicts = this.loop.filter(e => /^verdict/.test(e.kind));
+      return Promise.all(plans.map(async p => {
+        const cs = setOf[p.change_set] || {};
+        const mine = steps.filter(c => c.object_entity === p.subject).map(c => c.subject);
+        const runs = (await Promise.all(mine.map(s => KK.call('list_runs', { plan_step: s, limit: 5 })))).flat()
+          .filter(r => r.status !== 'running')
+          .sort((a, b) => String(b.ended_at || b.started_at).localeCompare(String(a.ended_at || a.started_at)));
+        const v = verdicts.find(e => e.target === p.subject);
+        return { iri: p.subject, label: labelOf[p.subject] || p.subject, risk: KK.short(typeOf[p.subject] || ''),
+                 status: cs.status || '', decidedBy: cs.decided_by || '', decidedAt: cs.decided_at || '', note: cs.review_note || '',
+                 run: runs.length ? runs[0] : null,
+                 verdict: v ? { id: v.id, kind: KK.short(typeOf[v.subject]), text: v.text, belief: v.belief } : null,
+                 at: p.recorded_at || '' };
+      })).then(rows => rows.sort((a, b) => String(b.at).localeCompare(String(a.at))));
     },
 
     // The managed systems (encoder-compose's maps): each a graph of its services and who connects to whom.
