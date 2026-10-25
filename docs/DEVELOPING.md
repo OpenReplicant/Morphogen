@@ -256,7 +256,7 @@ Rules that keep a provider correct:
 | `python3 kernel/contract/mutants.py` | every mutant fails the contract | Postgres |
 | `python3 kernel/providers/test.py` | each kernel provider's own tests, then the services end to end | Postgres |
 | `sh morphogen/contract/run.sh [--mutants]` | Morphogen's slot contracts (analyser, gap-finder) | Postgres for the analyser's service cases |
-| `python3 morphogen/modules/test.py` | each module's tests, then the full loop (T5), G2, G3, the design agent, catalog lookup and the UI | everything in section 1, as root |
+| `python3 morphogen/modules/test.py` | each module's tests, then the full loop (T5), G2, G3, the design agent, catalog lookup, the UI and the local bring-up | everything in section 1, as root |
 | `python3 scripts/check_boundary.py` | `kernel/` never depends on `morphogen/` | nothing |
 
 The module suite takes several minutes. Pass it the full environment:
@@ -289,6 +289,9 @@ Rules:
 - Tune on the train split, report on dev. Keep every run, including failed ones.
 
 ## 5. Running it
+
+The quickest way is `morphogen/deploy/local.py up` (`morphogen/deploy/LOCAL.md`): it does all of the below for
+you, with Postgres in Docker. By hand:
 
 - **Install into a database:** `python3 morphogen/modules/install.py <db>` installs the kernel, the kernel
   providers Morphogen uses, and every module.

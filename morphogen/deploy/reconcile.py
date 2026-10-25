@@ -17,7 +17,9 @@ morphogen/modules/<name> in the repository, or a candidate's experiments/<id>/<n
 intent actuator points to when a person approves a replacement), and its environment sets only KK_* settings other than KK_ROLE: a provider's
 identity and database login come from this process, not from intent.
 
-Logins (R5-22): the file's name names the slot's reviewed provider (environments/<env>/anomaly.yaml:
+Logins (R5-22, R5-38): a provider that declares no login runs as the one KK_SERVICE_LOGINS gives it, when that
+file names one (morphogen/deploy/local.py writes it; passwords derived per login from KK_LOGIN_SECRET), else with
+this process's DATABASE_URL. The file's name names the slot's reviewed provider (environments/<env>/anomaly.yaml:
 morphogen/modules/anomaly or kernel/providers/anomaly). When that provider declares a login of its own
 (provider.yaml `role`, `login`), the service runs as that login with none of this process's other
 credentials (morphogen.logins); otherwise it gets this process's environment. Either way it never gets
@@ -50,7 +52,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from morphogen import confine  # noqa: E402
-from morphogen.logins import login_env, login_of, telemetry_token, undumpable  # noqa: E402
+from morphogen.logins import SECRETS, login_env, login_of, service_login, telemetry_token, undumpable  # noqa: E402
 
 
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
@@ -114,8 +116,12 @@ def start(repo: Path, spec: dict, intent: Path | None = None) -> subprocess.Pope
              "PYTHONDONTWRITEBYTECODE": "1", "OTEL_SERVICE_NAME": spec.get("provider") or spec.get("_file", "")}
     if os.environ.get("KK_OTLP_SECRET"):
         extra["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Bearer%20{telemetry_token(os.environ['KK_OTLP_SECRET'], extra['OTEL_SERVICE_NAME'])}"
+    if login is None and not experiment:
+        login = service_login(slot_file)                 # a deployment's own login for a provider that declares none
     env = login_env(os.environ["DATABASE_URL"], *login, extra) if login else {**os.environ, **extra}
-    env.pop("KK_OTLP_SECRET", None)
+    for k in SECRETS:                                    # no child holds another login's password or the telemetry secret,
+        if not (slot_file == "sandbox" and k != "KK_OTLP_SECRET"):   # but the sandbox, which runs candidates as incumbents
+            env.pop(k, None)
     if slot_file != "sandbox":
         env.pop("KK_SANDBOX_CLUSTER", None)              # a superuser's login: the sandbox's alone
     cmd = shlex.split(spec["service"])
