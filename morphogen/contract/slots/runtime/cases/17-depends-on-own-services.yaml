@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/depends-on-own-services
+description: 'An approved file whose depends_on names anything but another service of the file (here a value carrying a line break and a unit section, which a runtime writing unit files could take as settings) is refused and not run.'

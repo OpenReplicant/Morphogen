@@ -70,7 +70,7 @@ slots:
   - id: runtime
     phase: execute
     cardinality: many
-    default: runtime-compose                   # runs a system's committed compose file, only one an approved plan step names (T26, T27)
+    default: runtime-compose                   # runs a system's committed compose file, only one an approved plan step names (T26, T27); runtime-quadlet the other provider (MORPHOGEN_RUNTIME=quadlet)
     contract: contract/slots/runtime
     status: written
   - id: outcome-verifier

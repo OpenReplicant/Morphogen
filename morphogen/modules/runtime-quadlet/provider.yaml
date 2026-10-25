@@ -1,0 +1,14 @@
+id: urn:kk:provider:runtime-quadlet
+name: 'Runtime: Podman Quadlet'
+version: 0.1.0
+license: Apache-2.0
+slots: [runtime]
+origin: T27 (R5-O9 as amended by R5-42 (c)); the loop and the approval rule are morphogen.runtime's, shared with runtime-compose
+requires: Python 3.12+, psycopg, PyYAML, git, Podman 5.6 or later (podman quadlet), systemd (a user session when not root)
+migration: migration.sql
+service: python3 -m runtime_quadlet --all
+role: kkm_runtime_quadlet
+login: kkm_runtime_quadlet_login
+agent: urn:kk:agent:runtime-quadlet
+tests: [python3 tests/test_render.py]
+note: renders each approved compose file (read from the commit at HEAD) as one Quadlet application, a network and a container unit per service, hands it to podman quadlet install and restarts its units; never writes claims, each file it runs is a run of its own

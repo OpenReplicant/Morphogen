@@ -5,8 +5,8 @@ person to approve. A plain command.
 
 Refuses while the gap finder has an open gap on the system (a question not answered yet), while the
 description conflicts (morphogen.blueprint), while a claim it would render has a refuted quote, when the system
-has a compose file already, when the compose runner would refuse the file (runtime-compose's allow
-list: an image not pinned by digest, a port not on 127.0.0.1, ...), or when the intake filter (the kernel's
+has a compose file already, when a runtime would refuse the file (every runtime's allow
+list, morphogen.runtime: an image not pinned by digest, a port not on 127.0.0.1, ...), or when the intake filter (the kernel's
 filter-gitleaks) finds a secret in the plan:
 a setting's value would otherwise reach the record and the intent repository. Otherwise it
 renders the file (morphogen.blueprint.render) and records, in the review lane, a plan whose label is the file's
@@ -27,6 +27,7 @@ from pathlib import Path
 
 from kk.lib import connect, run, submit
 from morphogen import blueprint
+from morphogen import runtime as runner             # every runtime's allow list: never propose what it would refuse
 
 MODULE = "urn:kk:module:design-blueprint"
 AGENT = blueprint.PROPOSER
@@ -42,10 +43,6 @@ _spec = importlib.util.spec_from_file_location(
     "filter_gitleaks", Path(__file__).resolve().parents[4] / "kernel" / "providers" / "filter-gitleaks" / "filter_gitleaks" / "__main__.py")
 intake = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(intake)
-_spec = importlib.util.spec_from_file_location(
-    "compose_runner", Path(__file__).resolve().parents[2] / "runtime-compose" / "runtime_compose" / "__main__.py")
-runner = importlib.util.module_from_spec(_spec)        # the compose runner's allow list: never propose what it would refuse
-_spec.loader.exec_module(runner)
 REFUTED = """select c.id from api.claims c join api.verifications v on v.claim_id = c.id
              where c.id = any(%s::uuid[]) and v.verdict = 'refuted'"""
 GAPS = """select g.object_entity, b.object_value->>'@value' from api.claims g

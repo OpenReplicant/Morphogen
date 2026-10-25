@@ -80,7 +80,8 @@ def env_for(name: str, **extra: str) -> dict:
 
 def morphogen_env() -> dict:
     return env_for("morphogen", MORPHOGEN_HOME=str(HOME), MORPHOGEN_DB="embedded", MORPHOGEN_PGDATA=str(PGDATA),
-                   MORPHOGEN_COMPOSE="external", MORPHOGEN_UI_HOST="0.0.0.0")
+                   MORPHOGEN_COMPOSE="external", MORPHOGEN_UI_HOST="0.0.0.0",
+                   MORPHOGEN_RUNTIME="compose")    # the image reaches the host's engine by its socket: no quadlet commands
 
 
 def drop(name: str) -> None:

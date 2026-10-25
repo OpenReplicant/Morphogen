@@ -15,7 +15,8 @@ described system.
 (the container image's supervisor, T24). Settings by environment: MORPHOGEN_DB=embedded runs Postgres from this
 machine's own binaries (initdb, pg_ctl) in MORPHOGEN_PGDATA (default MORPHOGEN_HOME/pgdata) instead of in Docker;
 MORPHOGEN_COMPOSE=external leaves the compose runner to someone else (the image runs it as the one process that
-holds the container socket); MORPHOGEN_UI_HOST (default 127.0.0.1) is where the UI listens;
+holds the container socket); MORPHOGEN_RUNTIME=quadlet runs managed systems as Podman Quadlet units (runtime-quadlet:
+Podman 5.6 or later and systemd on this machine, a user session when not root) instead of Docker Compose; MORPHOGEN_UI_HOST (default 127.0.0.1) is where the UI listens;
 MORPHOGEN_OPERATOR_NAME and MORPHOGEN_OPERATOR_EMAIL name who brought the instance up, when git does not.
 
 Everything it keeps is in MORPHOGEN_HOME (default ~/.local/state/morphogen), readable by you alone:
@@ -61,6 +62,7 @@ HOME = Path(os.environ.get("MORPHOGEN_HOME", Path.home() / ".local" / "state" / 
 EMBEDDED = os.environ.get("MORPHOGEN_DB") == "embedded"
 PGDATA = Path(os.environ.get("MORPHOGEN_PGDATA", HOME / "pgdata"))
 COMPOSE = os.environ.get("MORPHOGEN_COMPOSE") != "external"
+RUNTIME = os.environ.get("MORPHOGEN_RUNTIME", "compose")       # the runtime slot's provider: runtime-compose or runtime-quadlet
 DB = "morphogen"
 IMAGE = "postgres:16.9@sha256:ddfe3e8713e3ee5b8f286082cb12512488dfbf3f5a1ecb0b74a42e6055af0a5f"
 ENV = "local"
@@ -83,7 +85,8 @@ SERVICES = {
 OTHERS = {"observer-otel": ("morphogen/modules/observer-otel", "kkm_observer_otel"),
           "interview-encoder": ("morphogen/modules/interview-encoder", "kkm_interview_encoder"),
           "design-blueprint": ("morphogen/modules/design-blueprint", "kkm_design_blueprint"),
-          "runtime-compose": ("morphogen/modules/runtime-compose", "kkm_runtime_compose")}
+          "runtime-compose": ("morphogen/modules/runtime-compose", "kkm_runtime_compose"),
+          "runtime-quadlet": ("morphogen/modules/runtime-quadlet", "kkm_runtime_quadlet")}
 NEEDS = ["psycopg", "yaml", "pyshacl", "rdflib", "mcp", "jwt", "starlette", "uvicorn"]
 
 
@@ -155,13 +158,19 @@ def alive(pid: int) -> bool:
 def preflight() -> None:
     if sys.version_info < (3, 12):
         die(f"Python 3.12 or newer is needed (this is {sys.version.split()[0]})")
-    docker = COMPOSE or not EMBEDDED
-    want = ["git", "psql", *(["docker"] if docker else []), *(["initdb", "pg_ctl"] if EMBEDDED else [])]
+    if RUNTIME not in ("compose", "quadlet"):
+        die(f"MORPHOGEN_RUNTIME: compose or quadlet, not {RUNTIME!r}")
+    quadlet = COMPOSE and RUNTIME == "quadlet"
+    docker = (COMPOSE and not quadlet) or not EMBEDDED
+    want = ["git", "psql", *(["docker"] if docker else []), *(["initdb", "pg_ctl"] if EMBEDDED else []),
+            *(["podman", "systemctl"] if quadlet else [])]
     missing = [t for t in want if not shutil.which(t)]
     if missing:
         die(f"not on PATH: {', '.join(missing)} (docs/DEVELOPING.md, section 1)")
     if docker and subprocess.run(["docker", "info"], capture_output=True).returncode:
         die("Docker does not answer: start it first")
+    if quadlet and subprocess.run(["podman", "quadlet", "--help"], capture_output=True).returncode:
+        die("this Podman has no quadlet commands: runtime-quadlet needs Podman 5.6 or later")
     import importlib.util
     lost = [m for m in NEEDS if importlib.util.find_spec(m) is None]
     if lost:
@@ -295,10 +304,12 @@ def logins(s: dict) -> dict:
 
 
 def runtime_env(s: dict, every: dict) -> dict:
-    """What the runtime (runtime-compose) needs beside the engine's socket: its own login, which reads plan steps and
-    people's decisions (it runs only a file an approved step names, T26), and its code."""
-    rt = ROOT / "morphogen" / "modules" / "runtime-compose"
-    return {"DATABASE_URL": own(s, every, "runtime-compose"), "KK_ROLE": OTHERS["runtime-compose"][1],
+    """What the runtime (runtime-compose, or runtime-quadlet with MORPHOGEN_RUNTIME=quadlet) needs beside its engine:
+    its own login, which reads plan steps and people's decisions (it runs only a file an approved step names, T26),
+    and its code."""
+    name = f"runtime-{RUNTIME}"
+    rt = ROOT / "morphogen" / "modules" / name
+    return {"DATABASE_URL": own(s, every, name), "KK_ROLE": OTHERS[name][1],
             "PYTHONPATH": os.pathsep.join([str(rt), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")])}
 
 
@@ -419,9 +430,10 @@ def up(a) -> None:
                      "KK_LOGIN_URL": f"host=127.0.0.1 port={s['db_port']} dbname={DB}"}),   # a person's own name and password
     }
     if COMPOSE:
-        rt = ROOT / "morphogen" / "modules" / "runtime-compose"
-        started["compose"] = start("compose", [sys.executable, "-m", "runtime_compose", "--intent", str(repo), "--all"],
-                                   {**base, **({"DOCKER_HOST": os.environ["DOCKER_HOST"]} if "DOCKER_HOST" in os.environ else {}),
+        rt = ROOT / "morphogen" / "modules" / f"runtime-{RUNTIME}"
+        engine = ("DOCKER_HOST",) if RUNTIME == "compose" else ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
+        started["compose"] = start("compose", [sys.executable, "-m", f"runtime_{RUNTIME}", "--intent", str(repo), "--all"],
+                                   {**base, **{k: os.environ[k] for k in engine if k in os.environ},
                                     **runtime_env(s, every)}, cwd=rt)
     f = HOME / "pids.json"
     f.write_text(json.dumps(started, indent=2) + "\n")
