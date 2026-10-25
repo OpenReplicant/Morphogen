@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/no-rollback
+description: 'Committing an older approved file again is refused: a file approved later has run already.'

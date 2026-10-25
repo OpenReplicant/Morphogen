@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/unapproved-not-run
+description: A committed file no plan step names is not run, and the runtime says it is refused.

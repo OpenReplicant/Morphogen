@@ -104,3 +104,24 @@ def compose(rel: str, text: str, system: str) -> list[dict]:
         ops += [claim(n, KKT + "connectsTo", {"entity": node_iri(system, other)}, ref(rel, node))
                 for other, node in sorted(links.items()) if other in names]
     return ops
+
+
+ADOPT = "urn:kk:action:adopt-system"
+PPLAN, SOSA, DCT_TYPE = "http://purl.org/net/p-plan#", "http://www.w3.org/ns/sosa/", "http://purl.org/dc/terms/type"
+
+
+def adopt(rel: str, text: str, system: str, sha: str) -> tuple[str, list[dict]]:
+    """(plan iri, ops): a plan with one step asking a person to approve the file as committed (T26); every claim
+    cites the file by its content hash, and the label shows the whole file, so what is approved is what runs."""
+    plan = f"urn:kk:plan:adopt:{system}:{sha[:16]}"
+    step = f"{plan}:step:1"
+    refs = [{"source_uri": f"file:{rel}#sha256={sha}"}]
+    label = f"Run intent/systems/{system}/compose.yaml as committed (sha256 {sha}):\n\n{text}"
+    return plan, [claim(plan, RDF_TYPE, {"entity": PPLAN + "Plan"}, refs),
+                  claim(plan, LABEL, {"value": {"@value": label}}, refs),
+                  claim(plan, DCT_TYPE, {"entity": "urn:kk:risk:medium"}, refs),
+                  claim(step, RDF_TYPE, {"entity": SOSA + "Actuation"}, refs),
+                  claim(step, PPLAN + "isStepOfPlan", {"entity": plan}, refs),
+                  claim(step, DCT_TYPE, {"entity": ADOPT}, refs),
+                  claim(step, SOSA + "hasFeatureOfInterest", {"entity": system_iri(system)}, refs),
+                  claim(step, SOSA + "hasSimpleResult", {"value": {"@value": sha}}, refs)]

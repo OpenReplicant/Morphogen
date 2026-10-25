@@ -16,7 +16,8 @@ sys.path[:0] = [str(HERE), str(ROOT / "morphogen" / "src"), str(ROOT / "kernel" 
 from morphogen.policy import actions  # noqa: E402
 
 from intent_actuator.__main__ import commit  # noqa: E402
-from intent_actuator.actuate import DCT_TYPE, PPLAN_STEP_OF, RDF_TYPE, SOSA, refusal, set_env, steps  # noqa: E402
+from intent_actuator.actuate import refusal, set_env, steps  # noqa: E402
+from morphogen.plans import CHECKSUM, DCT_TYPE, PPLAN_STEP_OF, RDF_TYPE, SOSA, SUBSTITUTED_BY  # noqa: E402
 
 
 def check(cond, msg):
@@ -74,7 +75,7 @@ restore(intent, f)                                # as after a commit that faile
 check(subprocess.run(["git", "-C", str(intent), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
       and 'KK_POLL_SECONDS: "0.5"' in f.read_text(), "a failed commit leaves the file as committed, index and work tree")
 # Replacing a provider with a measured candidate (G2).
-from intent_actuator.actuate import CHECKSUM, SUBSTITUTED_BY, intent_file, replace  # noqa: E402
+from intent_actuator.actuate import intent_file, replace  # noqa: E402
 from morphogen.experiments import tree_hash  # noqa: E402
 exp = intent / "experiments" / "x0123456789ab"
 shutil.copytree(ROOT / "morphogen" / "tests" / "fixtures" / "analyser" / "anomaly-recent", exp / "anomaly-recent",
@@ -106,8 +107,14 @@ check(intent_file(intent, "sandbox", "urn:kk:provider:anomaly-recent") == af and
 from intent_actuator.actuate import target_file  # noqa: E402
 from morphogen import systems  # noqa: E402
 BACK = "urn:kk:node:podinfo:backend"
-ns = {**s, "action": "urn:kk:action:set-random-delay-max", "target": BACK, "value": 145}
-check(refusal(ns, ACTS, intent, "sandbox") is None, "an approved step on a managed system's service: carried out")
+PODINFO_FILE = intent / "systems" / "podinfo" / "compose.yaml"
+yields = systems.sha(systems.with_setting(PODINFO_FILE.read_text(), "backend", "PODINFO_RANDOM_DELAY_MAX", 145)[2])
+ns = {**s, "action": "urn:kk:action:set-random-delay-max", "target": BACK, "value": 145, "file_sha256": yields}
+check(refusal(ns, ACTS, intent, "sandbox") is None, "an approved step on a managed system's service, naming the file it yields: carried out")
+check("names no sha256" in refusal({**ns, "file_sha256": None}, ACTS, intent, "sandbox"),
+      "a node step that names no sha256 of the file it yields is refused (T26)")
+check("changed since the plan" in refusal({**ns, "file_sha256": "b" * 64}, ACTS, intent, "sandbox"),
+      "a node step whose file would not be the one approved (the file changed since the plan) is refused (T26)")
 check("not a service" in refusal({**ns, "target": "urn:kk:node:podinfo:nothing"}, ACTS, intent, "sandbox")
       and "not a service" in refusal({**ns, "target": "urn:kk:node:../etc:x"}, ACTS, intent, "sandbox")
       and "not a service" in refusal({**ns, "target": TARGET}, ACTS, intent, "sandbox"),
@@ -148,6 +155,16 @@ check("exists already" in refusal(cs("urn:kk:system:../etc", H), ACTS, intent, "
       and "exists already" in refusal(cs("urn:kk:node:notes:web", H), ACTS, intent, "sandbox"),
       "a create step must name a system by a plain name")
 check("sha256" in refusal(cs("urn:kk:system:notes", 0.5), ACTS, intent, "sandbox"), "a create step must name the file's sha256")
+# An adopt step (T26): an existing system's file, as committed, named by its sha256; the actuator writes nothing.
+ADOPT = "urn:kk:action:adopt-system"
+ad = lambda target, v: {**s, "action": ADOPT, "target": target, "value": v}  # noqa: E731
+check(refusal(ad("urn:kk:system:podinfo", systems.sha(PODINFO_FILE.read_text())), ACTS, intent, "sandbox") is None,
+      "an adopt step naming the system's file as it is: carried out")
+check("no longer the one approved" in refusal(ad("urn:kk:system:podinfo", H), ACTS, intent, "sandbox"),
+      "an adopt step naming other content than the file's is refused")
+check("not a managed system" in refusal(ad("urn:kk:system:notes", H), ACTS, intent, "sandbox")
+      and "not a managed system" in refusal(ad(BACK, H), ACTS, intent, "sandbox"),
+      "an adopt step on a system with no compose file, or on a node, is refused")
 (link_intent / "systems" / "notes").symlink_to(tmp)
 check(refusal(cs("urn:kk:system:notes", H), ACTS, link_intent, "sandbox") is not None, "a system directory that is a link is refused")
 shutil.rmtree(tmp)

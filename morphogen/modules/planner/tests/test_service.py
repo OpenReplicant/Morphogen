@@ -21,7 +21,8 @@ import importlib  # noqa: E402
 
 from kk.lib import connect, run, submit  # noqa: E402
 from planner.__main__ import one_pass  # noqa: E402
-from planner.plan import DCT_TYPE, LIMIT_KIND, MAX, OA, PROP, RESULT  # noqa: E402
+from planner.plan import CHECKSUM, DCT_TYPE, LIMIT_KIND, MAX, OA, PROP, RESULT  # noqa: E402
+from morphogen import systems  # noqa: E402
 
 install = importlib.import_module("install")
 validator = importlib.import_module("validator.__main__")
@@ -115,6 +116,13 @@ def main() -> None:
         got = one_pass(pl, intent, "sandbox", [MAPPER])[a]
         validator.drain(val)
         check("plan" in got and got["lane"] == "review" and plans() == 1, "within the budget the plan goes to review")
+        with connect(url=url) as su:
+            ops = su.execute("select ops from kernel.change_set where id = %s", (got["change_set"],)).fetchone()[0]
+        result = [(o["object"]["value"]["@value"], (o.get("qualifiers") or {}).get(CHECKSUM)) for o in ops if o["predicate"] == RESULT]
+        f = intent / "systems" / "podinfo" / "compose.yaml"
+        want = systems.sha(systems.with_setting(f.read_text(), "backend", "PODINFO_RANDOM_DELAY_MAX", float(result[0][0]))[2])
+        check(len(result) == 1 and result[0][1] == want,
+              "the step names the sha256 of the compose file it yields, so only that file can run once approved (T26)")
     subprocess.run(["dropdb", "--if-exists", DB], check=True)
     shutil.rmtree(tmp)
     print("planner service checks passed")

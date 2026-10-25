@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/worktree-not-run
+description: An approved file left uncommitted in the work tree is not run; HEAD is what counts.

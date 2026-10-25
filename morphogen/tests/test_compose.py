@@ -1,8 +1,10 @@
-"""deploy/compose.py: the allow list, then (with Docker) podinfo run from its committed compose file and
-updated when a commit changes a setting, while an uncommitted edit or a refused file changes nothing; with
---all, a system committed while the runner runs starts on its own.
+"""runtime-compose on a real Docker daemon (the runtime case set checks the rule on a stub engine,
+morphogen/contract/slots/runtime): podinfo runs once a person approves its committed file, and is updated when a
+committed change is approved, while an uncommitted edit, an unapproved commit or a refused file changes nothing; with
+--all, a system committed and approved while the runtime runs starts on its own.
 
-  python3 morphogen/tests/test_compose.py   (Docker part: when a daemon answers; KK_REQUIRE_DOCKER=1 makes it required)
+  PGHOST=... PGUSER=<superuser> python3 morphogen/tests/test_compose.py
+      (Docker part: when a daemon answers; KK_REQUIRE_DOCKER=1 makes it required)
 """
 import json
 import os
@@ -14,11 +16,13 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "morphogen" / "deploy"))
-from compose import refusal  # noqa: E402
+PROVIDER = ROOT / "morphogen" / "modules" / "runtime-compose"
+sys.path[:0] = [str(ROOT / "morphogen" / "contract" / "slots" / "runtime"), str(ROOT / "kernel" / "contract" / "slots")]
+from harness import Record, meta  # noqa: E402
+from runner import World, sha  # noqa: E402
 
 PODINFO = ROOT / "morphogen" / "intent" / "systems" / "podinfo" / "compose.yaml"
-IMG = "redis:7.4.2-alpine@sha256:" + "0" * 64
+ROLE = meta(PROVIDER)["role"]
 
 
 def check(cond, msg):
@@ -27,37 +31,11 @@ def check(cond, msg):
     print(f"ok: {msg}", flush=True)
 
 
-def svc(**kw):
-    return "services:\n  a:\n" + "".join(f"    {k}: {v}\n" for k, v in {"image": IMG, **kw}.items())
-
-
-check(refusal(PODINFO.read_text()) is None, "podinfo's compose file is on the allow list")
-import compose  # noqa: E402
-sys.path.insert(0, str(ROOT / "morphogen" / "modules" / "map-gaps"))
-from map_gaps import gaps  # noqa: E402
-check(gaps.DIGEST.pattern == compose.DIGEST.pattern, "the gap finder asks for a pin exactly as the compose runner requires one")
-for text, why in [(svc(privileged="true"), "privileged not allowed"), (svc(volumes='["/:/host"]'), "volumes not allowed"),
-                  (svc(build="."), "build not allowed"), (svc(env_file="/etc/shadow"), "env_file not allowed"),
-                  (svc(network_mode="host"), "network_mode not allowed"), (svc(cap_add="[SYS_ADMIN]"), "cap_add not allowed"),
-                  (svc(extends="{file: x.yaml, service: b}"), "extends not allowed"),
-                  ("services:\n  a:\n    image: redis:7.4.2-alpine\n", "pinned by digest"),
-                  (svc(ports='["9898:9898"]'), "127.0.0.1"), (svc(ports='["0.0.0.0:1:2"]'), "127.0.0.1"),
-                  (svc(environment="{A: ${HOME}}"), "no $"), (svc(environment="[DOCKER_HOST]"), "a name alone"),
-                  (svc(environment="{HOME: }"), "a name alone"), (svc(**{"1": "x"}), "1 not allowed"), (svc() + "volumes: {x: {}}\n", "nothing else at the top"),
-                  ("include: [x.yaml]\nservices: {}\n", "nothing else at the top"), ("services:\n  A B: {image: x}\n", "lower-case")]:
-    got = refusal(text)
-    check(got is not None and why in got, f"refused: {why} ({text.splitlines()[-1].strip()[:40]})")
-
 if subprocess.run(["docker", "info"], capture_output=True).returncode != 0:
     if os.environ.get("KK_REQUIRE_DOCKER") == "1":
         raise SystemExit("CHECK FAILED: KK_REQUIRE_DOCKER=1 and no Docker daemon answers")
-    print("skipped: no Docker daemon (the allow list was checked)")
+    print("skipped: no Docker daemon (the runtime case set checks the rule on a stub engine)")
     sys.exit(0)
-
-
-def git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args],
-                          check=True, capture_output=True, text=True).stdout
 
 
 def backend_env(project):
@@ -68,85 +46,93 @@ def backend_env(project):
     return dict(x.split("=", 1) for x in json.loads(out or "[]"))
 
 
-tmp = Path(tempfile.mkdtemp())
-intent = tmp / "intent"
-(intent / "systems" / "podinfo").mkdir(parents=True)
-shutil.copy(PODINFO, intent / "systems" / "podinfo" / "compose.yaml")
-f = intent / "systems" / "podinfo" / "compose.yaml"
-git(intent, "init", "-q")
-git(intent, "add", "-A")
-git(intent, "commit", "-qm", "import podinfo")
-project = f"kk-test-compose-{os.getpid()}"
-log = open(tmp / "compose.log", "w+")
-p = subprocess.Popen([sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(intent),
-                      "--system", "podinfo", "--project", project], env={**os.environ, "KK_RECONCILE_SECONDS": "1"},
-                     stdout=log, stderr=subprocess.STDOUT)
+def start(w: World, rec: Record, tmp: Path, *args: str) -> subprocess.Popen:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PG")} | w.env(stub=False) | {
+        "DATABASE_URL": rec.login(ROLE), "KK_ROLE": ROLE, "KK_RECONCILE_SECONDS": "1"}
+    return subprocess.Popen([sys.executable, "-m", "runtime_compose", "--intent", str(w.intent), *args], cwd=PROVIDER, env=env,
+                            stdout=open(tmp / "runtime.log", "w"), stderr=subprocess.STDOUT)
 
 
-def events():
-    log.flush()
-    return [json.loads(x) for x in (tmp / "compose.log").read_text().splitlines() if x.startswith("{")]
+def events(tmp: Path):
+    return [json.loads(x) for x in (tmp / "runtime.log").read_text().splitlines() if x.startswith("{")]
 
 
-def wait(what, f, timeout=300):
+def wait(what, f, tmp: Path, timeout=300):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         if got := f():
             return got
         time.sleep(1)
-    raise SystemExit(f"CHECK FAILED: timed out waiting for {what}: {(tmp / 'compose.log').read_text()[-1500:]}")
+    raise SystemExit(f"CHECK FAILED: timed out waiting for {what}: {(tmp / 'runtime.log').read_text()[-1500:]}")
 
 
+rec = Record("kkc_compose_docker", [PROVIDER])
+tmp = Path(tempfile.mkdtemp())
+project = f"kk-test-compose-{os.getpid()}"
+p = None
 try:
-    wait("the system to start", lambda: [e for e in events() if e["event"] == "started"])
-    check(backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "600", "the committed system runs (backend delay max 600)")
-    f.write_text(f.read_text().replace('PODINFO_RANDOM_DELAY_MAX: "600"', 'PODINFO_RANDOM_DELAY_MAX: "150"'))
+    w = World(PROVIDER, rec, tmp)
+    first = PODINFO.read_text()
+    w.commit("podinfo", first)
+    w.approve(w.propose("urn:kk:system:podinfo", sha(first), shows=first))
+    p = start(w, rec, tmp, "--system", "podinfo", "--project", project)
+    wait("the system to start", lambda: [e for e in events(tmp) if e["event"] == "started"], tmp)
+    check(backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "600", "the approved, committed system runs (backend delay max 600)")
+    edited = first.replace('PODINFO_RANDOM_DELAY_MAX: "600"', 'PODINFO_RANDOM_DELAY_MAX: "150"')
+    w.commit("podinfo", edited, add=False)
     time.sleep(4)
-    check(not [e for e in events() if e["event"] == "updated"] and backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "600",
+    check(not [e for e in events(tmp) if e["event"] == "updated"] and backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "600",
           "an uncommitted edit runs nothing")
-    git(intent, "commit", "-qam", "delay max 150")
-    wait("the update", lambda: [e for e in events() if e["event"] == "updated"])
-    check(backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "150", "a committed change: the backend now runs with 150")
-    f.write_text(f.read_text().replace("  redis:\n", "  redis:\n    privileged: true\n"))
-    git(intent, "commit", "-qam", "privileged redis")
-    wait("the refusal", lambda: [e for e in events() if e["event"] == "refused"])
-    check(backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "150", "a refused file changes nothing; the system keeps running")
+    w.commit("podinfo", edited)
+    wait("the refusal", lambda: [e for e in events(tmp) if e["event"] == "refused"], tmp)
+    check(backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "600", "a commit no one approved runs nothing; the system keeps running")
+    w.approve(w.propose("urn:kk:node:podinfo:backend", 150, file_sha=sha(edited)))
+    wait("the update", lambda: [e for e in events(tmp) if e["event"] == "updated"], tmp)
+    check(backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "150", "once the step naming the file is approved: the backend runs with 150")
+    bad = edited.replace("  redis:\n", "  redis:\n    privileged: true\n")
+    w.approve(w.propose("urn:kk:system:podinfo", sha(bad), shows=bad))
+    w.commit("podinfo", bad)
+    wait("the refusal", lambda: [e for e in events(tmp) if e["event"] == "refused" and "privileged" in e.get("reason", "")], tmp)
+    check(backend_env(project).get("PODINFO_RANDOM_DELAY_MAX") == "150", "a file off the allow list changes nothing, approved or not")
 finally:
-    p.terminate()
-    p.wait(timeout=15)
+    if p:
+        p.terminate()
+        p.wait(timeout=15)
     subprocess.run(["docker", "compose", "-p", project, "down", "-v", "-t", "1"], capture_output=True)
+    rec.drop()
     shutil.rmtree(tmp, ignore_errors=True)
 
-# --all: every system at HEAD, and one committed while it runs (what the intent actuator does once a person
-# approves a described system's file) starts with no one starting a runner for it.
+# --all: every system at HEAD, and one committed and approved while it runs (what the intent actuator and a person do
+# for a described system) starts with no one starting a runtime for it.
 REDIS = next(x.split("image:", 1)[1].strip() for x in PODINFO.read_text().splitlines() if "image: redis" in x)
+rec = Record("kkc_compose_docker", [PROVIDER])
 tmp = Path(tempfile.mkdtemp())
-intent = tmp / "intent"
 first, later = f"t{os.getpid()}a", f"t{os.getpid()}b"
-for name in (first, later):
-    (intent / "systems" / name).mkdir(parents=True)
-(intent / "systems" / first / "compose.yaml").write_text(f"services:\n  cache:\n    image: {REDIS}\n")
-git(intent, "init", "-q")
-git(intent, "add", "-A")
-git(intent, "commit", "-qm", "one system")
-log = open(tmp / "compose.log", "w+")
-p = subprocess.Popen([sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(intent), "--all"],
-                     env={**os.environ, "KK_RECONCILE_SECONDS": "1"}, stdout=log, stderr=subprocess.STDOUT)
+text = f"services:\n  cache:\n    image: {REDIS}\n"
+p = None
 try:
-    started = lambda name: [e for e in events() if e["event"] == "started" and e["system"] == name]  # noqa: E731
-    wait("the first system to start", lambda: started(first))
-    check(not started(later), "--all: the committed system runs; a directory with nothing committed in it runs nothing")
-    (intent / "systems" / later / "compose.yaml").write_text(f"services:\n  cache:\n    image: {REDIS}\n")
+    w = World(PROVIDER, rec, tmp)
+    w.commit(first, text)
+    w.approve(w.propose(f"urn:kk:system:{first}", sha(text), shows=text))
+    p = start(w, rec, tmp, "--all")
+    started = lambda name: [e for e in events(tmp) if e["event"] == "started" and e["system"] == name]  # noqa: E731
+    wait("the first system to start", lambda: started(first), tmp)
+    later_text = text + "    labels: {kk: later}\n"
+    w.approve(w.propose(f"urn:kk:system:{later}", sha(later_text), shows=later_text))
+    w.commit(later, later_text, add=False)
     time.sleep(3)
-    check(not started(later), "--all: a system written but not committed runs nothing")
-    git(intent, "add", "-A")
-    git(intent, "commit", "-qm", "a second system, approved")
-    e = wait("the second system to start", lambda: started(later))
+    check(not started(later), "--all: a system approved and written but not committed runs nothing")
+    git = lambda *a: subprocess.run(["git", "-C", str(w.intent), "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True)  # noqa: E731
+    git("add", "-A")
+    git("commit", "-qm", "a second system, approved")
+    e = wait("the second system to start", lambda: started(later), tmp)
     check(e[0]["project"] == f"kk-{later}", "--all: a system committed later starts, as its own project")
 finally:
-    p.terminate()
-    p.wait(timeout=15)
+    if p:
+        p.terminate()
+        p.wait(timeout=15)
     for name in (first, later):
         subprocess.run(["docker", "compose", "-p", f"kk-{name}", "down", "-v", "-t", "1"], capture_output=True)
+    rec.drop()
     shutil.rmtree(tmp, ignore_errors=True)
-print("compose reconciler tests passed")
+print("runtime-compose on Docker: tests passed")

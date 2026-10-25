@@ -5,6 +5,11 @@
 #   kind replace  a plan step the intent actuator carries out by running a measured candidate instead
 #   kind create   a plan step the intent actuator carries out by writing a new system's compose file from the
 #                 system a person described (morphogen.blueprint); the step names the file's sha256 (R5-29)
+#   kind adopt    a plan step that names an existing system's compose file by its sha256: a person approves the
+#                 file as committed; the actuator writes nothing (T26)
+# A runtime runs only a file a person approved as shown (T26, morphogen.plans.approval): a create or adopt step whose
+# label shows the file, or a node's setting step from this list, whose file the runtime derives itself. A node step
+# also names the yielded file's sha256 for the actuator, which writes only that file.
 # applies_to: provider (default; its intent file in environments/), node (a service of a managed system,
 # intent/systems/<system>/compose.yaml, R5-25) or system (urn:kk:system:<system>, a new one).
 # effect: halve (default) or proportional (planner/plan.py).
@@ -42,5 +47,11 @@ actions:
     kind: create
     applies_to: system
     label: write a new system's compose file from the system a person described
-    risk: medium                      # new intent; nothing runs until a reconciler is pointed at it
+    risk: medium                      # new running code: the runtime runs the file once this step is approved (T26)
     answers: []                       # proposed from a description with no gaps, not from an anomaly
+  urn:kk:action:adopt-system:
+    kind: adopt
+    applies_to: system
+    label: run a system's compose file as committed (a file a person brought in, not one Morphogen wrote)
+    risk: medium                      # new running code; a runtime runs only a file an approved step names (T26)
+    answers: []                       # proposed by encoder-compose when it maps a file no approved step names

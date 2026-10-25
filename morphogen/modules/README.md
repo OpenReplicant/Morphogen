@@ -17,7 +17,8 @@ submit claims; their effects are observed.
 | interview-encoder | design-agent | Ported (T13) | rebuild 4 `encoder-interaction`, unchanged but for names: a conversation as notes an interviewer quotes |
 | design-blueprint | design-agent | Written (T13) | New: a described system with no open question becomes a review-lane plan to write its compose file (`morphogen.blueprint`) |
 | map-gaps | gap-finder | Written (T13) | Rules new (system maps), shape from rebuild 4 `map-gaps`; 12 contract cases, 11 mutants |
-| encoder-compose | system-encoder | Written (T9) | New: a compose file as a TOSCA topology, every claim citing its line |
+| encoder-compose | system-encoder | Written (T9) | New: a compose file as a TOSCA topology, every claim citing its line; `scan --adopt` asks a person to approve a file brought in as it is (T26) |
+| runtime-compose | runtime | Written (T9 as deploy/compose.py; T26, T27) | New: runs a system's compose file as committed, only when a person approved that file (morphogen.plans.approval); the runtime case set (16 cases, 11 mutants) on a stub engine |
 | observer-prometheus | observer | Written (T9) | rebuild 4 `observer-prometheus`: request times from a service's metrics |
 | registry-lookup | catalog-lookup | Written (T14, T20) | New (R5-30): component sets of any kind searched through adapters (`components`, `pypi`, `providers`); rules are toggles judged on every entry; an offered, pinned provider for a build request becomes a sandbox candidate; needs are matched against recorded entries by their requirements, deterministically (T20, R5-33) |
 
@@ -25,6 +26,6 @@ The reconciler that runs the services an environment's intent describes is `../d
 
 ```sh
 python3 morphogen/modules/install.py <db>          # kernel, the kernel providers Morphogen uses, every module
-sh morphogen/contract/run.sh [--mutants]                  # the case sets of Morphogen's slots (analyser, gap-finder)
+sh morphogen/contract/run.sh [--mutants]                  # the case sets of Morphogen's slots (analyser, gap-finder, runtime)
 PGHOST=... PGUSER=... python3 morphogen/modules/test.py   # each module's tests, then the T5 loop, G2, G3 and the design agent
 ```

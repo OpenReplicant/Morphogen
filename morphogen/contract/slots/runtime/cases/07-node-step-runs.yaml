@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/node-step-runs
+description: Once committed, the file an approved node step names (its result's spdx:checksumValue) runs.

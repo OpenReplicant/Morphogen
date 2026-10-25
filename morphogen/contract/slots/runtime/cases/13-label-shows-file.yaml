@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/label-shows-file
+description: 'A step on a system authorises its file only when the plan''s label, decided with it, shows that whole file: a label showing other text names nothing.'

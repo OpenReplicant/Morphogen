@@ -15,6 +15,7 @@ The plan (rebuild 4 skill-adaptation-planning's shape, plus a prediction and a r
   <plan>             rdf:type p-plan:Plan; rdfs:label "..."; dcterms:type <risk class>
   <plan>:step:1      rdf:type sosa:Actuation; p-plan:isStepOfPlan <plan>; dcterms:type <action>;
                      sosa:hasFeatureOfInterest <target>; sosa:hasSimpleResult <new value>
+                     {spdx:checksumValue: the sha256 of the compose file the step yields, for a node: T26}
   <observed>         bbo:maxValue <limit>  {sosa:observedProperty: <property>, dcterms:isPartOf: <plan>}
                      -- the prediction: after the step, the property of the observed target (the
                      anomaly's) stays within the limit
@@ -38,6 +39,7 @@ OA = "http://www.w3.org/ns/oa#"
 XSD = "http://www.w3.org/2001/XMLSchema#"
 MAX = "https://www.irit.fr/recherches/MELODI/ontologies/BBO#maxValue"
 RESULT, PROP = SOSA + "hasSimpleResult", SOSA + "observedProperty"
+CHECKSUM = "http://spdx.org/rdf/terms#checksumValue"        # a content hash, qualifying the step's result or candidate
 LIMIT_KIND = "urn:kk:anomaly-kind:limit"
 
 
@@ -115,14 +117,13 @@ def change_set(p: dict, agent: str, scope: str, lane: str) -> dict:
                     claim(p["step"], PPLAN + "isStepOfPlan", ent(p["iri"])),
                     claim(p["step"], DCT_TYPE, ent(p["action"])),
                     claim(p["step"], SOSA + "hasFeatureOfInterest", ent(p["target"])),
-                    claim(p["step"], RESULT, lit(p["to"], XSD + "decimal")),
+                    claim(p["step"], RESULT, lit(p["to"], XSD + "decimal"), {CHECKSUM: p["sha256"]} if p.get("sha256") else None),
                     claim(p.get("observed", p["target"]), MAX, lit(p["limit"], XSD + "decimal"),
                           {PROP: p["property"], PART_OF: p["iri"]})]}
 
 
 # ---------------------------------------------------------------- G2: build requests and replacements (R5-21)
 SUBSTITUTED_BY = "https://w3id.org/knowledge-kernel/tosca#substitutedBy"
-CHECKSUM = "http://spdx.org/rdf/terms#checksumValue"        # the candidate's content hash, on the step
 BUILD, REPLACE = "urn:kk:action:build-candidate", "urn:kk:action:replace-provider"
 
 

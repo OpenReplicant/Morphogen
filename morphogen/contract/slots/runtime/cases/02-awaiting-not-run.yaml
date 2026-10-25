@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/awaiting-not-run
+description: A file whose adopt step waits for review is not run.

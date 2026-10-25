@@ -5,7 +5,7 @@ person to approve. A plain command.
 
 Refuses while the gap finder has an open gap on the system (a question not answered yet), while the
 description conflicts (morphogen.blueprint), while a claim it would render has a refuted quote, when the system
-has a compose file already, when the compose runner would refuse the file (morphogen/deploy/compose.py's allow
+has a compose file already, when the compose runner would refuse the file (runtime-compose's allow
 list: an image not pinned by digest, a port not on 127.0.0.1, ...), or when the intake filter (the kernel's
 filter-gitleaks) finds a secret in the plan:
 a setting's value would otherwise reach the record and the intent repository. Otherwise it
@@ -42,7 +42,8 @@ _spec = importlib.util.spec_from_file_location(
     "filter_gitleaks", Path(__file__).resolve().parents[4] / "kernel" / "providers" / "filter-gitleaks" / "filter_gitleaks" / "__main__.py")
 intake = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(intake)
-_spec = importlib.util.spec_from_file_location("compose_runner", Path(__file__).resolve().parents[3] / "deploy" / "compose.py")
+_spec = importlib.util.spec_from_file_location(
+    "compose_runner", Path(__file__).resolve().parents[2] / "runtime-compose" / "runtime_compose" / "__main__.py")
 runner = importlib.util.module_from_spec(_spec)        # the compose runner's allow list: never propose what it would refuse
 _spec.loader.exec_module(runner)
 REFUTED = """select c.id from api.claims c join api.verifications v on v.claim_id = c.id

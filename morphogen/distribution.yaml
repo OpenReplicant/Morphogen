@@ -64,8 +64,14 @@ slots:
   - id: actuator
     phase: execute
     cardinality: many
-    default: intent-actuator                   # approved plan steps become commits; deploy/reconcile.py runs them
+    default: intent-actuator                   # approved plan steps become commits; deploy/reconcile.py and the runtime run them
     contract: provider-tests
+    status: written
+  - id: runtime
+    phase: execute
+    cardinality: many
+    default: runtime-compose                   # runs a system's committed compose file, only one an approved plan step names (T26, T27)
+    contract: contract/slots/runtime
     status: written
   - id: outcome-verifier
     phase: verify

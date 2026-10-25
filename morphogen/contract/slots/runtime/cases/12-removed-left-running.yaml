@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/removed-left-running
+description: 'A file removed from HEAD stops nothing: nothing is asked of the engine, and the runtime says the system is unmanaged.'

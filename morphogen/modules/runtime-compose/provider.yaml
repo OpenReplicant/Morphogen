@@ -1,0 +1,14 @@
+id: urn:kk:provider:runtime-compose
+name: 'Runtime: Docker Compose'
+version: 0.2.0
+license: Apache-2.0
+slots: [runtime]
+origin: morphogen/deploy/compose.py (T9, R5-25) moved into the runtime slot (T27, R5-O9 as amended by R5-42 (c)); runs only a file an approved plan step names (T26)
+requires: Python 3.12+, psycopg, PyYAML, git, the Docker CLI with Compose (or Podman through its Docker-compatible socket)
+migration: migration.sql
+service: python3 -m runtime_compose --all
+role: kkm_runtime_compose
+login: kkm_runtime_compose_login
+agent: urn:kk:agent:runtime-compose
+tests: [python3 tests/test_allow.py]
+note: reads each system's compose file from the commit at HEAD, never the work tree; runs it only when it is on the allow list and the latest approved plan step for the system names its sha256; never writes claims, each file it runs is a run of its own

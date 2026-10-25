@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/listed-action
+description: A node step authorises a file only for an action on the fixed list (from the code), within its bounds.

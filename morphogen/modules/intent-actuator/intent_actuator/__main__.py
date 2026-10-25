@@ -70,9 +70,9 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                     (PPLAN_STEP_OF,))
         cols = [d.name for d in cur.description]
         claims = [dict(zip(cols, r)) for r in cur.fetchall()]
-        cur.execute("""select id::text, 'review', decided_by, submitted_by, 'applied' from api.review_decisions
+        cur.execute("""select id::text, 'review', decided_by, submitted_by, 'applied', decided_at from api.review_decisions
                        where id = any(%s::uuid[])""", (sorted({str(c["change_set"]) for c in claims}),))
-        sets = {r[0]: dict(zip(("lane", "decided_by", "submitted_by", "status"), r[1:])) for r in cur.fetchall()}
+        sets = {r[0]: dict(zip(("lane", "decided_by", "submitted_by", "status", "decided_at"), r[1:])) for r in cur.fetchall()}
         cur.execute("select distinct plan_step from kernel.run where agent = %s and plan_step is not null", (AGENT,))
         done = {r[0] for r in cur.fetchall()}
         cur.execute("""select subject, object_value->>'@value' from api.claims where predicate = %s
@@ -127,6 +127,12 @@ def one_pass(conn, intent: Path, env: str) -> dict:
                             raise
                         outputs.update(file=str(f.relative_to(intent)), setting="compose file", before=None,
                                        after=s["value"], commit=sha)
+                        report[s["step"]] = {"status": "succeeded", **outputs}
+                        continue
+                    if acts[s["action"]].get("kind") == "adopt":
+                        # Nothing to write: a person approved the file as it is, and the runtime runs it (T26).
+                        outputs.update(file=str(f.relative_to(intent)), setting="compose file", before=None,
+                                       after=s["value"], adopted=s["value"])
                         report[s["step"]] = {"status": "succeeded", **outputs}
                         continue
                     if uncommitted(intent, f):

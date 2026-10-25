@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/floor-kept
+description: 'Withdrawing the step that approved the newer file does not let an older approved file run again: the floor comes from the runtime''s own run records.'

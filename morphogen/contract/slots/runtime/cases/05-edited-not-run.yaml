@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/edited-not-run
+description: A file edited and committed after its approval (by anyone) names no approved step and is not run.
