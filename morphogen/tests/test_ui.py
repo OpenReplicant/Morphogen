@@ -23,12 +23,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "modules"), str(ROOT / "morphogen" / "ui"),
-                str(ROOT / "morphogen" / "modules" / "planner"), str(ROOT / "kernel" / "providers" / "validator-shacl"),
+                str(ROOT / "morphogen" / "modules" / "planner"),
+                str(ROOT / "morphogen" / "modules" / "prediction-verifier"), str(ROOT / "kernel" / "providers" / "validator-shacl"),
                 str(ROOT / "kernel" / "providers" / "belief-corroboration")]
 import install  # noqa: E402  (morphogen/modules/install.py)
 import people  # noqa: E402
 from kk.lib import connect, follow, run, submit  # noqa: E402
 from planner.plan import change_set  # noqa: E402
+from prediction_verifier import verify  # noqa: E402
 
 validator = importlib.import_module("validator.__main__")
 belief = importlib.import_module("belief_corroboration.__main__")
@@ -36,6 +38,7 @@ belief = importlib.import_module("belief_corroboration.__main__")
 DB = "kk_ui_test"
 URL = f"dbname={DB}"
 PLANNER, SEED = "urn:kk:agent:ui-test-planner", "urn:kk:agent:ui-test-observer"
+ACTUATOR, VERIFIER = "urn:kk:agent:ui-test-actuator", "urn:kk:agent:ui-test-verifier"
 SOSA, OA, KKT = "http://www.w3.org/ns/sosa/", "http://www.w3.org/ns/oa#", "https://w3id.org/knowledge-kernel/tosca#"
 RDF_TYPE, DCT_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "http://purl.org/dc/terms/type"
 NODE = "urn:kk:node:shop:web"
@@ -81,13 +84,14 @@ install.install(DB, ["lane-autonomy", "planner"])
 password, secret = secrets.token_urlsafe(18), secrets.token_urlsafe(40)
 auth_pw = secrets.token_urlsafe(18)
 with connect(url=URL) as su:
-    for r in ("t_ui_planner", "t_ui_observer"):
+    for r in ("t_ui_planner", "t_ui_observer", "t_ui_actuator", "t_ui_verifier"):
         su.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{r}') then create role {r} nologin; "
                    f"end if; end $$")
         su.execute(f"grant kk_agent to {r}")
     su.execute("set role kk_owner")
     su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, 't_ui_planner', 'software', 'planner'), "
-               "(%s, 't_ui_observer', 'software', 'observer') on conflict do nothing", (PLANNER, SEED))
+               "(%s, 't_ui_observer', 'software', 'observer'), (%s, 't_ui_actuator', 'software', 'actuator'), "
+               "(%s, 't_ui_verifier', 'software', 'verifier') on conflict do nothing", (PLANNER, SEED, ACTUATOR, VERIFIER))
     su.execute("reset role")
     alice = people.add(su, "alice", password, "Alice")
     people.add(su, "eve", password, "Eve")
@@ -178,6 +182,39 @@ try:
     with connect(url=URL) as su:
         st, by = su.execute("select status, decided_by from kernel.change_set where id = %s", (cs["id"],)).fetchone()
     check(st in ("approved", "applied") and by == "person_alice", f"the store records the approval as Alice's own ({st}, {by})")
+
+    # Carried out and checked: the actuator's run for the step, then the verifier's verdict on the prediction.
+    # The loop shows the plan with who approved it, its run and its verdict, and the verdict explains itself.
+    with connect("t_ui_actuator", URL) as conn, conn.cursor() as cur, \
+            run(cur, "urn:kk:module:ui-test-actuator", {"plan": plan["iri"]}, plan_step=plan["step"]):
+        pass
+    record("t_ui_observer", SEED, "after", [
+        claim(NODE, SOSA + "hasSimpleResult", {"value": {"@value": 0.12}}, qualifiers={SOSA + "observedProperty": plan["property"]},
+              valid_from="2026-10-24T10:05:00+00:00", valid_to="2026-10-24T10:06:00+00:00")])
+    with connect(url=URL) as su:
+        pred = str(su.execute("select id from kernel.claim where predicate = %s and qualifiers ? %s",
+                              (verify.MAX, verify.PART_OF)).fetchone()[0])
+        after = str(su.execute("select id from kernel.claim where predicate = %s and valid_from = '2026-10-24T10:05:00+00:00'",
+                               (SOSA + "hasSimpleResult",)).fetchone()[0])
+    v = {"verdict": "holds", "premises": [pred, after], "text": "latency-seconds-mean was 0.12 after the change: within the predicted limit 0.2."}
+    vcs = verify.change_set({"id": pred}, plan["iri"], v, VERIFIER, "urn:kk:scope:default")
+    record("t_ui_verifier", VERIFIER, vcs["idempotency_key"], vcs["ops"])
+    with connect("kkm_belief", URL) as bel:
+        follow(bel, belief.Pass(), once=True)
+    settle()
+    out = subprocess.run(["node", str(ROOT / "morphogen" / "tests" / "ui_browser.js")], capture_output=True, text=True,
+                         timeout=300, env={**os.environ, "UI": base + "/ui/", "NAME": "alice", "PASSWORD": password,
+                                           "PLAN": plan["label"], "STEP": "plans",
+                                           **({"SHOT": os.environ["KK_UI_SHOT_PLANS"]} if os.environ.get("KK_UI_SHOT_PLANS") else {})})
+    print(out.stdout.strip())
+    check(out.returncode == 0, f"the plans view loads ({out.stderr.strip()[-800:]})")
+    row = json.loads(out.stdout.strip().splitlines()[-1])
+    check("person_alice" in row["decided"] and row["decided"].startswith(("approved", "applied")),
+          f"the plan shows who approved it ({row['decided']})")
+    check(row["run"].startswith("succeeded by ui-test-actuator"), f"the plan shows its step was carried out, and by whom ({row['run']})")
+    check(row["verdict"].startswith("holds") and "0.12" in row["verdict"] and "(belief 0." in row["verdict"],
+          f"the plan shows its verdict and the verdict's belief ({row['verdict']})")
+    check(set(row["detail"]["derived_from"]) == {pred, after}, "the verdict explains itself: the prediction and the observation")
 
     # Alice proposes a change herself (a person is an agent too): the store refuses her approving it.
     code, body = post(base + "/ui/login", {"name": "alice", "password": password})

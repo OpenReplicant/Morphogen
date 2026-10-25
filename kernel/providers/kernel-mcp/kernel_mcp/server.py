@@ -44,7 +44,7 @@ PREFIXES = {  # same as kernel.prefix (kernel/providers/record-postgres/schema/0
     "kkp": "https://w3id.org/knowledge-kernel/profile#",
 }
 CLAIM_COLUMNS = ("id, subject, predicate, object_entity, object_value, qualifiers, scope, evidence_type, "
-                 "attributed_to, status, belief, valid_from, valid_to")
+                 "attributed_to, status, belief, valid_from, valid_to, recorded_at, change_set")
 RDF_TYPE = PREFIXES["rdf"] + "type"
 REQUIRE_TOKEN = False  # set by the http entrypoint
 
@@ -299,10 +299,11 @@ async def whoami(ctx: Context) -> dict:
 
 @mcp.tool()
 async def list_change_sets(ctx: Context, status: str | None = None, limit: int = 50) -> list[dict]:
-    """Change sets you can see (your own; reviewers and validators: all in their cleared scopes), newest first."""
+    """Change sets you can see (your own; reviewers and validators: all in their cleared scopes), newest first,
+    with who decided a reviewed one, when, and their note."""
     return await query(ctx, rows(
         "select id, idempotency_key, attributed_to, target_scope, lane, status, submitted_at, validation_report,"
-        " jsonb_array_length(ops) as op_count from api.change_sets"
+        " decided_by, decided_at, review_note, op_count from api.change_sets"
         " where (%(st)s::text is null or status = %(st)s) order by submitted_at desc limit %(n)s"),
         {"st": status, "n": max(1, min(limit, 500))})
 

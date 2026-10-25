@@ -26,7 +26,7 @@ of a long chat history, and does a small reader answer from it?
 
 Rebuild 4's floor (eval/longmemeval/runs, 100 questions, 93 with evidence): BM25 session R_any@5 0.935,
 R_all@5 0.817, NDCG@5 0.866; with cross-encoder re-ranking (D-66) 0.968 / 0.925 / 0.923. End to end with
-lfm-2.5-2.6b: none 0.10, kernel (top 5 sessions, re-ranked) 0.58, kernel turns with neighbours (D-92) 0.62.
+lfm-2.5-2.6b: none 0.10, kernel (top 5 sessions, re-ranked) 0.62, kernel turns with neighbours (D-92) 0.68.
 
 Each question gets a scope and a reader role that may read only that scope (and the vocabulary), so
 row-level security keeps the histories apart, as it would keep two users' memories apart. A turn is one
