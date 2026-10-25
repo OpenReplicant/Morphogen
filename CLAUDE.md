@@ -91,6 +91,6 @@ morphogen/                 the distribution
   intent/                  desired state orchestrators reconcile; policies (autonomy x risk); systems/ (managed systems' compose files, R5-25)
   ui/                      the review and loop UI (T21): serve.py (kernel-mcp + sign-in), people.py (a person's login), web/
   deploy/
-docs/                      rebuild-5.md, decisions.md, LESSONS.md, slots-rebuild4.yaml
+docs/                      rebuild-5.md, decisions.md, LESSONS.md, DEVELOPING.md (setup, concepts, writing a provider), slots-rebuild4.yaml
 scripts/                   check_boundary.py
 ```

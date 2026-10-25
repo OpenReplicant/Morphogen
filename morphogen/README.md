@@ -1,5 +1,7 @@
 # Morphogen distribution
 
+Developer guide: `../docs/DEVELOPING.md`.
+
 `distribution.yaml` lists the kernel slots Morphogen uses, the application slots it declares (design,
 monitor, analyse, plan, execute, verify, catalog lookup) and their default providers.
 
@@ -8,8 +10,10 @@ monitor, analyse, plan, execute, verify, catalog lookup) and their default provi
 | `modules/` | Providers for Morphogen's slots. A module moves to `kernel/providers/` when another distribution needs it |
 | `intent/` | Desired state orchestrators reconcile. Written only by the intent actuator after approval |
 | `intent/policies/autonomy.yaml` | Lane policy: autonomy level × risk class |
-| `ui/` | Window-manager shell; views are providers |
-| `deploy/` | Compose stack |
+| `contract/slots/` | Case sets for Morphogen's slots (analyser, gap-finder) |
+| `ui/` | The review and loop UI (`ui/README.md`) |
+| `deploy/` | `reconcile.py` runs what an environment's intent names; `compose.py` runs managed systems' compose files |
+| `evals/` | G2 runs, RCAEval, the design interview, self-model questions |
 
 Morphogen's own structure in the record (T4), with the self-encoder from the kernel:
 
