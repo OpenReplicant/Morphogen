@@ -1,0 +1,495 @@
+"""Morphogen on a machine of your own (T23): one command brings up the record, the services, the compose runner and
+the UI; others add a person, give an agent (Claude Code) its own login, record a conversation and propose a
+described system.
+
+  python3 morphogen/deploy/local.py up                 Postgres in Docker, install, the services, the UI
+  python3 morphogen/deploy/local.py person NAME        a person who signs in to the UI and reviews (asks the password)
+  python3 morphogen/deploy/local.py agent NAME         an agent's own login, and an MCP config for Claude Code
+  python3 morphogen/deploy/local.py record FILE --source NAME   a conversation (JSON lines) as notes, for an interview
+  python3 morphogen/deploy/local.py propose SYSTEM     a described system's compose file, to review in the UI
+  python3 morphogen/deploy/local.py status             what runs, and where
+  python3 morphogen/deploy/local.py down [--db]        stop the services (and Postgres, with --db)
+
+Everything it keeps is in MORPHOGEN_HOME (default ~/.local/state/morphogen), readable by you alone:
+  secrets.json   the database superuser's password, the services' and the UI's logins, the UI's token secret,
+                 the telemetry secret; generated once, never printed, never in the repository
+  intent/        Morphogen's intent, a git repository of its own (copied from morphogen/intent on the first up):
+                 the intent actuator commits approved changes here, the reconcilers run what is committed
+  artifacts/     source files the encoders stored (conversations), which the quote verifier reads
+  logs/          one log per process; pids.json, the processes `up` started
+  mcp/           per agent, the MCP config `agent` wrote
+
+The record is Postgres 16 in the container `morphogen-postgres` (image pinned by digest), published on
+127.0.0.1 only, asking every login for its password (scram-sha-256), data in the volume `morphogen-pgdata`.
+Every service, and `record` and `propose`, connects as a login of its own that may switch to its provider's role
+only, with a password derived for that login alone; the reconciler holds the secret they are derived from, and no
+service does. The UI connects as kk_authenticator, which may act as any signed-in person (and any provider): it is
+the one process trusted that far. The superuser's password is used to install, and to add people and agents.
+
+What this does not protect against: every process runs as you, so a service could read MORPHOGEN_HOME. The
+separation above stops a mistaken service, not a hostile one; model-written code, which is not trusted, is never
+started here.
+
+Needs: Docker, git, psql (the Postgres client), Python 3.12+ with the requirements in docs/DEVELOPING.md, and
+gitleaks 8.30.1 on PATH for the design agent's intake filter. Model-written code (the builder and the sandbox) is
+not started here: it needs run users and nftables (docs/DEVELOPING.md, section 1).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import secrets
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")]
+HOME = Path(os.environ.get("MORPHOGEN_HOME", Path.home() / ".local" / "state" / "morphogen"))
+DB = "morphogen"
+IMAGE = "postgres:16.9@sha256:ddfe3e8713e3ee5b8f286082cb12512488dfbf3f5a1ecb0b74a42e6055af0a5f"
+ENV = "local"
+# The services the reconciler runs from intent (environments/local/<provider>.yaml): directory, module, settings,
+# and the role each acts as. Every one gets a login of its own that may switch to that role only (`logins`).
+SERVICES = {
+    "validator-shacl": ("kernel/providers/validator-shacl", "validator", {}, "kkm_validator"),
+    "belief-corroboration": ("kernel/providers/belief-corroboration", "belief_corroboration", {}, "kkm_belief"),
+    "truth-maintenance": ("kernel/providers/truth-maintenance", "truth_maintenance", {}, "kkm_truth_maintenance"),
+    "verifier-quotes": ("kernel/providers/verifier-quotes", "verifier_quotes", {"KK_ARTIFACTS": "{artifacts}"}, "kkm_verifier_quotes"),
+    "recall-bm25": ("kernel/providers/recall-bm25", "recall_bm25", {}, "kkm_recall_index"),
+    "anomaly": ("morphogen/modules/anomaly", "anomaly", {}, "kkm_anomaly"),
+    "planner": ("morphogen/modules/planner", "planner", {"KK_INTENT_DIR": "{intent}", "KK_INTENT_ENV": ENV}, "kkm_planner"),
+    "intent-actuator": ("morphogen/modules/intent-actuator", "intent_actuator", {"KK_INTENT_DIR": "{intent}", "KK_INTENT_ENV": ENV},
+                        "kkm_intent_actuator"),
+    "prediction-verifier": ("morphogen/modules/prediction-verifier", "prediction_verifier", {}, "kkm_prediction_verifier"),
+    "map-gaps": ("morphogen/modules/map-gaps", "map_gaps", {}, "kkm_map_gaps"),
+}
+# Started by local.py itself, each as its own login too.
+OTHERS = {"observer-otel": ("morphogen/modules/observer-otel", "kkm_observer_otel"),
+          "interview-encoder": ("morphogen/modules/interview-encoder", "kkm_interview_encoder"),
+          "design-blueprint": ("morphogen/modules/design-blueprint", "kkm_design_blueprint")}
+NEEDS = ["psycopg", "yaml", "pyshacl", "rdflib", "mcp", "jwt", "starlette", "uvicorn"]
+
+
+def say(msg: str) -> None:
+    print(msg, flush=True)
+
+
+def die(msg: str) -> None:
+    raise SystemExit(f"morphogen: {msg}")
+
+
+# ------------------------------------------------------------------ state
+def secret() -> dict:
+    """The instance's secrets and settings, generated once (any missing key is filled in). MORPHOGEN_HOME is made
+    yours alone on every call, and a secrets file another user could read is refused."""
+    HOME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if HOME.stat().st_uid != os.getuid():
+        die(f"{HOME} belongs to another user")
+    HOME.chmod(0o700)
+    f = HOME / "secrets.json"
+    s = json.loads(f.read_text()) if f.exists() else {}
+    if f.exists() and f.stat().st_mode & 0o077:
+        die(f"{f} is readable by others: chmod 600 it, or start again with a new MORPHOGEN_HOME")
+    want = {**{k: secrets.token_urlsafe(32) for k in ("superuser", "logins", "authenticator", "jwt", "otlp")},
+            "instance": "morphogen",          # names the container (<instance>-postgres) and volume (<instance>-pgdata)
+            "db_port": 55432, "ui_port": 8470, "otlp_port": 54318}
+    if set(want) - set(s):
+        s = {**want, **s}
+        f.touch(mode=0o600)
+        f.chmod(0o600)
+        f.write_text(json.dumps(s, indent=2) + "\n")
+    return s
+
+
+def conninfo(s: dict, user: str = "postgres", password: str | None = None, db: str = DB) -> str:
+    from psycopg.conninfo import make_conninfo
+    return make_conninfo(host="127.0.0.1", port=s["db_port"], dbname=db, user=user,
+                         password=password if password is not None else s["superuser"])
+
+
+def container(s: dict) -> str:
+    return f"{s.get('instance', 'morphogen')}-postgres"
+
+
+def volume(s: dict) -> str:
+    return f"{s.get('instance', 'morphogen')}-pgdata"
+
+
+def pg_env(s: dict) -> dict:
+    """The PG* environment install.py and people.py use (a superuser, like psql)."""
+    return {"PGHOST": "127.0.0.1", "PGPORT": str(s["db_port"]), "PGUSER": "postgres", "PGPASSWORD": s["superuser"]}
+
+
+def pids() -> dict:
+    f = HOME / "pids.json"
+    got = json.loads(f.read_text()) if f.exists() else {}
+    return {k: v for k, v in got.items() if isinstance(v, dict)}
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
+# ------------------------------------------------------------------ checks
+def preflight() -> None:
+    if sys.version_info < (3, 12):
+        die(f"Python 3.12 or newer is needed (this is {sys.version.split()[0]})")
+    missing = [t for t in ("docker", "git", "psql") if not shutil.which(t)]
+    if missing:
+        die(f"not on PATH: {', '.join(missing)} (docs/DEVELOPING.md, section 1)")
+    if subprocess.run(["docker", "info"], capture_output=True).returncode:
+        die("Docker does not answer: start it first")
+    import importlib.util
+    lost = [m for m in NEEDS if importlib.util.find_spec(m) is None]
+    if lost:
+        die(f"Python packages missing ({', '.join(lost)}): pip install -r kernel/contract/requirements.txt "
+            "-r kernel/providers/kernel-mcp/requirements.txt -r morphogen/modules/observer-otel/requirements.txt "
+            "-r morphogen/modules/registry-lookup/requirements.txt")
+    if not shutil.which("gitleaks"):
+        say("note: gitleaks is not on PATH; the design agent will refuse to propose until it is (the intake filter fails closed)")
+
+
+# ------------------------------------------------------------------ Postgres
+def postgres(s: dict) -> None:
+    state = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container(s)], capture_output=True, text=True)
+    if state.returncode:
+        say(f"starting Postgres ({IMAGE.split('@')[0]}) on 127.0.0.1:{s['db_port']}")
+        pw = pw_file(s)
+        subprocess.run(["docker", "run", "-d", "--name", container(s), "-p", f"127.0.0.1:{s['db_port']}:5432",
+                        "-e", "POSTGRES_PASSWORD_FILE=/run/morphogen/pw", "-e", "POSTGRES_INITDB_ARGS=--auth=scram-sha-256",
+                        "-e", "POSTGRES_HOST_AUTH_METHOD=scram-sha-256", "-v", f"{volume(s)}:/var/lib/postgresql/data",
+                        "--mount", f"type=bind,src={pw},dst=/run/morphogen/pw,readonly", IMAGE],
+                       check=True, capture_output=True)
+    elif state.stdout.strip() != "true":
+        pw_file(s)                    # Docker checks a bind mount's source at every start, not only the first
+        subprocess.run(["docker", "start", container(s)], check=True, capture_output=True)
+    import psycopg
+    try:
+        for _ in range(60):
+            try:
+                with psycopg.connect(conninfo(s, db="postgres"), connect_timeout=3) as conn:
+                    conn.execute("select 1")
+                return
+            except psycopg.OperationalError:
+                time.sleep(1)
+        die(f"Postgres did not answer on 127.0.0.1:{s['db_port']}: docker logs {container(s)}")
+    finally:
+        (HOME / "pg-password").unlink(missing_ok=True)          # read at start only; secrets.json keeps it
+
+
+def pw_file(s: dict) -> Path:
+    """The superuser's password as a file the container reads at init (never an argument or a variable), there
+    only while the container starts. Readable inside the container (its postgres user reads it); on this machine
+    MORPHOGEN_HOME, yours alone, keeps other users out."""
+    f = HOME / "pg-password"
+    f.touch(mode=0o644)
+    f.write_text(s["superuser"])
+    return f
+
+
+def install(s: dict) -> None:
+    import psycopg
+    from psycopg import sql
+    with psycopg.connect(conninfo(s, db="postgres"), autocommit=True) as su:
+        if su.execute("select 1 from pg_database where datname = %s", (DB,)).fetchone():
+            return
+    say("installing the record and Morphogen's modules (a minute)")
+    os.environ.update(pg_env(s))
+    sys.path.insert(0, str(ROOT / "morphogen" / "modules"))
+    import install as morphogen_install   # morphogen/modules/install.py
+    subprocess.run(["createdb", DB], check=True, env={**os.environ, **pg_env(s)})
+    morphogen_install.install(DB, morphogen_install.modules())
+    morphogen_install.kernel.install(DB, ["verifier-quotes", "recall-bm25"])   # services here; Morphogen's tests run without them
+    with psycopg.connect(conninfo(s), autocommit=True) as su:
+        verifier = su.pgconn.encrypt_password(s["authenticator"].encode(), b"kk_authenticator", b"scram-sha-256").decode()
+        su.execute(sql.SQL("alter role kk_authenticator login password {}").format(sql.Literal(verifier)))
+        su.execute(sql.SQL("grant connect on database {} to kk_authenticator").format(sql.Identifier(DB)))
+
+
+def declared_login(cwd: str) -> str | None:
+    from morphogen.logins import login_of
+    found = login_of(ROOT / cwd)
+    return found[1] if found else None
+
+
+def logins(s: dict) -> dict:
+    """Every service's own login: may switch only to its role (noinherit, granted that role alone), password
+    derived from the logins secret for that login alone (morphogen.logins.password_for), so no service holds
+    another's. A provider that declares a login (provider.yaml `login`) keeps it. Writes service-logins.json for
+    the reconciler: {provider: [role, login]} for providers that declare none. Returns {name: (role, login)}."""
+    import psycopg
+    from psycopg import sql
+    from morphogen.logins import password_for
+    os.environ["KK_LOGIN_SECRET"] = s["logins"]
+    every = {name: (role, declared_login(cwd) or f"{role}_login") for name, (cwd, _, _, role) in SERVICES.items()}
+    every.update({name: (role, declared_login(cwd) or f"{role}_login") for name, (cwd, role) in OTHERS.items()})
+    with psycopg.connect(conninfo(s), autocommit=True) as su:
+        for role, login in every.values():
+            if not su.execute("select 1 from pg_roles where rolname = %s", (role,)).fetchone():
+                die(f"the role {role} is missing: its provider is not installed in {DB}")
+            if not su.execute("select 1 from pg_roles where rolname = %s", (login,)).fetchone():
+                su.execute(sql.SQL("create role {} login noinherit").format(sql.Identifier(login)))
+            verifier = su.pgconn.encrypt_password(password_for(login).encode(), login.encode(), b"scram-sha-256").decode()
+            su.execute(sql.SQL("alter role {} login noinherit password {}").format(sql.Identifier(login), sql.Literal(verifier)))
+            su.execute(sql.SQL("grant {} to {}").format(sql.Identifier(role), sql.Identifier(login)))
+            su.execute(sql.SQL("grant connect on database {} to {}").format(sql.Identifier(DB), sql.Identifier(login)))
+    f = HOME / "service-logins.json"
+    f.write_text(json.dumps({n: list(rl) for n, rl in every.items() if n in SERVICES and not declared_login(SERVICES[n][0])}, indent=2))
+    f.chmod(0o600)
+    os.environ.pop("KK_LOGIN_SECRET")
+    return every
+
+
+def own(s: dict, every: dict, name: str) -> str:
+    """The conninfo of `name`'s own login."""
+    from morphogen.logins import password_for
+    os.environ["KK_LOGIN_SECRET"] = s["logins"]
+    try:
+        return conninfo(s, user=every[name][1], password=password_for(every[name][1]))
+    finally:
+        os.environ.pop("KK_LOGIN_SECRET")
+
+
+# ------------------------------------------------------------------ intent
+def operator() -> tuple[str, str]:
+    """Who runs `up`: their own git identity, else their login name on this host."""
+    import getpass
+    import socket
+    get = lambda k: subprocess.run(["git", "config", "--get", k], capture_output=True, text=True).stdout.strip()  # noqa: E731
+    user = getpass.getuser()
+    return get("user.name") or user, get("user.email") or f"{user}@{socket.gethostname()}"
+
+
+def git(repo: Path, *args: str) -> str:
+    name, email = operator()
+    return subprocess.run(["git", "-C", str(repo), "-c", f"user.name={name}", "-c", f"user.email={email}", *args],
+                          check=True, capture_output=True, text=True).stdout
+
+
+def intent() -> Path:
+    d = HOME / "intent"
+    if (d / ".git").exists():
+        return d
+    say(f"making Morphogen's intent repository in {d}")
+    shutil.copytree(ROOT / "morphogen" / "intent", d, ignore=shutil.ignore_patterns("experiments"))
+    (d / "experiments").mkdir(exist_ok=True)
+    (d / "experiments" / ".keep").write_text("")
+    for env_dir in (d / "environments").iterdir():
+        if env_dir.is_dir():
+            shutil.rmtree(env_dir)
+    for f in (d / "systems").glob("*"):     # the example systems (podinfo) are not yours to run
+        shutil.rmtree(f) if f.is_dir() else f.unlink()
+    (d / "systems" / ".keep").parent.mkdir(exist_ok=True)
+    (d / "systems" / ".keep").write_text("")
+    local = d / "environments" / ENV
+    local.mkdir(parents=True)
+    fill = {"intent": str(d), "artifacts": str(HOME / "artifacts")}
+    for name, (cwd, module, env, _) in SERVICES.items():
+        settings = {k: v.format(**fill) for k, v in env.items()}
+        lines = ["# Written by morphogen/deploy/local.py at the first `up`, as the person who ran it (a bootstrap: not",
+                 "# reviewed). After that, changes come from approved plans, committed by the intent actuator.",
+                 f"provider: {name}", f"service: python3 -m {module}", f"cwd: {cwd}", "env:"]
+        lines += [f"  {k}: {json.dumps(v)}" for k, v in {"KK_SWEEP_SECONDS": "10", **settings}.items()]
+        (local / f"{name}.yaml").write_text("\n".join(lines) + "\n")
+    git(d, "init", "-q")
+    git(d, "add", "-A")
+    git(d, "commit", "-qm", "bootstrap: the local environment\n\nWritten by morphogen/deploy/local.py for the person running "
+        "`up`; not a reviewed plan.")
+    return d
+
+
+# ------------------------------------------------------------------ processes
+def started_at(pid: int) -> str:
+    """When the process started, as `ps` says: with the pid, it names one process (a pid alone may be reused)."""
+    return subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+
+
+def start(name: str, argv: list[str], env: dict, cwd: Path = ROOT) -> dict:
+    (HOME / "logs").mkdir(exist_ok=True, mode=0o700)
+    log = open(HOME / "logs" / f"{name}.log", "a")
+    p = subprocess.Popen(argv, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    return {"pid": p.pid, "started": started_at(p.pid)}
+
+
+def ours(entry: dict) -> bool:
+    return alive(entry["pid"]) and started_at(entry["pid"]) == entry["started"]
+
+
+def up(a) -> None:
+    preflight()
+    s = secret()
+    postgres(s)
+    install(s)
+    every = logins(s)
+    repo = intent()
+    (HOME / "artifacts").mkdir(exist_ok=True, mode=0o700)
+    running = {k: v for k, v in pids().items() if ours(v)}
+    if running:
+        say(f"already running: {', '.join(sorted(running))} (`down` first to restart)")
+        return
+    path = os.pathsep.join([str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")])
+    base = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "LC_ALL", "TZ", "TMPDIR")}
+    auth = conninfo(s, user="kk_authenticator", password=s["authenticator"])     # the UI's: it acts as signed-in people
+    bare = f"host=127.0.0.1 port={s['db_port']} dbname={DB}"                       # the reconciler adds each service's own login
+    otlp = f"http://127.0.0.1:{s['otlp_port']}"
+    started = {
+        "reconcile": start("reconcile", [sys.executable, str(ROOT / "morphogen" / "deploy" / "reconcile.py"), "--intent", str(repo),
+                                         "--env", ENV, "--repo", str(ROOT)],
+                           {**base, "DATABASE_URL": bare, "KK_LOGIN_SECRET": s["logins"], "KK_SERVICE_LOGINS": str(HOME / "service-logins.json"),
+                            "PYTHONPATH": path, "OTEL_EXPORTER_OTLP_ENDPOINT": otlp, "KK_OTLP_SECRET": s["otlp"]}),
+        "observer-otel": start("observer-otel", [sys.executable, "-m", "observer_otel"],
+                               {**base, "DATABASE_URL": own(s, every, "observer-otel"), "KK_ROLE": "kkm_observer_otel",
+                                "PYTHONPATH": os.pathsep.join([str(ROOT / "morphogen" / "modules" / "observer-otel"), path]),
+                                "KK_OTLP_PORT": str(s["otlp_port"]), "KK_OTLP_SECRET": s["otlp"],
+                                "KK_OTLP_SOURCE": f"{otlp}/v1/metrics", "KK_OTLP_SERVICES": ",".join(SERVICES)},
+                               cwd=ROOT / "morphogen" / "modules" / "observer-otel"),
+        "compose": start("compose", [sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(repo), "--all"],
+                         {**base, **({"DOCKER_HOST": os.environ["DOCKER_HOST"]} if "DOCKER_HOST" in os.environ else {})}),
+        "ui": start("ui", [sys.executable, str(ROOT / "morphogen" / "ui" / "serve.py")],
+                    {**base, "DATABASE_URL": auth, "KK_JWT_SECRET": s["jwt"], "PORT": str(s["ui_port"]),
+                     "KK_LOGIN_URL": f"host=127.0.0.1 port={s['db_port']} dbname={DB}"}),   # a person's own name and password
+    }
+    f = HOME / "pids.json"
+    f.write_text(json.dumps(started, indent=2) + "\n")
+    time.sleep(3)
+    dead = [k for k, v in started.items() if not ours(v)]
+    if dead:
+        die(f"stopped right away: {', '.join(dead)} (see {HOME / 'logs'})")
+    say(f"Morphogen is up. The UI: http://127.0.0.1:{s['ui_port']}/ui/")
+    if not any((repo / "systems").glob("*/compose.yaml")):
+        say("next: `local.py person <your name>` to sign in, then describe a system (morphogen/deploy/LOCAL.md)")
+
+
+def down(a) -> None:
+    for name, entry in pids().items():
+        if ours(entry):
+            os.killpg(entry["pid"], signal.SIGTERM)
+            say(f"stopped {name}")
+    (HOME / "pids.json").unlink(missing_ok=True)
+    if a.db:
+        s = secret()
+        subprocess.run(["docker", "stop", container(s)], capture_output=True)
+        say(f"stopped Postgres (the data stays in the volume {volume(s)})")
+
+
+def status(a) -> None:
+    s = secret()
+    db = subprocess.run(["docker", "inspect", "-f", "{{.State.Status}}", container(s)], capture_output=True, text=True)
+    say(f"Postgres: {db.stdout.strip() or 'not created'} (127.0.0.1:{s['db_port']})")
+    for name, entry in pids().items():
+        say(f"{name}: {'running' if ours(entry) else 'stopped'} (pid {entry['pid']}, log {HOME / 'logs' / (name + '.log')})")
+    say(f"UI: http://127.0.0.1:{s['ui_port']}/ui/   intent: {HOME / 'intent'}")
+
+
+# ------------------------------------------------------------------ people, agents, the design agent
+def person(a) -> None:
+    s = secret()
+    out = subprocess.run([sys.executable, str(ROOT / "morphogen" / "ui" / "people.py"), "add", DB, a.name],
+                         env={**os.environ, **pg_env(s), "PYTHONPATH": str(ROOT / "kernel" / "src")})
+    if out.returncode == 0:
+        import psycopg
+        from psycopg import sql
+        with psycopg.connect(conninfo(s), autocommit=True) as su:
+            su.execute(sql.SQL("grant connect on database {} to {}").format(sql.Identifier(DB), sql.Identifier("person_" + a.name)))
+        say(f"{a.name} can sign in at http://127.0.0.1:{s['ui_port']}/ui/")
+    sys.exit(out.returncode)
+
+
+def agent(a) -> None:
+    """An agent's own login (kk_agent: it proposes, it never reviews) and an MCP config that serves the record to it."""
+    import re
+    import psycopg
+    from psycopg import sql
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,30}", a.name):
+        die("an agent's name: lower-case letters, digits and _, starting with a letter")
+    s = secret()
+    role, iri, pw = f"agent_{a.name}", f"urn:kk:agent:{a.name.replace('_', '-')}", secrets.token_urlsafe(32)
+    with psycopg.connect(conninfo(s), autocommit=True) as su:
+        other = su.execute("select db_role from kernel.agent where iri = %s", (iri,)).fetchone()
+        if other and other[0] != role:
+            die(f"{iri} is already the agent of {other[0]}")
+        taken = su.execute("select iri from kernel.agent where db_role = %s and iri <> %s", (role, iri)).fetchone()
+        if taken:
+            die(f"{role} is already the login of {taken[0]}")
+        verifier = su.pgconn.encrypt_password(pw.encode(), role.encode(), b"scram-sha-256").decode()
+        exists = su.execute("select 1 from pg_roles where rolname = %s", (role,)).fetchone()
+        su.execute(sql.SQL("{} role {} login password {}").format(
+            sql.SQL("alter" if exists else "create"), sql.Identifier(role), sql.Literal(verifier)))
+        su.execute(sql.SQL("grant kk_agent to {}").format(sql.Identifier(role)))
+        su.execute(sql.SQL("grant connect on database {} to {}").format(sql.Identifier(DB), sql.Identifier(role)))
+        su.execute("set role kk_owner")
+        su.execute("insert into kernel.agent(iri, db_role, kind, label) values (%s, %s, 'software', %s) on conflict (iri) do nothing",
+                   (iri, role, a.name))
+    env = {"KK_DATABASE_URL": conninfo(s, user=role, password=pw),
+           "PYTHONPATH": os.pathsep.join([str(ROOT / "kernel" / "src"), str(ROOT / "kernel" / "providers" / "kernel-mcp")])}
+    config = {"mcpServers": {"morphogen": {"command": sys.executable, "args": ["-m", "kernel_mcp"], "env": env}}}
+    d = HOME / "mcp"
+    d.mkdir(exist_ok=True, mode=0o700)
+    f = d / f"{a.name}.json"
+    f.touch(mode=0o600)
+    f.write_text(json.dumps(config, indent=2) + "\n")
+    say(f"{iri} has its own login. For Claude Code: claude --mcp-config {f}\n"
+        f"(the interview skill: morphogen/skills/interview/SKILL.md)")
+
+
+def record(a) -> None:
+    s = secret()
+    (HOME / "artifacts").mkdir(exist_ok=True, mode=0o700)
+    out = subprocess.run([sys.executable, "-m", "interview_encoder", "--source", a.source, str(Path(a.file).resolve())],
+                         cwd=ROOT / "morphogen" / "modules" / "interview-encoder",
+                         env={**os.environ, "DATABASE_URL": own(s, logins(s), "interview-encoder"),
+                              "KK_ARTIFACTS": str(HOME / "artifacts"),
+                              "PYTHONPATH": os.pathsep.join([str(ROOT / "morphogen" / "modules" / "interview-encoder"), str(ROOT / "kernel" / "src")])})
+    sys.exit(out.returncode)
+
+
+def propose(a) -> None:
+    s = secret()
+    out = subprocess.run([sys.executable, "-m", "design_blueprint", "propose", a.system],
+                         cwd=ROOT / "morphogen" / "modules" / "design-blueprint",
+                         env={**os.environ, "DATABASE_URL": own(s, logins(s), "design-blueprint"),
+                              "KK_INTENT_DIR": str(HOME / "intent"),
+                              "PYTHONPATH": os.pathsep.join([str(ROOT / "morphogen" / "modules" / "design-blueprint"),
+                                                             str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")])})
+    if out.returncode == 0:
+        say(f"the plan waits in the UI's review lane: http://127.0.0.1:{s['ui_port']}/ui/")
+    sys.exit(out.returncode)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="Morphogen on a machine of your own.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("up").set_defaults(f=up)
+    d = sub.add_parser("down")
+    d.add_argument("--db", action="store_true", help="stop Postgres too")
+    d.set_defaults(f=down)
+    sub.add_parser("status").set_defaults(f=status)
+    p = sub.add_parser("person")
+    p.add_argument("name")
+    p.set_defaults(f=person)
+    g = sub.add_parser("agent")
+    g.add_argument("name")
+    g.set_defaults(f=agent)
+    r = sub.add_parser("record")
+    r.add_argument("file")
+    r.add_argument("--source", required=True, help="a short name for the conversation (a-z, 0-9, -)")
+    r.set_defaults(f=record)
+    q = sub.add_parser("propose")
+    q.add_argument("system")
+    q.set_defaults(f=propose)
+    a = ap.parse_args(argv)
+    a.f(a)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

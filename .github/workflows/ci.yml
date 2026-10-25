@@ -65,9 +65,10 @@ jobs:
           # the confined code reads the repository and the venv: every directory above them must be traversable
           d="$GITHUB_WORKSPACE"; while [ "$d" != / ]; do sudo chmod o+x "$d"; d=$(dirname "$d"); done
           chmod -R o+rX "$GITHUB_WORKSPACE" /tmp/kk-venv
-      - name: Images for G3 (R5-25), pulled with retries (Docker Hub rate-limits anonymous pulls)
+      - name: Images for G3 (R5-25) and the local bring-up (T23), pulled with retries (Docker Hub rate-limits anonymous pulls)
         run: |
-          for img in $(grep -ho 'image: .*' morphogen/intent/systems/*/compose.yaml | cut -d' ' -f2); do
+          for img in $(grep -ho 'image: .*' morphogen/intent/systems/*/compose.yaml | cut -d' ' -f2) \
+                     $(grep -o '^IMAGE = "[^"]*"' morphogen/deploy/local.py | cut -d'"' -f2); do
             for i in 1 2 3 4; do docker pull -q "$img" && break; sleep $((i * 15)); done
           done
       - name: A browser for the UI test (T21), Playwright pinned
@@ -76,7 +77,7 @@ jobs:
           PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
           echo "NODE_PATH=/tmp/pw/node_modules" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers" >> "$GITHUB_ENV"
-      - name: Morphogen modules, the full loop (T5), G2, G3 and the UI (T21), as root so they can start code as the run users
+      - name: Morphogen modules, the full loop (T5), G2, G3, the UI (T21) and the local bring-up (T23), as root so they can start code as the run users
         run: |
           # The passwords above are in this file, which the run users can read: replace them with ones they cannot.
           # The same for the sandbox's cluster.

@@ -52,6 +52,7 @@ convention:
 | Design agent (T13) | An interview becomes a system map; gaps become questions; a complete map becomes a compose file |
 | Catalog lookup (T14, T20) | Components found by stated requirements, matched deterministically |
 | Review and loop UI (T21) | People sign in with their own login, approve or refuse plans, follow each plan to its verdict |
+| Running locally (T22, T23) | One command brings it up; a described system ends running once a person approves its file |
 | Evals | SciFact recall, LongMemEval, RCAEval, self-model questions: see `docs/rebuild-5.md` for numbers and open gaps |
 
 Plans and open items: `docs/rebuild-5.md` ("First tasks").
@@ -74,7 +75,15 @@ sh morphogen/contract/run.sh           # Morphogen's slot contracts
 python3 scripts/check_boundary.py      # kernel/ never depends on morphogen/
 ```
 
-To try the UI against a database of your own, see `morphogen/ui/README.md`.
+## Run it on your own machine
+
+```sh
+python3 morphogen/deploy/local.py up             # Postgres in Docker, the record, the services, the compose runner, the UI
+python3 morphogen/deploy/local.py person alice   # you, as a person who reviews; then open http://127.0.0.1:8470/ui/
+```
+
+`morphogen/deploy/LOCAL.md` walks through describing a system with an agent (Claude Code), approving its compose
+file in the UI, and watching Morphogen start it.
 
 ## Repository map
 

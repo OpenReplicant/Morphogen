@@ -134,6 +134,11 @@ def record(conn, pts: list[dict], start: float, end: float, config: dict, source
 
 
 def main(argv=None) -> int:
+    try:                               # KK_OTLP_SECRET signs every service's token: not readable from /proc by others
+        import ctypes
+        ctypes.CDLL(None, use_errno=True).prctl(4, 0, 0, 0, 0)          # PR_SET_DUMPABLE = 4 (morphogen.logins.undumpable)
+    except (OSError, AttributeError):
+        pass
     ap = argparse.ArgumentParser(description="Record OpenTelemetry metrics as observations, once per window.")
     ap.add_argument("--port", type=int, default=int(os.environ.get("KK_OTLP_PORT", "4318")))
     a = ap.parse_args(argv)

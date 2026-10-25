@@ -118,5 +118,8 @@ def routes() -> list:
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(ROOT / "morphogen" / "src"))
+    from morphogen.logins import undumpable
+    undumpable()                       # KK_JWT_SECRET signs every person's token: not readable from /proc by other processes
     from kernel_mcp.__main__ import http
     http(extra_routes=routes())

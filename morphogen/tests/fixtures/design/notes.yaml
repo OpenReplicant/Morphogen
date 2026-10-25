@@ -24,9 +24,9 @@ answers:
   open: [no-image web, no-image api, no-image db, no-limit web]
 - message: "4"
   claims:
-  - [node:web, image, '"ghcr.io/example/notes-web:1.4.2"', "The web is ghcr.io/example/notes-web:1.4.2"]
-  - [node:api, image, '"ghcr.io/example/notes-api:1.4.2"', "the API is ghcr.io/example/notes-api:1.4.2"]
-  - [node:db, image, '"postgres:16.4"', "the database is postgres:16.4"]
+  - [node:web, image, '"ghcr.io/example/notes-web:1.4.2@sha256:3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a"', "The web is ghcr.io/example/notes-web:1.4.2@sha256:3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a1c3f9a"]
+  - [node:api, image, '"ghcr.io/example/notes-api:1.4.2@sha256:7b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e"', "the API is ghcr.io/example/notes-api:1.4.2@sha256:7b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e"]
+  - [node:db, image, '"postgres:16.4@sha256:c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d"', "the database is postgres:16.4@sha256:c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d88c41d"]
   open: [no-limit web]
 - message: "6"
   claims:

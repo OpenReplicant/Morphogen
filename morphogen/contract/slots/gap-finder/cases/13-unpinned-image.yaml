@@ -1,0 +1,29 @@
+id: urn:kk:eval:gap-finder/unpinned-image
+text: an image named by tag only is asked to be pinned by digest; a pinned one is not; a digest that is not sha256 is not a pin
+input:
+  services:
+    shop/front:
+      image: example/front:2.1
+      connects:
+      - shop/back
+      limit: true
+    shop/back:
+      image: example/back:2.1@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      connects:
+      - shop/db
+    shop/db:
+      image: postgres:16@md5:0123456789abcdef
+expect:
+  gaps:
+  - kind: unpinned-image
+    target: shop/front
+  - kind: unpinned-image
+    target: shop/db
+then:
+  services:
+    shop/front:
+      image: example/front:2.1@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+    shop/db:
+      image: true
+  expect:
+    gaps: []

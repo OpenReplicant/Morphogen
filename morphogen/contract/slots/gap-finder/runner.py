@@ -41,8 +41,9 @@ def claims(services: dict) -> list[dict]:
         c(n, RDF_TYPE, KKT + "NodeTemplate")
         c(n, LABEL, value=name.split("/")[1])
         c(n, KKT + "memberOf", f"urn:kk:system:{name.split('/')[0]}")
-        if d.get("image"):
-            c(n, KKT + "propertyValue", value=f"example/{name.split('/')[1]}:1", q={KKT + "propertyName": "image"})
+        if d.get("image"):          # true: an image pinned by digest; a string: that image as written
+            img = d["image"] if isinstance(d["image"], str) else f"example/{name.split('/')[1]}:1@sha256:{'a' * 64}"
+            c(n, KKT + "propertyValue", value=img, q={KKT + "propertyName": "image"})
         for k, v in (d.get("settings") or {}).items():
             c(n, KKT + "propertyValue", value=str(v), q={KKT + "propertyName": k})
         for peer in d.get("connects") or []:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 from pathlib import Path
 
@@ -34,11 +35,33 @@ def login_of(provider_dir: Path) -> tuple[str, str] | None:
     return (meta["role"], meta["login"]) if meta.get("role") and meta.get("login") else None
 
 
+def password_for(login: str) -> str | None:
+    """A login's password: derived for that login alone from KK_LOGIN_SECRET when it is set (so one service's
+    password opens no other login), else KK_LOGIN_PASSWORD (one for every module login, as tests set it)."""
+    secret = os.environ.get("KK_LOGIN_SECRET")
+    if secret:
+        return hmac.new(secret.encode(), f"login:{login}".encode(), hashlib.sha256).hexdigest()
+    return os.environ.get("KK_LOGIN_PASSWORD")
+
+
+def service_login(provider: str) -> tuple[str, str] | None:
+    """(role, login) for a provider that declares no login of its own, from the file KK_SERVICE_LOGINS names
+    ({provider: [role, login]}; a deployment's own, never intent's), or None."""
+    f = os.environ.get("KK_SERVICE_LOGINS")
+    if not f or not Path(f).is_file():
+        return None
+    got = (json.loads(Path(f).read_text()) or {}).get(provider)
+    return (got[0], got[1]) if isinstance(got, list) and len(got) == 2 else None
+
+
+SECRETS = ("KK_LOGIN_PASSWORD", "KK_LOGIN_SECRET", "KK_SERVICE_LOGINS", "KK_OTLP_SECRET")
+
+
 def login_env(base_url: str, role: str, login: str, extra: dict, password: str | None = None) -> dict:
     """The allow-listed environment, DATABASE_URL for the login (on base_url's database) and KK_ROLE,
     plus `extra` (PYTHONPATH, OTEL_*, the provider's KK_* settings). The password is `password`, or
-    KK_LOGIN_PASSWORD."""
-    pw = password or os.environ.get("KK_LOGIN_PASSWORD")
+    password_for(login)."""
+    pw = password or password_for(login)
     url = make_conninfo(base_url, user=login, **({"password": pw} if pw else {}))
     return {**{k: v for k, v in os.environ.items() if k in KEEP}, **extra, "DATABASE_URL": url, "KK_ROLE": role}
 

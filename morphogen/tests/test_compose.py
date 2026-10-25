@@ -1,5 +1,6 @@
 """deploy/compose.py: the allow list, then (with Docker) podinfo run from its committed compose file and
-updated when a commit changes a setting, while an uncommitted edit or a refused file changes nothing.
+updated when a commit changes a setting, while an uncommitted edit or a refused file changes nothing; with
+--all, a system committed while the runner runs starts on its own.
 
   python3 morphogen/tests/test_compose.py   (Docker part: when a daemon answers; KK_REQUIRE_DOCKER=1 makes it required)
 """
@@ -31,6 +32,10 @@ def svc(**kw):
 
 
 check(refusal(PODINFO.read_text()) is None, "podinfo's compose file is on the allow list")
+import compose  # noqa: E402
+sys.path.insert(0, str(ROOT / "morphogen" / "modules" / "map-gaps"))
+from map_gaps import gaps  # noqa: E402
+check(gaps.DIGEST.pattern == compose.DIGEST.pattern, "the gap finder asks for a pin exactly as the compose runner requires one")
 for text, why in [(svc(privileged="true"), "privileged not allowed"), (svc(volumes='["/:/host"]'), "volumes not allowed"),
                   (svc(build="."), "build not allowed"), (svc(env_file="/etc/shadow"), "env_file not allowed"),
                   (svc(network_mode="host"), "network_mode not allowed"), (svc(cap_add="[SYS_ADMIN]"), "cap_add not allowed"),
@@ -110,5 +115,38 @@ finally:
     p.terminate()
     p.wait(timeout=15)
     subprocess.run(["docker", "compose", "-p", project, "down", "-v", "-t", "1"], capture_output=True)
+    shutil.rmtree(tmp, ignore_errors=True)
+
+# --all: every system at HEAD, and one committed while it runs (what the intent actuator does once a person
+# approves a described system's file) starts with no one starting a runner for it.
+REDIS = next(x.split("image:", 1)[1].strip() for x in PODINFO.read_text().splitlines() if "image: redis" in x)
+tmp = Path(tempfile.mkdtemp())
+intent = tmp / "intent"
+first, later = f"t{os.getpid()}a", f"t{os.getpid()}b"
+for name in (first, later):
+    (intent / "systems" / name).mkdir(parents=True)
+(intent / "systems" / first / "compose.yaml").write_text(f"services:\n  cache:\n    image: {REDIS}\n")
+git(intent, "init", "-q")
+git(intent, "add", "-A")
+git(intent, "commit", "-qm", "one system")
+log = open(tmp / "compose.log", "w+")
+p = subprocess.Popen([sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(intent), "--all"],
+                     env={**os.environ, "KK_RECONCILE_SECONDS": "1"}, stdout=log, stderr=subprocess.STDOUT)
+try:
+    started = lambda name: [e for e in events() if e["event"] == "started" and e["system"] == name]  # noqa: E731
+    wait("the first system to start", lambda: started(first))
+    check(not started(later), "--all: the committed system runs; a directory with nothing committed in it runs nothing")
+    (intent / "systems" / later / "compose.yaml").write_text(f"services:\n  cache:\n    image: {REDIS}\n")
+    time.sleep(3)
+    check(not started(later), "--all: a system written but not committed runs nothing")
+    git(intent, "add", "-A")
+    git(intent, "commit", "-qm", "a second system, approved")
+    e = wait("the second system to start", lambda: started(later))
+    check(e[0]["project"] == f"kk-{later}", "--all: a system committed later starts, as its own project")
+finally:
+    p.terminate()
+    p.wait(timeout=15)
+    for name in (first, later):
+        subprocess.run(["docker", "compose", "-p", f"kk-{name}", "down", "-v", "-t", "1"], capture_output=True)
     shutil.rmtree(tmp, ignore_errors=True)
 print("compose reconciler tests passed")

@@ -235,7 +235,7 @@ def main() -> None:
                 submit(cur, {"idempotency_key": key, "attributed_to": INTERVIEWER, "target_scope": "urn:kk:scope:default", "ops": ops}, run_id)
             settle()
         base = [["node:app", "a", "kkt:NodeTemplate", "run the API"], ["node:app", "kkt:memberOf", "sys", "run the API"],
-                ["node:app", "image", '"ghcr.io/example/notes-api:1.4.2"', "run the API"],
+                ["node:app", "image", '"ghcr.io/example/notes-api:1.4.2@sha256:7b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e047b2e"', "run the API"],
                 ["node:app", "limit urn:kk:property:latency-seconds-mean", "0.3", "run the API"]]
         describe("forge", base + [["node:app", "setting MODE", '"evil"', "run the API"]], "interview:forge")
         rendered = blueprint.render(blueprint.described(
@@ -265,6 +265,44 @@ def main() -> None:
             secret = propose(conn, "vault", intent)
         check("intake filter found a secret" in secret.get("refused", ""),
               f"propose: a secret in a setting is not put in a plan or a file ({secret.get('refused')})")
+
+        # An image named by tag only: the gap finder asks for its digest, and nothing is proposed until it is pinned
+        # (the compose runner runs only pinned images, so what runs is what a person approved).
+        tagged = [r if r[1] != "image" else ["node:app", "image", '"ghcr.io/example/notes-api:1.4.2"', "run the API"] for r in base]
+        before = gaps_now()
+        describe("tagged", tagged, "interview:tagged")
+        asked = [g for g in gaps_now() if g not in before or before.remove(g)]
+        with connect("kkm_design_blueprint") as conn:
+            held = propose(conn, "tagged", intent)
+        check(asked == ["unpinned-image app"] and held.get("refused") == "questions not answered yet"
+              and any("sha256" in q for q in held["gaps"]),
+              f"ask: an image named by tag only is asked to be pinned by digest before anything is proposed ({asked}, {held})")
+
+        # The person gives the digest: the interviewer records the pinned image and supersedes the tag claim by it,
+        # in one change set, as the interview skill says. The question closes and the file can be proposed.
+        pinned_image = "ghcr.io/example/notes-api:1.4.2@sha256:" + "7b2e04" * 10 + "7b2e"
+        with connect("t_design_interviewer") as me:
+            tag_claim = str(me.execute("select id from api.claims where subject = 'urn:kk:node:tagged:app' and predicate = %s "
+                                       "and status <> 'deprecated' and object_value->>'@value' = 'ghcr.io/example/notes-api:1.4.2'",
+                                       (KKT + "propertyValue",)).fetchone()[0])
+            with me.cursor() as cur, run(cur, "urn:kk:module:design-test") as (run_id, _):
+                new = op(["node:app", "image", f'"{pinned_image}"', "run the API"], "urn:kk:message:notes:notes-intake:6")
+                new["subject"] = "urn:kk:node:tagged:app"
+                submit(cur, {"idempotency_key": "interview:tagged|2", "attributed_to": INTERVIEWER, "target_scope": "urn:kk:scope:default",
+                             "ops": [{**new, "ref": "img"},
+                                     {"op": "set_status", "claim": tag_claim, "status": "deprecated", "reason": "superseded",
+                                      "replaced_by": "img", "expect_status": "normal"}]}, run_id)
+        settle()
+        with connect("t_design_interviewer") as me:
+            by = me.execute("select s.status, s.reason, c.object_value->>'@value' from kernel.claim_status s join api.claims c "
+                            "on c.id = s.replaced_by where s.claim_id = %s", (tag_claim,)).fetchall()
+        check(by == [("deprecated", "superseded", pinned_image)],
+              f"pin: the tag claim is superseded by the pinned image, which the record names as its replacement ({by})")
+        gaps_now()                                        # the gap finder runs again: the question is answered
+        with connect("kkm_design_blueprint") as conn:
+            pinned = propose(conn, "tagged", intent)      # refused while any question on the system is open
+        check("plan" in pinned and pinned_image in pinned["text"],
+              f"pin: the question closes and the pinned file goes to review ({pinned.get('refused')}, {pinned.get('gaps')})")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
         subprocess.run(["dropdb", "--force", DB], check=True)

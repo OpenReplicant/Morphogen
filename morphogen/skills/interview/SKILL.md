@@ -32,7 +32,7 @@ your quote against it (no method verifies its own output).
 | --- | --- |
 | the system ("a small online shop") | `urn:kk:system:<name>` a `<KKT>ServiceTemplate`; `rdfs:label` "<name>" |
 | a service ("a storefront", "a cart service", "MySQL") | `urn:kk:node:<name>:<service>` a `<KKT>NodeTemplate`; `rdfs:label`; `<KKT>memberOf` the system |
-| what it runs ("the cart is registry.example.org/shop/cart:2.0.1") | `<service>` `<KKT>propertyValue` "<image>" with qualifier `<KKT>propertyName` (written out in full): `image` |
+| what it runs ("the cart is registry.example.org/shop/cart:2.0.1") | `<service>` `<KKT>propertyValue` "<image>" with qualifier `<KKT>propertyName` (written out in full): `image`. Record it as said; the gap finder asks for a digest when it has none |
 | a setting ("give the cart CART_TTL_HOURS of 48") | `<service>` `<KKT>propertyValue` "<value>" with qualifier `<KKT>propertyName`: the variable's name (`command` for a command) |
 | who calls whom ("the storefront calls the cart", "orders go into MySQL") | `<caller>` `<KKT>connectsTo` `<callee>` |
 | a limit ("the storefront should answer within 800 ms") | `<service>` `<BBO>maxValue` <number, in seconds for times> with qualifier `<SOSA>observedProperty`: `urn:kk:property:latency-seconds-mean` (no other qualifier: a qualifier more makes it a plan's prediction) |
@@ -77,9 +77,15 @@ expanded: always write them as full IRIs**, or the claim is recorded but nothing
 
 The gap finder lists what the map lacks, as questions: `query_claims(predicate="oa:hasTarget")` from
 `urn:kk:agent:map-gaps`, then `get_entity(<gap>)` for its kind and its question (`oa:bodyValue`). Kinds:
-`unknown-peer` (a service calls something not on the map), `no-image` (what runs a service), `unconnected` (how a
-service fits with the rest), `no-limit` (how long the service people use may take before something should
-change). Ask about one or two at a time, in plain words. A gap is retracted once its answer is recorded.
+`unknown-peer` (a service calls something not on the map), `no-image` (what runs a service), `unpinned-image`
+(the image's digest: Morphogen runs only images pinned as `name@sha256:...`, so what runs is what a person
+approved), `unconnected` (how a service fits with the rest), `no-limit` (how long the service people use may
+take before something should change). Ask about one or two at a time, in plain words. A gap is retracted once its
+answer is recorded. When the person gives the digest of an image they named by tag, record the pinned image
+(quoting them, with `"ref": "img"`) and, in the same change set, supersede your earlier image claim for that service
+by it: `{"op": "set_status", "claim": "<its id>", "status": "deprecated", "reason": "superseded", "replaced_by": "img",
+"expect_status": "normal"}`. Two current images for one service is a conflict, and nothing is proposed until it is
+settled.
 
 ## Then
 
