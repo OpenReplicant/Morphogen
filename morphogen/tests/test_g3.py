@@ -1,14 +1,14 @@
 """G3: Morphogen maps a small real system it did not build and completes one governed change on it (R5-25).
 
   system     podinfo 6.9.2 (frontend -> backend -> Redis), an operator's compose file imported into
-             intent/systems/podinfo by a person; deploy/compose.py runs it from the commit
+             intent/systems/podinfo by a person, who approves it as it is (an adopt plan); runtime-compose runs it from the commit
   map        encoder-compose records its services, images, settings and connections, citing each line
   monitor    observer-prometheus scrapes the frontend's and backend's own metrics: mean request time
   analyse    a person documents a limit on the frontend's request time; anomaly finds it over the limit
   plan       the planner follows the map from the frontend to the backend, whose delay setting answers
              it, and proposes lowering it, predicting the frontend's request time within the limit
   approve    a person approves it in the review lane
-  execute    the intent actuator commits the new value to the compose file; compose.py applies it
+  execute    the intent actuator commits the new value to the compose file; the runtime applies it (the file the step named)
   verify     the prediction verifier compares the frontend's windows after the change with the prediction
 
 Then every step is checked to cite the one before it, the plan citing the map. Needs Docker (images
@@ -108,25 +108,33 @@ def main() -> None:
 
     stop = threading.Event()
     try:
-        start("compose", [sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(intent),
-                          "--system", "podinfo", "--project", project], ROOT, {"KK_RECONCILE_SECONDS": "1"})
+        # The kernel providers (validator, belief model, anomaly) from intent; the runtime, which runs nothing yet.
+        start("reconcile", [sys.executable, str(ROOT / "morphogen" / "deploy" / "reconcile.py"), "--intent", str(intent),
+                            "--env", "sandbox", "--repo", str(ROOT)], ROOT)
+        rt = MODULES / "runtime-compose"
+        start("compose", [sys.executable, "-m", "runtime_compose", "--intent", str(intent), "--system", "podinfo", "--project", project],
+              rt, {"KK_RECONCILE_SECONDS": "1", "PYTHONPATH": path(rt)})
+        wait("the runtime to refuse the file nobody approved",
+             lambda: '"refused"' in (tmp / "compose.log").read_text(), timeout=120, every=1)
+        check(subprocess.run(["docker", "compose", "-p", project, "ps", "-q"], capture_output=True, text=True).stdout.strip() == "",
+              "a committed file no one approved does not run (T26)")
+
+        # Map it, and ask a person to approve the file as it is.
+        enc = MODULES / "encoder-compose"
+        out = subprocess.run([sys.executable, "-m", "encoder_compose", "scan", "--system", "podinfo", "--file", str(compose_file),
+                              "--repo", str(intent), "--adopt"], cwd=enc, env={**base_env, "PYTHONPATH": path(enc)},
+                             capture_output=True, text=True)
+        check(out.returncode == 0, "encoder-compose maps the system: " + (out.stdout + out.stderr).strip()[-300:])
+        with connect("t_g3_person", url) as person:
+            adopt = wait("the adopt plan in the review queue", lambda: person.execute(
+                "select id from api.review_queue where attributed_to = 'urn:kk:agent:encoder-compose'").fetchall())
+            person.execute("select api.review(%s, true, 'run it as the operator wrote it')", (adopt[0][0],))
         wait("podinfo to start", lambda: '"started"' in (tmp / "compose.log").read_text(), timeout=600, every=1)
         port = lambda s: subprocess.run(["docker", "compose", "-p", project, "port", s, "9898"], capture_output=True,
                                         text=True, check=True).stdout.strip().rsplit(":", 1)[-1]
         front, back = f"http://127.0.0.1:{port('frontend')}", f"http://127.0.0.1:{port('backend')}"
         check(json.loads(urllib.request.urlopen(front + "/version", timeout=10).read())["version"] == "6.9.2",
-              "the system runs from the operator's committed compose file (podinfo 6.9.2)")
-
-        # Map it.
-        enc = MODULES / "encoder-compose"
-        out = subprocess.run([sys.executable, "-m", "encoder_compose", "scan", "--system", "podinfo", "--file", str(compose_file),
-                              "--repo", str(intent)], cwd=enc, env={**base_env, "PYTHONPATH": path(enc)},
-                             capture_output=True, text=True)
-        check(out.returncode == 0, "encoder-compose maps the system: " + (out.stdout + out.stderr).strip()[-300:])
-
-        # The kernel providers (validator, belief model, anomaly) from intent, and the loop's services.
-        start("reconcile", [sys.executable, str(ROOT / "morphogen" / "deploy" / "reconcile.py"), "--intent", str(intent),
-                            "--env", "sandbox", "--repo", str(ROOT)], ROOT)
+              "once a person approves it, the system runs from the operator's committed compose file (podinfo 6.9.2)")
         service("observer", "observer_prometheus", MODULES / "observer-prometheus",
                 {"KK_WINDOW_SECONDS": str(WINDOW), "KK_PROM_TARGETS": f"{FRONT}={front}/metrics,{BACK}={back}/metrics"})
         service("planner", "planner", MODULES / "planner")
@@ -193,7 +201,7 @@ def main() -> None:
                   and f'PODINFO_RANDOM_DELAY_MAX: "{run_row[0][1]["after"]}"' in compose_file.read_text(),
                   "the change is one commit to the compose file, naming the change set and the step")
             check(not q("select 1 from api.claims where attributed_to = 'urn:kk:agent:intent-actuator'"), "the actuator wrote no claims")
-            wait("compose.py to apply it", lambda: '"updated"' in (tmp / "compose.log").read_text(), timeout=120)
+            wait("the runtime to apply it", lambda: '"updated"' in (tmp / "compose.log").read_text(), timeout=120)
 
             verdict = wait("a verdict", lambda: q("select v.subject, t.object_entity from api.claims v join api.claims t on t.subject = v.subject "
                                                  "where v.subject like 'urn:kk:verdict:%%' and v.predicate = %s and t.predicate = %s",

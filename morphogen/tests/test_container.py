@@ -193,7 +193,7 @@ try:
     ps = [line.split(None, 1) for line in ex("ps", "-eo", "user:12,args").stdout.splitlines()[1:]]
     by = lambda needle: {u for u, a in ps if needle in a}  # noqa: E731
     check(by("postgres -D") == {"morphogen"} and by("reconcile.py") == {"morphogen"} and by("serve.py") == {"morphogen"}
-          and by("compose.py") == {"root"} and "agent" not in {u for u, _ in ps},
+          and by("-m runtime_compose") == {"root"} and "agent" not in {u for u, _ in ps},
           "Postgres, the services and the UI run as morphogen; the compose runner alone as root; nothing as agent")
     rec = lambda: [json.loads(x) for x in ex("cat", f"{HOME}/logs/reconcile.log").stdout.splitlines() if x.startswith("{")]  # noqa: E731
     sys.path.insert(0, str(ROOT / "morphogen" / "deploy"))
@@ -260,7 +260,7 @@ try:
           "a link the agent left in its home does not hand it MORPHOGEN_HOME")
     ex("sh", "-c", "rm /home/agent/work && mv /home/agent/work.old /home/agent/work", user="agent")
     out = ex("morphogen", "claude", "interviewer", env=["MORPHOGEN_CLAUDE=/usr/local/bin/claude-stub"])   # each run, a new login
-    check(out.returncode == 0, "with the link gone, `claude` works again")
+    check(out.returncode == 0, f"with the link gone, `claude` works again ({out.stdout.strip()[-200:]} {out.stderr.strip()[-400:]})")
 
     messages = [("1", "interviewer", "What system would you like Morphogen to run?"),
                 ("2", "Alice", f"A store: one Redis service, {REDIS}."),

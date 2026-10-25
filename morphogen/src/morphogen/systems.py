@@ -4,6 +4,7 @@ each of its services is the node `urn:kk:node:<name>:<service>` (encoder-compose
   compose_file(intent, node)           -> (file, service) or None
   setting(intent, node, name)          -> the service's environment value of `name`, or None
   set_setting(intent, node, name, v)   -> (before, after): rewrites that one value where it is written
+  with_setting(text, service, name, v) -> (before, after, new text): the same on a file's text
 
 Only a setting the file already has is changed, and only its value's characters (located by the YAML
 parser), so the rest of the file stays as the operator wrote it. A value that is an alias, carries an
@@ -12,6 +13,7 @@ place would change something else, or not what compose reads.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -60,18 +62,29 @@ def setting(intent: Path, node: str, name: str) -> str | None:
     return v.value if v is not None else None
 
 
+def with_setting(text: str, service: str, name: str, value) -> tuple[str, str, str]:
+    """(before, after, the file's new text): the setting's value rewritten (double-quoted, as compose wants
+    strings); ValueError when the setting is not there. The planner names the new text's sha256 on the step,
+    and the actuator writes only that text (T26)."""
+    v = _value_node(text, service, name)
+    if v is None:
+        raise ValueError(f"{service} has no environment setting {name} to change")
+    new = f"{value:g}" if isinstance(value, float) else str(value)
+    return v.value, new, text[:v.start_mark.index] + json.dumps(new) + text[v.end_mark.index:]
+
+
 def set_setting(intent: Path, node: str, name: str, value) -> tuple[str, str]:
-    """Rewrite the setting's value (double-quoted, as compose wants strings); ValueError when the service
-    or the setting is not there."""
+    """with_setting on the node's compose file, written back; ValueError when the service or the setting
+    is not there."""
     found = compose_file(intent, node)
     if not found:
         raise ValueError(f"{node} is not a service of a managed system")
     f, service = found
-    text = f.read_text()
-    v = _value_node(text, service, name)
-    if v is None:
-        raise ValueError(f"{node} has no environment setting {name} to change")
-    new = f"{value:g}" if isinstance(value, float) else str(value)
-    text = text[:v.start_mark.index] + json.dumps(new) + text[v.end_mark.index:]
+    before, after, text = with_setting(f.read_text(), service, name, value)
     f.write_text(text)
-    return v.value, new
+    return before, after
+
+
+def sha(text: str) -> str:
+    """A compose file's content hash, as plan steps name it."""
+    return hashlib.sha256(text.encode()).hexdigest()

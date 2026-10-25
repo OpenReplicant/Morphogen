@@ -4,6 +4,9 @@ A plain command.
   python -m encoder_compose scan --system NAME --file FILE [--repo DIR]
       FILE (cited relative to DIR, default .) into one change set: the same content again is a no-op; a
       changed file supersedes this encoder's earlier claims about the system.
+  python -m encoder_compose scan --system NAME --file FILE [--repo DIR] --adopt
+      also asks a person, in the review lane, to approve the file as it is (an adopt-system plan naming its
+      sha256): a runtime runs only a file an approved step names (T26). For a file a person brought in.
   python -m encoder_compose answer SYSTEM
       the system's services: each one's image, settings and what it connects to, from this encoder's own
       claims, every part citing its claim id, belief and file line (invariant 6).
@@ -93,6 +96,20 @@ def answer(conn, system: str) -> dict:
     return out
 
 
+def propose_adopt(system: str, file: Path, repo: Path) -> dict:
+    """An adopt-system plan for the file's exact content, in the review lane; the same content again is a no-op."""
+    rel = str(file.resolve().relative_to(repo.resolve()))
+    data = file.read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
+    plan, ops = encode.adopt(rel, data.decode("utf-8"), system, sha)
+    with connect(os.environ.get("KK_ROLE", "kkm_encoder_compose")) as conn, conn.cursor() as cur:
+        with run(cur, MODULE, {"system": system, "file": rel, "sha256": sha, "adopt": True}) as (run_id, outputs):
+            res = submit(cur, {"idempotency_key": f"adopt:{system}:{sha}", "attributed_to": AGENT, "target_scope": SCOPE,
+                               "lane": "review", "ops": ops}, run_id)
+            outputs.update(plan=plan, change_set=str(res["id"]))
+    return {"plan": plan, "change_set": str(res["id"]), "sha256": sha}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -100,11 +117,15 @@ def main(argv=None) -> int:
     sc.add_argument("--system", required=True)
     sc.add_argument("--file", required=True)
     sc.add_argument("--repo", default=".")
+    sc.add_argument("--adopt", action="store_true", help="also propose running the file as it is (review lane)")
     an = sub.add_parser("answer")
     an.add_argument("system")
     a = ap.parse_args(argv)
     if a.cmd == "scan":
-        print(json.dumps(scan(a.system, Path(a.file), Path(a.repo))))
+        out = scan(a.system, Path(a.file), Path(a.repo))
+        if a.adopt:
+            out["adopt"] = propose_adopt(a.system, Path(a.file), Path(a.repo))
+        print(json.dumps(out))
         return 0
     with connect(os.environ.get("KK_ROLE", "kkm_encoder_compose")) as conn:
         print(json.dumps(answer(conn, a.system), indent=2, default=str))

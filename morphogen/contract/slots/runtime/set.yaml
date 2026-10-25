@@ -1,0 +1,17 @@
+# The runtime slot's contract (T26, T27; R5-O9 as amended by R5-42 (c)): what any runtime must run, and refuse. A
+# runtime runs a managed system's file as committed in intent (HEAD, never the work tree), and only a file a
+# person-approved plan step authorises (morphogen.plans.approval), whoever committed it: a create or adopt step on
+# urn:kk:system:<s> whose value is the file's sha256 and whose plan label, decided with it, shows the whole file; or a
+# setting step on one of its nodes, for an action on the fixed list within its bounds, when the file is the one the
+# runtime last ran with that value set (derived by the runtime, never taken from the step's own hash). Its approval
+# must be no older than the latest approval among the files the runtime has run (the floor, from its own run records).
+# A file off the runtime's allow list is refused even when approved. A file removed from HEAD leaves the system as it
+# runs (R5-25). Each file it runs is a run of its own: plan_step the approving step, outputs {system, applied: sha256,
+# decided_at}, used: the step's claims. The slot's own runner (runner.py) builds a record
+# (kernel/contract/slots/harness.py), an intent repository and a stub engine on PATH (docker, podman, systemctl,
+# kubectl, nomad: each logs what it was asked to run), runs the provider's service once (KK_ONCE=1, `--intent DIR
+# --all`) as its own role after each step, and judges what reached the engine. A provider for an engine the stub does
+# not cover needs its own stub.
+slot: runtime
+runner: runner.py
+version: 0.2.0

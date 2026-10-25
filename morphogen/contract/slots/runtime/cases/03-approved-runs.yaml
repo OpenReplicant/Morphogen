@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/approved-runs
+description: Once a person approves the adopt step naming the file's sha256, the file as committed is what reaches the engine.

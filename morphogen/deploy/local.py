@@ -82,7 +82,8 @@ SERVICES = {
 # Started by local.py itself, each as its own login too.
 OTHERS = {"observer-otel": ("morphogen/modules/observer-otel", "kkm_observer_otel"),
           "interview-encoder": ("morphogen/modules/interview-encoder", "kkm_interview_encoder"),
-          "design-blueprint": ("morphogen/modules/design-blueprint", "kkm_design_blueprint")}
+          "design-blueprint": ("morphogen/modules/design-blueprint", "kkm_design_blueprint"),
+          "runtime-compose": ("morphogen/modules/runtime-compose", "kkm_runtime_compose")}
 NEEDS = ["psycopg", "yaml", "pyshacl", "rdflib", "mcp", "jwt", "starlette", "uvicorn"]
 
 
@@ -293,6 +294,21 @@ def logins(s: dict) -> dict:
     return every
 
 
+def runtime_env(s: dict, every: dict) -> dict:
+    """What the runtime (runtime-compose) needs beside the engine's socket: its own login, which reads plan steps and
+    people's decisions (it runs only a file an approved step names, T26), and its code."""
+    rt = ROOT / "morphogen" / "modules" / "runtime-compose"
+    return {"DATABASE_URL": own(s, every, "runtime-compose"), "KK_ROLE": OTHERS["runtime-compose"][1],
+            "PYTHONPATH": os.pathsep.join([str(rt), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src")])}
+
+
+def runtime_login(a) -> None:
+    """Print the runtime's environment (JSON) for the process that holds the container socket (container.py), which
+    must not read MORPHOGEN_HOME itself."""
+    s = secret()
+    print(json.dumps(runtime_env(s, logins(s))))
+
+
 def own(s: dict, every: dict, name: str) -> str:
     """The conninfo of `name`'s own login."""
     from morphogen.logins import password_for
@@ -403,8 +419,10 @@ def up(a) -> None:
                      "KK_LOGIN_URL": f"host=127.0.0.1 port={s['db_port']} dbname={DB}"}),   # a person's own name and password
     }
     if COMPOSE:
-        started["compose"] = start("compose", [sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", str(repo), "--all"],
-                                   {**base, **({"DOCKER_HOST": os.environ["DOCKER_HOST"]} if "DOCKER_HOST" in os.environ else {})})
+        rt = ROOT / "morphogen" / "modules" / "runtime-compose"
+        started["compose"] = start("compose", [sys.executable, "-m", "runtime_compose", "--intent", str(repo), "--all"],
+                                   {**base, **({"DOCKER_HOST": os.environ["DOCKER_HOST"]} if "DOCKER_HOST" in os.environ else {}),
+                                    **runtime_env(s, every)}, cwd=rt)
     f = HOME / "pids.json"
     f.write_text(json.dumps(started, indent=2) + "\n")
     time.sleep(3)
@@ -629,6 +647,7 @@ def main(argv=None) -> int:
     r.add_argument("file")
     r.add_argument("--source", required=True, help="a short name for the conversation (a-z, 0-9, -)")
     r.set_defaults(f=record)
+    sub.add_parser("runtime-login", help="print the runtime's own login (for container.py)").set_defaults(f=runtime_login)
     q = sub.add_parser("propose")
     q.add_argument("system")
     q.set_defaults(f=propose)

@@ -43,7 +43,7 @@ in the intent repository's first commit.
 
 **The socket is the strongest thing you hand over.** Docker's socket is root on your machine to whoever uses it;
 rootless Podman's is your own user's. Inside the image only the compose runner (as root in the container) can
-reach it, and it runs only committed compose files that pass its allow list (images pinned by digest, ports on
+reach it, and it runs only committed compose files a person approved, by content, that pass its allow list (images pinned by digest, ports on
 127.0.0.1, no host volumes). Prefer rootless Podman.
 
 Then, from your machine:
@@ -98,11 +98,13 @@ Three users, so what one holds the others cannot read:
 So Claude Code, which runs commands, can read neither the superuser's password nor the UI's signing secret nor a
 service's environment, and cannot use the socket: it reaches the record only as its agent login, which proposes
 and never reviews. Every agent runs as the one user `agent`, so `morphogen claude NAME` revokes every other
-agent's login before it starts: one agent at a time. The services in turn cannot read its Claude Code login. One thing is not separated: the
-compose runner reads the intent repository, which every process of `morphogen` can write, so a service gone wrong
-could commit a compose file that runs if it passes the allow list, as on the machine itself (planned: the runner
-checks each file against an approved plan in the record). `morphogen/tests/test_container.py`
-checks each of these.
+agent's login before it starts: one agent at a time. The services in turn cannot read its Claude Code login. The
+compose runner reads the intent repository, which every process of `morphogen` can write, so it does not trust who
+committed a file: it runs one only when a person approved that file, as the plan showed it to them (T26), so an
+agent that commits a compose file through its own login gets it refused. This guards against agents, not against
+the user `morphogen` itself: a process running as `morphogen` can read the record's superuser password, so it could
+forge a person's decision. The compose runner takes nothing but its login from `morphogen` (its code and role are
+root's own). `morphogen/tests/test_container.py` checks each of these.
 
 ## On the machine itself
 
@@ -138,7 +140,7 @@ the services record; Systems shows the systems Morphogen knows.
 | --- | --- |
 | `reconcile` | runs the services named in `intent/environments/local/` (validator, belief, truth maintenance, quote verifier, recall index, analyser, planner, intent actuator, prediction verifier, gap finder) and restarts one when its intent file changes |
 | `observer-otel` | records the services' own telemetry (feed lag, step time) as observations, so Morphogen watches itself |
-| `compose` | runs every system under `intent/systems/` as committed, including one approved later |
+| `compose` | the runtime (runtime-compose): runs every system under `intent/systems/` as committed, when an approved plan step names the file, including one approved later |
 | `ui` | the review and loop UI, and kernel-mcp over HTTP for signed-in people |
 
 `status` shows what runs and where the logs are; `down` stops the processes (`down --db` stops Postgres too; the

@@ -1,0 +1,2 @@
+id: urn:kk:contract:runtime/clearance
+description: An approval the runtime's role cannot read (a scope not granted to it) does not count.

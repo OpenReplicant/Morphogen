@@ -155,9 +155,19 @@ def serve() -> int:
                    "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": repo,
                    "GIT_CONFIG_KEY_1": "core.hooksPath", "GIT_CONFIG_VALUE_1": "/dev/null",
                    "GIT_CONFIG_KEY_2": "core.fsmonitor", "GIT_CONFIG_VALUE_2": "false"}
+            # The runtime's own login (it runs only a file a person approved, T26), made as morphogen and handed over on a
+            # pipe: root never reads MORPHOGEN_HOME. Only the connection string is taken from it; the code root runs and
+            # the role it acts as are root's own (the image's root-owned /opt/morphogen), never morphogen's to choose.
+            got = as_user("morphogen", [sys.executable, "-s", str(LOCAL), "runtime-login"], env=morphogen_env(),
+                          cwd=str(HOME), stdout=subprocess.PIPE, text=True)
+            printed, _ = got.communicate()
+            login = json.loads(printed.strip().splitlines()[-1]) if got.returncode == 0 and printed.strip() else {}
+            code = [ROOT / "morphogen" / "modules" / "runtime-compose", ROOT / "kernel" / "src", ROOT / "morphogen" / "src"]
             runner = subprocess.Popen(
-                [sys.executable, str(ROOT / "morphogen" / "deploy" / "compose.py"), "--intent", repo, "--all"],
-                env={"PATH": os.environ["PATH"], "HOME": "/root", "DOCKER_HOST": f"unix://{SOCKET}", **git},
+                [sys.executable, "-s", "-m", "runtime_compose", "--intent", repo, "--all"],
+                env={"PATH": os.environ["PATH"], "HOME": "/root", "DOCKER_HOST": f"unix://{SOCKET}", **git,
+                     "DATABASE_URL": str(login.get("DATABASE_URL", "")), "KK_ROLE": "kkm_runtime_compose",
+                     "PYTHONPATH": os.pathsep.join(map(str, code)), "PYTHONNOUSERSITE": "1"},
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd="/")
             # Its log is written by morphogen, never opened by root in a folder morphogen controls.
             procs["compose-log"] = as_user("morphogen", ["tee", "-a", str(HOME / "logs" / "compose.log")],

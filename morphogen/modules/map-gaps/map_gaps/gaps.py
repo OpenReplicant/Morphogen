@@ -35,7 +35,7 @@ NODE, MEMBER, CONNECTS, VALUE, NAME = (KKT + t for t in ("NodeTemplate", "member
 PREDICATES = [RDF_TYPE, LABEL, MEMBER, CONNECTS, VALUE, MAX]
 KIND = "urn:kk:gap-kind:"
 ORDER = ["unknown-peer", "no-image", "unpinned-image", "unconnected", "no-limit"]
-DIGEST = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}")      # as morphogen/deploy/compose.py requires
+DIGEST = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}")      # as the runtime (runtime-compose) requires
 
 
 def gaps(claims: list[dict]) -> list[dict]:

@@ -219,6 +219,11 @@ def one_pass(conn, intent: Path, env: str, mappers: list[str] = ("urn:kk:agent:e
                 report[a["iri"]] = got
                 continue
             p = got["plan"]
+            if applies_to(p["target"]) == "node":
+                # The compose file the step yields, by content: the actuator writes only that text and the
+                # runtime runs only a file an approved step names (T26).
+                f, service = systems.compose_file(intent, p["target"])
+                p["sha256"] = systems.sha(systems.with_setting(f.read_text(), service, p["setting"], p["to"])[2])
             over = beyond_budget(dependencies, p["target"], budget, unreadable)
             if over:
                 report[a["iri"]] = over

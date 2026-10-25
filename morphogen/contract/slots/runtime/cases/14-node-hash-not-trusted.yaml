@@ -1,0 +1,3 @@
+id: urn:kk:contract:runtime/node-hash-not-trusted
+description: 'A node step authorises the file the runtime derives itself (the file it last ran with the step''s value set), never the hash the step carries: a file the hash names but the value does not
+  yield is not run.'

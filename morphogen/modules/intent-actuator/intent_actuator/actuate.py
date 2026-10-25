@@ -13,57 +13,25 @@ A step is carried out only if
   must still have it: what a person approved is what was measured. A create step (R5-29) names a new system
 (urn:kk:system:<name>) whose compose file does not exist yet, and the sha256 of the file the design agent
 rendered: the actuator renders it again from the record and writes it only if it is the text approved.
+A step on a node names the sha256 of the compose file it yields (its result's spdx:checksumValue), and the
+actuator writes only that file. An adopt step names an existing system's file by its sha256 and writes nothing:
+a person approved the file as committed (T26). A runtime runs only a file an approved step names.
 Carrying it out sets the action's setting in the provider's intent file (or the node's compose file); the
 caller commits the file.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
 import yaml
 
 from morphogen import systems
+from morphogen.plans import PPLAN_STEP_OF, steps  # noqa: F401 (steps: the actuator's reading of the record)
 from morphogen.experiments import candidate_dir, tree_hash
 
-PPLAN_STEP_OF = "http://purl.org/net/p-plan#isStepOfPlan"
-RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-DCT_TYPE = "http://purl.org/dc/terms/type"
-SOSA = "http://www.w3.org/ns/sosa/"
-SUBSTITUTED_BY = "https://w3id.org/knowledge-kernel/tosca#substitutedBy"
-CHECKSUM = "http://spdx.org/rdf/terms#checksumValue"
 SERVICE = re.compile(r"python3 -m [a-z_][a-z0-9_]*")
-
-
-def steps(claims: list[dict], change_sets: dict[str, dict]) -> list[dict]:
-    """claims: current claims about plan steps (id, subject, predicate, object_entity, object_value,
-    qualifiers, change_set); change_sets: id -> {lane, decided_by, submitted_by, status} (api.review_decisions)."""
-    by: dict[str, list[dict]] = {}
-    for c in claims:
-        by.setdefault(c["subject"], []).append(c)
-    out = []
-    for step, cs in sorted(by.items()):
-        get = lambda p: next((c for c in cs if c["predicate"] == p), None)
-        part = get(PPLAN_STEP_OF)
-        if not part or not any(c["predicate"] == RDF_TYPE and c["object_entity"] == SOSA + "Actuation" for c in cs):
-            continue
-        action, target, result = get(DCT_TYPE), get(SOSA + "hasFeatureOfInterest"), get(SOSA + "hasSimpleResult")
-        substitute = get(SUBSTITUTED_BY)
-        preds = [c["predicate"] for c in cs]
-        ambiguous = len({str(c["change_set"]) for c in cs}) > 1 or len(preds) != len(set(preds))
-        approvals = [change_sets.get(str(c["change_set"]), {}) for c in cs]
-        out.append({"step": step, "plan": part["object_entity"], "claims": sorted(str(c["id"]) for c in cs),
-                    "change_sets": sorted({str(c["change_set"]) for c in cs}),
-                    "action": action["object_entity"] if action else None,
-                    "target": target["object_entity"] if target else None,
-                    "value": (result["object_value"] or {}).get("@value") if result else None,
-                    "candidate": substitute["object_entity"] if substitute else None,
-                    "sha256": (substitute.get("qualifiers") or {}).get(CHECKSUM) if substitute else None,
-                    "ambiguous": ambiguous,
-                    "approved": bool(approvals) and all(a.get("lane") == "review" and a.get("decided_by")
-                                                        and a["decided_by"] != a.get("submitted_by")
-                                                        and a.get("status") == "applied" for a in approvals)})
-    return out
 
 
 def new_system_file(intent: Path, target) -> Path | None:
@@ -79,11 +47,23 @@ def new_system_file(intent: Path, target) -> Path | None:
     return None if f.exists() or f.is_symlink() else f
 
 
+def system_file(intent: Path, target) -> Path | None:
+    """intent/systems/<name>/compose.yaml for urn:kk:system:<name>, when it is a file and no link is on its way."""
+    m = re.fullmatch(r"urn:kk:system:([a-z0-9][a-z0-9_.-]*)", target) if isinstance(target, str) else None
+    if not m:
+        return None
+    root = (Path(intent) / "systems").resolve()
+    f = Path(intent) / "systems" / m.group(1) / "compose.yaml"
+    return f if f.is_file() and not f.is_symlink() and f.resolve().parent == root / m.group(1) else None
+
+
 def target_file(intent: Path, env: str, target, action: dict) -> Path | None:
     """The file a step on `target` changes: a new system's compose file, the node's compose file, or the
     provider's intent file."""
     if action.get("kind") == "create":
         return new_system_file(intent, target)
+    if action.get("kind") == "adopt":
+        return system_file(intent, target)
     if action.get("applies_to", "provider") == "node":
         found = systems.compose_file(intent, target)
         return found[0] if found else None
@@ -113,7 +93,7 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
     if s.get("ambiguous"):
         return "the step is recorded by more than one change set, or names a predicate twice"
     a = actions.get(s["action"])
-    if a is None or a.get("kind", "setting") not in ("setting", "replace", "create"):
+    if a is None or a.get("kind", "setting") not in ("setting", "replace", "create", "adopt"):
         return f"the action {s['action']!r} is not on the fixed list of plan steps"
     if a.get("kind") == "create":
         f = new_system_file(intent, s["target"])
@@ -121,6 +101,15 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
             return f"{s['target']!r} is not a new system's name, or its compose file exists already"
         if not isinstance(s["value"], str) or not re.fullmatch(r"[0-9a-f]{64}", s["value"]):
             return "the step names no sha256 for the file to write"
+        return None
+    if a.get("kind") == "adopt":
+        f = system_file(intent, s["target"])
+        if f is None:
+            return f"{s['target']!r} is not a managed system with a compose file"
+        if not isinstance(s["value"], str) or not re.fullmatch(r"[0-9a-f]{64}", s["value"]):
+            return "the step names no sha256 for the file to run"
+        if hashlib.sha256(f.read_bytes()).hexdigest() != s["value"]:     # bytes, as the runtime and encoder hash them
+            return "the system's compose file is no longer the one approved"
         return None
     if a.get("applies_to", "provider") == "node":
         if systems.compose_file(intent, s["target"]) is None:
@@ -146,6 +135,12 @@ def refusal(s: dict, actions: dict, intent: Path, env: str) -> str | None:
         return f"{a['setting']} must be a number from {a['min']:g} to {a['max']:g}"
     if a.get("integer") and v != int(v):
         return f"{a['setting']} must be a whole number"
+    if a.get("applies_to", "provider") == "node":
+        found = systems.compose_file(intent, s["target"])
+        if not s.get("file_sha256"):
+            return "the step names no sha256 of the compose file it yields"
+        if systems.sha(systems.with_setting(found[0].read_text(), found[1], a["setting"], v)[2]) != s["file_sha256"]:
+            return "the compose file the step yields is not the one approved: the file changed since the plan"
     return None
 
 

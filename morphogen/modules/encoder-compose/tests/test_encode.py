@@ -18,7 +18,7 @@ sys.path[:0] = [str(HERE), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" 
 import importlib  # noqa: E402
 import install  # noqa: E402  (morphogen/modules/install.py)
 from encoder_compose import encode  # noqa: E402
-from encoder_compose.__main__ import answer, scan  # noqa: E402
+from encoder_compose.__main__ import answer, propose_adopt, scan  # noqa: E402
 from kk.lib import connect  # noqa: E402
 
 validator = importlib.import_module("validator.__main__")
@@ -117,6 +117,20 @@ try:
         old = conn.execute("select count(*) from api.claims where attributed_to = 'urn:kk:agent:encoder-compose' "
                            "and status = 'deprecated'").fetchone()[0]
     check(now == "150" and old == first["claims"], "the answer is the new value; the old claims are kept, superseded")
+    import hashlib
+    adopt = propose_adopt("podinfo", copy, tmp)
+    with connect("kkm_validator") as val:
+        validator.drain(val)
+    with connect(url=f"dbname={DB}") as su:
+        cs = su.execute("select lane, status, ops from kernel.change_set where id = %s", (adopt["change_set"],)).fetchone()
+    step = {o["predicate"].rsplit("/", 1)[-1].rsplit("#", 1)[-1]: o for o in cs[2] if o["subject"].endswith(":step:1")}
+    check(cs[0] == "review" and cs[1] == "awaiting_review" and adopt["sha256"] == hashlib.sha256(copy.read_bytes()).hexdigest()
+          and step["hasSimpleResult"]["object"]["value"]["@value"] == adopt["sha256"]
+          and step["type"]["object"]["entity"] == "urn:kk:action:adopt-system"
+          and step["hasFeatureOfInterest"]["object"]["entity"] == "urn:kk:system:podinfo"
+          and all(o["references"][0]["source_uri"] == f"file:systems/podinfo/compose.yaml#sha256={adopt['sha256']}" for o in cs[2]),
+          "--adopt: a plan asking a person to approve the file as it is, naming its sha256, waits in the review lane (T26)")
+    check(propose_adopt("podinfo", copy, tmp)["change_set"] == adopt["change_set"], "--adopt on the same file again submits nothing new")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
     subprocess.run(["dropdb", "--force", DB], check=True)
