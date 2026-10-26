@@ -28,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MODULES = ROOT / "morphogen" / "modules"
 FIX = ROOT / "morphogen" / "tests" / "fixtures" / "design"
 sys.path[:0] = [str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "src"), str(MODULES),
-                 *(str(MODULES / m) for m in ("map-gaps", "design-blueprint", "intent-actuator", "encoder-compose")),
+                 *(str(MODULES / m) for m in ("design-blueprint", "intent-actuator", "encoder-compose")),
+                 str(ROOT / "kernel" / "providers" / "gaps-shacl"),
                  str(ROOT / "kernel" / "providers" / "validator-shacl"), str(ROOT / "kernel" / "providers" / "verifier-quotes")]
 import install  # noqa: E402  (morphogen/modules/install.py)
 from kk.lib import connect, run, submit  # noqa: E402
@@ -37,7 +38,7 @@ from morphogen import blueprint  # noqa: E402
 from design_blueprint.__main__ import propose  # noqa: E402
 from encoder_compose.__main__ import scan  # noqa: E402
 from intent_actuator.__main__ import one_pass as actuate  # noqa: E402
-from map_gaps.__main__ import one_pass as find_gaps  # noqa: E402
+from gaps_shacl.__main__ import one_pass as find_gaps  # noqa: E402  (the kernel's gap finder, R5-47)
 
 validator = importlib.import_module("validator.__main__")
 quotes = importlib.import_module("verifier_quotes.__main__")
@@ -115,21 +116,22 @@ def main() -> None:
             validator.drain(val)
 
     def gaps_now() -> list[str]:
-        with connect("kkm_map_gaps") as conn:
+        with connect("kkm_gaps_shacl") as conn:
             find_gaps(conn)
         settle()
-        with connect("kkm_map_gaps") as conn:
+        with connect("kkm_gaps_shacl") as conn:
             rows = conn.execute(
                 "select k.object_entity, t.object_entity from api.claims t join api.claims k on k.subject = t.subject "
                 "and k.predicate = 'http://purl.org/dc/terms/type' and k.status <> 'deprecated' "
-                "where t.predicate = %s and t.attributed_to = 'urn:kk:agent:map-gaps' and t.status <> 'deprecated'",
+                "where t.predicate = %s and t.attributed_to = 'urn:kk:agent:gaps-shacl' and t.status <> 'deprecated'",
                 (OA + "hasTarget",)).fetchall()
         return sorted(f"{k.rsplit(':', 1)[-1]} {t.rsplit(':', 1)[-1]}" for k, t in rows)
 
     try:
         with connect("kkm_design_blueprint") as conn:
             refused = propose(conn, "notes", intent)
-        check("refused" in refused, f"nothing is proposed for a system nobody has described ({refused['refused']})")
+        check(refused.get("refused", "").startswith("no gap finder has run yet"),
+              f"nothing is proposed before a gap finder has looked: no gap is not no question, the gate fails closed ({refused})")
         for n, answer in enumerate(script["answers"]):
             upto = next(i for i, x in enumerate(lines) if json.loads(x)["id"] == answer["message"])
             chat.write_text("\n".join(lines[:upto + 1]) + "\n")

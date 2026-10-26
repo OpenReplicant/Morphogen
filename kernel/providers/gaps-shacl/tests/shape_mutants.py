@@ -12,7 +12,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[2]
 SHAPES = ROOT / "kernel" / "packs" / "kk-tosca.shapes.ttl"
-RUNNER = ROOT / "morphogen" / "contract" / "slots" / "gap-finder" / "runner.py"
+RUNNER = ROOT / "kernel" / "contract" / "slots" / "gap-finder" / "runner.py"
 
 MUTANTS = {
     "the unknown-peer rule dropped": ("sh:class kkt:NodeTemplate ;\n    sh:severity sh:Warning ;", "sh:severity sh:Warning ;"),
@@ -45,6 +45,7 @@ def main() -> int:
             continue
         with tempfile.TemporaryDirectory() as d:
             Path(d, SHAPES.name).write_text(text.replace(old, new))
+            Path(d, "packs.yaml").write_text((SHAPES.parent / "packs.yaml").read_text())
             env = {**os.environ, "KK_SHAPES_DIR": d}
             killed = any(subprocess.run([sys.executable, *cmd], cwd=HERE, env=env, capture_output=True).returncode
                          for cmd in ([str(RUNNER), str(HERE)], [str(HERE / "tests" / "test_gaps.py")]))

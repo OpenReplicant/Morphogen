@@ -16,6 +16,7 @@ uses_kernel_slots:
   - belief-model
   - verifier
   - truth-maintenance
+  - gap-finder                                 # the kernel's since R5-47 (the kk-tosca shapes ask about system maps); map-gaps the alternative
   - recall
   - agent-interface
   - vocabulary-pack
@@ -33,11 +34,6 @@ slots:
     default: interview-encoder + design-blueprint   # rebuild 4: encoder-interaction; the interview skill drives them (R5-29)
     contract: provider-tests
     status: ported
-  - id: gap-finder
-    phase: design
-    default: map-gaps                          # what a system map lacks, as questions (R5-29; rules new, shape from rebuild 4 map-gaps)
-    contract: contract/slots/gap-finder
-    status: written
   - id: system-encoder
     phase: design
     cardinality: many

@@ -10,7 +10,7 @@ monitor, analyse, plan, execute, verify, catalog lookup) and their default provi
 | `modules/` | Providers for Morphogen's slots. A module moves to `kernel/providers/` when another distribution needs it |
 | `intent/` | Desired state orchestrators reconcile. Written only by the intent actuator after approval |
 | `intent/policies/autonomy.yaml` | Lane policy: autonomy level × risk class |
-| `contract/slots/` | Case sets for Morphogen's slots (analyser, gap-finder, runtime) |
+| `contract/slots/` | Case sets for Morphogen's slots (analyser, runtime) |
 | `ui/` | The review and loop UI (`ui/README.md`) |
 | `deploy/` | `reconcile.py` runs what an environment's intent names; managed systems run through the runtime slot (`modules/runtime-compose`) |
 | `evals/` | G2 runs, RCAEval, the design interview, self-model questions |

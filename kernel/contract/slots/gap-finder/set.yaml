@@ -1,6 +1,9 @@
-# The gap-finder slot's contract (R5-29): what any provider must ask about a system map. New in rebuild 5
-# (rebuild 4's map-gaps asked about organisation and process maps). The slot's own runner (runner.py) builds each
-# case's claims, runs the provider's <package>.gaps.gaps(claims) in a child process and judges what it answers.
+# The gap-finder slot's contract (R5-29; a kernel slot since R5-47): what a gap finder, with the kernel's packs
+# installed, must ask about a system map. The questions are the kk-tosca pack's warning shapes (kernel/packs/
+# kk-tosca.shapes.ttl) for the kernel's provider, gaps-shacl, and Python rules for Morphogen's map-gaps; either
+# passes the same cases. New in rebuild 5 (rebuild 4's map-gaps asked about organisation and process maps). The
+# slot's own runner (runner.py) builds each case's claims, runs the provider's <package>.gaps.gaps(claims) in a
+# child process (with the kernel's kk on its path) and judges what it answers.
 #
 # input.services: {<system>/<service>: {image: true (pinned by digest) or the image as written, settings: {name: value}, connects: [<system>/<service>],
 #                  limit: bool (a documented limit: bbo:maxValue qualified by the observed property only),
@@ -11,7 +14,7 @@
 # then (optional):  {services: {...}} merged into the input (a person's answers), and expect: every gap after it
 slot: gap-finder
 runner: runner.py
-version: 0.4.0
+version: 0.5.0
 rules: >-
   For a system map: a connection to something not on the map is a gap (unknown-peer, on the peer); a service with
   no image setting is a gap (no-image); a service whose images are none pinned by digest (name@sha256:<64 hex>) is

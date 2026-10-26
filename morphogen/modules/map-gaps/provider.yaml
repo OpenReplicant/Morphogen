@@ -12,5 +12,5 @@ service: python3 -m map_gaps
 role: kkm_map_gaps
 login: kkm_map_gaps_login
 agent: urn:kk:agent:map-gaps
-tests: [python3 tests/test_service.py]
+tests: [python3 tests/test_service.py, python3 tests/test_parity.py]
 note: each gap an oa:Annotation whose body is the question to ask, derived from the claims that put its target on the map; retracted once answered

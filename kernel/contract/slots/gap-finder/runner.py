@@ -80,7 +80,7 @@ out.write(json.dumps(answers))
 
 
 def answer(provider: Path, package: str, stages: list[list]) -> list[dict]:
-    out = subprocess.run([sys.executable, "-c", CHILD, str(provider), package, str(SET.parents[3] / "kernel" / "src")],
+    out = subprocess.run([sys.executable, "-c", CHILD, str(provider), package, str(SET.parents[2] / "src")],
                          input=json.dumps(stages),
                          capture_output=True, text=True, timeout=300)
     try:

@@ -74,6 +74,7 @@ profile:
     owns: system structure — node types/templates, requirements (slots), capabilities, fulfillment, relationships, substitution
     iri: https://w3id.org/knowledge-kernel/tosca#
     file: kk-tosca.ttl
+    shapes: kk-tosca.shapes.ttl     # what a complete system map has: warning shapes the gap finder asks from (R5-47)
     license: Apache-2.0
     note: RDF mirror of the OASIS TOSCA 2.0 metamodel; TOSCA YAML itself is a format. Carries the
       alignment of the module contract (kk:Module ⊂ kkt:NodeType, kk:Slot ⊂ kkt:RequirementDefinition)

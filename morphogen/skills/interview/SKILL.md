@@ -76,7 +76,7 @@ expanded: always write them as full IRIs**, or the claim is recorded but nothing
 ## Ask next about the gaps
 
 The gap finder lists what the map lacks, as questions: `query_claims(predicate="oa:hasTarget")` from
-`urn:kk:agent:map-gaps`, then `get_entity(<gap>)` for its kind and its question (`oa:bodyValue`). Kinds:
+`urn:kk:agent:gaps-shacl` (the kernel's gap finder, asking what the packs' shapes ask), then `get_entity(<gap>)` for its kind and its question (`oa:bodyValue`). Kinds:
 `unknown-peer` (a service calls something not on the map), `no-image` (what runs a service), `unpinned-image`
 (the image's digest: Morphogen runs only images pinned as `name@sha256:...`, so what runs is what a person
 approved), `unconnected` (how a service fits with the rest), `no-limit` (how long the service people use may

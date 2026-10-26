@@ -60,7 +60,7 @@ kkts:ServiceImagePinned a sh:NodeShape ;
     dcterms:type <urn:kk:gap-kind:unpinned-image> ;
     kk:premisePredicate rdf:type , kkt:memberOf ;
     sh:order 3 ;
-    sh:message "Which digest pins {this}'s image? Morphogen runs only images pinned as name@sha256:..." .
+    sh:message "Which digest pins {this}'s image? a runtime runs only images pinned as name@sha256:..., so what runs is what was approved" .
 
 kkts:ImageSetting a sh:NodeShape ;
     sh:property [ sh:path kkt:propertyName ; sh:hasValue "image" ] .

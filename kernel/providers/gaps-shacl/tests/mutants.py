@@ -1,4 +1,4 @@
-"""Mutants for the gaps-shacl provider's finder (run by morphogen/contract/run.sh --mutants). The rules themselves are
+"""Mutants for the gaps-shacl provider's finder (run by kernel/contract/mutants.py). The rules themselves are
 the kk-tosca pack's shapes, outside this provider: their mutants are tests/shape_mutants.py."""
 
 G = "gaps_shacl/gaps.py"
@@ -14,4 +14,7 @@ MUTANTS = [
   ("a qualified claim's value left out", G, [("            g.add((node, RDF.value, o))\n", "")]),
   ("gaps not in the shapes' order", G, [("key=lambda g: (g[\"order\"], g[\"target\"])", "key=lambda g: g[\"target\"]")], "own"),
   ("the question does not name its target", G, [('.replace("{this}", name)', "")], "own"),
+  ("full IRIs in a rule not read", G, [('        out |= set(re.findall(r"<((?:https?|urn):[^>\\s]+)>", q))\n', "")], "own"),
+  ("an inverse path not walked", G, [("        for p in (SH.inversePath, SH.zeroOrMorePath, SH.oneOrMorePath, SH.zeroOrOnePath):",
+                                       "        for p in (SH.zeroOrMorePath, SH.oneOrMorePath, SH.zeroOrOnePath):")], "own"),
 ]
