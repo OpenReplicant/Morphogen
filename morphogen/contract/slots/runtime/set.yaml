@@ -9,9 +9,10 @@
 # runs (R5-25). Each file it runs is a run of its own: plan_step the approving step, outputs {system, applied: sha256,
 # decided_at}, used: the step's claims. The slot's own runner (runner.py) builds a record
 # (kernel/contract/slots/harness.py), an intent repository and a stub engine on PATH (docker, podman, systemctl,
-# kubectl, nomad: each logs what it was asked to run), runs the provider's service once (KK_ONCE=1, `--intent DIR
-# --all`) as its own role after each step, and judges what reached the engine. A provider for an engine the stub does
-# not cover needs its own stub.
+# kubectl, nomad: each logs its arguments and every file they name), runs the provider's service once (KK_ONCE=1, `--intent DIR
+# --all`) as its own role after each step, and judges what reached the engine, read as a model of the system whatever its format (a compose file, a
+# `.quadlets` bundle: runner.py `model`). A provider for an engine the stub does not cover, or a format `model` does not
+# read, needs both added here first.
 slot: runtime
 runner: runner.py
-version: 0.2.0
+version: 0.4.0

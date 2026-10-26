@@ -2,15 +2,25 @@
 the provider's service runs once after each step, and what reached the engine is judged. Prints "ok: <case id>" per
 passing case. Never imports the provider.
 
+What reached the engine is every file named in its arguments, read as the engine reads it (`model`): a compose file,
+or a `.quadlets` bundle of Quadlet units (a container unit per service, a network). Either becomes the same model:
+per service by name, its image, environment, command, entrypoint, ports, labels, working directory, user, depends_on
+and restart, plus any other top-level key of a compose file. A unit key the runner does not map back (AddCapability,
+Volume, PodmanArgs, Wants, a network of the host, a unit name not the system's own, ...) stays in the model under its
+own name, so it never equals an approved file's. Health checks, which run inside the container, are not judged.
+
   python3 runner.py <provider directory>
 """
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+import yaml
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
@@ -27,15 +37,15 @@ NODE_ACTION = "urn:kk:action:set-random-delay-max"     # on Morphogen's fixed li
 ENGINES = ("docker", "podman", "systemctl", "kubectl", "nomad")
 STUB = """#!{python}
 # A stub engine for the runtime contract: logs what it is asked to do, and every file it is handed, then succeeds.
-import json, sys
+import json, os, sys
 args = sys.argv[1:]
 files = {{}}
-for i, a in enumerate(args[:-1]):
-    if a in ("-f", "--file"):
+for a in args:
+    if os.path.isfile(a):
         try:
-            files[args[i + 1]] = open(args[i + 1]).read()
+            files[a] = open(a).read()
         except OSError:
-            files[args[i + 1]] = None
+            files[a] = None
 with open({log!r}, "a") as out:
     out.write(json.dumps({{"engine": {name!r}, "args": args, "files": files}}) + "\\n")
 """
@@ -129,8 +139,124 @@ class World:
 
 
 def ran(calls: list[dict]) -> list[str]:
-    """The file contents the engine was asked to run (compose up, podman, kube apply, ...)."""
-    return [t for c in calls if not stops(c) for t in c["files"].values() if t]
+    """What the engine was asked to run (compose up, podman quadlet install, ...), each file as a model."""
+    return [model(t) for c in calls if not stops(c) for t in c["files"].values() if t]
+
+
+UNJUDGED = {"HealthCmd", "HealthInterval", "HealthRetries", "HealthTimeout", "HealthStartPeriod"}   # run inside the container
+MAPPED = {"Image": "image", "Exec": "command", "Entrypoint": "entrypoint", "PublishPort": "ports",
+          "Environment": "environment", "Label": "labels", "WorkingDir": "working_dir", "User": "user"}
+RESTART = {"always": "always", "unless-stopped": "always", "on-failure": "on-failure", "no": "no"}
+
+
+def unquote(value: str) -> list[str]:
+    """The words of a setting Quadlet splits as systemd does (Environment, Label, Exec): double quotes and backslash
+    escapes, `%%` a literal `%`."""
+    return [w.replace("%%", "%") for w in shlex.split(value, posix=True)]
+
+
+def canonical(m: dict) -> str:
+    return json.dumps(m, sort_keys=True)
+
+
+def model(text: str) -> str:
+    """One system as the engine would run it (see the docstring), as canonical JSON; unreadable text is itself."""
+    if text.startswith("# FileName="):
+        return quadlets(text)
+    try:
+        doc = yaml.safe_load(text)
+        services = dict(doc["services"])
+    except (yaml.YAMLError, KeyError, TypeError, ValueError):
+        return text
+    out = {k: v for k, v in doc.items() if k != "services"}           # any other top-level key stays, as itself
+    out["services"] = {}
+    for name, svc in services.items():
+        m = {k: v for k, v in svc.items() if k != "healthcheck"}
+        for key in ("environment", "labels"):
+            if key in m:
+                v = m[key]
+                m[key] = dict(sorted((str(a), str(b)) for a, b in (v.items() if isinstance(v, dict) else (x.split("=", 1) for x in v))))
+        for key in ("command", "entrypoint"):
+            if key in m:
+                m[key] = [str(x) for x in m[key]] if isinstance(m[key], list) else shlex.split(str(m[key]))
+        for key in ("working_dir", "user"):
+            if key in m:
+                m[key] = str(m[key])
+        if "depends_on" in m:
+            m["depends_on"] = sorted(m["depends_on"])
+        if "restart" in m:
+            m["restart"] = RESTART.get(str(m["restart"]), m["restart"])
+        out["services"][str(name)] = m
+    return canonical(out)
+
+
+def quadlets(text: str) -> str:
+    """A `.quadlets` bundle as the same model: one `<p>.network` with nothing in it, and per service a
+    `<p>-<name>.container` whose ContainerName is `<p>-<name>`, NetworkAlias `<name>` and Network `<p>.network`;
+    Requires and After name the same `<p>-<dep>.service` units (depends_on), Restart is restart, WantedBy is
+    default.target. Anything else, or any of these otherwise, stays in the model under its own name."""
+    files = {}
+    for part in text.split("\n---\n"):
+        lines = part.strip("\n").splitlines()
+        name = lines[0].removeprefix("# FileName=").strip() if lines and lines[0].startswith("# FileName=") else "?"
+        sections, head = {}, None
+        for line in lines[1:]:
+            if line.startswith("[") and line.endswith("]"):
+                head = line[1:-1]
+                sections.setdefault(head, [])
+            elif line.strip() and head:
+                k, _, v = line.partition("=")
+                sections[head].append((k.strip(), v.strip()))
+            elif line.strip():
+                sections.setdefault("", []).append(("", line))
+        files[name] = sections
+    nets = [n for n in files if n.endswith(".network")]
+    prefix = nets[0].removesuffix(".network") if len(nets) == 1 and files[nets[0]] == {"Network": []} else None
+    out: dict = {"services": {}}
+    for name, sections in files.items():
+        if prefix is not None and name == f"{prefix}.network":
+            continue
+        settings = [(h, k, v) for h, body in sections.items() for k, v in body]
+        alias = [v for h, k, v in settings if (h, k) == ("Container", "NetworkAlias")]
+        svc = alias[0] if len(alias) == 1 else None
+        unit = f"{prefix}-{svc}"
+        if prefix is None or svc is None or name != f"{unit}.container":
+            out[f"file:{name}"] = sections
+            continue
+        m: dict = {}
+        requires, after = [], []
+        for head, k, v in settings:
+            if head == "Container" and (k, v) in (("NetworkAlias", svc), ("ContainerName", unit), ("Network", f"{prefix}.network")):
+                continue
+            if head == "Container" and k in UNJUDGED:
+                continue
+            if (head, k) in (("Unit", "Requires"), ("Unit", "After")) and v.startswith(f"{prefix}-") and v.endswith(".service"):
+                (requires if k == "Requires" else after).append(v[len(prefix) + 1:-len(".service")])
+            elif (head, k, v) == ("Install", "WantedBy", "default.target"):
+                continue
+            elif (head, k) == ("Service", "Restart"):
+                m["restart"] = v
+            elif head != "Container" or k not in MAPPED:
+                m.setdefault(f"{head}:{k}", []).append(v)
+            elif k in ("Environment", "Label"):
+                m.setdefault(MAPPED[k], {}).update(w.split("=", 1) for w in unquote(v))
+            elif k == "PublishPort":
+                m.setdefault("ports", []).append(v)
+            elif k == "Entrypoint":
+                m["entrypoint"] = json.loads(v.replace("%%", "%"))
+            elif k == "Exec":
+                m["command"] = unquote(v)
+            else:                                             # taken as written: quotes would stay in the value
+                m[MAPPED[k]] = v.replace("%%", "%")
+        if requires or after:
+            m["depends_on"] = sorted(requires)
+            if sorted(after) != sorted(requires):
+                m["Unit:After"] = sorted(after)
+        for key in ("environment", "labels"):
+            if key in m:
+                m[key] = dict(sorted(m[key].items()))
+        out["services"][svc] = m
+    return canonical(out)
 
 
 def stops(c: dict) -> bool:
@@ -158,7 +284,7 @@ def main(provider: Path) -> int:
 
         w.approve(adopt)
         calls, events = w.run()
-        ok &= check(ran(calls) == [first], C + "approved-runs", f"{calls} {events}")
+        ok &= check(ran(calls) == [model(first)], C + "approved-runs", f"{calls} {events}")
         runs = rec.rows("""select r.outputs, r.used, r.plan_step from kernel.run r join kernel.agent a on a.iri = r.agent
                            where a.db_role = %s and r.status = 'succeeded' and r.outputs ? 'applied'""",
                         (meta(provider).get("role"),))
@@ -185,10 +311,10 @@ def main(provider: Path) -> int:
         w.approve(step)
         w.commit("demo", edited, add=False)
         calls, events = w.run()
-        ok &= check(edited not in ran(calls), C + "worktree-not-run", str(calls))
+        ok &= check(model(edited) not in ran(calls), C + "worktree-not-run", str(calls))
         git(w.intent, "commit", "-qam", "delay 150")
         calls, events = w.run()
-        ok &= check(ran(calls) == [edited], C + "node-step-runs", f"{calls} {events}")
+        ok &= check(ran(calls) == [model(edited)], C + "node-step-runs", f"{calls} {events}")
 
         swapped = compose("75", image=OTHER)              # the step says 75; its hash names a file with another image
         w.approve(w.propose("urn:kk:node:demo:web", 75, file_sha=sha(swapped)))
@@ -211,20 +337,26 @@ def main(provider: Path) -> int:
 
         w.commit("other", first)                          # the bytes demo's adopt step approved, as another system
         calls, events = w.run()
-        ok &= check(first not in ran(calls) and refused(events, "other"), C + "per-system", f"{calls} {events}")
+        ok &= check(model(first) not in ran(calls) and refused(events, "other"), C + "per-system", f"{calls} {events}")
 
         secret = rec.scope("urn:kk:scope:contract-runtime-secret", readers=(w.proposer, w.person))
         hidden = compose("75")
         w.approve(w.propose("urn:kk:system:hidden", sha(hidden), scope=secret, shows=hidden))
         w.commit("hidden", hidden)
         calls, events = w.run()
-        ok &= check(hidden not in ran(calls) and refused(events, "hidden"), C + "clearance", f"{calls} {events}")
+        ok &= check(model(hidden) not in ran(calls) and refused(events, "hidden"), C + "clearance", f"{calls} {events}")
 
         bad = compose("600", "    privileged: true\n")
         w.approve(w.propose("urn:kk:system:bad", sha(bad), shows=bad))
         w.commit("bad", bad)
         calls, events = w.run()
-        ok &= check(bad not in ran(calls) and refused(events, "bad"), C + "allow-list", f"{calls} {events}")
+        ok &= check(model(bad) not in ran(calls) and refused(events, "bad"), C + "allow-list", f"{calls} {events}")
+
+        sneaky = compose("600", '    depends_on: ["cache\\n[Service]\\nExecStartPre=/bin/touch /tmp/kkc-runtime"]\n')
+        w.approve(w.propose("urn:kk:system:sneaky", sha(sneaky), shows=sneaky))
+        w.commit("sneaky", sneaky)
+        calls, events = w.run()
+        ok &= check(not ran(calls) and refused(events, "sneaky"), C + "depends-on-own-services", f"{calls} {events}")
 
         w.commit("demo", None)
         calls, events = w.run()

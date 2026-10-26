@@ -140,7 +140,7 @@ the services record; Systems shows the systems Morphogen knows.
 | --- | --- |
 | `reconcile` | runs the services named in `intent/environments/local/` (validator, belief, truth maintenance, quote verifier, recall index, analyser, planner, intent actuator, prediction verifier, gap finder) and restarts one when its intent file changes |
 | `observer-otel` | records the services' own telemetry (feed lag, step time) as observations, so Morphogen watches itself |
-| `compose` | the runtime (runtime-compose): runs every system under `intent/systems/` as committed, when an approved plan step names the file, including one approved later |
+| `compose` | the runtime (runtime-compose; runtime-quadlet with `MORPHOGEN_RUNTIME=quadlet`, Podman 5.6+ and systemd on this machine): runs every system under `intent/systems/` as committed, when an approved plan step names the file, including one approved later |
 | `ui` | the review and loop UI, and kernel-mcp over HTTP for signed-in people |
 
 `status` shows what runs and where the logs are; `down` stops the processes (`down --db` stops Postgres too; the

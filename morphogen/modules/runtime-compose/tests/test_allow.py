@@ -1,4 +1,4 @@
-"""runtime-compose's allow list (`refusal`): podinfo's file passes; anything that could reach the host, or our own
+"""The runtime allow list (`morphogen.runtime.refusal`, every runtime's): podinfo's file passes; anything that could reach the host, or our own
 environment, is refused. No database, no Docker (the runtime case set checks what runs: morphogen/contract/slots/runtime).
 
   python3 tests/test_allow.py
@@ -10,7 +10,7 @@ HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[2]
 sys.path[:0] = [str(HERE), str(ROOT / "morphogen" / "src"), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "modules" / "map-gaps")]
 from map_gaps import gaps  # noqa: E402
-from runtime_compose.__main__ import DIGEST, refusal  # noqa: E402
+from morphogen.runtime import DIGEST, refusal  # noqa: E402
 
 PODINFO = ROOT / "morphogen" / "intent" / "systems" / "podinfo" / "compose.yaml"
 IMG = "redis:7.4.2-alpine@sha256:" + "0" * 64
@@ -36,7 +36,17 @@ for text, why in [(svc(privileged="true"), "privileged not allowed"), (svc(volum
                   (svc(ports='["9898:9898"]'), "127.0.0.1"), (svc(ports='["0.0.0.0:1:2"]'), "127.0.0.1"),
                   (svc(environment="{A: ${HOME}}"), "no $"), (svc(environment="[DOCKER_HOST]"), "a name alone"),
                   (svc(environment="{HOME: }"), "a name alone"), (svc(**{"1": "x"}), "1 not allowed"), (svc() + "volumes: {x: {}}\n", "nothing else at the top"),
-                  ("include: [x.yaml]\nservices: {}\n", "nothing else at the top"), ("services:\n  A B: {image: x}\n", "lower-case")]:
+                  ("include: [x.yaml]\nservices: {}\n", "nothing else at the top"), ("services:\n  A B: {image: x}\n", "lower-case"),
+                  (svc(depends_on='["db"]'), "depends_on names only other services"),
+                  (svc(depends_on='["a"]'), "depends_on names only other services"),
+                  (svc(depends_on='["b\\n[Service]\\nExecStartPre=/bin/sh"]') + "  b:\n    image: " + IMG + "\n", "depends_on names only other services"),
+                  (svc(depends_on="{b: {condition: service_started, restart: true}}") + "  b:\n    image: " + IMG + "\n", "only condition"),
+                  (svc(healthcheck='"x"'), "healthcheck must be a mapping"), (svc(healthcheck="{test: x, start_interval: 1s}"), "healthcheck must be a mapping"),
+                  (svc(restart="sometimes"), "restart must be one of"),
+                  (svc(image="reg%H/x@sha256:" + "0" * 64), "pinned by digest")]:
     got = refusal(text)
     check(got is not None and why in got, f"refused: {why} ({text.splitlines()[-1].strip()[:40]})")
+ok = svc(depends_on="{b: {condition: service_healthy}}", healthcheck="{test: [CMD, true], interval: 5s}", restart="always") \
+    + "  b:\n    image: " + IMG + "\n"
+check(refusal(ok) is None, "depends_on on another service (list or condition), a healthcheck mapping and a known restart pass")
 print("runtime-compose allow list tests passed")

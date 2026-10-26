@@ -1,6 +1,6 @@
 id: urn:kk:provider:runtime-compose
 name: 'Runtime: Docker Compose'
-version: 0.2.0
+version: 0.3.0
 license: Apache-2.0
 slots: [runtime]
 origin: morphogen/deploy/compose.py (T9, R5-25) moved into the runtime slot (T27, R5-O9 as amended by R5-42 (c)); runs only a file an approved plan step names (T26)
