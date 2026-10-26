@@ -1,10 +1,13 @@
 id: urn:kk:provider:validator-shacl
 name: Change-set validator (JSON Schema + SHACL)
-version: 0.3.1
+version: 0.3.2
 license: Apache-2.0
 slots: [validator]
+emits: []
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/validator-shacl (core.py, paths adapted) and shapes/
 requires: Python 3.12+, requirements.txt
 runner: python3 tests/contract.py
+tests: [python3 tests/test_severity.py]
 migration: migration.sql
 service: python3 -m validator     # before the commit: NOTIFY plus a sweep, not the feed

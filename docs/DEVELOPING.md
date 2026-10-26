@@ -168,6 +168,9 @@ name: Anomaly detection
 version: 0.4.0
 license: Apache-2.0
 slots: [analyser]
+emits: [oa:Annotation, oa:hasTarget, oa:bodyValue, dcterms:type]   # the terms its claims use
+consumes: [sosa:hasSimpleResult, sosa:observedProperty,            # the terms it needs another provider to emit
+           {term: bbo:maxValue, optional: true, from: people}]     # read when there; people may supply it
 origin: where it was ported from, or "new"
 requires: Python 3.12+, psycopg
 migration: migration.sql
@@ -180,6 +183,14 @@ runner: python3 tests/contract.py    # only for a case set without a runner of i
 entry: my_filter.__main__:filter     # a function-level slot's boundary (the intake filter's proposals)
 applies_to: [extracted]              # a verifier: the evidence types or predicates it gives verdicts on
 ```
+
+`emits` and `consumes` are required (`[]` allowed): they are the provider's dependency lines (R5-47). Terms are
+CURIEs (`kk.terms.PREFIXES`) or full IRIs and must be defined by a vocabulary pack or the record's bootstrap. A
+selection of providers is closed when every term one of them consumes is emitted by another: `kernel/providers/tests/
+test_terms.py` checks the kernel's providers, `morphogen/tests/test_closure.py` Morphogen's default selection. Mark a
+need `optional` when people can supply it (through the agent interface or the UI) or the provider works without it. Qualifier keys count as terms (a limit's `sosa:observedProperty`, a setting's `kkt:propertyName`). The lines are
+at the level of terms, so a need is only as exact as its term: declare it by a term only its real source emits.
+The self-encoder records them as `kk:emits`, `kk:consumes` and `kk:mayConsume`.
 
 `role:` is what a slot's runner runs the provider's service or command as (through a login of its own that may
 switch only to that role), so a kernel provider with a service or command names it too.

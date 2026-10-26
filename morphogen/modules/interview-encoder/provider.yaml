@@ -3,6 +3,8 @@ name: Interview encoder
 version: 0.1.0
 license: Apache-2.0
 slots: [design-agent]
+emits: [as:Note, as:content, as:attributedTo, as:context, as:inReplyTo, as:instrument, dcterms:isPartOf, dcterms:type, prov:used]
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/encoder-interaction (D-81), unchanged but for names (R5-29)
 requires: Python 3.12+, psycopg; the activitystreams pack; the intake filter (kernel filter-gitleaks, gitleaks on PATH)
 migration: migration.sql

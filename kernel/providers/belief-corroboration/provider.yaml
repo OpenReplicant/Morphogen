@@ -3,6 +3,8 @@ name: 'Belief model: corroboration counting v0'
 version: 0.4.0
 license: Apache-2.0
 slots: [belief-model]
+emits: []
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/belief-corroboration; model.py unchanged, the service follows the change feed
 requires: Python 3.12+, PyYAML (contract runner), psycopg (service)
 runner: python3 tests/contract.py

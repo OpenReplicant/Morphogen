@@ -9,7 +9,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
 MODULES = HERE.parent
-sys.path[:0] = [str(HERE), str(MODULES / "map-gaps"), str(MODULES.parent / "contract" / "slots" / "gap-finder")]
+sys.path[:0] = [str(HERE), str(MODULES / "map-gaps"), str(MODULES.parent / "contract" / "slots" / "gap-finder"),
+                str(MODULES.parents[1] / "kernel" / "src")]
 from gaps_shacl.gaps import gaps, shapes  # noqa: E402
 from map_gaps.gaps import gaps as python_gaps  # noqa: E402
 from runner import claims, node  # noqa: E402

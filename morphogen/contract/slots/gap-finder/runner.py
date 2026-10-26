@@ -66,7 +66,7 @@ CHILD = """
 import importlib, json, os, sys
 out = os.fdopen(os.dup(1), "w")
 os.dup2(2, 1)                                            # the provider's own prints go to stderr
-sys.path.insert(0, sys.argv[1])
+sys.path[:0] = [sys.argv[1], sys.argv[3]]                  # the provider, and the kernel's kk
 gaps = importlib.import_module(sys.argv[2] + ".gaps").gaps
 answers = []
 for stage in json.load(sys.stdin):
@@ -80,7 +80,8 @@ out.write(json.dumps(answers))
 
 
 def answer(provider: Path, package: str, stages: list[list]) -> list[dict]:
-    out = subprocess.run([sys.executable, "-c", CHILD, str(provider), package], input=json.dumps(stages),
+    out = subprocess.run([sys.executable, "-c", CHILD, str(provider), package, str(SET.parents[3] / "kernel" / "src")],
+                         input=json.dumps(stages),
                          capture_output=True, text=True, timeout=300)
     try:
         got = json.loads(out.stdout)

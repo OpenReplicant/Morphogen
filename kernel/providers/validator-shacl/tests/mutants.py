@@ -29,4 +29,6 @@ MUTANTS = [
      "                  ] ;")]),
   ("context types are ignored", CORE, [
     ("        data.add((URIRef(expand(s)), URIRef(expand(p)), URIRef(expand(o))))", "        pass")]),
+  ("a warning refuses like a violation", CORE, [
+    ("        if node not in focus or results.value(r, SH.resultSeverity) != SH.Violation:", "        if node not in focus:")], "own"),
 ]

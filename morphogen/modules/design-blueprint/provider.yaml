@@ -3,6 +3,9 @@ name: Design blueprint
 version: 0.1.0
 license: Apache-2.0
 slots: [design-agent]
+emits: [pplan:Plan, pplan:isStepOfPlan, sosa:Actuation, sosa:hasFeatureOfInterest, sosa:hasSimpleResult, dcterms:type, rdfs:label]
+# the gaps are its gate: it writes no compose file while a gap on the system is open; the map comes from the interview
+consumes: [oa:Annotation, {term: kkt:NodeTemplate, optional: true, from: people}, {term: kkt:memberOf, optional: true, from: people}, {term: kkt:connectsTo, optional: true, from: people}, {term: kkt:propertyValue, optional: true, from: people}, {term: kkt:propertyName, optional: true, from: people}]
 origin: new (R5-29)
 requires: Python 3.12+, psycopg, PyYAML; morphogen.blueprint; the gap finder's gaps
 migration: migration.sql

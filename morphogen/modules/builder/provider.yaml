@@ -3,6 +3,8 @@ name: 'Builder: candidate providers'
 version: 0.1.0
 license: Apache-2.0
 slots: [builder]
+emits: [rdfs:label, dcterms:source]
+consumes: [dcterms:type, dcterms:subject, oa:hasTarget, oa:bodyValue]
 origin: new (T6, R5-21)
 requires: Python 3.12+, psycopg, PyYAML, git; for the harness strategy, an agent harness (KK_BUILDER_COMMAND)
 migration: migration.sql

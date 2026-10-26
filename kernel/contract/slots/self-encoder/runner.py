@@ -42,6 +42,8 @@ name: Alpha
 version: 1.2.0
 license: Apache-2.0
 slots: [store]
+emits: [kkt:NodeTemplate, sosa:hasSimpleResult]
+consumes: [kkt:connectsTo, {term: bbo:maxValue, optional: true, from: people}]
 """
 BETA = """id: urn:kk:provider:beta
 name: Beta
@@ -73,6 +75,9 @@ def cited(c: dict, line: str) -> bool:
         return bool(re.match(r"\s+(default|why):", line))
     if p == "http://purl.org/dc/terms/license":
         return line.startswith("license:") and c["object_entity"].rsplit("/", 1)[-1] in line
+    if p in (KK + "emits", KK + "consumes", KK + "mayConsume"):
+        local = re.split(r"[#/]", c["object_entity"])[-1]
+        return line.startswith("emits:" if p == KK + "emits" else "consumes:") and local in line
     if p in (KK + "fills", HAS_PART):
         return obj in line or line.strip() == "slots:"
     if c["subject"].startswith("urn:kk:slot:"):
@@ -117,6 +122,11 @@ def main(provider: Path) -> int:
         fills = {p: (objects(f"urn:kk:provider:{p}", KK + "fills"), objects(f"urn:kk:provider:{p}", VERSION)) for p in ("alpha", "beta")}
         ok &= check(fills == {"alpha": (["urn:kk:slot:store"], ["1.2.0"]),
                               "beta": (["urn:kk:slot:index", "urn:kk:slot:store"], ["0.3.0"])}, C + "fills", str(fills))
+        lines = {p: objects("urn:kk:provider:alpha", KK + p) for p in ("emits", "consumes", "mayConsume")}
+        ok &= check(lines == {"emits": ["http://www.w3.org/ns/sosa/hasSimpleResult", "https://w3id.org/knowledge-kernel/tosca#NodeTemplate"],
+                              "consumes": ["https://w3id.org/knowledge-kernel/tosca#connectsTo"],
+                              "mayConsume": ["https://www.irit.fr/recherches/MELODI/ontologies/BBO#maxValue"]}
+                    and not current("urn:kk:provider:beta", KK + "emits"), C + "dependency-lines", str(lines))
         parts = objects("urn:kk:distribution:demo", HAS_PART)
         ok &= check(parts == ["urn:kk:slot:store", "urn:kk:slot:watcher"]
                     and objects("urn:kk:slot:watcher", TYPE) == [KK + "Slot"]

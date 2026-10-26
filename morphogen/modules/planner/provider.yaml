@@ -3,6 +3,9 @@ name: 'Planner: fixed actions with predictions'
 version: 0.1.0
 license: Apache-2.0
 slots: [planner]
+emits: [pplan:Plan, pplan:isStepOfPlan, sosa:Actuation, sosa:hasFeatureOfInterest, sosa:hasSimpleResult, dcterms:type, rdfs:label, bbo:maxValue, sosa:observedProperty, dcterms:isPartOf, dcterms:subject, oa:hasTarget, oa:bodyValue, kkt:substitutedBy]
+# the map's connections come from encoder-compose (KK_MAP_AGENTS); without them a plan on a node is refused (blast radius)
+consumes: [oa:Annotation, oa:hasTarget, sosa:hasSimpleResult, sosa:observedProperty, rdfs:subPropertyOf, {term: kkt:connectsTo, optional: true, from: encoder-compose}, {term: kkt:hostedOn, optional: true, from: encoder-compose}, {term: bbo:maxValue, optional: true, from: people}, {term: dqv:value, optional: true, from: evaluator}, {term: dqv:isMeasurementOf, optional: true, from: evaluator}]
 origin: rewrite of rebuild 4 modules/skill-adaptation-planning (a skill for an agent) as a deterministic provider; plans carry a prediction and a risk class
 requires: Python 3.12+, psycopg, PyYAML
 migration: migration.sql

@@ -4,8 +4,9 @@
 2. RDF form: each add_claim becomes an rdf:Statement node in standard terms (PROV, DCTerms, Web
    Annotation; shapes/kernel.shacl.ttl) plus its content triple, so both the claim shapes and the
    content shapes (module, slot, and pack shapes in shapes/*.shacl.ttl) apply.
-3. pySHACL with the kernel shapes. Only violations whose focus node is in the change set count;
-   context triples (types of entities the change set points at) are there to satisfy sh:class.
+3. pySHACL with the kernel shapes. Only violations (sh:Violation; a warning is a gap, R5-O18 (5)) whose focus
+   node is in the change set count; context triples (types of entities the change set points at) are there to
+   satisfy sh:class.
 """
 from __future__ import annotations
 
@@ -19,7 +20,9 @@ from pyshacl import validate as shacl_validate
 from rdflib import BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, PROV, RDF, SH, XSD
 
-VERSION = "0.3.1"
+from kk.sparql import prepare_queries
+
+VERSION = "0.3.2"
 HERE = Path(__file__).resolve().parents[1]           # kernel/providers/validator-shacl
 KERNEL = Path(os.environ.get("KK_KERNEL") or HERE.parents[1])
 SCHEMA = json.loads((KERNEL / "schemas/change_set.schema.json").read_text())
@@ -48,28 +51,7 @@ PREFIXES = {
 }
 
 
-def _prepared_queries() -> None:
-    """pySHACL runs each SPARQL-based constraint once per focus node, as a query string, and rdflib parses
-    the string every time: 70% of validating a large change set (M3-T4). Translate each distinct query
-    once and reuse it with each node's bindings, as rdflib's prepared queries are meant to be used."""
-    from functools import lru_cache
-
-    from rdflib.plugins.sparql import processor
-
-    @lru_cache(maxsize=256)
-    def prepared(text: str, base, ns: tuple):
-        return processor.translateQuery(processor.parseQuery(text), base, dict(ns))
-
-    query = processor.SPARQLProcessor.query
-
-    def cached(self, strOrQuery, initBindings=None, initNs=None, base=None, DEBUG=False):
-        if isinstance(strOrQuery, str):
-            strOrQuery = prepared(strOrQuery, base, tuple(sorted((initNs or {}).items())))
-        return query(self, strOrQuery, initBindings, initNs, base, DEBUG)
-    processor.SPARQLProcessor.query = cached
-
-
-_prepared_queries()
+prepare_queries()          # kk.sparql: each SPARQL constraint parsed once, not once per focus node
 EVIDENCE = {name: URIRef(f"urn:kk:evidence:{name}")
             for name in ("deterministic", "extracted", "inferred", "observed", "testimony")}
 
@@ -146,8 +128,8 @@ def validate(cs: dict, context: list[tuple[str, str, str]] = ()) -> tuple[bool, 
     _, results, _ = shacl_validate(data, shacl_graph=SHAPES, advanced=True, allow_warnings=False)
     for r in results.subjects(RDF.type, SH.ValidationResult):
         node = results.value(r, SH.focusNode)
-        if node not in focus:
-            continue
+        if node not in focus or results.value(r, SH.resultSeverity) != SH.Violation:
+            continue                        # a pack's sh:Warning shape is a gap to ask about, never a refusal (R5-O18 (5))
         path = results.value(r, SH.resultPath)
         report["shape_violations"].append({
             "focus": str(node),

@@ -3,6 +3,8 @@ name: 'Observer: Prometheus metrics endpoints'
 version: 0.1.0
 license: Apache-2.0
 slots: [observer]
+emits: [sosa:hasSimpleResult, sosa:observedProperty]
+consumes: []
 origin: rewrite (T9, R5-25) of OpenReplicant/kernel (rebuild 4) modules/observer-prometheus, which queried a Prometheus server; this one scrapes the services' own endpoints
 requires: Python 3.12+, psycopg, PyYAML
 migration: migration.sql

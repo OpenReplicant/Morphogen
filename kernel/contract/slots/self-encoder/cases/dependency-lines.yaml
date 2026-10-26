@@ -1,0 +1,3 @@
+id: urn:kk:contract:self-encoder/dependency-lines
+description: A provider's declared terms are recorded as kk:emits, kk:consumes and (an optional need) kk:mayConsume, each the full
+  IRI of the CURIE written; a provider that declares none gets none (R5-O18 (7)).

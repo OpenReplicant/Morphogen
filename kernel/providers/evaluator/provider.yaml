@@ -3,6 +3,8 @@ name: Evaluator
 version: 0.1.0
 license: Apache-2.0
 slots: [evaluator]
+emits: [rdfs:label, dcterms:subject, dqv:value, dqv:isMeasurementOf, dqv:computedOn]
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/evaluator, unchanged
 requires: Python 3.12+, psycopg; the dqv pack (dqv:value must be an approved property)
 migration: migration.sql

@@ -3,6 +3,8 @@ name: Map gap finder
 version: 0.1.0
 license: Apache-2.0
 slots: [gap-finder]
+emits: [oa:Annotation, oa:hasTarget, oa:bodyValue, dcterms:type]
+consumes: [{term: kkt:NodeTemplate, optional: true, from: people}, {term: kkt:memberOf, optional: true, from: people}, {term: kkt:connectsTo, optional: true, from: people}, {term: kkt:propertyValue, optional: true, from: people}, {term: kkt:propertyName, optional: true, from: people}, {term: bbo:maxValue, optional: true, from: people}, {term: sosa:observedProperty, optional: true, from: people}]
 origin: new rules (R5-29) in the shape of OpenReplicant/kernel (rebuild 4) modules/map-gaps, which asked about organisation and process maps; the service follows the change feed
 requires: Python 3.12+, psycopg; the kk-tosca, bbo and oa packs
 migration: migration.sql

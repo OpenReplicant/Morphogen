@@ -4,7 +4,8 @@
                                     kk:cardinality ; rdfs:comment (its default provider and status, or why it is
                                     unfilled) ; dcterms:isPartOf urn:kk:blueprint:kernel
   kernel/providers/*/provider.yaml  urn:kk:provider:<name> rdfs:label ; owl:versionInfo ; dcterms:license ;
-                                    kk:fills urn:kk:slot:<id> (one per slot it declares)
+                                    kk:fills urn:kk:slot:<id> (one per slot it declares) ; kk:emits, kk:consumes and
+                                    kk:mayConsume each term it declares (R5-O18 (7))
   a distribution file (given)       urn:kk:distribution:<id> rdfs:label ; owl:versionInfo ; dcterms:hasPart each
                                     kernel slot it uses and each application slot it declares, which is encoded
                                     as a slot like the kernel's (contract: its interface, else its phase)
@@ -20,6 +21,8 @@ from __future__ import annotations
 import re
 
 import yaml
+
+from kk.terms import declared
 
 KK = "https://w3id.org/knowledge-kernel/ns#"
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
@@ -131,6 +134,11 @@ def provider(rel: str, text: str, name: str) -> list[dict]:
         ops.append(claim(p, LICENSE, entity(f"https://spdx.org/licenses/{doc['license']}"), src.ref(src.line(r"^license:"))))
     at = src.line(r"^slots:")
     ops += [claim(p, KK + "fills", entity(slot_iri(s)), src.ref(at)) for s in doc["slots"]]
+    emits, needs, may = declared(doc)
+    for key, pred, found in (("emits", "emits", emits), ("consumes", "consumes", needs), ("consumes", "mayConsume", may)):
+        if found:
+            at = src.line(rf"^{key}:")
+            ops += [claim(p, KK + pred, entity(t), src.ref(at)) for t in sorted(found)]
     return ops
 
 

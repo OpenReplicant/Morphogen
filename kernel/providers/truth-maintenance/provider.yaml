@@ -3,6 +3,8 @@ name: Truth maintenance
 version: 0.2.0
 license: Apache-2.0
 slots: [truth-maintenance]
+emits: []
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/truth-maintenance (D-89, M6-T12); plan.py unchanged, the service follows the change feed
 requires: Python 3.12+, psycopg (service)
 migration: migration.sql

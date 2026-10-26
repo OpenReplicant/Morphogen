@@ -3,6 +3,8 @@ name: 'Recall: BM25 over claims'
 version: 0.2.0
 license: Apache-2.0
 slots: [recall]
+emits: []
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/recall-index (index and api.recall unchanged); the worker follows the change feed
 requires: PostgreSQL 16+ (no extension), Python 3.12+, psycopg
 migration: migration.sql
