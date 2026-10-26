@@ -313,6 +313,8 @@ results in `runs/`:
 - `kernel/evals/self-model`, `morphogen/evals/self-model`: questions about the system's own structure (G7).
 - `morphogen/evals/rcaeval`: root-cause ranking.
 - `morphogen/evals/design`: the design interview with Haiku as the interviewer.
+- `morphogen/evals/ranking`: does the order the gap finder's questions are asked in matter (simulated interviews over real
+  compose files; R5-53).
 - `morphogen/evals/g2`: recorded self-modification runs.
 
 Rules:

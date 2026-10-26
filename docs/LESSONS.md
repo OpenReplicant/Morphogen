@@ -133,6 +133,9 @@ rebuild does not use (RuleGo, PostgREST, its `kk` command and Docker stack, Cadd
   claim older than 10 s has a belief", not "zero unscored right now".
 - A green eval proves little until it fails when the logic is broken: mutation-check evals (disable
   SHACL, count copies naively) once when you write them.
+- Mutating a file by hand and copying it back can run the mutant again: Python trusts a cached `.pyc` whose source has
+  the same size and the same mtime second, and a mutant like `(a, b)` to `(b, a)` keeps the size. Set
+  `PYTHONDONTWRITEBYTECODE=1` and clear `__pycache__` (`kernel/contract/mutants.py` copies each provider without it).
 - Ask the real runtime, not just unit tests: the UI's check runs in headless Chromium, and the Quadlet units are
   run through Podman's own generator.
 

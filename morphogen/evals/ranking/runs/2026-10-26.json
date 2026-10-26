@@ -1,0 +1,2722 @@
+{
+ "corpus": [
+  [
+   "docker/awesome-compose",
+   "30f4b7f6a6c3b0c0ecf4d4efb0de203c48d11562"
+  ],
+  [
+   "delimitrou/DeathStarBench",
+   "6ecb09706140f8730b5385c08f1386c654c3c526"
+  ],
+  [
+   "microservices-demo/microservices-demo",
+   "9dff06fae4981921caec6a62393a6ebfce4b3e3f"
+  ]
+ ],
+ "seeds": 20,
+ "verdicts": [
+  "ranked: systems of 10 or more services: 3; questions fixed 170, ranked 170 (+0.0%); connections unknown at the end fixed 18, ranked 18: dropped",
+  "ranked-images: systems of 10 or more services: 3; questions fixed 170, ranked-images 169 (-0.6%); connections unknown at the end fixed 18, ranked-images 13: dropped",
+  "names: systems of 10 or more services: 3; questions fixed 170, names 167 (-1.8%); connections unknown at the end fixed 18, names 13: dropped",
+  "hindsight: systems of 10 or more services: 3; questions fixed 170, hindsight 142 (-16.5%); connections unknown at the end fixed 18, hindsight 0: the measure with the answers known, not an interviewer"
+ ],
+ "systems": [
+  {
+   "app": "DeathStarBench/socialNetwork",
+   "file": "DeathStarBench/socialNetwork/docker-compose-swarm.yml",
+   "services": 31,
+   "connections": 61,
+   "fixed": {
+    "questions": 73,
+    "by_kind": {
+     "no-image": 31,
+     "unconnected": 22,
+     "no-limit": 20
+    },
+    "unknown": 12,
+    "order": [
+     "no-image cassandra",
+     "no-image cassandra-schema",
+     "no-image compose-post-service",
+     "no-image home-timeline-redis",
+     "no-image home-timeline-service",
+     "no-image jaeger-agent",
+     "no-image jaeger-collector",
+     "no-image jaeger-query",
+     "no-image media-frontend",
+     "no-image media-memcached",
+     "no-image media-mongodb",
+     "no-image media-service",
+     "no-image nginx-web-server",
+     "no-image post-storage-memcached",
+     "no-image post-storage-mongodb",
+     "no-image post-storage-service",
+     "no-image social-graph-mongodb",
+     "no-image social-graph-redis",
+     "no-image social-graph-service",
+     "no-image text-service",
+     "no-image unique-id-service",
+     "no-image url-shorten-memcached",
+     "no-image url-shorten-mongodb",
+     "no-image url-shorten-service",
+     "no-image user-memcached",
+     "no-image user-mention-service",
+     "no-image user-mongodb",
+     "no-image user-service",
+     "no-image user-timeline-mongodb",
+     "no-image user-timeline-redis",
+     "no-image user-timeline-service",
+     "unconnected cassandra",
+     "unconnected compose-post-service",
+     "unconnected home-timeline-redis",
+     "unconnected home-timeline-service",
+     "unconnected jaeger-collector",
+     "unconnected media-frontend",
+     "unconnected media-memcached",
+     "unconnected media-mongodb",
+     "unconnected nginx-web-server",
+     "unconnected post-storage-memcached",
+     "unconnected post-storage-mongodb",
+     "unconnected social-graph-mongodb",
+     "unconnected social-graph-redis",
+     "unconnected text-service",
+     "unconnected unique-id-service",
+     "unconnected url-shorten-memcached",
+     "unconnected url-shorten-mongodb",
+     "unconnected user-memcached",
+     "unconnected user-mention-service",
+     "unconnected user-mongodb",
+     "unconnected user-timeline-mongodb",
+     "unconnected user-timeline-redis",
+     "no-limit compose-post-service",
+     "no-limit home-timeline-redis",
+     "no-limit home-timeline-service",
+     "no-limit media-frontend",
+     "no-limit media-memcached",
+     "no-limit media-service",
+     "no-limit nginx-web-server",
+     "no-limit post-storage-memcached",
+     "no-limit post-storage-service",
+     "no-limit social-graph-redis",
+     "no-limit social-graph-service",
+     "no-limit text-service",
+     "no-limit unique-id-service",
+     "no-limit url-shorten-memcached",
+     "no-limit url-shorten-service",
+     "no-limit user-memcached",
+     "no-limit user-mention-service",
+     "no-limit user-service",
+     "no-limit user-timeline-redis",
+     "no-limit user-timeline-service"
+    ]
+   },
+   "ranked": {
+    "questions": 73,
+    "by_kind": {
+     "unconnected": 22,
+     "no-image": 31,
+     "no-limit": 20
+    },
+    "unknown": 12,
+    "order": [
+     "unconnected cassandra",
+     "unconnected compose-post-service",
+     "unconnected home-timeline-redis",
+     "unconnected home-timeline-service",
+     "unconnected jaeger-collector",
+     "unconnected media-frontend",
+     "unconnected media-memcached",
+     "unconnected media-mongodb",
+     "unconnected nginx-web-server",
+     "unconnected post-storage-memcached",
+     "unconnected post-storage-mongodb",
+     "unconnected social-graph-mongodb",
+     "unconnected social-graph-redis",
+     "unconnected text-service",
+     "unconnected unique-id-service",
+     "unconnected url-shorten-memcached",
+     "unconnected url-shorten-mongodb",
+     "unconnected user-memcached",
+     "unconnected user-mention-service",
+     "unconnected user-mongodb",
+     "unconnected user-timeline-mongodb",
+     "unconnected user-timeline-redis",
+     "no-image cassandra",
+     "no-image cassandra-schema",
+     "no-image compose-post-service",
+     "no-image home-timeline-redis",
+     "no-image home-timeline-service",
+     "no-image jaeger-agent",
+     "no-image jaeger-collector",
+     "no-image jaeger-query",
+     "no-image media-frontend",
+     "no-image media-memcached",
+     "no-image media-mongodb",
+     "no-image media-service",
+     "no-image nginx-web-server",
+     "no-image post-storage-memcached",
+     "no-image post-storage-mongodb",
+     "no-image post-storage-service",
+     "no-image social-graph-mongodb",
+     "no-image social-graph-redis",
+     "no-image social-graph-service",
+     "no-image text-service",
+     "no-image unique-id-service",
+     "no-image url-shorten-memcached",
+     "no-image url-shorten-mongodb",
+     "no-image url-shorten-service",
+     "no-image user-memcached",
+     "no-image user-mention-service",
+     "no-image user-mongodb",
+     "no-image user-service",
+     "no-image user-timeline-mongodb",
+     "no-image user-timeline-redis",
+     "no-image user-timeline-service",
+     "no-limit compose-post-service",
+     "no-limit home-timeline-redis",
+     "no-limit home-timeline-service",
+     "no-limit media-frontend",
+     "no-limit media-memcached",
+     "no-limit media-service",
+     "no-limit nginx-web-server",
+     "no-limit post-storage-memcached",
+     "no-limit post-storage-service",
+     "no-limit social-graph-redis",
+     "no-limit social-graph-service",
+     "no-limit text-service",
+     "no-limit unique-id-service",
+     "no-limit url-shorten-memcached",
+     "no-limit url-shorten-service",
+     "no-limit user-memcached",
+     "no-limit user-mention-service",
+     "no-limit user-service",
+     "no-limit user-timeline-redis",
+     "no-limit user-timeline-service"
+    ]
+   },
+   "ranked-images": {
+    "questions": 73,
+    "by_kind": {
+     "no-image": 31,
+     "unconnected": 22,
+     "no-limit": 20
+    },
+    "unknown": 13,
+    "order": [
+     "no-image cassandra",
+     "no-image cassandra-schema",
+     "no-image compose-post-service",
+     "no-image home-timeline-redis",
+     "no-image home-timeline-service",
+     "no-image jaeger-agent",
+     "no-image jaeger-collector",
+     "no-image jaeger-query",
+     "no-image media-frontend",
+     "no-image media-memcached",
+     "no-image media-mongodb",
+     "no-image media-service",
+     "no-image nginx-web-server",
+     "no-image post-storage-memcached",
+     "no-image post-storage-mongodb",
+     "no-image post-storage-service",
+     "no-image social-graph-mongodb",
+     "no-image social-graph-redis",
+     "no-image social-graph-service",
+     "no-image text-service",
+     "no-image unique-id-service",
+     "no-image url-shorten-memcached",
+     "no-image url-shorten-mongodb",
+     "no-image url-shorten-service",
+     "no-image user-memcached",
+     "no-image user-mention-service",
+     "no-image user-mongodb",
+     "no-image user-service",
+     "no-image user-timeline-mongodb",
+     "no-image user-timeline-redis",
+     "no-image user-timeline-service",
+     "unconnected cassandra",
+     "unconnected compose-post-service",
+     "unconnected home-timeline-redis",
+     "unconnected home-timeline-service",
+     "unconnected jaeger-collector",
+     "unconnected media-frontend",
+     "unconnected media-memcached",
+     "unconnected media-service",
+     "unconnected nginx-web-server",
+     "unconnected post-storage-memcached",
+     "unconnected post-storage-service",
+     "unconnected social-graph-redis",
+     "unconnected social-graph-service",
+     "unconnected text-service",
+     "unconnected unique-id-service",
+     "unconnected url-shorten-memcached",
+     "unconnected url-shorten-service",
+     "unconnected user-memcached",
+     "unconnected user-mention-service",
+     "unconnected user-service",
+     "unconnected user-timeline-redis",
+     "unconnected user-timeline-service",
+     "no-limit compose-post-service",
+     "no-limit home-timeline-redis",
+     "no-limit home-timeline-service",
+     "no-limit media-frontend",
+     "no-limit media-memcached",
+     "no-limit media-service",
+     "no-limit nginx-web-server",
+     "no-limit post-storage-memcached",
+     "no-limit post-storage-service",
+     "no-limit social-graph-redis",
+     "no-limit social-graph-service",
+     "no-limit text-service",
+     "no-limit unique-id-service",
+     "no-limit url-shorten-memcached",
+     "no-limit url-shorten-service",
+     "no-limit user-memcached",
+     "no-limit user-mention-service",
+     "no-limit user-service",
+     "no-limit user-timeline-redis",
+     "no-limit user-timeline-service"
+    ]
+   },
+   "names": {
+    "questions": 73,
+    "by_kind": {
+     "unconnected": 22,
+     "no-image": 31,
+     "no-limit": 20
+    },
+    "unknown": 12,
+    "order": [
+     "unconnected cassandra",
+     "unconnected nginx-web-server",
+     "unconnected jaeger-collector",
+     "unconnected text-service",
+     "unconnected unique-id-service",
+     "unconnected media-memcached",
+     "unconnected media-mongodb",
+     "unconnected social-graph-mongodb",
+     "unconnected social-graph-redis",
+     "unconnected url-shorten-memcached",
+     "unconnected url-shorten-mongodb",
+     "unconnected compose-post-service",
+     "unconnected post-storage-memcached",
+     "unconnected post-storage-mongodb",
+     "unconnected home-timeline-redis",
+     "unconnected home-timeline-service",
+     "unconnected media-frontend",
+     "unconnected user-memcached",
+     "unconnected user-mention-service",
+     "unconnected user-mongodb",
+     "unconnected user-timeline-mongodb",
+     "unconnected user-timeline-redis",
+     "no-image cassandra",
+     "no-image cassandra-schema",
+     "no-image compose-post-service",
+     "no-image home-timeline-redis",
+     "no-image home-timeline-service",
+     "no-image jaeger-agent",
+     "no-image jaeger-collector",
+     "no-image jaeger-query",
+     "no-image media-frontend",
+     "no-image media-memcached",
+     "no-image media-mongodb",
+     "no-image media-service",
+     "no-image nginx-web-server",
+     "no-image post-storage-memcached",
+     "no-image post-storage-mongodb",
+     "no-image post-storage-service",
+     "no-image social-graph-mongodb",
+     "no-image social-graph-redis",
+     "no-image social-graph-service",
+     "no-image text-service",
+     "no-image unique-id-service",
+     "no-image url-shorten-memcached",
+     "no-image url-shorten-mongodb",
+     "no-image url-shorten-service",
+     "no-image user-memcached",
+     "no-image user-mention-service",
+     "no-image user-mongodb",
+     "no-image user-service",
+     "no-image user-timeline-mongodb",
+     "no-image user-timeline-redis",
+     "no-image user-timeline-service",
+     "no-limit compose-post-service",
+     "no-limit home-timeline-redis",
+     "no-limit home-timeline-service",
+     "no-limit media-frontend",
+     "no-limit media-memcached",
+     "no-limit media-service",
+     "no-limit nginx-web-server",
+     "no-limit post-storage-memcached",
+     "no-limit post-storage-service",
+     "no-limit social-graph-redis",
+     "no-limit social-graph-service",
+     "no-limit text-service",
+     "no-limit unique-id-service",
+     "no-limit url-shorten-memcached",
+     "no-limit url-shorten-service",
+     "no-limit user-memcached",
+     "no-limit user-mention-service",
+     "no-limit user-service",
+     "no-limit user-timeline-redis",
+     "no-limit user-timeline-service"
+    ]
+   },
+   "hindsight": {
+    "questions": 60,
+    "by_kind": {
+     "unconnected": 2,
+     "no-image": 31,
+     "no-limit": 27
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected jaeger-agent",
+     "unconnected cassandra-schema",
+     "no-image cassandra",
+     "no-image cassandra-schema",
+     "no-image compose-post-service",
+     "no-image home-timeline-redis",
+     "no-image home-timeline-service",
+     "no-image jaeger-agent",
+     "no-image jaeger-collector",
+     "no-image jaeger-query",
+     "no-image media-frontend",
+     "no-image media-memcached",
+     "no-image media-mongodb",
+     "no-image media-service",
+     "no-image nginx-web-server",
+     "no-image post-storage-memcached",
+     "no-image post-storage-mongodb",
+     "no-image post-storage-service",
+     "no-image social-graph-mongodb",
+     "no-image social-graph-redis",
+     "no-image social-graph-service",
+     "no-image text-service",
+     "no-image unique-id-service",
+     "no-image url-shorten-memcached",
+     "no-image url-shorten-mongodb",
+     "no-image url-shorten-service",
+     "no-image user-memcached",
+     "no-image user-mention-service",
+     "no-image user-mongodb",
+     "no-image user-service",
+     "no-image user-timeline-mongodb",
+     "no-image user-timeline-redis",
+     "no-image user-timeline-service",
+     "no-limit compose-post-service",
+     "no-limit home-timeline-redis",
+     "no-limit home-timeline-service",
+     "no-limit jaeger-query",
+     "no-limit media-frontend",
+     "no-limit media-memcached",
+     "no-limit media-mongodb",
+     "no-limit media-service",
+     "no-limit nginx-web-server",
+     "no-limit post-storage-memcached",
+     "no-limit post-storage-mongodb",
+     "no-limit post-storage-service",
+     "no-limit social-graph-mongodb",
+     "no-limit social-graph-redis",
+     "no-limit social-graph-service",
+     "no-limit text-service",
+     "no-limit unique-id-service",
+     "no-limit url-shorten-memcached",
+     "no-limit url-shorten-mongodb",
+     "no-limit url-shorten-service",
+     "no-limit user-memcached",
+     "no-limit user-mention-service",
+     "no-limit user-mongodb",
+     "no-limit user-service",
+     "no-limit user-timeline-mongodb",
+     "no-limit user-timeline-redis",
+     "no-limit user-timeline-service"
+    ]
+   },
+   "random": {
+    "mean": 72.8,
+    "min": 61,
+    "max": 74,
+    "unknown": 15.1
+   }
+  },
+  {
+   "app": "DeathStarBench/hotelReservation",
+   "file": "DeathStarBench/hotelReservation/docker-compose.yml",
+   "services": 23,
+   "connections": 22,
+   "fixed": {
+    "questions": 47,
+    "by_kind": {
+     "no-image": 23,
+     "unconnected": 14,
+     "no-limit": 10
+    },
+    "unknown": 6,
+    "order": [
+     "no-image attractions",
+     "no-image consul",
+     "no-image frontend",
+     "no-image geo",
+     "no-image memcached-profile",
+     "no-image memcached-rate",
+     "no-image memcached-reserve",
+     "no-image memcached-review",
+     "no-image mongodb-attractions",
+     "no-image mongodb-geo",
+     "no-image mongodb-profile",
+     "no-image mongodb-rate",
+     "no-image mongodb-recommendation",
+     "no-image mongodb-reservation",
+     "no-image mongodb-review",
+     "no-image mongodb-user",
+     "no-image profile",
+     "no-image rate",
+     "no-image recommendation",
+     "no-image reservation",
+     "no-image review",
+     "no-image search",
+     "no-image user",
+     "unconnected attractions",
+     "unconnected frontend",
+     "unconnected geo",
+     "unconnected memcached-profile",
+     "unconnected memcached-rate",
+     "unconnected memcached-reserve",
+     "unconnected memcached-review",
+     "unconnected mongodb-profile",
+     "unconnected mongodb-rate",
+     "unconnected mongodb-recommendation",
+     "unconnected mongodb-reservation",
+     "unconnected mongodb-review",
+     "unconnected mongodb-user",
+     "unconnected search",
+     "no-limit attractions",
+     "no-limit frontend",
+     "no-limit geo",
+     "no-limit profile",
+     "no-limit rate",
+     "no-limit recommendation",
+     "no-limit reservation",
+     "no-limit review",
+     "no-limit search",
+     "no-limit user"
+    ]
+   },
+   "ranked": {
+    "questions": 47,
+    "by_kind": {
+     "unconnected": 14,
+     "no-image": 23,
+     "no-limit": 10
+    },
+    "unknown": 6,
+    "order": [
+     "unconnected attractions",
+     "unconnected frontend",
+     "unconnected geo",
+     "unconnected memcached-profile",
+     "unconnected memcached-rate",
+     "unconnected memcached-reserve",
+     "unconnected memcached-review",
+     "unconnected mongodb-profile",
+     "unconnected mongodb-rate",
+     "unconnected mongodb-recommendation",
+     "unconnected mongodb-reservation",
+     "unconnected mongodb-review",
+     "unconnected mongodb-user",
+     "unconnected search",
+     "no-image attractions",
+     "no-image consul",
+     "no-image frontend",
+     "no-image geo",
+     "no-image memcached-profile",
+     "no-image memcached-rate",
+     "no-image memcached-reserve",
+     "no-image memcached-review",
+     "no-image mongodb-attractions",
+     "no-image mongodb-geo",
+     "no-image mongodb-profile",
+     "no-image mongodb-rate",
+     "no-image mongodb-recommendation",
+     "no-image mongodb-reservation",
+     "no-image mongodb-review",
+     "no-image mongodb-user",
+     "no-image profile",
+     "no-image rate",
+     "no-image recommendation",
+     "no-image reservation",
+     "no-image review",
+     "no-image search",
+     "no-image user",
+     "no-limit attractions",
+     "no-limit frontend",
+     "no-limit geo",
+     "no-limit profile",
+     "no-limit rate",
+     "no-limit recommendation",
+     "no-limit reservation",
+     "no-limit review",
+     "no-limit search",
+     "no-limit user"
+    ]
+   },
+   "ranked-images": {
+    "questions": 46,
+    "by_kind": {
+     "no-image": 23,
+     "unconnected": 13,
+     "no-limit": 10
+    },
+    "unknown": 0,
+    "order": [
+     "no-image attractions",
+     "no-image consul",
+     "no-image frontend",
+     "no-image geo",
+     "no-image memcached-profile",
+     "no-image memcached-rate",
+     "no-image memcached-reserve",
+     "no-image memcached-review",
+     "no-image mongodb-attractions",
+     "no-image mongodb-geo",
+     "no-image mongodb-profile",
+     "no-image mongodb-rate",
+     "no-image mongodb-recommendation",
+     "no-image mongodb-reservation",
+     "no-image mongodb-review",
+     "no-image mongodb-user",
+     "no-image profile",
+     "no-image rate",
+     "no-image recommendation",
+     "no-image reservation",
+     "no-image review",
+     "no-image search",
+     "no-image user",
+     "unconnected mongodb-attractions",
+     "unconnected consul",
+     "unconnected mongodb-geo",
+     "unconnected mongodb-profile",
+     "unconnected mongodb-rate",
+     "unconnected mongodb-recommendation",
+     "unconnected mongodb-reservation",
+     "unconnected memcached-profile",
+     "unconnected memcached-rate",
+     "unconnected mongodb-review",
+     "unconnected memcached-reserve",
+     "unconnected mongodb-user",
+     "unconnected memcached-review",
+     "no-limit attractions",
+     "no-limit frontend",
+     "no-limit geo",
+     "no-limit profile",
+     "no-limit rate",
+     "no-limit recommendation",
+     "no-limit reservation",
+     "no-limit review",
+     "no-limit search",
+     "no-limit user"
+    ]
+   },
+   "names": {
+    "questions": 44,
+    "by_kind": {
+     "unconnected": 11,
+     "no-image": 23,
+     "no-limit": 10
+    },
+    "unknown": 1,
+    "order": [
+     "unconnected attractions",
+     "unconnected geo",
+     "unconnected profile",
+     "unconnected rate",
+     "unconnected recommendation",
+     "unconnected frontend",
+     "unconnected reservation",
+     "unconnected memcached-review",
+     "unconnected search",
+     "unconnected user",
+     "unconnected mongodb-review",
+     "no-image attractions",
+     "no-image consul",
+     "no-image frontend",
+     "no-image geo",
+     "no-image memcached-profile",
+     "no-image memcached-rate",
+     "no-image memcached-reserve",
+     "no-image memcached-review",
+     "no-image mongodb-attractions",
+     "no-image mongodb-geo",
+     "no-image mongodb-profile",
+     "no-image mongodb-rate",
+     "no-image mongodb-recommendation",
+     "no-image mongodb-reservation",
+     "no-image mongodb-review",
+     "no-image mongodb-user",
+     "no-image profile",
+     "no-image rate",
+     "no-image recommendation",
+     "no-image reservation",
+     "no-image review",
+     "no-image search",
+     "no-image user",
+     "no-limit attractions",
+     "no-limit frontend",
+     "no-limit geo",
+     "no-limit profile",
+     "no-limit rate",
+     "no-limit recommendation",
+     "no-limit reservation",
+     "no-limit review",
+     "no-limit search",
+     "no-limit user"
+    ]
+   },
+   "hindsight": {
+    "questions": 46,
+    "by_kind": {
+     "unconnected": 13,
+     "no-image": 23,
+     "no-limit": 10
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected consul",
+     "no-image attractions",
+     "no-image consul",
+     "no-image frontend",
+     "no-image geo",
+     "no-image memcached-profile",
+     "no-image memcached-rate",
+     "no-image memcached-reserve",
+     "no-image memcached-review",
+     "no-image mongodb-attractions",
+     "no-image mongodb-geo",
+     "no-image mongodb-profile",
+     "no-image mongodb-rate",
+     "no-image mongodb-recommendation",
+     "no-image mongodb-reservation",
+     "no-image mongodb-review",
+     "no-image mongodb-user",
+     "no-image profile",
+     "no-image rate",
+     "no-image recommendation",
+     "no-image reservation",
+     "no-image review",
+     "no-image search",
+     "no-image user",
+     "unconnected memcached-profile",
+     "unconnected memcached-rate",
+     "unconnected memcached-reserve",
+     "unconnected memcached-review",
+     "unconnected mongodb-attractions",
+     "unconnected mongodb-geo",
+     "unconnected mongodb-profile",
+     "unconnected mongodb-rate",
+     "unconnected mongodb-recommendation",
+     "unconnected mongodb-reservation",
+     "unconnected mongodb-review",
+     "unconnected mongodb-user",
+     "no-limit attractions",
+     "no-limit frontend",
+     "no-limit geo",
+     "no-limit profile",
+     "no-limit rate",
+     "no-limit recommendation",
+     "no-limit reservation",
+     "no-limit review",
+     "no-limit search",
+     "no-limit user"
+    ]
+   },
+   "random": {
+    "mean": 46.15,
+    "min": 45,
+    "max": 47,
+    "unknown": 4.05
+   }
+  },
+  {
+   "app": "microservices-demo/sock-shop",
+   "file": "microservices-demo/deploy/docker-compose/docker-compose.logging.yml",
+   "services": 18,
+   "connections": 17,
+   "fixed": {
+    "questions": 50,
+    "by_kind": {
+     "no-image": 18,
+     "unconnected": 16,
+     "no-limit": 16
+    },
+    "unknown": 0,
+    "order": [
+     "no-image carts",
+     "no-image carts-db",
+     "no-image catalogue",
+     "no-image catalogue-db",
+     "no-image edge-router",
+     "no-image elasticsearch",
+     "no-image front-end",
+     "no-image kibana",
+     "no-image log-server",
+     "no-image orders",
+     "no-image orders-db",
+     "no-image payment",
+     "no-image queue-master",
+     "no-image rabbitmq",
+     "no-image shipping",
+     "no-image user",
+     "no-image user-db",
+     "no-image user-sim",
+     "unconnected carts",
+     "unconnected carts-db",
+     "unconnected catalogue",
+     "unconnected catalogue-db",
+     "unconnected edge-router",
+     "unconnected elasticsearch",
+     "unconnected front-end",
+     "unconnected orders",
+     "unconnected orders-db",
+     "unconnected payment",
+     "unconnected queue-master",
+     "unconnected rabbitmq",
+     "unconnected shipping",
+     "unconnected user",
+     "unconnected user-db",
+     "unconnected user-sim",
+     "no-limit carts",
+     "no-limit carts-db",
+     "no-limit catalogue",
+     "no-limit catalogue-db",
+     "no-limit edge-router",
+     "no-limit front-end",
+     "no-limit kibana",
+     "no-limit orders",
+     "no-limit orders-db",
+     "no-limit payment",
+     "no-limit queue-master",
+     "no-limit rabbitmq",
+     "no-limit shipping",
+     "no-limit user",
+     "no-limit user-db",
+     "no-limit user-sim"
+    ]
+   },
+   "ranked": {
+    "questions": 50,
+    "by_kind": {
+     "unconnected": 16,
+     "no-image": 18,
+     "no-limit": 16
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected carts",
+     "unconnected carts-db",
+     "unconnected catalogue",
+     "unconnected catalogue-db",
+     "unconnected edge-router",
+     "unconnected elasticsearch",
+     "unconnected front-end",
+     "unconnected orders",
+     "unconnected orders-db",
+     "unconnected payment",
+     "unconnected queue-master",
+     "unconnected rabbitmq",
+     "unconnected shipping",
+     "unconnected user",
+     "unconnected user-db",
+     "unconnected user-sim",
+     "no-image carts",
+     "no-image carts-db",
+     "no-image catalogue",
+     "no-image catalogue-db",
+     "no-image edge-router",
+     "no-image elasticsearch",
+     "no-image front-end",
+     "no-image kibana",
+     "no-image log-server",
+     "no-image orders",
+     "no-image orders-db",
+     "no-image payment",
+     "no-image queue-master",
+     "no-image rabbitmq",
+     "no-image shipping",
+     "no-image user",
+     "no-image user-db",
+     "no-image user-sim",
+     "no-limit carts",
+     "no-limit carts-db",
+     "no-limit catalogue",
+     "no-limit catalogue-db",
+     "no-limit edge-router",
+     "no-limit front-end",
+     "no-limit kibana",
+     "no-limit orders",
+     "no-limit orders-db",
+     "no-limit payment",
+     "no-limit queue-master",
+     "no-limit rabbitmq",
+     "no-limit shipping",
+     "no-limit user",
+     "no-limit user-db",
+     "no-limit user-sim"
+    ]
+   },
+   "ranked-images": {
+    "questions": 50,
+    "by_kind": {
+     "no-image": 18,
+     "unconnected": 16,
+     "no-limit": 16
+    },
+    "unknown": 0,
+    "order": [
+     "no-image carts",
+     "no-image carts-db",
+     "no-image catalogue",
+     "no-image catalogue-db",
+     "no-image edge-router",
+     "no-image elasticsearch",
+     "no-image front-end",
+     "no-image kibana",
+     "no-image log-server",
+     "no-image orders",
+     "no-image orders-db",
+     "no-image payment",
+     "no-image queue-master",
+     "no-image rabbitmq",
+     "no-image shipping",
+     "no-image user",
+     "no-image user-db",
+     "no-image user-sim",
+     "unconnected carts",
+     "unconnected carts-db",
+     "unconnected catalogue",
+     "unconnected catalogue-db",
+     "unconnected edge-router",
+     "unconnected elasticsearch",
+     "unconnected front-end",
+     "unconnected orders",
+     "unconnected orders-db",
+     "unconnected payment",
+     "unconnected queue-master",
+     "unconnected rabbitmq",
+     "unconnected shipping",
+     "unconnected user",
+     "unconnected user-db",
+     "unconnected user-sim",
+     "no-limit carts",
+     "no-limit carts-db",
+     "no-limit catalogue",
+     "no-limit catalogue-db",
+     "no-limit edge-router",
+     "no-limit front-end",
+     "no-limit kibana",
+     "no-limit orders",
+     "no-limit orders-db",
+     "no-limit payment",
+     "no-limit queue-master",
+     "no-limit rabbitmq",
+     "no-limit shipping",
+     "no-limit user",
+     "no-limit user-db",
+     "no-limit user-sim"
+    ]
+   },
+   "names": {
+    "questions": 50,
+    "by_kind": {
+     "unconnected": 16,
+     "no-image": 18,
+     "no-limit": 16
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected carts-db",
+     "unconnected catalogue-db",
+     "unconnected orders-db",
+     "unconnected user-db",
+     "unconnected carts",
+     "unconnected catalogue",
+     "unconnected edge-router",
+     "unconnected elasticsearch",
+     "unconnected front-end",
+     "unconnected orders",
+     "unconnected payment",
+     "unconnected queue-master",
+     "unconnected rabbitmq",
+     "unconnected shipping",
+     "unconnected user",
+     "unconnected user-sim",
+     "no-image carts",
+     "no-image carts-db",
+     "no-image catalogue",
+     "no-image catalogue-db",
+     "no-image edge-router",
+     "no-image elasticsearch",
+     "no-image front-end",
+     "no-image kibana",
+     "no-image log-server",
+     "no-image orders",
+     "no-image orders-db",
+     "no-image payment",
+     "no-image queue-master",
+     "no-image rabbitmq",
+     "no-image shipping",
+     "no-image user",
+     "no-image user-db",
+     "no-image user-sim",
+     "no-limit carts",
+     "no-limit carts-db",
+     "no-limit catalogue",
+     "no-limit catalogue-db",
+     "no-limit edge-router",
+     "no-limit front-end",
+     "no-limit kibana",
+     "no-limit orders",
+     "no-limit orders-db",
+     "no-limit payment",
+     "no-limit queue-master",
+     "no-limit rabbitmq",
+     "no-limit shipping",
+     "no-limit user",
+     "no-limit user-db",
+     "no-limit user-sim"
+    ]
+   },
+   "hindsight": {
+    "questions": 36,
+    "by_kind": {
+     "unconnected": 2,
+     "no-image": 18,
+     "no-limit": 16
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected log-server",
+     "no-image carts",
+     "no-image carts-db",
+     "no-image catalogue",
+     "no-image catalogue-db",
+     "no-image edge-router",
+     "no-image elasticsearch",
+     "no-image front-end",
+     "no-image kibana",
+     "no-image log-server",
+     "no-image orders",
+     "no-image orders-db",
+     "no-image payment",
+     "no-image queue-master",
+     "no-image rabbitmq",
+     "no-image shipping",
+     "no-image user",
+     "no-image user-db",
+     "no-image user-sim",
+     "unconnected kibana",
+     "no-limit carts",
+     "no-limit carts-db",
+     "no-limit catalogue",
+     "no-limit catalogue-db",
+     "no-limit edge-router",
+     "no-limit front-end",
+     "no-limit kibana",
+     "no-limit orders",
+     "no-limit orders-db",
+     "no-limit payment",
+     "no-limit queue-master",
+     "no-limit rabbitmq",
+     "no-limit shipping",
+     "no-limit user",
+     "no-limit user-db",
+     "no-limit user-sim"
+    ]
+   },
+   "random": {
+    "mean": 48.6,
+    "min": 36,
+    "max": 50,
+    "unknown": 0.4
+   }
+  },
+  {
+   "app": "DeathStarBench/mediaMicroservices",
+   "file": "DeathStarBench/mediaMicroservices/docker-compose-sharding.yml",
+   "services": 8,
+   "connections": 7,
+   "fixed": {
+    "questions": 16,
+    "by_kind": {
+     "no-image": 8,
+     "unconnected": 7,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image user-mongodb-config",
+     "no-image user-mongodb-router",
+     "no-image user-mongodb-shard-1_1",
+     "no-image user-mongodb-shard-1_2",
+     "no-image user-mongodb-shard-2_1",
+     "no-image user-mongodb-shard-2_2",
+     "no-image user-mongodb-shard-3_1",
+     "no-image user-mongodb-shard-3_2",
+     "unconnected user-mongodb-config",
+     "unconnected user-mongodb-shard-1_1",
+     "unconnected user-mongodb-shard-1_2",
+     "unconnected user-mongodb-shard-2_1",
+     "unconnected user-mongodb-shard-2_2",
+     "unconnected user-mongodb-shard-3_1",
+     "unconnected user-mongodb-shard-3_2",
+     "no-limit user-mongodb-router"
+    ]
+   },
+   "ranked": {
+    "questions": 16,
+    "by_kind": {
+     "unconnected": 7,
+     "no-image": 8,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected user-mongodb-config",
+     "unconnected user-mongodb-shard-1_1",
+     "unconnected user-mongodb-shard-1_2",
+     "unconnected user-mongodb-shard-2_1",
+     "unconnected user-mongodb-shard-2_2",
+     "unconnected user-mongodb-shard-3_1",
+     "unconnected user-mongodb-shard-3_2",
+     "no-image user-mongodb-config",
+     "no-image user-mongodb-router",
+     "no-image user-mongodb-shard-1_1",
+     "no-image user-mongodb-shard-1_2",
+     "no-image user-mongodb-shard-2_1",
+     "no-image user-mongodb-shard-2_2",
+     "no-image user-mongodb-shard-3_1",
+     "no-image user-mongodb-shard-3_2",
+     "no-limit user-mongodb-router"
+    ]
+   },
+   "ranked-images": {
+    "questions": 16,
+    "by_kind": {
+     "no-image": 8,
+     "unconnected": 7,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image user-mongodb-config",
+     "no-image user-mongodb-router",
+     "no-image user-mongodb-shard-1_1",
+     "no-image user-mongodb-shard-1_2",
+     "no-image user-mongodb-shard-2_1",
+     "no-image user-mongodb-shard-2_2",
+     "no-image user-mongodb-shard-3_1",
+     "no-image user-mongodb-shard-3_2",
+     "unconnected user-mongodb-config",
+     "unconnected user-mongodb-shard-1_1",
+     "unconnected user-mongodb-shard-1_2",
+     "unconnected user-mongodb-shard-2_1",
+     "unconnected user-mongodb-shard-2_2",
+     "unconnected user-mongodb-shard-3_1",
+     "unconnected user-mongodb-shard-3_2",
+     "no-limit user-mongodb-router"
+    ]
+   },
+   "names": {
+    "questions": 16,
+    "by_kind": {
+     "unconnected": 7,
+     "no-image": 8,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected user-mongodb-config",
+     "unconnected user-mongodb-shard-1_1",
+     "unconnected user-mongodb-shard-1_2",
+     "unconnected user-mongodb-shard-2_1",
+     "unconnected user-mongodb-shard-2_2",
+     "unconnected user-mongodb-shard-3_1",
+     "unconnected user-mongodb-shard-3_2",
+     "no-image user-mongodb-config",
+     "no-image user-mongodb-router",
+     "no-image user-mongodb-shard-1_1",
+     "no-image user-mongodb-shard-1_2",
+     "no-image user-mongodb-shard-2_1",
+     "no-image user-mongodb-shard-2_2",
+     "no-image user-mongodb-shard-3_1",
+     "no-image user-mongodb-shard-3_2",
+     "no-limit user-mongodb-router"
+    ]
+   },
+   "hindsight": {
+    "questions": 10,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 8,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected user-mongodb-router",
+     "no-image user-mongodb-config",
+     "no-image user-mongodb-router",
+     "no-image user-mongodb-shard-1_1",
+     "no-image user-mongodb-shard-1_2",
+     "no-image user-mongodb-shard-2_1",
+     "no-image user-mongodb-shard-2_2",
+     "no-image user-mongodb-shard-3_1",
+     "no-image user-mongodb-shard-3_2",
+     "no-limit user-mongodb-router"
+    ]
+   },
+   "random": {
+    "mean": 16.0,
+    "min": 16,
+    "max": 16,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/elasticsearch-logstash-kibana",
+   "file": "awesome-compose/elasticsearch-logstash-kibana/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 6,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 2
+    },
+    "unknown": 0,
+    "order": [
+     "no-image elasticsearch",
+     "no-image kibana",
+     "no-image logstash",
+     "unconnected elasticsearch",
+     "no-limit kibana",
+     "no-limit logstash"
+    ]
+   },
+   "ranked": {
+    "questions": 6,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 2
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected elasticsearch",
+     "no-image elasticsearch",
+     "no-image kibana",
+     "no-image logstash",
+     "no-limit kibana",
+     "no-limit logstash"
+    ]
+   },
+   "ranked-images": {
+    "questions": 6,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 2
+    },
+    "unknown": 0,
+    "order": [
+     "no-image elasticsearch",
+     "no-image kibana",
+     "no-image logstash",
+     "unconnected elasticsearch",
+     "no-limit kibana",
+     "no-limit logstash"
+    ]
+   },
+   "names": {
+    "questions": 6,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 2
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected elasticsearch",
+     "no-image elasticsearch",
+     "no-image kibana",
+     "no-image logstash",
+     "no-limit kibana",
+     "no-limit logstash"
+    ]
+   },
+   "hindsight": {
+    "questions": 6,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 2
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected elasticsearch",
+     "no-image elasticsearch",
+     "no-image kibana",
+     "no-image logstash",
+     "no-limit kibana",
+     "no-limit logstash"
+    ]
+   },
+   "random": {
+    "mean": 6.55,
+    "min": 6,
+    "max": 7,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-aspnet-mysql",
+   "file": "awesome-compose/nginx-aspnet-mysql/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "ranked-images": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-flask-mongo",
+   "file": "awesome-compose/nginx-flask-mongo/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image mongo",
+     "no-image web",
+     "unconnected backend",
+     "no-limit web"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image mongo",
+     "no-image web",
+     "no-limit web"
+    ]
+   },
+   "ranked-images": {
+    "questions": 6,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image mongo",
+     "no-image web",
+     "unconnected web",
+     "unconnected mongo",
+     "no-limit web"
+    ]
+   },
+   "names": {
+    "questions": 6,
+    "by_kind": {
+     "unconnected": 2,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected mongo",
+     "unconnected web",
+     "no-image backend",
+     "no-image mongo",
+     "no-image web",
+     "no-limit web"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image mongo",
+     "no-image web",
+     "no-limit web"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-flask-mysql",
+   "file": "awesome-compose/nginx-flask-mysql/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "ranked-images": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-golang-mysql",
+   "file": "awesome-compose/nginx-golang-mysql/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "ranked-images": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-golang-postgres",
+   "file": "awesome-compose/nginx-golang-postgres/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "ranked-images": {
+    "questions": 6,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "unconnected proxy",
+     "unconnected db",
+     "no-limit proxy"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-nodejs-redis",
+   "file": "awesome-compose/nginx-nodejs-redis/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image nginx",
+     "no-image web1",
+     "no-image web2",
+     "unconnected nginx",
+     "no-limit nginx"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected nginx",
+     "no-image nginx",
+     "no-image web1",
+     "no-image web2",
+     "no-limit nginx"
+    ]
+   },
+   "ranked-images": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image nginx",
+     "no-image web1",
+     "no-image web2",
+     "unconnected nginx",
+     "no-limit nginx"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected nginx",
+     "no-image nginx",
+     "no-image web1",
+     "no-image web2",
+     "no-limit nginx"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected nginx",
+     "no-image nginx",
+     "no-image web1",
+     "no-image web2",
+     "no-limit nginx"
+    ]
+   },
+   "random": {
+    "mean": 5.75,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/react-express-mongodb",
+   "file": "awesome-compose/react-express-mongodb/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image frontend",
+     "no-image mongo",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image frontend",
+     "no-image mongo",
+     "no-limit frontend"
+    ]
+   },
+   "ranked-images": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image frontend",
+     "no-image mongo",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image frontend",
+     "no-image mongo",
+     "no-limit frontend"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image frontend",
+     "no-image mongo",
+     "no-limit frontend"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/react-express-mysql",
+   "file": "awesome-compose/react-express-mysql/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "ranked-images": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/react-java-mysql",
+   "file": "awesome-compose/react-java-mysql/compose.yaml",
+   "services": 3,
+   "connections": 2,
+   "fixed": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "ranked": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "ranked-images": {
+    "questions": 5,
+    "by_kind": {
+     "no-image": 3,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "names": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "hindsight": {
+    "questions": 5,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 3,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "random": {
+    "mean": 5.8,
+    "min": 5,
+    "max": 6,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/flask-redis",
+   "file": "awesome-compose/flask-redis/compose.yaml",
+   "services": 2,
+   "connections": 1,
+   "fixed": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image redis",
+     "no-image web",
+     "unconnected redis",
+     "no-limit web"
+    ]
+   },
+   "ranked": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected redis",
+     "no-image redis",
+     "no-image web",
+     "no-limit web"
+    ]
+   },
+   "ranked-images": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image redis",
+     "no-image web",
+     "unconnected redis",
+     "no-limit web"
+    ]
+   },
+   "names": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected redis",
+     "no-image redis",
+     "no-image web",
+     "no-limit web"
+    ]
+   },
+   "hindsight": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected web",
+     "no-image redis",
+     "no-image web",
+     "no-limit web"
+    ]
+   },
+   "random": {
+    "mean": 4.0,
+    "min": 4,
+    "max": 4,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-golang",
+   "file": "awesome-compose/nginx-golang/compose.yaml",
+   "services": 2,
+   "connections": 1,
+   "fixed": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image proxy",
+     "unconnected backend",
+     "no-limit proxy"
+    ]
+   },
+   "ranked": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "ranked-images": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image proxy",
+     "unconnected proxy",
+     "no-limit proxy"
+    ]
+   },
+   "names": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected proxy",
+     "no-image backend",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "hindsight": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected proxy",
+     "no-image backend",
+     "no-image proxy",
+     "no-limit proxy"
+    ]
+   },
+   "random": {
+    "mean": 4.0,
+    "min": 4,
+    "max": 4,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/nginx-wsgi-flask",
+   "file": "awesome-compose/nginx-wsgi-flask/compose.yaml",
+   "services": 2,
+   "connections": 1,
+   "fixed": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image flask-app",
+     "no-image nginx-proxy",
+     "unconnected flask-app",
+     "no-limit nginx-proxy"
+    ]
+   },
+   "ranked": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected flask-app",
+     "no-image flask-app",
+     "no-image nginx-proxy",
+     "no-limit nginx-proxy"
+    ]
+   },
+   "ranked-images": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image flask-app",
+     "no-image nginx-proxy",
+     "unconnected flask-app",
+     "no-limit nginx-proxy"
+    ]
+   },
+   "names": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected flask-app",
+     "no-image flask-app",
+     "no-image nginx-proxy",
+     "no-limit nginx-proxy"
+    ]
+   },
+   "hindsight": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected nginx-proxy",
+     "no-image flask-app",
+     "no-image nginx-proxy",
+     "no-limit nginx-proxy"
+    ]
+   },
+   "random": {
+    "mean": 4.0,
+    "min": 4,
+    "max": 4,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/pihole-cloudflared-DoH",
+   "file": "awesome-compose/pihole-cloudflared-DoH/compose.yaml",
+   "services": 2,
+   "connections": 1,
+   "fixed": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image cloudflared",
+     "no-image pihole",
+     "unconnected cloudflared",
+     "no-limit pihole"
+    ]
+   },
+   "ranked": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected cloudflared",
+     "no-image cloudflared",
+     "no-image pihole",
+     "no-limit pihole"
+    ]
+   },
+   "ranked-images": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image cloudflared",
+     "no-image pihole",
+     "unconnected cloudflared",
+     "no-limit pihole"
+    ]
+   },
+   "names": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected cloudflared",
+     "no-image cloudflared",
+     "no-image pihole",
+     "no-limit pihole"
+    ]
+   },
+   "hindsight": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected pihole",
+     "no-image cloudflared",
+     "no-image pihole",
+     "no-limit pihole"
+    ]
+   },
+   "random": {
+    "mean": 4.0,
+    "min": 4,
+    "max": 4,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/react-rust-postgres",
+   "file": "awesome-compose/react-rust-postgres/compose.yaml",
+   "services": 2,
+   "connections": 1,
+   "fixed": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "unconnected backend",
+     "no-limit backend"
+    ]
+   },
+   "ranked": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-limit backend"
+    ]
+   },
+   "ranked-images": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image db",
+     "unconnected backend",
+     "no-limit backend"
+    ]
+   },
+   "names": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-limit backend"
+    ]
+   },
+   "hindsight": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image db",
+     "no-limit backend"
+    ]
+   },
+   "random": {
+    "mean": 4.0,
+    "min": 4,
+    "max": 4,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/traefik-golang",
+   "file": "awesome-compose/traefik-golang/compose.yaml",
+   "services": 2,
+   "connections": 1,
+   "fixed": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image frontend",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "ranked": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected backend",
+     "no-image backend",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "ranked-images": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image backend",
+     "no-image frontend",
+     "unconnected backend",
+     "no-limit frontend"
+    ]
+   },
+   "names": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected frontend",
+     "no-image backend",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "hindsight": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected frontend",
+     "no-image backend",
+     "no-image frontend",
+     "no-limit frontend"
+    ]
+   },
+   "random": {
+    "mean": 4.0,
+    "min": 4,
+    "max": 4,
+    "unknown": 0.0
+   }
+  },
+  {
+   "app": "awesome-compose/wasmedge-kafka-mysql",
+   "file": "awesome-compose/wasmedge-kafka-mysql/compose.yml",
+   "services": 2,
+   "connections": 1,
+   "fixed": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image etl",
+     "no-image redpanda",
+     "unconnected etl",
+     "no-limit etl"
+    ]
+   },
+   "ranked": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected etl",
+     "no-image etl",
+     "no-image redpanda",
+     "no-limit etl"
+    ]
+   },
+   "ranked-images": {
+    "questions": 4,
+    "by_kind": {
+     "no-image": 2,
+     "unconnected": 1,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "no-image etl",
+     "no-image redpanda",
+     "unconnected etl",
+     "no-limit etl"
+    ]
+   },
+   "names": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected etl",
+     "no-image etl",
+     "no-image redpanda",
+     "no-limit etl"
+    ]
+   },
+   "hindsight": {
+    "questions": 4,
+    "by_kind": {
+     "unconnected": 1,
+     "no-image": 2,
+     "no-limit": 1
+    },
+    "unknown": 0,
+    "order": [
+     "unconnected etl",
+     "no-image etl",
+     "no-image redpanda",
+     "no-limit etl"
+    ]
+   },
+   "random": {
+    "mean": 4.0,
+    "min": 4,
+    "max": 4,
+    "unknown": 0.0
+   }
+  }
+ ]
+}
