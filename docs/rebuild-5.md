@@ -1,6 +1,7 @@
 # Rebuild 5: kernel and Morphogen carry-over map
 
-Repo copy of the "Rebuild 5: Kernel and Morphogen Carry-Over Map" doc (Oct 23, 2026). Rebuild 5 keeps the
+Started from the "Rebuild 5: Kernel and Morphogen Carry-Over Map" doc (Oct 23, 2026); the tables now say what was
+built. Rebuild 5 keeps the
 kernel's guarantees, changes its module boundary, and ships one distribution: Morphogen, a system you
 describe that builds and manages it, starting with itself.
 
@@ -74,33 +75,33 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 | `eval/validator`, `eval/belief-v0` | Into the conformance suite | Done (T2): `kernel/contract/slots/validator` (13) and `slots/belief-model` (17), passed by the ported providers |
 | `kernel/contracts.py` | Rewrite as slot interfaces | Done: `kernel/src/kk/interfaces.py` |
 | `kernel/schemas` (change set, module manifest) | Port, then adapt | Ported: `kernel/schemas/` |
-| `ontology/slots.yaml` (42 slots) | Rewrite as the self-blueprint | Done for kernel slots: `kernel/blueprint/slots.yaml`; original kept in `docs/slots-rebuild4.yaml` |
+| `ontology/slots.yaml` (42 slots) | Rewrite as the self-blueprint | Done: `kernel/blueprint/slots.yaml` and `morphogen/distribution.yaml`; the original is in rebuild 4's repository |
 | `ontology` packs | Port; RDF at the edges | Ported: `kernel/packs/`, loaded by `kernel/providers/pack-loader` (T4) |
-| `shapes/` (SHACL) | Rewrite as one validator provider | To do |
-| `kk` command | Rewrite, smaller | To do |
-| `docs/LESSONS.md` | Port whole | Ported |
-| `docs/decisions.md` (D-01 to D-93) | Keep as history | Referenced from `docs/decisions.md` |
+| `shapes/` (SHACL) | Rewrite as one validator provider | Done: `kernel/providers/validator-shacl` (R5-11, R5-15) |
+| `kk` command | Rewrite, smaller | Replaced: `morphogen/deploy/local.py` and the container image (R5-38, R5-39) |
+| `docs/LESSONS.md` | Port whole | Ported, then cut to what this rebuild's tools need (lessons about RuleGo, PostgREST, `kk`, AGE stay in rebuild 4) |
+| `docs/decisions.md` (D-01 to D-93) | Keep as history | Settled unless superseded; referenced from `docs/decisions.md` |
 | `parked/` | Drop | — |
 
 ### Modules
 
-| Module (rebuild 4) | Verdict | Goes to |
+| Module (rebuild 4) | Verdict | Where it is now |
 | --- | --- | --- |
-| kernel-mcp | Port | `kernel/providers/` (agent-interface slot) |
-| validator-shacl | Rewrite | `kernel/providers/` (validator candidate) |
-| belief-corroboration, verifier-quotes | Port | `kernel/providers/` |
-| truth-maintenance | Parked (R5-12), then ported in T18 once catalog offers and answered gaps were inferred claims | — |
+| kernel-mcp | Port | `kernel/providers/kernel-mcp` (agent-interface slot, R5-13) |
+| validator-shacl | Rewrite | `kernel/providers/validator-shacl` (the validator's default, R5-15) |
+| belief-corroboration, verifier-quotes | Port | `kernel/providers/` (R5-11, R5-13) |
+| truth-maintenance | Parked (R5-12), then ported | `kernel/providers/truth-maintenance` (T18, R5-31) |
 | kernel-mcp briefing | Park: its slot stays unfilled (R5-12) | — |
-| recall-index, recall-dense | Port | `kernel/providers/` |
-| evaluator | Port, central | `kernel/providers/` |
-| self-encoder | Rewrite | `kernel/providers/` (encodes blueprint, providers, packs) |
-| ingest-filter-gitleaks, pack-loader | Port | `kernel/providers/` |
-| encoder-interaction, skill-interview, map-gaps | Port | `morphogen/modules/` (design agent) |
-| observer-prometheus, anomaly | Port; add an OTel observer | `morphogen/modules/` |
-| skill-adaptation-planning | Rewrite: predictions and risk class | `morphogen/modules/` |
-| actuator-compose | Rewrite: intent actuator | `morphogen/modules/` |
-| ui, view-modules | Rewrite: window-manager shell | `morphogen/ui/` |
-| encoder-eventlog, encoder-bpmn, conformance, learner-process, view-bpm, view-devops | Park | — |
+| recall-index, recall-dense | Port BM25; dense not ported (R5-13), re-ranking in `kk.recall` (R5-35) | `kernel/providers/recall-bm25` |
+| evaluator | Port, central | `kernel/providers/evaluator` |
+| self-encoder | Rewrite | `kernel/providers/self-encoder` (blueprint, providers, distribution files; R5-14, R5-27) |
+| ingest-filter-gitleaks, pack-loader | Port | `kernel/providers/filter-gitleaks`, `pack-loader` |
+| encoder-interaction, skill-interview, map-gaps | Port, for systems rather than organisations (R5-29) | `morphogen/modules/interview-encoder`, `map-gaps`, `morphogen/skills/interview` |
+| observer-prometheus, anomaly | Port; add an OTel observer | `morphogen/modules/observer-prometheus`, `observer-otel`, `anomaly` |
+| skill-adaptation-planning | Rewrite: predictions and risk class | `morphogen/modules/planner` (deterministic, R5-20) |
+| actuator-compose | Rewrite: intent actuator | `morphogen/modules/intent-actuator`; running is the runtime slot's (`runtime-compose`, `runtime-quadlet`) |
+| ui, view-modules | Rewrite | `morphogen/ui/` (T21); the window manager of views is R5-O14 |
+| encoder-eventlog, encoder-bpmn, conformance, learner-process, view-bpm, view-devops | Park | Parked; the organisation package would port them (R5-O17) |
 | encoder-papers, memory-extractor | Park; evals stay as baselines | — |
 
 ### Evals
@@ -110,7 +111,7 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 | validator, belief-v0 | Into the conformance suite |
 | self-model questions | Port; the self-modifying gate builds on it. **Ported** (T11, R5-27): G7 passes on both sets with Haiku (kernel 11/12, Morphogen 12/12, under a stricter grader); the kernel set is one short of rebuild 4's 12/12 |
 | SciFact, LongMemEval, RCAEval | Port as baselines the new build must match |
-| BPI Challenge 2019 | Park |
+| BPI Challenge 2019 | Park; the organisation package's first floor (R5-O17) |
 
 ## Morphogen, the only distribution
 
@@ -119,20 +120,20 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 A system that builds systems cannot build its own first parts. These ship in place; everything after them
 arrives through the loop.
 
-| Slot | Bootstrap provider | Source |
+| Slot | Bootstrap provider | Now |
 | --- | --- | --- |
-| Record store and write pipeline | Postgres claims, change sets, lanes | Ported |
-| Conformance suite | Invariant tests | Ported |
-| Design agent | Interview and blueprint encoder, map gaps | To port |
-| Monitor | OTel observer, Prometheus observer | New, to port |
-| Analyse | Anomaly detection, watchers on the change feed | To port |
-| Plan | Planning skill with predictions and risk class | To rewrite |
-| Review lane | Autonomy level × risk class | To rewrite |
-| Execute | Intent actuator: commits to git, orchestrators reconcile | To rewrite |
-| Verify | Separate verifier compares observations with predictions | New |
-| Evaluator | Scores a candidate against the incumbent | To port |
-| Catalog lookup | Configured registries, matched on slot requirements | New |
-| Recall and MCP | BM25 recall, kernel MCP | To port |
+| Record store and write pipeline | Postgres claims, change sets, lanes | `record-postgres` |
+| Conformance suite | Invariant tests | `kernel/contract/` (G1) |
+| Design agent | Interview and blueprint encoder, map gaps | `interview-encoder`, `map-gaps`, `design-blueprint`, `encoder-compose` |
+| Monitor | OTel observer, Prometheus observer | `observer-otel`, `observer-prometheus` |
+| Analyse | Anomaly detection, watchers on the change feed | `anomaly` |
+| Plan | Planning skill with predictions and risk class | `planner`, `builder` |
+| Review lane | Autonomy level × risk class | `lane-autonomy` |
+| Execute | Intent actuator: commits to git, orchestrators reconcile | `intent-actuator`, `deploy/reconcile.py`, the runtime slot |
+| Verify | Separate verifier compares observations with predictions | `prediction-verifier` |
+| Evaluator | Scores a candidate against the incumbent | `evaluator`, `sandbox` (G2) |
+| Catalog lookup | Configured registries, matched on slot requirements | `registry-lookup` |
+| Recall and MCP | BM25 recall, kernel MCP | `recall-bm25`, `kernel-mcp` |
 
 Any later provider, including replacements for bootstrap ones, arrives the same way: proposed against a slot,
 built or found in a catalog, installed in a sandbox, scored by the evaluator, approved, observed.

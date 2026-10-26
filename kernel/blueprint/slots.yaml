@@ -3,8 +3,8 @@
 # changes to it go through the same governed path as anything else.
 #
 # Only kernel slots live here. Application slots (observe, plan, act, design, ...) are declared by
-# distributions (morphogen/distribution.yaml). Rebuild 4's 42-slot catalog is kept for reference in
-# docs/slots-rebuild4.yaml.
+# distributions (morphogen/distribution.yaml). Rebuild 4's 42-slot catalog is in its own
+# repository (OpenReplicant/kernel, ontology/slots.yaml).
 #
 # core: true  = swappable only by a provider that passes kernel/contract/
 # hook        = where in the write pipeline or read path the slot attaches

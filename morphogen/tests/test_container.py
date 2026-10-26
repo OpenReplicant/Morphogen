@@ -153,7 +153,12 @@ def refused(f):
 out["secrets_refused"] = refused(lambda: open("/var/lib/morphogen/secrets.json").read())
 out["host_refused"] = refused(lambda: os.listdir("/run/morphogen-claude/host"))
 out["socket_refused"] = refused(lambda: socket.socket(socket.AF_UNIX).connect("/run/morphogen-socket/docker.sock"))
-ui = [p for p in os.listdir("/proc") if p.isdigit() and b"serve.py" in open(f"/proc/{p}/cmdline", "rb").read()]
+def cmdline(p):
+    try:
+        return open(f"/proc/{p}/cmdline", "rb").read()
+    except OSError:          # a process that exited after the listing
+        return b""
+ui = [p for p in os.listdir("/proc") if p.isdigit() and b"serve.py" in cmdline(p)]
 out["ui_environ_refused"] = bool(ui) and all(refused(lambda p=p: open(f"/proc/{p}/environ", "rb").read()) for p in ui)
 cfg = sys.argv[sys.argv.index("--mcp-config") + 1] if "--mcp-config" in sys.argv else None
 out["config"] = cfg and json.load(open(cfg))["mcpServers"]["morphogen"]["env"]["KK_DATABASE_URL"]
@@ -190,11 +195,16 @@ try:
     wait("the UI", answers, timeout=180)
     st = ex("morphogen", "status").stdout
     check(all(f"{p}: running" in st for p in ("reconcile", "observer-otel", "ui")) and "Postgres: running" in st, f"status: every process runs ({st})")
-    ps = [line.split(None, 1) for line in ex("ps", "-eo", "user:12,args").stdout.splitlines()[1:]]
+    def runner_up():
+        # The supervisor starts the compose runner after `up` writes pids.json and the runtime's login is made, which
+        # can be after the UI answers.
+        ps = [line.split(None, 1) for line in ex("ps", "-eo", "user:12,args").stdout.splitlines()[1:]]
+        return ps if any("-m runtime_compose" in a for _, a in ps) else None
+    ps = wait("the compose runner", runner_up, timeout=60)
     by = lambda needle: {u for u, a in ps if needle in a}  # noqa: E731
     check(by("postgres -D") == {"morphogen"} and by("reconcile.py") == {"morphogen"} and by("serve.py") == {"morphogen"}
           and by("-m runtime_compose") == {"root"} and "agent" not in {u for u, _ in ps},
-          "Postgres, the services and the UI run as morphogen; the compose runner alone as root; nothing as agent")
+          f"Postgres, the services and the UI run as morphogen; the compose runner alone as root; nothing as agent: {ps}")
     rec = lambda: [json.loads(x) for x in ex("cat", f"{HOME}/logs/reconcile.log").stdout.splitlines() if x.startswith("{")]  # noqa: E731
     sys.path.insert(0, str(ROOT / "morphogen" / "deploy"))
     from local import SERVICES
