@@ -1,0 +1,2 @@
+id: urn:kk:contract:mapping-set/refused
+description: A file the format says to reject (here an undeclared prefix) records nothing, and the command says so.

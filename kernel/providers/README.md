@@ -22,5 +22,6 @@ end-to-end service test (`tests/test_services.py`). Services share `kk.lib` (`..
 | kernel-mcp | agent-interface | Ported from rebuild 4 (T3): the operator tools; `whoami` fixed for non-reviewers. Not ported: the memory profile and briefing (R5-12) |
 | pack-loader | vocabulary-pack | Ported from rebuild 4 (T4): `packs.sql` identical but for file paths; the pack checks pass |
 | self-encoder | self-encoder | Rewritten (T4): blueprint, provider manifests and a distribution as claims; `answer` says which provider fills each slot, citing file and line |
+| mapping-set | encoder-sssom | New (T34, R5-51): SSSOM/TSV mapping sets as proposed skos:*Match claims (justification, confidence, tool as qualifiers), one change set per set for a person to decide |
 | evaluator | evaluator | Ported from rebuild 4 unchanged (T3): eval runs as DQV measurements. Candidate-vs-incumbent scoring comes with G2 |
 | (none) | harness-adapter | Unfilled (T25): Morphogen runs Claude Code directly with kernel-mcp and needs no hooks; rebuild 4's `kernel-mcp/hooks` stay unported until a harness or the UI (R5-O14) needs them |

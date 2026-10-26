@@ -1,0 +1,15 @@
+id: urn:kk:provider:encoder-sssom
+name: SSSOM mapping set encoder
+version: 0.1.0
+license: Apache-2.0
+slots: [mapping-set]
+emits: [skos:exactMatch, skos:closeMatch, skos:broadMatch, skos:narrowMatch, skos:relatedMatch, sssom:mapping_justification, sssom:confidence, sssom:mapping_tool]
+consumes: []
+origin: new (R5-51); reads SSSOM/TSV as the SSSOM 1.0.0 specification (mapping-commons/sssom, tag v1.0.0) describes it
+requires: Python 3.12+, psycopg, PyYAML; the sssom pack (pack-loader)
+migration: migration.sql
+role: kkm_encoder_sssom
+command: python3 -m encoder_sssom import FILE ...
+tests:
+  - python3 tests/test_encode.py
+note: embedded metadata mode only; external metadata files (.sssom.yml), SSSOM/JSON and SSSOM/OWL are not read yet

@@ -1,0 +1,2 @@
+id: urn:kk:contract:mapping-set/cited
+description: Every claim is deterministic, attributed to the provider's agent, in the vocabulary scope, and references its file, recorded as an artifact by its sha256, and the line its mapping starts on.

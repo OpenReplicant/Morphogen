@@ -1,0 +1,8 @@
+# The mapping-set slot's contract (R5-51): what every provider that reads mapping sets into the record holds. The boundary
+# is the provider's command (`import FILE`) run as its own role, then the record: a set's mappings are proposed in one
+# change set a person decides, never followed before then; each is a skos:*Match citing its file and line; a later
+# version of the same set changes only what changed. The cases use SSSOM/TSV, the one format a provider reads today.
+# The slot's own runner (runner.py) never imports the provider.
+slot: mapping-set
+runner: runner.py
+version: 0.1.0

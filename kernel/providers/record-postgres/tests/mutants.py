@@ -41,4 +41,7 @@ MUTANTS = [
   ("a redacted artifact may be quoted again", SQL, [("            if v_art.redacted_at is not null then", "            if false then")]),
   ("rows about a claim visible without it", SQL, [("  select exists (select 1 from kernel.claim c where c.id = p_claim)\n$$;", "  select true\n$$;")]),
   ("review decisions without a person", SQL, [("join kernel.agent a on a.db_role = c.decided_by and a.kind = 'person'\n", "")]),
+  ("a claim id in another spelling escapes review", SQL, [("           and pg_input_is_valid(op->>'claim', 'uuid')",
+                                                            "           and op->>'claim' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'")]),
+  ("a mapping's status changed without review", SQL, [("       or (op->>'op' = 'set_status'\n", "       or (false and op->>'op' = 'set_status'\n")]),
 ]

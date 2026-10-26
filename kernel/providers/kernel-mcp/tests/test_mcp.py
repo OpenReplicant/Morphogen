@@ -88,6 +88,26 @@ async def agent_session(login: str) -> str:
               "search finds the claim by BM25, with its id, belief and rank")
         found = await call(s, "query_claims", {"subject": "urn:x:billing", "predicate": "rdfs:label"})
         check(len(found) == 1 and found[0]["id"] == hit["id"], "query_claims returns the same claim")
+        obs = await call(s, "submit_change_set", {"change_set": {
+            "idempotency_key": "mcp:obs", "attributed_to": AGENT, "generated_by": run_id,
+            "target_scope": "urn:kk:scope:default",
+            "ops": [{"op": "add_claim", "subject": "urn:x:reading", "predicate": "rdf:type",
+                     "object": {"entity": "http://www.w3.org/ns/sosa/Observation"}, "evidence_type": "deterministic",
+                     "references": [{"source_uri": "https://example.org/services"}]}]}})
+        with connect("kkm_validator", f"dbname={DB}") as val:
+            validator.drain(val)
+        asked = {"predicate": "rdf:type", "object_entity": "prov:Activity"}
+        plain = await call(s, "query_claims", asked)
+        wide = await call(s, "query_claims", {**asked, "follow_mappings": True})
+        mapping = await call(s, "query_claims", {"subject": "http://www.w3.org/ns/sosa/Observation", "predicate": "skos:broadMatch",
+                                                 "object_entity": "prov:Activity"})
+        reading = [c for c in wide if c["subject"] == "urn:x:reading"]
+        check(obs.get("status") == "submitted" and not [c for c in plain if c["subject"] == "urn:x:reading"]
+              and len(reading) == 1 and len(mapping) == 1
+              and [(v.get("id"), v.get("belief"), v.get("status")) for v in reading[0].get("via", [])]
+                  == [(mapping[0]["id"], mapping[0]["belief"], mapping[0]["status"])],
+              "follow_mappings: an observation counts as an activity through the pack's sosa:Observation broadMatch "
+              "prov:Activity, and cites that mapping in `via` with its belief")
         why = await call(s, "explain", {"claim_id": hit["id"][:8]})
         check(why["references"][0]["source_uri"] == "https://example.org/services" and why["run"]["id"] == run_id,
               "explain (by the first characters of the id) shows the source and the run")
@@ -128,7 +148,7 @@ async def reviewer_session(login: str, held: str) -> None:
 
 def main() -> None:
     subprocess.run(["dropdb", "--if-exists", "--force", DB], check=True)
-    install.install(DB, ["validator-shacl", "recall-bm25"])
+    install.install(DB, ["validator-shacl", "recall-bm25", "pack-loader"])
     with connect(url=f"dbname={DB}") as su:
         su.execute(f"do $$ begin if not exists (select 1 from pg_roles where rolname = '{ROLE}') then "
                    f"create role {ROLE} login password '{AGENT_PASSWORD}'; end if; end $$")

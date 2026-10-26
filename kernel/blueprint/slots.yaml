@@ -136,6 +136,12 @@ slots:
     default: pack-loader              # packs.sql generated from kernel/packs, reviewed as code
     contract: ../contract/slots/vocabulary-pack
     status: ported
+  - id: mapping-set
+    cardinality: many
+    interface: Encoder
+    default: encoder-sssom            # SSSOM/TSV mapping sets as proposed skos:*Match claims, each set reviewed by a person (R5-51)
+    contract: ../contract/slots/mapping-set
+    status: written
   - id: self-encoder
     cardinality: one
     interface: Encoder

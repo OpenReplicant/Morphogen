@@ -8,7 +8,7 @@ select kernel.install_ops('pack:extra', 'urn:kk:scope:vocab', $kk$[{"op": "add_c
   'urn:kk:agent:pack-loader', 'urn:kk:module:pack-loader');
 reset role;""")
 MUTANTS = [
-    ("a pack left out", "packs.sql", [("select kernel.install_ops('pack:mappings:0.1.0'",
-                                       "select 1 where false and kernel.install_ops('pack:mappings:0.1.0'")]),
+    ("a pack left out", "packs.sql", [("select kernel.install_ops('pack:mappings:0.2.0'",
+                                       "select 1 where false and kernel.install_ops('pack:mappings:0.2.0'")]),
     ("a property no pack types is approved", "migration.sql", [EXTRA]),
 ]

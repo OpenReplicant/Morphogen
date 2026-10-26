@@ -1,0 +1,3 @@
+id: urn:kk:contract:lane-policy/status-reviewed
+description: A change to the status of a mapping, a subclass or subproperty link or a term's typing (here a retraction of an approved
+  skos:exactMatch, then bringing it back, the claim's id written in any form the store accepts) waits for review whatever lane is asked; retracting an ordinary claim does not.
