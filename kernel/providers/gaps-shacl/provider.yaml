@@ -1,0 +1,16 @@
+id: urn:kk:provider:gaps-shacl
+name: Shape-driven gap finder
+version: 0.1.0
+license: Apache-2.0
+slots: [gap-finder]
+emits: [oa:Annotation, oa:hasTarget, oa:bodyValue, dcterms:type]
+consumes: []      # what it reads is what the installed packs' shapes look at (gaps.reads), none needed from a given provider
+origin: new (R5-O18 (5), R5-47); the service's bookkeeping is Morphogen's map-gaps', whose rules became the kk-tosca pack's shapes
+requires: Python 3.12+, psycopg, pyshacl, rdflib; the packs whose packs.yaml entry names `shapes` (kk-tosca), and oa
+migration: migration.sql
+service: python3 -m gaps_shacl
+role: kkm_gaps_shacl
+login: kkm_gaps_shacl_login
+agent: urn:kk:agent:gaps-shacl
+tests: [python3 tests/test_gaps.py, python3 tests/shape_mutants.py, python3 tests/test_service.py]
+note: each gap an oa:Annotation whose body is the question to ask, derived from the claims its shape declares; retracted once answered

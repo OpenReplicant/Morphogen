@@ -93,6 +93,13 @@ slots:
       through other derived claims) inconclusive, naming the withdrawn premises, so the belief model caps them;
       supported again when the premises are current. Filled in T18 (R5-O7 a1): distributions now keep inferred
       claims whose premises change (Morphogen's catalog offers, inferred from build requests; answered gaps).
+  - id: gap-finder
+    hook: feed
+    cardinality: one
+    interface: Processor
+    default: gaps-shacl               # what the claims lack, by the installed packs' warning shapes, as questions (R5-47); a distribution may fill it with its own (Morphogen's map-gaps)
+    contract: ../contract/slots/gap-finder
+    status: written
 
   # ---- read path
   - id: recall
@@ -160,6 +167,6 @@ couplings:
   - {from: lane-policy, to: write-pipeline, contract: Lane}
   - {from: write-pipeline, to: record-store, contract: atomic commit (no extension code)}
   - {from: record-store, to: change-feed, contract: Applied}
-  - {from: change-feed, to: [belief-model, verifier, truth-maintenance], contract: Applied}
-  - {from: [belief-model, verifier, truth-maintenance], to: intake-filter, contract: change_set.schema.json}
+  - {from: change-feed, to: [belief-model, verifier, truth-maintenance, gap-finder], contract: Applied}
+  - {from: [belief-model, verifier, truth-maintenance, gap-finder], to: intake-filter, contract: change_set.schema.json}
   - {from: record-store, to: [recall, agent-interface, context-assembler], contract: RecordStore, note: reader's clearance}

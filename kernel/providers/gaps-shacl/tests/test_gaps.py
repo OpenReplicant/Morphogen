@@ -1,18 +1,16 @@
-"""The shape-driven finder's own tests (R5-O18 (5)): rules the gap-finder cases do not reach, what the finder takes
-from a shape (kind, question, order, premises), and the same gaps as map-gaps on random maps.
+"""The shape-driven gap finder's own tests (R5-O18 (5), R5-47): rules the gap-finder cases do not reach, what the
+finder takes from a shape (kind, question, order, premises), and the predicates a service reads. Its parity with
+Morphogen's map-gaps is checked in that distribution, next to map-gaps.
 
   python3 tests/test_gaps.py
 """
-import random
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
-MODULES = HERE.parent
-sys.path[:0] = [str(HERE), str(MODULES / "map-gaps"), str(MODULES.parent / "contract" / "slots" / "gap-finder"),
-                str(MODULES.parents[1] / "kernel" / "src")]
-from gaps_shacl.gaps import gaps, shapes  # noqa: E402
-from map_gaps.gaps import gaps as python_gaps  # noqa: E402
+KERNEL = HERE.parents[1]
+sys.path[:0] = [str(HERE), str(KERNEL / "contract" / "slots" / "gap-finder"), str(KERNEL / "src")]
+from gaps_shacl.gaps import ShapeError, gaps, reads, shapes  # noqa: E402
 from runner import claims, node  # noqa: E402
 
 RULES = shapes()
@@ -85,25 +83,25 @@ hard = Graph().parse(data="""@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix
 check(not any(g["kind"] == KIND + "refusal" for g in gaps(claims({"shop/web": {"image": True}}), RULES + hard)),
       "a shape at sh:Violation is a hard rule, not a gap")
 
-rng = random.Random(5)
-for n in range(100):
-    systems = [f"s{i}" for i in range(rng.randint(1, 3))]
-    names = [f"{s}/v{j}" for s in systems for j in range(rng.randint(1, 4))]
-    services = {}
-    for name in names:
-        d = {"image": rng.choice([None, True, "example/x:1", "example/x:1@sha256:" + "b" * rng.choice([12, 64])]),
-             "connects": rng.sample(names + ["s0/ghost", "s9/ext"], rng.randint(0, 2)),
-             "limit": rng.random() < 0.3, "prediction": rng.random() < 0.3}
-        services[name] = {k: v for k, v in d.items() if v}
-    state = claims(services)
-    py, sh = python_gaps(state), gaps(state, RULES)
-    want, have = {(g["kind"], g["target"]) for g in py}, {(g["kind"], g["target"]) for g in sh}
-    if want != have:
-        check(False, f"map {n}: map-gaps and the shapes differ: only map-gaps {want - have}, only shapes {have - want}; {services}")
-    same = {g["iri"]: g["premises"] for g in py if not g["kind"].endswith(("unpinned-image",)) and g["target"].startswith("urn:kk:node:")}
-    for g in sh:
-        if g["iri"] in same and g["premises"] != same[g["iri"]]:
-            check(False, f"map {n}: {g['kind']} on {g['target']} rests on {g['premises']}, map-gaps on {same[g['iri']]}")
-print("ok: 100 random maps: the shapes find map-gaps' kinds and targets, and the same premises where map-gaps rests on "
-      "the claims that put a service on the map")
+KKT = "https://w3id.org/knowledge-kernel/tosca#"
+check({KKT + "connectsTo", KKT + "memberOf", KKT + "propertyValue", "https://www.irit.fr/recherches/MELODI/ontologies/BBO#maxValue",
+       "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "http://www.w3.org/2000/01/rdf-schema#label"} <= set(reads(RULES)),
+      "the predicates a service reads come from the shapes: their paths, premises and SPARQL rules")
+more = Graph().parse(data="""@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix ex: <http://example.org/> .
+ex:S a sh:NodeShape ; sh:targetClass ex:C ;
+    sh:property [ sh:path [ sh:inversePath ex:inverse ] ; sh:minCount 1 ] ,
+                [ sh:path ( ex:first [ sh:alternativePath ( ex:alt1 ex:alt2 ) ] ) ; sh:minCount 1 ] ,
+                [ sh:path ex:pairA ; sh:equals ex:pairB ] ;
+    sh:sparql [ sh:select \"\"\"PREFIX q: <http://example.org/q#>
+        SELECT $this WHERE { $this <http://example.org/full> ?x ; q:own ?y }\"\"\" ] .""", format="turtle")
+got = set(reads(more))
+check({"http://example.org/" + p for p in ("inverse", "first", "alt1", "alt2", "pairA", "pairB", "full")} | {"http://example.org/q#own"} <= got,
+      "inverse, sequence and alternative paths, property pairs, full IRIs and a query's own PREFIX are all read")
+odd = Graph().parse(data="""@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix ex: <http://example.org/> .
+ex:S a sh:NodeShape ; sh:targetClass ex:C ; sh:property [ sh:path [ ex:unknownPathKind ex:p ] ; sh:minCount 1 ] .""", format="turtle")
+try:
+    reads(odd)
+    check(False, "a path the finder cannot walk is refused")
+except ShapeError:
+    check(True, "a path the finder cannot walk is refused (reading too little would find gaps on partial data)")
 print("gaps-shacl tests passed")

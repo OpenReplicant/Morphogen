@@ -33,7 +33,7 @@ from kk.sparql import prepare_queries
 
 SH = Namespace("http://www.w3.org/ns/shacl#")
 KK = Namespace("https://w3id.org/knowledge-kernel/ns#")
-PACKS = Path(__file__).resolve().parents[4] / "kernel" / "packs"
+PACKS = Path(__file__).resolve().parents[3] / "packs"
 IRI_SCHEMES = ("urn:", "http://", "https://")
 prepare_queries()          # each SPARQL rule parsed once, not once per service
 
@@ -43,12 +43,53 @@ class ShapeError(ValueError):
 
 
 def shapes(directory: Path | None = None) -> Graph:
-    """Every pack's shapes (`<pack>.shapes.ttl`), from KK_SHAPES_DIR or the kernel's packs."""
+    """The shapes the packs carry: each packs.yaml entry's `shapes` file, from KK_SHAPES_DIR or the kernel's packs."""
+    import yaml
     g = Graph()
     d = Path(directory or os.environ.get("KK_SHAPES_DIR") or PACKS)
-    for f in sorted(d.glob("*.shapes.ttl")):
-        g.parse(f, format="turtle")
+    for tier in yaml.safe_load((d / "packs.yaml").read_text()).values():
+        for entry in tier if isinstance(tier, list) else []:
+            if isinstance(entry, dict) and entry.get("shapes"):
+                g.parse(d / entry["shapes"], format="turtle")
     return g
+
+
+def reads(rules: Graph) -> list[str]:
+    """The predicates the shapes look at, so a service reads only those claims: every path (inverse, alternative,
+    sequence and repeated paths walked), the predicates of targetObjectsOf, targetSubjectsOf and the property-pair
+    constraints, the declared premises, rdf:type (class targets) and rdfs:label (questions), and in a SPARQL rule every
+    full IRI and every prefixed name its own PREFIX lines or the shapes' sh:declare expand. A path the finder cannot
+    walk is a ShapeError: reading too little would find gaps on partial data. Reading a few too many costs nothing."""
+    import re
+    from rdflib.collection import Collection
+    out = {str(RDF.type), str(RDFS.label)}
+
+    def path(node) -> set[str]:
+        if isinstance(node, URIRef):
+            return {str(node)}
+        if rules.value(node, RDF.first) is not None:                       # a sequence path
+            return set().union(*(path(n) for n in Collection(rules, node)))
+        for p in (SH.inversePath, SH.zeroOrMorePath, SH.oneOrMorePath, SH.zeroOrOnePath):
+            if (inner := rules.value(node, p)) is not None:
+                return path(inner)
+        if (alt := rules.value(node, SH.alternativePath)) is not None:
+            return set().union(*(path(n) for n in Collection(rules, alt)))
+        raise ShapeError(f"a shape's path the gap finder cannot read: {node}")
+
+    for o in rules.objects(None, SH.path):
+        out |= path(o)
+    for p in (SH.targetObjectsOf, SH.targetSubjectsOf, SH.equals, SH.disjoint, SH.lessThan, SH.lessThanOrEquals,
+              KK.premisePredicate):
+        out |= {str(o) for o in rules.objects(None, p) if isinstance(o, URIRef)}
+    declared = {str(rules.value(d, SH.prefix)): str(rules.value(d, SH.namespace)) for d in rules.objects(None, SH.declare)}
+    for q in rules.objects(None, SH.select):
+        q = str(q)
+        prefixes = {**declared, **dict(re.findall(r"(?im)^\s*PREFIX\s+([A-Za-z][\w-]*):\s*<([^>]+)>", q))}
+        out |= set(re.findall(r"<((?:https?|urn):[^>\s]+)>", q))
+        for pre, local in re.findall(r"\b([A-Za-z][\w-]*):([A-Za-z_][\w-]*)", q):
+            if pre in prefixes:
+                out.add(prefixes[pre] + local)
+    return sorted(out)
 
 
 def term(v):

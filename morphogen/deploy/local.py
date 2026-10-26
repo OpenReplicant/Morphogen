@@ -79,7 +79,7 @@ SERVICES = {
     "intent-actuator": ("morphogen/modules/intent-actuator", "intent_actuator", {"KK_INTENT_DIR": "{intent}", "KK_INTENT_ENV": ENV},
                         "kkm_intent_actuator"),
     "prediction-verifier": ("morphogen/modules/prediction-verifier", "prediction_verifier", {}, "kkm_prediction_verifier"),
-    "map-gaps": ("morphogen/modules/map-gaps", "map_gaps", {}, "kkm_map_gaps"),
+    "gaps-shacl": ("kernel/providers/gaps-shacl", "gaps_shacl", {}, "kkm_gaps_shacl"),
 }
 # Started by local.py itself, each as its own login too.
 OTHERS = {"observer-otel": ("morphogen/modules/observer-otel", "kkm_observer_otel"),
@@ -347,9 +347,30 @@ def git(repo: Path, *args: str) -> str:
                           check=True, capture_output=True, text=True).stdout
 
 
+def upgrade(d: Path) -> None:
+    """Bring an intent repository made by an earlier `up` to what this one runs: since R5-48 the local environment runs
+    the kernel's gap finder (gaps-shacl) where it ran map-gaps, and design-blueprint waits on its gaps. The change is
+    committed as a bootstrap, like the first `up`'s, by the person running `up`."""
+    local = d / "environments" / ENV
+    old, new = local / "map-gaps.yaml", local / "gaps-shacl.yaml"
+    if not old.exists() or new.exists():
+        return
+    cwd, module, env, _ = SERVICES["gaps-shacl"]
+    lines = ["# Written by morphogen/deploy/local.py, upgrading an intent repository an earlier `up` made (R5-48: the kernel's",
+             "# gap finder replaces map-gaps). A bootstrap, not reviewed; after it, changes come from approved plans.",
+             "provider: gaps-shacl", f"service: python3 -m {module}", f"cwd: {cwd}", "env:", '  KK_SWEEP_SECONDS: "10"']
+    new.write_text("\n".join(lines) + "\n")
+    git(d, "rm", "-q", str(old.relative_to(d)))
+    git(d, "add", str(new.relative_to(d)))
+    git(d, "commit", "-qm", "bootstrap: the kernel's gap finder replaces map-gaps (R5-48)\n\nWritten by morphogen/deploy/local.py "
+        "for the person running `up`; not a reviewed plan.")
+    say("upgraded the intent repository: the kernel's gap finder (gaps-shacl) replaces map-gaps")
+
+
 def intent() -> Path:
     d = HOME / "intent"
     if (d / ".git").exists():
+        upgrade(d)
         return d
     say(f"making Morphogen's intent repository in {d}")
     shutil.copytree(ROOT / "morphogen" / "intent", d, ignore=shutil.ignore_patterns("experiments"))

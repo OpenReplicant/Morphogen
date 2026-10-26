@@ -44,7 +44,7 @@ MODULES = ROOT / "morphogen" / "modules"
 FIX = ROOT / "morphogen" / "tests" / "fixtures" / "design"
 SKILL = ROOT / "morphogen" / "skills" / "interview" / "SKILL.md"
 EXPECTED = FIX / "notes.yaml"            # what a correct description holds; never what an agent was given
-for p in (ROOT / "kernel" / "src", ROOT / "morphogen" / "src", MODULES, MODULES / "map-gaps", MODULES / "design-blueprint",
+for p in (ROOT / "kernel" / "src", ROOT / "morphogen" / "src", MODULES, ROOT / "kernel" / "providers" / "gaps-shacl", MODULES / "design-blueprint",
           ROOT / "kernel" / "providers" / "validator-shacl", ROOT / "kernel" / "providers" / "verifier-quotes"):
     sys.path.insert(0, str(p))
 CACHE = Path(os.environ.get("KK_EVAL_CACHE") or Path.home() / ".cache/knowledge-kernel/eval") / "design"
@@ -185,13 +185,13 @@ def grade(db: str, label: str) -> dict:
     from kk.lib import connect
     from morphogen import blueprint
     from design_blueprint.__main__ import GAPS, OA
-    from map_gaps.__main__ import one_pass as find_gaps
+    from gaps_shacl.__main__ import one_pass as find_gaps
     quotes = importlib.import_module("verifier_quotes.__main__")
     settle(db)
     with connect("kkm_verifier_quotes", f"dbname={db}") as v:
         quotes.Pass(CACHE / db / "artifacts", ROOT)(v)
     settle(db)
-    with connect("kkm_map_gaps", f"dbname={db}") as conn:
+    with connect("kkm_gaps_shacl", f"dbname={db}") as conn:
         find_gaps(conn)
     settle(db)
     with connect(url=f"dbname={db}") as su:

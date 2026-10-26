@@ -3,7 +3,8 @@ person to approve. A plain command.
 
   python3 -m design_blueprint propose SYSTEM
 
-Refuses while the gap finder has an open gap on the system (a question not answered yet), while the
+Refuses while no gap finder (KK_GAP_AGENTS) has run, while the gap finder has an open gap on the system (a question
+not answered yet), while the
 description conflicts (morphogen.blueprint), while a claim it would render has a refuted quote, when the system
 has a compose file already, when a runtime would refuse the file (every runtime's allow
 list, morphogen.runtime: an image not pinned by digest, a port not on 127.0.0.1, ...), or when the intake filter (the kernel's
@@ -14,7 +15,8 @@ whole text and whose one step (urn:kk:action:create-system on urn:kk:system:<nam
 inferred from every map claim the file was rendered from. The intent actuator writes the file only if the system
 as described then still renders to that text.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_design_blueprint),
-KK_INTENT_DIR (default morphogen/intent).
+KK_INTENT_DIR (default morphogen/intent), KK_GAP_AGENTS (the agents whose gaps are its gate, comma-separated; default
+the agent of the kernel's gap finder, urn:kk:agent:gaps-shacl; map-gaps' is urn:kk:agent:map-gaps).
 """
 from __future__ import annotations
 
@@ -39,6 +41,7 @@ DCT_TYPE = "http://purl.org/dc/terms/type"
 PPLAN = "http://purl.org/net/p-plan#"
 SOSA = "http://www.w3.org/ns/sosa/"
 OA = "http://www.w3.org/ns/oa#"
+GAP_AGENTS = [a.strip() for a in os.environ.get("KK_GAP_AGENTS", "urn:kk:agent:gaps-shacl").split(",") if a.strip()]
 _spec = importlib.util.spec_from_file_location(
     "filter_gitleaks", Path(__file__).resolve().parents[4] / "kernel" / "providers" / "filter-gitleaks" / "filter_gitleaks" / "__main__.py")
 intake = importlib.util.module_from_spec(_spec)
@@ -47,7 +50,7 @@ REFUTED = """select c.id from api.claims c join api.verifications v on v.claim_i
              where c.id = any(%s::uuid[]) and v.verdict = 'refuted'"""
 GAPS = """select g.object_entity, b.object_value->>'@value' from api.claims g
           join api.claims b on b.subject = g.subject and b.predicate = %(body)s and b.status <> 'deprecated'
-          where g.predicate = %(target)s and g.attributed_to = 'urn:kk:agent:map-gaps' and g.status <> 'deprecated'
+          where g.predicate = %(target)s and g.attributed_to = any(%(agents)s) and g.status <> 'deprecated'
             and (g.object_entity like %(nodes)s or g.object_entity = %(system)s)"""
 
 
@@ -75,7 +78,10 @@ def propose(conn, name: str, intent: Path) -> dict:
     if (intent / "systems" / name / "compose.yaml").exists():
         return {"refused": f"{name} has a compose file already: change it through its settings"}
     with conn.cursor() as cur:
-        cur.execute(GAPS, {"body": OA + "bodyValue", "target": OA + "hasTarget", "nodes": f"urn:kk:node:{name}:%",
+        cur.execute("select 1 from kernel.run where agent = any(%s) and status = 'succeeded' limit 1", (GAP_AGENTS,))
+        if cur.fetchone() is None:          # fail closed: no gap finder has looked, so no gap does not mean no question
+            return {"refused": f"no gap finder has run yet ({', '.join(GAP_AGENTS)}): nothing says the description is complete"}
+        cur.execute(GAPS, {"body": OA + "bodyValue", "target": OA + "hasTarget", "agents": GAP_AGENTS, "nodes": f"urn:kk:node:{name}:%",
                            "system": f"urn:kk:system:{name}"})
         open_ = [q for _, q in cur.fetchall()]
         if open_:
