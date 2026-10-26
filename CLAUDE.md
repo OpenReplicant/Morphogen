@@ -70,6 +70,7 @@ KK_EVAL_CACHE=... python3 kernel/evals/scifact/run.py fetch|setup DB|retrieval D
 PGHOST=... PGUSER=... python3 kernel/evals/self-model/run.py setup DB && ... reference DB    # self-model questions (12, G7 >= 90%); morphogen/evals/self-model/run.py for Morphogen's 12; `claude DB` asks Haiku
 PGHOST=... PGUSER=... python3 morphogen/evals/design/run.py setup DB && ... claude DB   # the interview with Haiku as the interviewer (R5-29); test_grade.py: the grader
 python3.12 morphogen/evals/rcaeval/run.py run --dataset re1-ob --method analyser   # RCAEval floor (not in CI; EXPERIMENTS.md)
+python3 morphogen/evals/ranking/run.py fetch && ... run                # the gap finder's order against a ranking (R5-53, not in CI); test_ranking.py in CI
 python3 scripts/check_boundary.py                                      # kernel/ never depends on morphogen/
 ```
 
