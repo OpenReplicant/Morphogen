@@ -184,7 +184,7 @@ def shape(described: dict) -> dict:
 def grade(db: str, label: str) -> dict:
     from kk.lib import connect
     from morphogen import blueprint
-    from design_blueprint.__main__ import GAPS, OA
+    from design_blueprint.__main__ import GAP_AGENTS, GAPS, OA
     from gaps_shacl.__main__ import one_pass as find_gaps
     quotes = importlib.import_module("verifier_quotes.__main__")
     settle(db)
@@ -202,7 +202,7 @@ def grade(db: str, label: str) -> dict:
         verdicts = dict(su.execute("select coalesce(v.verdict, 'unverified'), count(*) from api.claims c left join api.verifications v "
                                    "on v.claim_id = c.id where c.attributed_to = %s and c.status <> 'deprecated' group by 1",
                                    (AGENT,)).fetchall())
-        open_ = [q for _, q in su.execute(GAPS, {"body": OA + "bodyValue", "target": OA + "hasTarget",
+        open_ = [q for _, q in su.execute(GAPS, {"body": OA + "bodyValue", "target": OA + "hasTarget", "agents": GAP_AGENTS,
                                                  "nodes": "urn:kk:node:notes:%", "system": "urn:kk:system:notes"}).fetchall()]
         cols = ["id", "subject", "predicate", "object_entity", "object_value", "qualifiers"]
         mine = [dict(zip(cols, r)) for r in su.execute(blueprint.MAP + " and attributed_to = %(me)s",
