@@ -47,8 +47,8 @@ const KERNEL_GROUPS = [
   ['After the commit', 'They follow the change feed; what they find comes back as a proposal.',
    ['change-feed', 'belief-model', 'verifier', 'truth-maintenance', 'gap-finder']],
   ['Reading', 'How people and agents ask the record.', ['recall', 'agent-interface', 'context-assembler']],
-  ['Upkeep', 'The vocabularies, the record of itself, and measuring providers.',
-   ['vocabulary-pack', 'self-encoder', 'evaluator', 'harness-adapter']],
+  ['Upkeep', 'The vocabularies and the mappings between them, the record of itself, and measuring providers.',
+   ['vocabulary-pack', 'mapping-set', 'self-encoder', 'evaluator', 'harness-adapter']],
 ];
 
 const KK = {

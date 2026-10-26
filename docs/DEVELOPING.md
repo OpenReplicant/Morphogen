@@ -192,6 +192,12 @@ need `optional` when people can supply it (through the agent interface or the UI
 at the level of terms, so a need is only as exact as its term: declare it by a term only its real source emits.
 The self-encoder records them as `kk:emits`, `kk:consumes` and `kk:mayConsume`.
 
+Which terms to use (R5-51): a published standard's term wherever one has the concept; a `kk:` term only for what no
+standard covers, saying so in its definition. Where two standards name one concept, a mapping joins them (a
+`skos:*Match` in `kernel/packs/mappings.ttl`, or an SSSOM set imported through the mapping-set slot, which a person
+approves). A reader that should count both asks with `kk.mappings` (or kernel-mcp's `query_claims` with
+`follow_mappings`) and cites the mapping claims it followed; until a mapping is approved, it is not followed.
+
 `role:` is what a slot's runner runs the provider's service or command as (through a login of its own that may
 switch only to that role), so a kernel provider with a service or command names it too.
 
@@ -280,7 +286,7 @@ Rules that keep a provider correct:
 
 | Command | What it checks | Needs |
 | --- | --- | --- |
-| `sh kernel/contract/run.sh` | the API against `api.yaml`, then each kernel provider against its slots' cases: 66 record, 6 lane policy, 13 validator, 17 belief, 9 intake filter, 8 verifier, 11 truth maintenance, 8 recall, 8 agent interface, 6 vocabulary pack, 8 self-encoder, 6 evaluator, 18 gap finder | Postgres |
+| `sh kernel/contract/run.sh` | the API against `api.yaml`, then each kernel provider against its slots' cases: 66 record, 7 lane policy, 13 validator, 17 belief, 9 intake filter, 8 verifier, 11 truth maintenance, 8 recall, 8 agent interface, 6 vocabulary pack, 7 mapping set, 8 self-encoder, 6 evaluator, 18 gap finder | Postgres |
 | `python3 kernel/contract/mutants.py` | every mutant fails the contract | Postgres |
 | `python3 kernel/providers/test.py` | each kernel provider's own tests, then the services end to end | Postgres |
 | `sh morphogen/contract/run.sh [--mutants]` | Morphogen's slot contracts (analyser, runtime), and the kernel slots its modules fill (lane-autonomy: lane policy) | Postgres for the analyser's service cases |

@@ -1,0 +1,2 @@
+id: urn:kk:contract:mapping-set/qualifiers
+description: Each claim carries the mapping's justification and confidence, and the mapping tool (a set-level value propagated), as qualifiers in the sssom namespace.

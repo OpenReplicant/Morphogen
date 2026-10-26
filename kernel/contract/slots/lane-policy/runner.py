@@ -63,6 +63,24 @@ def main(provider: Path) -> int:
         ok &= check(waiting == "awaiting_review" and after == "applied" and refused
                     and rec.rows("select status from kernel.change_set where id = %s", (own["id"],))[0]["status"] == "awaiting_review",
                     C + "waits-for-person", f"waiting {waiting}, after approval {after}, own approval refused {refused}")
+        # A change to a mapping's status is a person's decision too (R5-51): once a person approved it, retracting it
+        # goes to review, and so does bringing it back; an ordinary claim's retraction stays in the auto lane.
+        with rec.connect(person) as conn:
+            conn.execute("select api.review(%s, true, 'fine')", (match["id"],))
+        mapped = rec.claim("urn:x:t2", "http://www.w3.org/2004/02/skos/core#exactMatch")
+        plain_id = rec.claim("urn:x:a")
+        def status(cid, to, expect, reason=None):
+            return rec.submit(ex, [{"op": "set_status", "claim": cid, "status": to, "expect_status": expect,
+                                    **({"reason": reason} if reason else {})}], lane="auto")
+        drop = status(mapped, "deprecated", "normal", "retracted")
+        drop_plain = status(plain_id, "deprecated", "normal", "retracted")
+        with rec.connect(person) as conn:
+            conn.execute("select api.review(%s, true, 'fine')", (drop["id"],))
+        back = status(mapped, "normal", "deprecated")
+        braces = status("{" + mapped + "}", "normal", "deprecated")       # other spellings of the same id
+        bare = status(mapped.replace("-", "").upper(), "preferred", "deprecated")
+        ok &= check(drop["status"] == back["status"] == braces["status"] == bare["status"] == "awaiting_review"
+                    and drop_plain["status"] == "applied", C + "status-reviewed", f"{drop} {back} {braces} {bare} {drop_plain}")
         now = rules(rec)
         ok &= check(baseline and all(baseline[k] <= now.get(k, set()) for k in baseline), C + "only-adds",
                     str({k: sorted(baseline[k] - now.get(k, set())) for k in baseline}))

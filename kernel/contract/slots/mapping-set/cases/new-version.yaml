@@ -1,0 +1,2 @@
+id: urn:kk:contract:mapping-set/new-version
+description: A new version of the same set (same mapping_set_id) proposes only the mappings not already current and retracts the dropped ones, in one change set; an unchanged mapping keeps its claim.

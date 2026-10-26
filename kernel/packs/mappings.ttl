@@ -5,15 +5,20 @@
 @prefix pplan: <http://purl.org/net/p-plan#> .
 @prefix bbo:   <https://www.irit.fr/recherches/MELODI/ontologies/BBO#> .
 @prefix sosa:  <http://www.w3.org/ns/sosa/> .
+@prefix org:   <http://www.w3.org/ns/org#> .
+@prefix dqv:   <http://www.w3.org/ns/dqv#> .
 
 # Mappings between the packs (D-47): one concept, one home; where two packs name the same concept,
 # the mapping says so instead of a second definition. BPMN models use BBO terms (the documented
 # process); P-Plan stays the home of plans in general; SOSA observations are PROV activities.
+# Standards first (R5-51): there is no kk: concept above these; a group of terms meeting on one concept has a
+# standard's term as its hub (prov:Agent for whatever acts or performs work, pplan:Step for a unit of work,
+# sosa:Observation for a measured value). A reader follows these only while they are current claims (kk.mappings).
 
 <https://w3id.org/knowledge-kernel/mappings>
     a owl:Ontology ;
     rdfs:label "Mappings between vocabulary packs" ;
-    owl:versionInfo "0.1.0" .
+    owl:versionInfo "0.2.0" .
 
 bbo:Process              skos:closeMatch pplan:Plan .
 bbo:FlowNode             skos:closeMatch pplan:Step .
@@ -23,3 +28,6 @@ sosa:Observation         skos:broadMatch prov:Activity .
 sosa:Actuation           skos:broadMatch prov:Activity .
 sosa:Sensor              skos:broadMatch prov:Agent .
 sosa:Actuator            skos:broadMatch prov:Agent .
+bbo:Role                 skos:closeMatch org:Role .
+org:Organization         skos:broadMatch prov:Agent .
+dqv:QualityMeasurement   skos:broadMatch sosa:Observation .

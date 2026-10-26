@@ -7,10 +7,16 @@
 # A new vocabulary is added only with an entry here naming the concept it owns. If another entry
 # already owns that concept, the newcomer is a format (or rejected), not a second home.
 #
+# Standards first (R5-51): a concept's home is a published standard wherever one has it; a kk: term is minted only
+# for what no standard covers (the module contract, the TOSCA metamodel's RDF form, which OASIS does not publish),
+# and its definition says so. Terms from different standards that name the same concept are joined by mappings
+# (mappings.ttl, SSSOM sets through the mapping-set slot), never by a kk: concept above them: the hub of a group
+# of mapped terms is itself a standard's term (prov:Agent for whatever performs work, p-plan:Step for a unit of work).
+#
 # pin: the pack loader fetches the upstream file once, stores it as an artifact (sha256), and
 # records the pinned version. "pin at install" = choose and record the version when first loaded.
 
-version: 0.4.0
+version: 0.5.0
 
 core:
   - id: kk-core          # first: it types the annotation properties the other pack files use
@@ -64,10 +70,12 @@ core:
     license: W3C Software and Document License
     pin: pin at install
   - id: sssom
-    owns: mapping metadata (justification, confidence) — stored as skos:*Match claims with qualifiers
+    owns: mapping metadata (justification, confidence, tool) — a mapping is a skos:*Match claim with these as qualifiers
     iri: https://w3id.org/sssom/
-    license: CC0 / BSD-3 (check at install)
-    pin: pin at install
+    file: sssom.ttl
+    license: BSD-3-Clause (mapping-commons/sssom)
+    pin: SSSOM 1.0.0 (tag v1.0.0, 2024-08-09), subset (mapping_justification, confidence, mapping_tool) cut by scripts/vocab_subset.py; upstream sha256 in the file header
+    note: the mapping-set slot's encoder (encoder-sssom) reads SSSOM/TSV files into these claims (R5-51)
 
 profile:
   - id: kk-tosca
@@ -88,9 +96,10 @@ profile:
   - id: kk-profile
     owns: agent profiles and skills
     iri: https://w3id.org/knowledge-kernel/profile#
-    file: kk-profile.ttl
     license: Apache-2.0
     load_when: agent profiles are modeled
+    note: not loaded (R5-51); nothing reads or writes it yet. kk-profile.ttl stays as the draft; when profiles are
+      modeled, check the A2A Agent Card and Agent Skills formats first and keep only what neither covers
   - id: bbo
     owns: BPMN process models — processes, tasks, gateways, events, sequence (next/previous flow node), roles (D-47)
     iri: https://www.irit.fr/recherches/MELODI/ontologies/BBO#

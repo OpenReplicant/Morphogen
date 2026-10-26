@@ -32,7 +32,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
-from kk import recall
+from kk import mappings, recall
 
 PREFIXES = {  # same as kernel.prefix (kernel/providers/record-postgres/schema/002_bootstrap.sql)
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
@@ -151,16 +151,40 @@ def rows(select: str) -> str:
 @mcp.tool()
 async def query_claims(ctx: Context, subject: str | None = None, predicate: str | None = None,
                        object_entity: str | None = None, scope: str | None = None,
-                       include_deprecated: bool = False, limit: int = 100) -> list[dict]:
-    """Claims matching all given filters (IRIs or CURIEs such as rdfs:label). Each has id, status and belief."""
-    return await query(ctx, rows(
-        f"select {CLAIM_COLUMNS} from api.claims"
-        " where (%(s)s::text is null or subject = %(s)s) and (%(p)s::text is null or predicate = %(p)s)"
-        "   and (%(o)s::text is null or object_entity = %(o)s) and (%(sc)s::text is null or scope = %(sc)s)"
-        "   and (%(dep)s or status <> 'deprecated')"
-        " order by subject, predicate limit %(n)s"),
-        {"s": expand(subject), "p": expand(predicate), "o": expand(object_entity), "sc": expand(scope),
-         "dep": include_deprecated, "n": max(1, min(limit, 1000))})
+                       include_deprecated: bool = False, limit: int = 100, follow_mappings: bool = False) -> list[dict]:
+    """Claims matching all given filters (IRIs or CURIEs such as rdfs:label). Each has id, status and belief.
+    follow_mappings: also match the terms accepted mappings make equivalent or narrower (skos:exactMatch,
+    broadMatch, narrowMatch; one closeMatch), as far as the caller may read them (so two callers may get different
+    expansions). A claim matched through mappings lists them in `via` (id, belief, status), which an answer cites and
+    shows with it; a claim written from such an answer lists those ids in its derived_from too."""
+    params = {"s": expand(subject), "p": expand(predicate), "o": expand(object_entity), "sc": expand(scope),
+              "dep": include_deprecated, "n": max(1, min(limit, 1000))}
+    if not follow_mappings:
+        return await query(ctx, rows(
+            f"select {CLAIM_COLUMNS} from api.claims"
+            " where (%(s)s::text is null or subject = %(s)s) and (%(p)s::text is null or predicate = %(p)s)"
+            "   and (%(o)s::text is null or object_entity = %(o)s) and (%(sc)s::text is null or scope = %(sc)s)"
+            "   and (%(dep)s or status <> 'deprecated')"
+            " order by subject, predicate limit %(n)s"), params)
+    async with connection(ctx) as conn:
+        found = await (await conn.execute(mappings.CURRENT, {"matches": mappings.MATCHES})).fetchall()
+        ways = {k: mappings.reach(found, params[k]) if params[k] else None for k in ("s", "p", "o")}
+        got = await one(conn, rows(
+            f"select {CLAIM_COLUMNS} from api.claims"
+            " where (%(s)s::text[] is null or subject = any(%(s)s)) and (%(p)s::text[] is null or predicate = any(%(p)s))"
+            "   and (%(o)s::text[] is null or object_entity = any(%(o)s)) and (%(sc)s::text is null or scope = %(sc)s)"
+            "   and (%(dep)s or status <> 'deprecated')"
+            " order by subject, predicate limit %(n)s"),
+            {**params, **{k: sorted(w) if w is not None else None for k, w in ways.items()}})
+        used = sorted({i for w in ways.values() if w for path in w.values() for i in path})
+        mapped = {m["id"]: m for m in await one(conn, rows("select id, belief, status from api.claims where id = any(%(ids)s::uuid[])"),
+                                                {"ids": used})} if used else {}
+    for c in got:
+        via = [i for k, col in (("s", "subject"), ("p", "predicate"), ("o", "object_entity")) if ways[k]
+               for i in ways[k].get(c[col], [])]
+        if via:
+            c["via"] = [mapped.get(i, {"id": i}) for i in dict.fromkeys(via)]
+    return got
 
 
 @mcp.tool()

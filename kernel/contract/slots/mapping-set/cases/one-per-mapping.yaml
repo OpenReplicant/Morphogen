@@ -1,0 +1,2 @@
+id: urn:kk:contract:mapping-set/one-per-mapping
+description: Once approved, each mapping whose predicate is a SKOS mapping property and not negated is one current claim, subject predicate object; rows with another predicate or negated are not recorded at all.

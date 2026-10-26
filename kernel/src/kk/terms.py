@@ -42,6 +42,7 @@ PREFIXES = {
     "fabio": "http://purl.org/spar/fabio/",
     "schema": "http://schema.org/",
     "spdx": "http://spdx.org/rdf/terms#",
+    "sssom": "https://w3id.org/sssom/",
 }
 # Vocabularies with no pack file. The W3C core ones are checked against rdflib's own term lists, so a misspelt term is
 # unknown; P-Plan's terms are listed (its whole vocabulary, https://www.opmw.org/model/p-plan/).

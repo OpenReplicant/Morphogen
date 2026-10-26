@@ -371,19 +371,38 @@ create trigger run_rules before insert or update on kernel.run
   for each row execute function kernel.run_before_write();
 
 -- ---------------------------------------------------------------- change set rules
--- Lane upgrade: claims that change the vocabulary or mappings always go to review.
-create function kernel.needs_review(p_ops jsonb) returns boolean
+-- Lane upgrade: claims that change the vocabulary or mappings always go to review (settings review_predicates and
+-- review_types), and so does any change to the status of a mapping, a subclass/subproperty/domain/range/equivalence
+-- link or a term's typing as a property or class (R5-51): readers follow these while they are current, so bringing
+-- a retracted or refuted one back, or retracting one a person approved, is a person's decision too. (Other reviewed
+-- types, such as a plan, are reviewed when added; their status follows their own lifecycle.)
+create function kernel.reviewed_statement(p_predicate text, p_object text) returns boolean
 language sql stable as $$
+  select kernel.expand(p_predicate) in
+           (select kernel.expand(x) from jsonb_array_elements_text(
+              coalesce((select value from kernel.setting where key = 'review_predicates'), '[]')) x)
+      or (kernel.expand(p_predicate) = kernel.expand('rdf:type')
+          and kernel.expand(p_object) in
+            (select kernel.expand(x) from jsonb_array_elements_text(
+               coalesce((select value from kernel.setting where key = 'review_types'), '[]')) x))
+$$;
+revoke all on function kernel.reviewed_statement(text, text) from public;   -- internal: needs_review runs as its owner
+
+create function kernel.needs_review(p_ops jsonb) returns boolean
+language sql stable security definer set search_path = kernel, pg_catalog as $$
   select exists (
     select 1 from jsonb_array_elements(p_ops) op
-    where op->>'op' = 'add_claim'
-      and (kernel.expand(op->>'predicate') in
-             (select kernel.expand(x) from jsonb_array_elements_text(
-                coalesce((select value from kernel.setting where key = 'review_predicates'), '[]')) x)
-           or (kernel.expand(op->>'predicate') = kernel.expand('rdf:type')
-               and kernel.expand(op->'object'->>'entity') in
-                 (select kernel.expand(x) from jsonb_array_elements_text(
-                    coalesce((select value from kernel.setting where key = 'review_types'), '[]')) x))))
+    where (op->>'op' = 'add_claim' and kernel.reviewed_statement(op->>'predicate', op->'object'->>'entity'))
+       or (op->>'op' = 'set_status'
+           and pg_input_is_valid(op->>'claim', 'uuid')    -- every form apply's ::uuid accepts (braces, no hyphens)
+           and exists (select 1 from kernel.claim c
+                       where c.id = (op->>'claim')::uuid
+                         and (c.predicate in (select kernel.expand(x) from jsonb_array_elements_text(
+                                coalesce((select value from kernel.setting where key = 'review_predicates'), '[]')) x)
+                              or (c.predicate = kernel.expand('rdf:type')
+                                  and c.object_entity in (kernel.expand('rdf:Property'), kernel.expand('owl:ObjectProperty'),
+                                        kernel.expand('owl:DatatypeProperty'), kernel.expand('owl:AnnotationProperty'),
+                                        kernel.expand('rdfs:Class'), kernel.expand('owl:Class')))))))
 $$;
 
 create function kernel.change_set_before_insert() returns trigger

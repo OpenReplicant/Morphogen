@@ -21,16 +21,26 @@ begin
   end if;
   raise notice 'ok: every self-encoder property is approved';
 
-  -- Every kk/kkt/kkp property typed in a pack is approved.
+  -- Every kk/kkt property typed in a pack is approved (kk-profile's seven are not loaded, R5-51).
   select count(*) into n from kernel.claim c
   where c.predicate = kernel.expand('rdf:type')
     and c.object_entity in (kernel.expand('rdf:Property'), kernel.expand('owl:ObjectProperty'),
                             kernel.expand('owl:DatatypeProperty'), kernel.expand('owl:AnnotationProperty'))
     and c.subject like 'https://w3id.org/knowledge-kernel/%';
-  if n <> 38 then
-    raise exception 'T3: expected 38 kk/kkt/kkp properties typed, found %', n;
+  if n <> 31 then
+    raise exception 'T3: expected 31 kk/kkt properties typed, found %', n;
   end if;
-  raise notice 'ok: 38 kk/kkt/kkp properties typed';
+  raise notice 'ok: 31 kk/kkt properties typed';
+
+  -- The SSSOM terms a mapping's qualifiers use (R5-51) are typed by the sssom pack.
+  select string_agg(p, ', ') into missing
+  from unnest(array['https://w3id.org/sssom/mapping_justification', 'https://w3id.org/sssom/confidence',
+                    'https://w3id.org/sssom/mapping_tool']) p
+  where not kernel.is_approved_property(p);
+  if missing is not null then
+    raise exception 'R5-51: SSSOM properties not approved: %', missing;
+  end if;
+  raise notice 'ok: SSSOM mapping properties approved';
 
   -- Milestone 2 vocabularies (D-47): the BBO and SOSA terms the process and devops modules write.
   select string_agg(p, ', ') into missing
