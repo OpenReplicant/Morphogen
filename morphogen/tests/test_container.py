@@ -153,7 +153,12 @@ def refused(f):
 out["secrets_refused"] = refused(lambda: open("/var/lib/morphogen/secrets.json").read())
 out["host_refused"] = refused(lambda: os.listdir("/run/morphogen-claude/host"))
 out["socket_refused"] = refused(lambda: socket.socket(socket.AF_UNIX).connect("/run/morphogen-socket/docker.sock"))
-ui = [p for p in os.listdir("/proc") if p.isdigit() and b"serve.py" in open(f"/proc/{p}/cmdline", "rb").read()]
+def cmdline(p):
+    try:
+        return open(f"/proc/{p}/cmdline", "rb").read()
+    except OSError:          # a process that exited after the listing
+        return b""
+ui = [p for p in os.listdir("/proc") if p.isdigit() and b"serve.py" in cmdline(p)]
 out["ui_environ_refused"] = bool(ui) and all(refused(lambda p=p: open(f"/proc/{p}/environ", "rb").read()) for p in ui)
 cfg = sys.argv[sys.argv.index("--mcp-config") + 1] if "--mcp-config" in sys.argv else None
 out["config"] = cfg and json.load(open(cfg))["mcpServers"]["morphogen"]["env"]["KK_DATABASE_URL"]
