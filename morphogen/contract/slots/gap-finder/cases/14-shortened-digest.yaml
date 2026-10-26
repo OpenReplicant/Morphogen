@@ -1,0 +1,17 @@
+id: urn:kk:eval:gap-finder/shortened-digest
+text: a sha256 digest shorter than 64 hex digits is not a pin
+input:
+  services:
+    shop/web:
+      image: example/web:1@sha256:0123456789ab
+      limit: true
+expect:
+  gaps:
+  - kind: unpinned-image
+    target: shop/web
+then:
+  services:
+    shop/web:
+      image: example/web:1@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  expect:
+    gaps: []

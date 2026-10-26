@@ -1,0 +1,134 @@
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix kkt:     <https://w3id.org/knowledge-kernel/tosca#> .
+@prefix kk:      <https://w3id.org/knowledge-kernel/ns#> .
+@prefix kkts:    <https://w3id.org/knowledge-kernel/tosca/shapes#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# What a complete system map in kk-tosca terms has (R5-O18 (5)): the pack's rules, as data. At sh:Warning a shape is
+# a gap, not a refusal: its sh:message is the question to ask ({this} is the target's label), dcterms:type the kind of
+# gap, sh:order the order a person is asked in, and kk:premisePredicate the claims about the target a gap rests on
+# (no wider: a label, another setting or a plan's prediction never decides whether, or for whom, it holds; a shape
+# aimed at the objects of a predicate rests on those claims). A gap finder that knows no domain applies them
+# (R5-O18 (5)); Morphogen's map-gaps has the same five rules in Python.
+#
+# The graph they read: each current claim as a triple; a claim with a literal object and qualifiers points to a node
+# of its own carrying rdf:value (the claim's object) and each qualifier, so `kkt:propertyValue` of a service reaches
+# [ rdf:value "redis@sha256:..." ; kkt:propertyName "image" ]. A claim naming an entity stays a plain triple.
+
+<https://w3id.org/knowledge-kernel/tosca/shapes>
+    a owl:Ontology ;
+    rdfs:label "kk-tosca shapes: what a complete system map has" ;
+    owl:versionInfo "0.1.0" ;
+    sh:declare [ sh:prefix "kkt" ;  sh:namespace "https://w3id.org/knowledge-kernel/tosca#"^^xsd:anyURI ] ,
+               [ sh:prefix "rdf" ;  sh:namespace "http://www.w3.org/1999/02/22-rdf-syntax-ns#"^^xsd:anyURI ] ,
+               [ sh:prefix "bbo" ;  sh:namespace "https://www.irit.fr/recherches/MELODI/ontologies/BBO#"^^xsd:anyURI ] ,
+               [ sh:prefix "sosa" ; sh:namespace "http://www.w3.org/ns/sosa/"^^xsd:anyURI ] .
+
+# A connection to something not on the map.
+kkts:PeerOnMap a sh:NodeShape ;
+    sh:targetObjectsOf kkt:connectsTo ;
+    sh:class kkt:NodeTemplate ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:unknown-peer> ;
+    sh:order 1 ;
+    sh:message "Something connects to {this}, which is not on the map: what is {this}, and is it part of the system?" .
+
+# A service with no image setting.
+kkts:ServiceHasImage a sh:PropertyShape ;
+    sh:targetClass kkt:NodeTemplate ;
+    sh:path kkt:propertyValue ;
+    sh:qualifiedValueShape kkts:ImageSetting ;
+    sh:qualifiedMinCount 1 ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:no-image> ;
+    kk:premisePredicate rdf:type , kkt:memberOf ;
+    sh:order 2 ;
+    sh:message "Which container image runs {this}?" .
+
+# A service with images, none pinned by digest (runtimes run only name@sha256:..., so what runs is what was approved).
+kkts:ServiceImagePinned a sh:NodeShape ;
+    sh:targetClass kkt:NodeTemplate ;
+    sh:or (
+        [ sh:path kkt:propertyValue ; sh:qualifiedValueShape kkts:ImageSetting ;       sh:qualifiedMaxCount 0 ]
+        [ sh:path kkt:propertyValue ; sh:qualifiedValueShape kkts:PinnedImageSetting ; sh:qualifiedMinCount 1 ]
+    ) ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:unpinned-image> ;
+    kk:premisePredicate rdf:type , kkt:memberOf ;
+    sh:order 3 ;
+    sh:message "Which digest pins {this}'s image? Morphogen runs only images pinned as name@sha256:..." .
+
+kkts:ImageSetting a sh:NodeShape ;
+    sh:property [ sh:path kkt:propertyName ; sh:hasValue "image" ] .
+
+kkts:PinnedImageSetting a sh:NodeShape ;
+    sh:node kkts:ImageSetting ;
+    sh:property [ sh:path rdf:value ; sh:minCount 1 ; sh:pattern "^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$" ;
+                  sh:not [ sh:pattern "\\n" ] ] .    # $ also matches before a final line break
+
+# In a system of two or more services, one nothing of its system calls and that calls nothing.
+kkts:ServiceConnected a sh:NodeShape ;
+    sh:targetClass kkt:NodeTemplate ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:prefixes <https://w3id.org/knowledge-kernel/tosca/shapes> ;
+        sh:select """
+            SELECT $this WHERE {
+                $this kkt:memberOf ?system .
+                FILTER EXISTS { ?other a kkt:NodeTemplate ; kkt:memberOf ?system . FILTER (?other != $this) }
+                FILTER NOT EXISTS { $this kkt:connectsTo ?any }
+                FILTER NOT EXISTS { ?caller kkt:connectsTo $this ; kkt:memberOf ?system }
+            }""" ] ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:unconnected> ;
+    kk:premisePredicate rdf:type , kkt:memberOf ;
+    sh:order 4 ;
+    sh:message "What does {this} call, or what calls it?" .
+
+# An entry point (nothing of its system calls it) with no documented limit. A limit is bbo:maxValue qualified by the
+# observed property only; a plan's prediction carries more qualifiers and is not one.
+kkts:EntryPointHasLimit a sh:NodeShape ;
+    sh:targetClass kkt:NodeTemplate ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:prefixes <https://w3id.org/knowledge-kernel/tosca/shapes> ;
+        sh:select """
+            SELECT $this WHERE {
+                FILTER NOT EXISTS { ?caller kkt:connectsTo $this ; kkt:memberOf ?system . $this kkt:memberOf ?system }
+                FILTER NOT EXISTS {
+                    $this bbo:maxValue ?limit . ?limit sosa:observedProperty ?property .
+                    FILTER NOT EXISTS { ?limit ?q ?v . FILTER (?q NOT IN (rdf:value, sosa:observedProperty)) }
+                }
+            }""" ] ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:no-limit> ;
+    kk:premisePredicate rdf:type , kkt:memberOf ;
+    sh:order 5 ;
+    sh:message "What is the most {this}'s request time (or another measure) may be before something should change?" .
+
+# A system each of whose services is called by another of its services (a cycle, so no entry point), none with a limit.
+kkts:SystemHasLimit a sh:NodeShape ;
+    sh:targetObjectsOf kkt:memberOf ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:prefixes <https://w3id.org/knowledge-kernel/tosca/shapes> ;
+        sh:select """
+            SELECT $this WHERE {
+                FILTER EXISTS { ?s a kkt:NodeTemplate ; kkt:memberOf $this }
+                FILTER NOT EXISTS {
+                    ?s a kkt:NodeTemplate ; kkt:memberOf $this .
+                    FILTER NOT EXISTS { ?caller kkt:connectsTo ?s ; kkt:memberOf $this }
+                }
+                FILTER NOT EXISTS {
+                    ?s a kkt:NodeTemplate ; kkt:memberOf $this ; bbo:maxValue ?limit . ?limit sosa:observedProperty ?property .
+                    FILTER NOT EXISTS { ?limit ?q ?v . FILTER (?q NOT IN (rdf:value, sosa:observedProperty)) }
+                }
+            }""" ] ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:no-limit> ;
+    sh:order 5 ;
+    sh:message "Every service of {this} is called by another: which one do people use first, and what is the most its request time may be before something should change?" .

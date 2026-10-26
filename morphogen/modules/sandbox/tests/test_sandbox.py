@@ -292,8 +292,9 @@ def main() -> None:
             check(value(p, "contract.passed") == value(p, "contract.total") == 2 * N + 1 and value(p, "contract.service.passed") == N,
                   f"{p.rsplit(':', 1)[-1]} passes the analyser contract: {N} rule cases, {N} service cases and "
                   "the same outputs as the incumbent on the benchmark")
-        inc, cand = value("urn:kk:provider:anomaly", "metric.mean"), value("urn:kk:provider:anomaly-recent", "metric.mean")
-        check(cand < inc, f"on a copy of the record, timed by the sandbox, the candidate's full pass is faster ({cand:.3f} s against {inc:.3f} s)")
+        # The median of the timed passes: one slow pass on a shared CI machine moved the mean the wrong way once.
+        inc, cand = value("urn:kk:provider:anomaly", "metric.median"), value("urn:kk:provider:anomaly-recent", "metric.median")
+        check(cand < inc, f"on a copy of the record, timed by the sandbox, the candidate's full pass is faster ({cand:.3f} s against {inc:.3f} s, medians)")
         check(value("urn:kk:provider:anomaly", "inputs") == 4500, "the sandbox copied the record's 4,500 observations")
         check(not q("select 1 from api.claims where attributed_to = 'urn:kk:agent:sandbox'"), "the sandbox wrote no claims")
     who, creds, sees, os_user, parent_env, superuser, record = probe.read_text().split()

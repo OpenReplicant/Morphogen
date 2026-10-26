@@ -1,0 +1,23 @@
+id: urn:kk:eval:gap-finder/connected-only-from-another-system
+text: a service only another system calls, calling nothing, is unconnected within its own system of two
+input:
+  services:
+    shop/front:
+      image: true
+      limit: true
+      connects:
+      - shop/back
+    shop/back:
+      image: true
+    ops/probe:
+      image: true
+      limit: true
+      connects:
+      - shop/stock
+    shop/stock:
+      image: true
+      limit: true
+expect:
+  gaps:
+  - kind: unconnected
+    target: shop/stock

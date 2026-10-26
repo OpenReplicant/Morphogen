@@ -101,7 +101,7 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 | skill-adaptation-planning | Rewrite: predictions and risk class | `morphogen/modules/planner` (deterministic, R5-20) |
 | actuator-compose | Rewrite: intent actuator | `morphogen/modules/intent-actuator`; running is the runtime slot's (`runtime-compose`, `runtime-quadlet`) |
 | ui, view-modules | Rewrite | `morphogen/ui/` (T21); the window manager of views is R5-O14 |
-| encoder-eventlog, encoder-bpmn, conformance, learner-process, view-bpm, view-devops | Park | Parked; the organisation package would port them (R5-O17) |
+| encoder-eventlog, encoder-bpmn, conformance, learner-process, view-bpm, view-devops | Park | Parked; R5-O17 would port them as encoders and processes (R5-O18) |
 | encoder-papers, memory-extractor | Park; evals stay as baselines | — |
 
 ### Evals
@@ -111,7 +111,7 @@ purpose, change the shape. **Park** = not in the first distribution. **Drop** = 
 | validator, belief-v0 | Into the conformance suite |
 | self-model questions | Port; the self-modifying gate builds on it. **Ported** (T11, R5-27): G7 passes on both sets with Haiku (kernel 11/12, Morphogen 12/12, under a stricter grader); the kernel set is one short of rebuild 4's 12/12 |
 | SciFact, LongMemEval, RCAEval | Port as baselines the new build must match |
-| BPI Challenge 2019 | Park; the organisation package's first floor (R5-O17) |
+| BPI Challenge 2019 | Park; the first floor of R5-O17 |
 
 ## Morphogen, the only distribution
 
