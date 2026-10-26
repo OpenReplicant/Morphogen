@@ -1,0 +1,16 @@
+id: urn:kk:provider:encoder-engine
+name: 'Encoder: what a container engine runs'
+version: 0.1.0
+license: Apache-2.0
+slots: [system-encoder]
+emits: [kkt:NodeRepresentation, kkt:representationOf, kkt:memberOf, kkt:propertyValue, kkt:propertyName, rdfs:label]
+consumes: []
+origin: new (T32, R5-49); the change-set shape is encoder-compose's
+requires: Python 3.12+, psycopg; a container engine's CLI (docker, or podman as KK_ENGINE); the kk-tosca pack (0.5.0 or later)
+migration: migration.sql
+role: kkm_encoder_engine
+login: kkm_encoder_engine_login
+agent: urn:kk:agent:encoder-engine
+command: python3 -m encoder_engine scan --system <name> [--project <name>]   |   python3 -m encoder_engine watch --intent <dir> [--every <seconds>]
+tests: [python3 tests/test_encode.py, python3 tests/test_service.py]
+note: each running service of a system's compose project as a kkt:NodeRepresentation of its template, its image, command and environment as observed claims citing the container; the kk-tosca drift shapes compare them with the templates (R5-49)

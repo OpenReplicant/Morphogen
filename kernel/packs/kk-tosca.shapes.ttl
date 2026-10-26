@@ -13,7 +13,7 @@
 # gap, sh:order the order a person is asked in, and kk:premisePredicate the claims about the target a gap rests on
 # (no wider: a label, another setting or a plan's prediction never decides whether, or for whom, it holds; a shape
 # aimed at the objects of a predicate rests on those claims). A gap finder that knows no domain applies them
-# (R5-O18 (5)); Morphogen's map-gaps has the same five rules in Python.
+# (R5-O18 (5)); Morphogen's first gap finder, map-gaps, had the first five in Python (retired, R5-49).
 #
 # The graph they read: each current claim as a triple; a claim with a literal object and qualifiers points to a node
 # of its own carrying rdf:value (the claim's object) and each qualifier, so `kkt:propertyValue` of a service reaches
@@ -21,8 +21,8 @@
 
 <https://w3id.org/knowledge-kernel/tosca/shapes>
     a owl:Ontology ;
-    rdfs:label "kk-tosca shapes: what a complete system map has" ;
-    owl:versionInfo "0.1.0" ;
+    rdfs:label "kk-tosca shapes: what a complete system map has, and where what runs departs from it" ;
+    owl:versionInfo "0.2.0" ;
     sh:declare [ sh:prefix "kkt" ;  sh:namespace "https://w3id.org/knowledge-kernel/tosca#"^^xsd:anyURI ] ,
                [ sh:prefix "rdf" ;  sh:namespace "http://www.w3.org/1999/02/22-rdf-syntax-ns#"^^xsd:anyURI ] ,
                [ sh:prefix "bbo" ;  sh:namespace "https://www.irit.fr/recherches/MELODI/ontologies/BBO#"^^xsd:anyURI ] ,
@@ -132,3 +132,63 @@ kkts:SystemHasLimit a sh:NodeShape ;
     dcterms:type <urn:kk:gap-kind:no-limit> ;
     sh:order 5 ;
     sh:message "Every service of {this} is called by another: which one do people use first, and what is the most its request time may be before something should change?" .
+
+# ------------------------------------------------------------------ drift: what runs against what is intended (R5-49)
+# A node representation (what an encoder of a runtime observed, kkt:representationOf the template it was created from)
+# is compared with the templates of its system, in TOSCA 2.0's own terms for changes between two graphs (§4.4):
+# modified, obsolete, novel. Each is a discrepancy with two ways to close it (R5-O18 (9)): change what runs back to the
+# template, or change the template (the intent) to what runs; the question asks which. Only systems something runs of
+# are compared, so a system still being described raises no drift.
+
+# A setting of the template that the running node does not have, or has with another value.
+kkts:RunsAsIntended a sh:NodeShape ;
+    sh:targetClass kkt:NodeRepresentation ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:prefixes <https://w3id.org/knowledge-kernel/tosca/shapes> ;
+        sh:select """
+            SELECT $this WHERE {
+                $this kkt:representationOf ?template .
+                ?template a kkt:NodeTemplate ; kkt:propertyValue ?want .
+                ?want kkt:propertyName ?name ; rdf:value ?value .
+                FILTER NOT EXISTS { $this kkt:propertyValue ?got . ?got kkt:propertyName ?name ; rdf:value ?value }
+            }""" ] ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:drift-modified> ;
+    kk:premisePredicate kkt:representationOf , kkt:propertyValue ;
+    sh:order 6 ;
+    sh:message "{this} does not run as intended: a setting of its template has another value, or none, where it runs. Should it be changed back, or should its template change?" .
+
+# A template of a running system with nothing running for it.
+kkts:IntendedIsRunning a sh:NodeShape ;
+    sh:targetClass kkt:NodeTemplate ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:prefixes <https://w3id.org/knowledge-kernel/tosca/shapes> ;
+        sh:select """
+            SELECT $this WHERE {
+                $this kkt:memberOf ?system .
+                FILTER EXISTS { ?running a kkt:NodeRepresentation ; kkt:memberOf ?system }
+                FILTER NOT EXISTS { ?r a kkt:NodeRepresentation ; kkt:representationOf $this }
+            }""" ] ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:drift-obsolete> ;
+    kk:premisePredicate rdf:type , kkt:memberOf ;
+    sh:order 7 ;
+    sh:message "{this} is intended but not running while the rest of its system is: should it be started, or taken out of the intent?" .
+
+# A running node no template of the map describes.
+kkts:RunningIsIntended a sh:NodeShape ;
+    sh:targetClass kkt:NodeRepresentation ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:prefixes <https://w3id.org/knowledge-kernel/tosca/shapes> ;
+        sh:select """
+            SELECT $this WHERE {
+                FILTER NOT EXISTS { $this kkt:representationOf ?template . ?template a kkt:NodeTemplate }
+            }""" ] ;
+    sh:severity sh:Warning ;
+    dcterms:type <urn:kk:gap-kind:drift-novel> ;
+    kk:premisePredicate rdf:type , kkt:representationOf ;
+    sh:order 8 ;
+    sh:message "{this} is running but nothing intends it: should it be taken into the intent, or stopped?" .

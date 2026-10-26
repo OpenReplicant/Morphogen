@@ -8,8 +8,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[2]
-sys.path[:0] = [str(HERE), str(ROOT / "morphogen" / "src"), str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "modules" / "map-gaps")]
-from map_gaps import gaps  # noqa: E402
+sys.path[:0] = [str(HERE), str(ROOT / "morphogen" / "src"), str(ROOT / "kernel" / "src")]
 from morphogen.runtime import DIGEST, refusal  # noqa: E402
 
 PODINFO = ROOT / "morphogen" / "intent" / "systems" / "podinfo" / "compose.yaml"
@@ -27,7 +26,11 @@ def svc(**kw):
 
 
 check(refusal(PODINFO.read_text()) is None, "podinfo's compose file is on the allow list")
-check(gaps.DIGEST.pattern == DIGEST.pattern, "the gap finder asks for a pin exactly as the runtime requires one")
+from rdflib import Graph, Namespace  # noqa: E402
+SH, KKTS = Namespace("http://www.w3.org/ns/shacl#"), Namespace("https://w3id.org/knowledge-kernel/tosca/shapes#")
+shapes = Graph().parse(ROOT / "kernel" / "packs" / "kk-tosca.shapes.ttl", format="turtle")
+pins = {str(p) for prop in shapes.objects(KKTS.PinnedImageSetting, SH.property) for p in shapes.objects(prop, SH.pattern)}
+check(pins == {f"^{DIGEST.pattern}$"}, f"the gap finder asks for a pin exactly as the runtime requires one: {pins}")
 for text, why in [(svc(privileged="true"), "privileged not allowed"), (svc(volumes='["/:/host"]'), "volumes not allowed"),
                   (svc(build="."), "build not allowed"), (svc(env_file="/etc/shadow"), "env_file not allowed"),
                   (svc(network_mode="host"), "network_mode not allowed"), (svc(cap_add="[SYS_ADMIN]"), "cap_add not allowed"),

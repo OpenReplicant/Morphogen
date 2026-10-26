@@ -86,7 +86,9 @@ OTHERS = {"observer-otel": ("morphogen/modules/observer-otel", "kkm_observer_ote
           "interview-encoder": ("morphogen/modules/interview-encoder", "kkm_interview_encoder"),
           "design-blueprint": ("morphogen/modules/design-blueprint", "kkm_design_blueprint"),
           "runtime-compose": ("morphogen/modules/runtime-compose", "kkm_runtime_compose"),
-          "runtime-quadlet": ("morphogen/modules/runtime-quadlet", "kkm_runtime_quadlet")}
+          "runtime-quadlet": ("morphogen/modules/runtime-quadlet", "kkm_runtime_quadlet"),
+          "encoder-engine": ("morphogen/modules/encoder-engine", "kkm_encoder_engine"),
+          "self-encoder": ("kernel/providers/self-encoder", "kkm_self_encoder")}
 NEEDS = ["psycopg", "yaml", "pyshacl", "rdflib", "mcp", "jwt", "starlette", "uvicorn"]
 
 
@@ -255,6 +257,9 @@ def install(s: dict) -> None:
     from psycopg import sql
     with psycopg.connect(conninfo(s, db="postgres"), autocommit=True) as su:
         if su.execute("select 1 from pg_database where datname = %s", (DB,)).fetchone():
+            roles = [r for *_, r in SERVICES.values()] + [r for _, r in OTHERS.values()]
+            if su.execute("select count(*) from pg_roles where rolname = any(%s)", (roles,)).fetchone()[0] < len(set(roles)):
+                upgrade_record(s)
             return
     say("installing the record and Morphogen's modules (a minute)")
     os.environ.update(pg_env(s))
@@ -262,11 +267,38 @@ def install(s: dict) -> None:
     import install as morphogen_install   # morphogen/modules/install.py
     subprocess.run(["createdb", DB], check=True, env={**os.environ, **pg_env(s)})
     morphogen_install.install(DB, morphogen_install.modules())
-    morphogen_install.kernel.install(DB, ["verifier-quotes", "recall-bm25"])   # services here; Morphogen's tests run without them
+    morphogen_install.kernel.install(DB, ["verifier-quotes", "recall-bm25", "self-encoder"])   # services here; Morphogen's tests run without them
     with psycopg.connect(conninfo(s), autocommit=True) as su:
         verifier = su.pgconn.encrypt_password(s["authenticator"].encode(), b"kk_authenticator", b"scram-sha-256").decode()
         su.execute(sql.SQL("alter role kk_authenticator login password {}").format(sql.Literal(verifier)))
         su.execute(sql.SQL("grant connect on database {} to kk_authenticator").format(sql.Identifier(DB)))
+
+
+def upgrade_record(s: dict) -> None:
+    """A record an earlier `up` installed, missing a provider this one runs (encoder-engine since T32, the self-encoder
+    since T33), gets the install again: every migration is idempotent, and the packs load their new versions."""
+    os.environ.update(pg_env(s))
+    sys.path.insert(0, str(ROOT / "morphogen" / "modules"))
+    import install as morphogen_install
+    morphogen_install.install(DB, morphogen_install.modules())
+    morphogen_install.kernel.install(DB, ["verifier-quotes", "recall-bm25", "self-encoder"])
+    say("upgraded the record: the providers and packs this version runs are installed")
+
+
+def self_model(s: dict, every: dict) -> None:
+    """Record what Morphogen is made of (the kernel's blueprint, every provider's manifest, the distribution file) as
+    the self-encoder's claims, each citing its file and line: the UI's overview reads them. The same files again
+    submit nothing; a changed one supersedes what it said before."""
+    cwd = ROOT / "kernel" / "providers" / "self-encoder"
+    out = subprocess.run([sys.executable, "-m", "self_encoder", "scan", "--repo", str(ROOT),
+                          "--distribution", str(ROOT / "morphogen" / "distribution.yaml"), "--providers", str(ROOT / "morphogen" / "modules")],
+                         cwd=cwd, capture_output=True, text=True, timeout=300,
+                         env={k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "TMPDIR")} |
+                             {"DATABASE_URL": own(s, every, "self-encoder"), "KK_ROLE": OTHERS["self-encoder"][1],
+                              "PYTHONPATH": os.pathsep.join([str(cwd), str(ROOT / "kernel" / "src")])})
+    if out.returncode:
+        die(f"the self-encoder could not record what Morphogen is made of: {out.stderr.strip()[-600:]}")
+    say("recorded what Morphogen is made of (the self-encoder)")
 
 
 def declared_login(cwd: str) -> str | None:
@@ -423,6 +455,7 @@ def up(a) -> None:
     postgres(s)
     install(s)
     every = logins(s)
+    self_model(s, every)
     repo = intent()
     (HOME / "artifacts").mkdir(exist_ok=True, mode=0o700)
     running = {k: v for k, v in pids().items() if ours(v)}
@@ -456,6 +489,13 @@ def up(a) -> None:
         started["compose"] = start("compose", [sys.executable, "-m", f"runtime_{RUNTIME}", "--intent", str(repo), "--all"],
                                    {**base, **{k: os.environ[k] for k in engine if k in os.environ},
                                     **runtime_env(s, every)}, cwd=rt)
+        # What the engine runs, as node representations the gap finder compares with the templates (drift, R5-49).
+        en = ROOT / "morphogen" / "modules" / "encoder-engine"
+        started["engine"] = start("engine", [sys.executable, "-m", "encoder_engine", "watch", "--intent", str(repo), "--every", "30"],
+                                  {**base, **{k: os.environ[k] for k in engine if k in os.environ},
+                                   "KK_ENGINE": "docker" if RUNTIME == "compose" else "podman",
+                                   "DATABASE_URL": own(s, every, "encoder-engine"), "KK_ROLE": OTHERS["encoder-engine"][1],
+                                   "PYTHONPATH": os.pathsep.join([str(en), str(ROOT / "kernel" / "src")])}, cwd=en)
     f = HOME / "pids.json"
     f.write_text(json.dumps(started, indent=2) + "\n")
     time.sleep(3)

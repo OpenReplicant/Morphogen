@@ -112,7 +112,7 @@ try:
             return False
     check(lan != "127.0.0.1" and not reaches(lan), f"the UI listens on 127.0.0.1 only, not on {lan}")
     st = local("status").stdout
-    check(all(f"{p}: running" in st for p in ("reconcile", "observer-otel", "compose", "ui")), "status: every process runs")
+    check(all(f"{p}: running" in st for p in ("reconcile", "observer-otel", "compose", "engine", "ui")), "status: every process runs")
     sys.path.insert(0, str(LOCAL.parent))
     from local import SERVICES
     rec = lambda: [json.loads(x) for x in (home / "logs" / "reconcile.log").read_text().splitlines() if x.startswith("{")]  # noqa: E731
@@ -128,6 +128,12 @@ try:
         "select distinct usename from pg_stat_activity where datname = 'morphogen'").fetchall()}
     want = {(json.loads((home / "service-logins.json").read_text()).get(n) or [None, f"{SVC[n][3]}_login"])[1] for n in SVC}
     check(want <= logins_in_use, f"every service connects as its own login ({sorted(want - logins_in_use)} missing)")
+    with psycopg.connect(su_url, autocommit=True) as su:
+        slots, fills = su.execute(
+            "select count(*) filter (where predicate = %s), count(*) filter (where predicate = %s) from api.claims"
+            " where attributed_to = 'urn:kk:agent:self-encoder' and status <> 'deprecated'",
+            ("https://w3id.org/knowledge-kernel/ns#slotContract", "https://w3id.org/knowledge-kernel/ns#fills")).fetchone()
+    check(slots >= 28 and fills >= 28, f"up records what Morphogen is made of, for the UI's overview: its slots and their providers ({slots}, {fills})")
     os.environ["KK_LOGIN_SECRET"] = s["logins"]
     sys.path.insert(0, str(ROOT / "morphogen" / "src"))
     from morphogen.logins import password_for
@@ -215,6 +221,12 @@ try:
     e = wait("the system to start", lambda: [x for x in events() if x.get("system") == "cache" and x["event"] in ("started", "failed")],
              timeout=300)
     check(e[0]["event"] == "started" and e[0]["project"] == "kk-cache", f"run: the compose runner starts the approved system ({e[0]})")
+    rep = "urn:kk:representation:cache:redis"
+    with connect(url=url) as me:
+        of = wait("the engine encoder to record what runs", lambda: me.execute(
+            "select object_entity from api.claims where subject = %s and predicate = %s and status <> 'deprecated'",
+            (rep, KKT + "representationOf")).fetchone(), timeout=120)
+    check(of[0] == node, f"observe: the engine encoder records the running redis as a representation of its template ({of})")
 
     # Stopped and started again, Postgres included (as after a reboot): everything comes back, the record kept.
     out = local("down", "--db")
@@ -223,7 +235,7 @@ try:
     check(out.returncode == 0 and "Morphogen is up" in out.stdout, f"up again: Postgres restarts from its volume ({out.stderr.strip()[-400:]})")
     check(not (home / "pg-password").exists(), "the init password file is gone again once Postgres answers")
     st = local("status").stdout
-    check(all(f"{p}: running" in st for p in ("reconcile", "observer-otel", "compose", "ui")), "status: every process runs again")
+    check(all(f"{p}: running" in st for p in ("reconcile", "observer-otel", "compose", "engine", "ui")), "status: every process runs again")
     code, body = post(ui + "/ui/login", {"name": "alice", "password": password})
     check(code == 200 and body.get("token"), "the record is kept: alice signs in again")
 finally:

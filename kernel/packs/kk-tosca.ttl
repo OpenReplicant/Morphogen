@@ -18,7 +18,7 @@
 <https://w3id.org/knowledge-kernel/tosca>
     a owl:Ontology ;
     rdfs:label "TOSCA 2.0 metamodel mirror" ;
-    owl:versionInfo "0.4.0" ;
+    owl:versionInfo "0.5.0" ;
     rdfs:seeAlso <https://docs.oasis-open.org/tosca/TOSCA/v2.0/TOSCA-v2.0.html> .
 
 # ------------------------------------------------------------------ types and templates
@@ -28,6 +28,10 @@ kkt:NodeType a owl:Class ; rdfs:label "node type" ;
 
 kkt:NodeTemplate a owl:Class ; rdfs:label "node template" ;
     skos:definition "A configured use of a node type in a topology: property values set, requirements fulfilled." ;
+    rdfs:isDefinedBy <https://docs.oasis-open.org/tosca/TOSCA/v2.0/TOSCA-v2.0.html> .
+
+kkt:NodeRepresentation a owl:Class ; rdfs:label "node representation" ;
+    skos:definition "What an orchestrator maintains of a component that exists outside it, created from a node template and kept in step with what runs (TOSCA 2.0 §2.3: node representations are the vertices of a service representation graph); what an encoder of a runtime observed (R5-49)." ;
     rdfs:isDefinedBy <https://docs.oasis-open.org/tosca/TOSCA/v2.0/TOSCA-v2.0.html> .
 
 kkt:ServiceTemplate a owl:Class ; rdfs:label "service template" ;
@@ -96,7 +100,10 @@ kkt:hasPolicy a owl:ObjectProperty ; rdfs:range kkt:PolicyDefinition ; rdfs:labe
 kkt:substitutes a owl:ObjectProperty ; rdfs:domain kkt:SubstitutionMapping ; rdfs:range kkt:NodeType ; rdfs:label "substitutes" .
 kkt:substitutedBy a owl:ObjectProperty ; rdfs:domain kkt:SubstitutionMapping ; rdfs:range kkt:ServiceTemplate ; rdfs:label "substituted by" .
 kkt:memberOf a owl:ObjectProperty ; rdfs:range kkt:ServiceTemplate ; rdfs:label "member of" ;
-    skos:definition "A node template belongs to a service template (topology)." .
+    skos:definition "A node template, or a node representation, belongs to a service template (topology)." .
+kkt:representationOf a owl:ObjectProperty ; rdfs:domain kkt:NodeRepresentation ; rdfs:range kkt:NodeTemplate ;
+    rdfs:label "representation of" ;
+    skos:definition "The node template a representation was created from. TOSCA 2.0 matches representations to templates by the template's name (§4.4) and names no property for it; the mirror adds this one so the two can be compared (R5-49)." .
 kkt:hasAffordance a owl:ObjectProperty ; rdfs:range td:InteractionAffordance ; rdfs:label "has affordance" ;
     skos:definition "Bridge to WoT TD: runtime properties, actions and events of a node, each with forms (transport bindings)." .
 

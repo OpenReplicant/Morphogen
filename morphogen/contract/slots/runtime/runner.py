@@ -252,6 +252,12 @@ def quadlets(text: str) -> str:
             m["depends_on"] = sorted(requires)
             if sorted(after) != sorted(requires):
                 m["Unit:After"] = sorted(after)
+        own = {"com.docker.compose.project": prefix, "com.docker.compose.service": svc}   # as Compose labels its containers
+        if all(m.get("labels", {}).get(k) == v for k, v in own.items()):
+            for k in own:
+                del m["labels"][k]
+            if not m["labels"]:
+                del m["labels"]
         for key in ("environment", "labels"):
             if key in m:
                 m[key] = dict(sorted(m[key].items()))

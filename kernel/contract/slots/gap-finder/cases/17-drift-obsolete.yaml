@@ -1,0 +1,29 @@
+id: urn:kk:eval:gap-finder/drift-obsolete
+text: a template of a system that runs, with nothing running for it, is asked about; a system nothing of runs is not
+input:
+  services:
+    shop/web:
+      image: true
+      limit: true
+      connects:
+      - shop/db
+    shop/db:
+      image: true
+    blog/api:
+      image: true
+      limit: true
+  running:
+    shop/web:
+      of: shop/web
+      image: true
+expect:
+  gaps:
+  - kind: drift-obsolete
+    target: shop/db
+then:
+  running:
+    shop/db:
+      of: shop/db
+      image: true
+  expect:
+    gaps: []
