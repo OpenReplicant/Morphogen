@@ -13,6 +13,7 @@ volumes and networks are not encoded yet.
 from __future__ import annotations
 
 import re
+import shlex
 
 import yaml
 
@@ -59,6 +60,14 @@ def scalars(node) -> list[yaml.ScalarNode]:
     return []
 
 
+def split(command: str) -> list[str]:
+    """A string command's words, as a shell splits them; on a quote left open, at spaces (encoder-engine does the same)."""
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
+
+
 def environment(node) -> list[tuple[str, str, yaml.Node]]:
     """(name, value, node to cite) for a mapping or a list of NAME=value."""
     if isinstance(node, yaml.MappingNode):
@@ -90,7 +99,8 @@ def compose(rel: str, text: str, system: str) -> list[dict]:
             ops.append(prop("image", image.value, image))
         command = get(svc, "command")
         if command is not None:
-            ops.append(prop("command", " ".join(x.value for x in scalars(command)), command))
+            words = split(command.value) if isinstance(command, yaml.ScalarNode) else [x.value for x in scalars(command)]
+            ops.append(prop("command", " ".join(words), command))   # a string split as a shell does, as the engine runs it
         env = environment(get(svc, "environment"))
         ops += [prop(name, value, node) for name, value, node in env]
         links: dict[str, yaml.Node] = {}

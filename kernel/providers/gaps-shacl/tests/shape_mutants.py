@@ -32,6 +32,13 @@ MUTANTS = {
     "a gap is a refusal, not a question": ("kkts:ServiceHasImage a sh:PropertyShape ;", "kkts:ServiceHasImage a sh:PropertyShape ; sh:deactivated true ;"),
     "a warning is not a gap": ("sh:severity sh:Warning ;\n    dcterms:type <urn:kk:gap-kind:unconnected>",
                                "sh:severity sh:Violation ;\n    dcterms:type <urn:kk:gap-kind:unconnected>"),
+    "a differing value runs as intended": ("FILTER NOT EXISTS { $this kkt:propertyValue ?got . ?got kkt:propertyName ?name ; rdf:value ?value }",
+                                           "FILTER NOT EXISTS { $this kkt:propertyValue ?got . ?got kkt:propertyName ?name }"),
+    "drift where nothing of the system runs": ("                FILTER EXISTS { ?running a kkt:NodeRepresentation ; kkt:memberOf ?system }\n", ""),
+    "a template with any representation counts as running": ("FILTER NOT EXISTS { ?r a kkt:NodeRepresentation ; kkt:representationOf $this }",
+                                                             "FILTER NOT EXISTS { ?r a kkt:NodeRepresentation }"),
+    "a representation of something off the map is intended": ("FILTER NOT EXISTS { $this kkt:representationOf ?template . ?template a kkt:NodeTemplate }",
+                                                              "FILTER NOT EXISTS { $this kkt:representationOf ?template }"),
 }
 
 

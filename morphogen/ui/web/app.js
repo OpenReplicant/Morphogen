@@ -17,7 +17,39 @@ const NS = {
   body: 'http://www.w3.org/ns/oa#bodyValue',
   target: 'http://www.w3.org/ns/oa#hasTarget',
   system: 'https://w3id.org/knowledge-kernel/tosca#ServiceTemplate',
+  comment: 'http://www.w3.org/2000/01/rdf-schema#comment',
+  version: 'http://www.w3.org/2002/07/owl#versionInfo',
+  ontology: 'http://www.w3.org/2002/07/owl#Ontology',
+  license: 'http://purl.org/dc/terms/license',
+  hasPart: 'http://purl.org/dc/terms/hasPart',
+  fills: 'https://w3id.org/knowledge-kernel/ns#fills',
+  contract: 'https://w3id.org/knowledge-kernel/ns#slotContract',
+  cardinality: 'https://w3id.org/knowledge-kernel/ns#cardinality',
+  emits: 'https://w3id.org/knowledge-kernel/ns#emits',
+  consumes: 'https://w3id.org/knowledge-kernel/ns#consumes',
+  mayConsume: 'https://w3id.org/knowledge-kernel/ns#mayConsume',
 };
+
+// How the overview lays the slots out. A distribution's slots carry their phase in the record (its contract reads
+// "<phase> phase"); the kernel's are grouped by where they sit around the commit. A slot in neither list still shows,
+// under "Other".
+const PHASES = [
+  ['design', 'Design', 'A system is described, in an interview or from its files, and becomes a map.'],
+  ['monitor', 'Monitor', 'What runs is observed.'],
+  ['analyse', 'Analyse', 'What is wrong, or surprising, is found.'],
+  ['plan', 'Plan', 'A change is proposed, with a prediction and a risk.'],
+  ['execute', 'Execute', 'What a person approved is carried out.'],
+  ['verify', 'Verify', 'The prediction is checked against what happened.'],
+];
+const KERNEL_GROUPS = [
+  ['Writing', 'Every change passes these, before and at the commit.',
+   ['intake-filter', 'validator', 'lane-policy', 'write-pipeline', 'record-store']],
+  ['After the commit', 'They follow the change feed; what they find comes back as a proposal.',
+   ['change-feed', 'belief-model', 'verifier', 'truth-maintenance', 'gap-finder']],
+  ['Reading', 'How people and agents ask the record.', ['recall', 'agent-interface', 'context-assembler']],
+  ['Upkeep', 'The vocabularies, the record of itself, and measuring providers.',
+   ['vocabulary-pack', 'self-encoder', 'evaluator', 'harness-adapter']],
+];
 
 const KK = {
   token: '',
@@ -76,16 +108,17 @@ function readPlan(ops) {
 
 function shell() {
   return {
-    tab: 'review', token: '', name: '', password: '', me: null, error: '', busy: false,
+    tab: 'overview', token: '', name: '', password: '', me: null, error: '', busy: false,
     queue: [], notes: {}, loop: [], plans: [], systems: [], system: '', graphInfo: '', rows: [], query: '', searched: false,
-    detail: null,
+    detail: null, slot: null, overview: null, phases: PHASES, kernelGroups: KERNEL_GROUPS,
 
     async init() {
       try { this.token = sessionStorage.getItem('kk_token') || ''; } catch (e) { /* storage blocked */ }
       if (this.token) await this.signIn();
     },
     tabs() {
-      return [{ id: 'review', title: 'Review' }, { id: 'loop', title: 'Loop' }, { id: 'systems', title: 'Systems' },
+      return [{ id: 'overview', title: 'Overview' }, { id: 'review', title: 'Review' }, { id: 'loop', title: 'Loop' },
+              { id: 'systems', title: 'Systems' },
               { id: 'search', title: 'Search' }, { id: 'me', title: 'Me' }];
     },
     async signIn() {
@@ -106,7 +139,7 @@ function shell() {
       if (this.token) await this.signIn();
     },
     signOut(keepError = false) {
-      this.token = ''; this.me = null; this.queue = []; this.loop = []; this.plans = []; this.rows = []; this.detail = null; KK.token = '';
+      this.token = ''; this.me = null; this.overview = null; this.slot = null; this.queue = []; this.loop = []; this.plans = []; this.rows = []; this.detail = null; KK.token = '';
       if (!keepError) this.error = '';
       try { sessionStorage.removeItem('kk_token'); } catch (e) { /* storage blocked */ }
     },
@@ -115,7 +148,8 @@ function shell() {
       try { await fn(); } catch (e) { this.error = e.message; } finally { this.busy = false; }
     },
     async open(tab) {
-      this.tab = tab; this.detail = null;
+      this.tab = tab; this.detail = null; this.slot = null;
+      if (tab === 'overview') await this.run(() => this.loadOverview());
       if (tab === 'review') await this.run(() => this.loadQueue());
       if (tab === 'loop') await this.run(() => this.loadLoop());
       if (tab === 'systems') await this.run(() => this.loadSystems());
@@ -154,7 +188,12 @@ function shell() {
         KK.call('list_change_sets', { limit: 500 })]);
       const typeOf = Object.fromEntries(types.map(c => [c.subject, c.object_entity]));
       const targetOf = Object.fromEntries(targets.map(c => [c.subject, c.object_entity]));
-      const kind = t => (t || '').replace(/^urn:kk:/, '').replace(/:/g, ' · ');
+      const kind = t => {                       // urn:kk:gap-kind:no-limit -> question · no limit
+        const m = (t || '').match(/^urn:kk:([a-z-]+?)(?:-kind)?:(.+)$/);
+        if (!m) return KK.short(t);
+        const family = m[1] === 'gap' ? (m[2].startsWith('drift-') ? 'drift' : 'question') : m[1];
+        return `${family} · ${m[2].replace(/^drift-/, '').replace(/-/g, ' ')}`;
+      };
       this.loop = bodies.map(c => ({ id: c.id, subject: c.subject, kind: kind(typeOf[c.subject]),
                                      target: targetOf[c.subject] || '', text: value(c.object_value ? { value: c.object_value } : null),
                                      belief: c.belief, at: c.valid_from || c.recorded_at || '' }))
@@ -216,11 +255,114 @@ function shell() {
       this.graphInfo = `${cy.nodes().length} entities, ${cy.edges().length} claims`;
     },
 
+    // The overview: what the system is made of, read from the record (the self-encoder's claims about the blueprint,
+    // each provider's manifest and the distribution, every one citing its file and line), what it has open, and where
+    // each part can be swapped.
+    async loadOverview() {
+      const [slotRows, fills, ontologies, parts, runs, types, systems, me] = await Promise.all([
+        KK.call('list_slots'),
+        KK.call('query_claims', { predicate: NS.fills, limit: 1000 }),
+        KK.call('query_claims', { predicate: NS.rdfType, object_entity: NS.ontology, limit: 200 }),
+        KK.call('query_claims', { predicate: NS.hasPart, limit: 1000 }),
+        KK.call('list_runs', { limit: 500 }),
+        KK.call('query_claims', { predicate: NS.dctType, limit: 1000 }),
+        KK.call('query_claims', { predicate: NS.rdfType, object_entity: NS.system, limit: 200 }),
+        KK.call('whoami')]);
+      this.me = me;
+      const entity = iri => KK.call('get_entity', { iri });
+      const about = (card, p) => card.claims.filter(c => c.predicate === p);
+      const one = (card, p) => { const c = about(card, p)[0]; return c ? (c.object_entity || value({ value: c.object_value })) : ''; };
+      const lastRun = {};
+      for (const r of runs) {
+        const name = KK.short(r.module || '').replace(/-v\d+$/, '');
+        if (name && !(name in lastRun)) lastRun[name] = r;
+      }
+      const providerIris = [...new Set(fills.map(c => c.subject))];
+      const [slotCards, providerCards, ontologyCards] = await Promise.all([
+        Promise.all(slotRows.map(s => entity(s.iri))), Promise.all(providerIris.map(entity)),
+        Promise.all(ontologies.map(c => entity(c.subject)))]);
+      const providers = Object.fromEntries(providerCards.map(card => {
+        const name = KK.short(card.iri);
+        return [card.iri, { iri: card.iri, name, label: one(card, NS.label) || name, version: one(card, NS.version),
+                            license: KK.short(one(card, NS.license)), slots: about(card, NS.fills).map(c => c.object_entity),
+                            fills: Object.fromEntries(about(card, NS.fills).map(c => [c.object_entity, c])),
+                            emits: about(card, NS.emits).map(c => c.object_entity),
+                            consumes: about(card, NS.consumes).map(c => c.object_entity),
+                            mayConsume: about(card, NS.mayConsume).map(c => c.object_entity), lastRun: lastRun[name] || null }];
+      }));
+      const distribution = {};
+      for (const c of parts) if (c.subject.startsWith('urn:kk:distribution:')) (distribution[c.object_entity] ||= []).push(c.subject);
+      const slots = slotCards.map(card => {
+        const note = about(card, NS.comment)[0];
+        const text = note ? value({ value: note.object_value }) : '';
+        const m = text.match(/^Default provider: (.+) \(status ([^)]*)\)\.$/);
+        const contract = one(card, NS.contract);
+        const phase = (contract.match(/^(\w+) phase$/) || [])[1] || '';
+        const defaults = m ? m[1].split(' + ').map(s => s.trim()) : [];
+        const filling = Object.values(providers).filter(p => p.slots.includes(card.iri))
+          .sort((a, b) => (defaults.includes(b.name) - defaults.includes(a.name)) || a.name.localeCompare(b.name));
+        return { iri: card.iri, id: one(card, NS.label) || KK.short(card.iri), contract: phase ? '' : contract, phase,
+                 cardinality: one(card, NS.cardinality) || 'one', note: text, noteId: note ? note.id : null,
+                 status: m ? m[2] : (text.startsWith('Unfilled') ? 'unfilled' : ''), unfilled: text.startsWith('Unfilled'),
+                 why: text.replace(/^Unfilled: no default provider\. ?/, ''), defaults, providers: filling,
+                 kernel: KK.short(one(card, 'http://purl.org/dc/terms/isPartOf')) === 'kernel',
+                 usedBy: (distribution[card.iri] || []).map(KK.short) };
+      });
+      const byId = Object.fromEntries(slots.map(s => [s.id, s]));
+      const grouped = new Set();
+      const take = ids => ids.map(id => byId[id]).filter(Boolean).map(s => { grouped.add(s.id); return s; });
+      const phases = PHASES.map(([id, title, text]) => ({ id, title, text, slots: take(slots.filter(s => s.phase === id).map(s => s.id)) }));
+      const kernel = KERNEL_GROUPS.map(([title, text, ids]) => ({ title, text, slots: take(ids) }));
+      const other = slots.filter(s => !grouped.has(s.id));
+      const gapKinds = types.filter(c => (c.object_entity || '').startsWith('urn:kk:gap-kind:')).map(c => KK.short(c.object_entity));
+      this.overview = {
+        slots, phases, kernel, other, providers: Object.values(providers),
+        filled: slots.filter(s => !s.unfilled).length,
+        swappable: slots.filter(s => this.alternatives(s)).length,
+        questions: gapKinds.filter(k => !k.startsWith('drift')).length, drift: gapKinds.filter(k => k.startsWith('drift')).length,
+        systems: systems.length, waiting: me.awaiting_review,
+        vocabularies: ontologyCards.map(card => ({ iri: card.iri, label: one(card, NS.label) || KK.short(card.iri),
+                                                   version: one(card, NS.version) }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      };
+    },
+    // One slot in the side panel: its contract, who fills it, which is the default and where that is written (the
+    // file and line the self-encoder's claim cites), and how a provider is swapped.
+    async openSlot(s) {
+      this.detail = null;
+      this.slot = { ...s, where: '' };
+      if (!s.noteId) return;
+      await this.run(async () => {
+        const ex = await KK.call('explain', { claim_id: s.noteId });
+        const ref = (ex.references || [])[0];
+        if (ref && this.slot && this.slot.iri === s.iri) {
+          const line = ((ref.span || {}).value || '').replace(/^line=/, '');
+          this.slot.where = String(ref.source_uri || '').replace(/^file:/, '') + (line ? ` line ${line}` : '');
+        }
+      });
+    },
+    alternatives: s => s.providers.filter(p => !s.defaults.includes(p.name)).length,
+    ago(t) {
+      if (!t) return '';
+      const s = (Date.now() - new Date(t).getTime()) / 1000;
+      if (s < 90) return 'just now';
+      if (s < 5400) return `${Math.round(s / 60)} min ago`;
+      if (s < 129600) return `${Math.round(s / 3600)} h ago`;
+      return `${Math.round(s / 86400)} days ago`;
+    },
+
     async find() {
       await this.run(async () => { this.rows = await KK.call('search', { text: this.query, limit: 50 }); this.searched = true; });
     },
     async explain(id) {
+      this.slot = null;
       await this.run(async () => { this.detail = { id, body: await KK.call('explain', { claim_id: id }) }; });
+    },
+    // A claim read as a sentence, with where it came from.
+    sentence(c) { return c ? `${KK.short(c.subject)} · ${KK.short(c.predicate)} · ${this.objectOf(c)}` : ''; },
+    refText(r) {
+      const span = r.span && r.span.value ? ` (${r.span.value})` : '';
+      return String(r.source_uri || r.artifact_id || '') + span + (r.quote ? ` "${r.quote}"` : '');
     },
 
     short: iri => KK.short(iri),

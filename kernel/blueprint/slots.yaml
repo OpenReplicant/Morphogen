@@ -97,7 +97,7 @@ slots:
     hook: feed
     cardinality: one
     interface: Processor
-    default: gaps-shacl               # what the claims lack, by the installed packs' warning shapes, as questions (R5-47); a distribution may fill it with its own (Morphogen's map-gaps)
+    default: gaps-shacl               # what the claims lack, by the installed packs' warning shapes, as questions, drift included (R5-47, R5-49)
     contract: ../contract/slots/gap-finder
     status: written
 

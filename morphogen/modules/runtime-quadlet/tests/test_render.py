@@ -124,7 +124,7 @@ if GENERATOR:
     line = next((l for l in out.splitlines() if l.startswith("ExecStart=") and "--name=kk-demo-web" in l), "")
     args = [specifiers(a) for a in shlex.split(line.removeprefix("ExecStart="))]
     check(["--env", "SPACED=v a % \" x \\ y"] == args[args.index("--env", args.index("--env") + 1):][:2]
-          and ["--label", "pct=50%"] == args[args.index("--label", args.index("--label") + 1):][:2]
+          and ("--label", "pct=50%") in zip(args, args[1:]) and ("--label", "com.docker.compose.service=web") in zip(args, args[1:])
           and "-w=/srv x%n" in args and args[args.index("--user") + 1] == "1000",
           f"the generated podman run holds each value exactly, spaces, quotes, backslashes and % included: {args}")
     check(args[-5:] == ["--port", "98 98", "%n", "a\\b", 'say "hi"'], f"the command's words reach podman run as they are: {args[-5:]}")

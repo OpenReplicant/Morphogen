@@ -16,7 +16,7 @@ uses_kernel_slots:
   - belief-model
   - verifier
   - truth-maintenance
-  - gap-finder                                 # the kernel's since R5-47 (the kk-tosca shapes ask about system maps); map-gaps the alternative
+  - gap-finder                                 # the kernel's since R5-47 (the kk-tosca shapes ask about system maps and drift)
   - recall
   - agent-interface
   - vocabulary-pack

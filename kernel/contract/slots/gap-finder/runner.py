@@ -29,7 +29,12 @@ def node(name: str) -> str:
     return f"urn:kk:node:{system}:{service}"
 
 
-def claims(services: dict) -> list[dict]:
+def representation(name: str) -> str:
+    system, service = name.split("/")
+    return f"urn:kk:representation:{system}:{service}"
+
+
+def claims(services: dict, running: dict | None = None) -> list[dict]:
     out = []
 
     def c(s, p, o=None, value=None, q=None):
@@ -52,6 +57,20 @@ def claims(services: dict) -> list[dict]:
             c(n, MAX, value=0.5, q={PROP: LATENCY})
         if d.get("prediction"):
             c(n, MAX, value=0.5, q={PROP: LATENCY, PART: "urn:kk:plan:x"})
+    for name, d in (running or {}).items():        # what a runtime's encoder observed (R5-49)
+        d = d or {}
+        r = representation(name)
+        c(r, RDF_TYPE, KKT + "NodeRepresentation")
+        c(r, LABEL, value=name.split("/")[1])
+        c(r, KKT + "memberOf", f"urn:kk:system:{name.split('/')[0]}")
+        if d.get("of"):
+            c(r, KKT + "representationOf", node(d["of"]))
+        if d.get("image"):
+            of = (d.get("of") or name).split("/")[1]
+            img = d["image"] if isinstance(d["image"], str) else f"example/{of}:1@sha256:{'a' * 64}"
+            c(r, KKT + "propertyValue", value=img, q={KKT + "propertyName": "image"})
+        for k, v in (d.get("settings") or {}).items():
+            c(r, KKT + "propertyValue", value=str(v), q={KKT + "propertyName": k})
     return out
 
 
@@ -110,7 +129,12 @@ def judge(found: list[dict], state: list[dict]) -> tuple[list, str | None]:
             ok = all(c["subject"] == t for c in prem)
         if not ok:
             return [], f"a gap on {t} derives from claims about something else: {g['premises']}"
-        target = t.removeprefix("urn:kk:system:") if t.startswith("urn:kk:system:") else t.removeprefix("urn:kk:node:").replace(":", "/", 1)
+        if t.startswith("urn:kk:system:"):
+            target = t.removeprefix("urn:kk:system:")
+        elif t.startswith("urn:kk:representation:"):
+            target = "running:" + t.removeprefix("urn:kk:representation:").replace(":", "/", 1)
+        else:
+            target = t.removeprefix("urn:kk:node:").replace(":", "/", 1)
         rows.append({"kind": g["kind"].rsplit(":", 1)[-1], "target": target})
     return sorted(rows, key=lambda r: (r["target"], r["kind"])), None
 
@@ -135,10 +159,13 @@ def main() -> int:
     cases = [yaml.safe_load(p.read_text()) for p in paths]
     plan = []
     for case in cases:
-        stages = [(case["input"]["services"], case["expect"]["gaps"])]
+        run_ = case["input"].get("running")
+        stages = [(case["input"]["services"], run_, case["expect"]["gaps"])]
         if case.get("then"):
-            stages.append((merged(case["input"]["services"], case["then"]["services"]), case["then"]["expect"]["gaps"]))
-        plan.append((case, [(claims(s), e) for s, e in stages]))
+            stages.append((merged(case["input"]["services"], case["then"].get("services") or {}),
+                           merged(run_ or {}, case["then"].get("running") or {}) if run_ or case["then"].get("running") else None,
+                           case["then"]["expect"]["gaps"]))
+        plan.append((case, [(claims(s, r), e) for s, r, e in stages]))
     answers = iter(answer(provider, m.group(1), [st for _, stages in plan for st, _ in stages]))
     failed = 0
     for case, stages in plan:

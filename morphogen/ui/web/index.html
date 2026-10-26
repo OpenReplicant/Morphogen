@@ -15,14 +15,14 @@
 </head>
 <body x-data="shell()" x-init="init()">
 <header>
-  <h1>Morphogen</h1>
+  <h1><span class="mark" aria-hidden="true"></span>Morphogen</h1>
   <nav aria-label="Views" x-show="me">
     <template x-for="t in tabs()" :key="t.id">
       <button :class="{on: tab === t.id}" @click="open(t.id)" x-text="t.title"></button>
     </template>
   </nav>
   <div class="who">
-    <span class="muted" x-show="me" x-text="me ? me.agent : ''" data-test="agent"></span>
+    <span class="muted" x-show="me" x-text="me ? short(me.agent) : ''" :title="me ? me.agent : ''" data-test="agent"></span>
     <button x-show="me" @click="signOut()">Sign out</button>
     <form class="row" x-show="!me" @submit.prevent="login()">
       <input placeholder="Name" aria-label="Name" autocomplete="username" x-model="name">
@@ -33,10 +33,101 @@
 </header>
 <main>
   <p class="bad" role="alert" x-show="error" x-text="error"></p>
-  <p class="muted" x-show="!me && !error">Sign in with your own login. What you see and what you may approve is
-    decided by the record, for you.</p>
+  <div class="welcome" x-show="!me && !error">
+    <h2>A system you describe, which builds and manages it</h2>
+    <p class="muted">Sign in with your own login. What you see and what you may approve is decided by the record, for
+      you.</p>
+  </div>
+  <p class="muted loading" x-show="me && busy">Loading…</p>
+
+  <section x-show="me && tab === 'overview'" aria-label="Overview" data-test="overview">
+    <template x-if="overview">
+      <div>
+        <p class="lede">Every part of Morphogen fills a <strong>slot</strong>: a job with a contract. Any provider that passes
+          the slot's contract can take its place. Everything on this page is read from the record; open a slot to see
+          the claims behind it, with their belief and the file and line each comes from.</p>
+        <div class="tiles">
+          <button class="tile" :class="{alert: overview.waiting}" @click="open('review')" data-test="tile-review">
+            <strong x-text="overview.waiting"></strong><span>waiting for your review</span></button>
+          <button class="tile" @click="open('loop')" data-test="tile-questions">
+            <strong x-text="overview.questions"></strong><span>open questions about the maps</span></button>
+          <button class="tile" :class="{alert: overview.drift}" @click="open('loop')" data-test="tile-drift">
+            <strong x-text="overview.drift"></strong><span>places where what runs differs from the intent</span></button>
+          <button class="tile" @click="open('systems')" data-test="tile-systems">
+            <strong x-text="overview.systems"></strong><span>systems mapped</span></button>
+          <div class="tile" data-test="tile-slots"><strong x-text="overview.filled + ' / ' + overview.slots.length"></strong>
+            <span>slots filled, <span x-text="overview.swappable"></span> with a choice of provider</span></div>
+          <div class="tile" data-test="tile-vocabularies"><strong x-text="overview.vocabularies.length"></strong>
+            <span>vocabularies</span></div>
+        </div>
+
+        <h2>The loop</h2>
+        <p class="muted">What Morphogen does with a system, in order. A person approves every change before it is carried out.
+          Open a slot to see its providers and how to swap one.</p>
+        <p class="legend small muted"><span class="chip def">default</span> <span class="chip">another provider</span>
+          <span class="chip def live">ran</span> <span>has recorded runs</span>
+          <span class="chip none">unfilled</span> <span>no provider yet</span></p>
+        <div class="phases">
+          <template x-for="(ph, i) in overview.phases" :key="ph.id">
+            <div class="phase" :data-phase="ph.id">
+              <h3><span class="step" x-text="i + 1"></span><span x-text="ph.title"></span></h3>
+              <p class="muted small" x-text="ph.text"></p>
+              <template x-for="s in ph.slots" :key="s.id">
+                <button class="slot" :class="{unfilled: s.unfilled}" @click="openSlot(s)" :data-slot="s.id">
+                  <span class="slot-name" x-text="s.id"></span>
+                  <span class="chips">
+                    <template x-for="p in s.providers" :key="p.iri">
+                      <span class="chip" :class="{def: s.defaults.includes(p.name), live: p.lastRun}" x-text="p.name"
+                            :title="(s.defaults.includes(p.name) ? 'default' : 'alternative') + (p.lastRun ? ', last ran ' + ago(p.lastRun.started_at) : '')"></span>
+                    </template>
+                    <span class="chip none" x-show="s.unfilled">unfilled</span>
+                  </span>
+                  <span class="swaps small" x-show="alternatives(s)" x-text="alternatives(s) + (s.cardinality === 'many' ? ' more to add' : (alternatives(s) === 1 ? ' alternative' : ' alternatives'))"></span>
+                </button>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <h2>The record underneath</h2>
+        <p class="muted">The knowledge kernel. Model output is only ever a proposal here; these slots decide what is recorded, and how much it is believed.</p>
+        <div class="groups">
+          <template x-for="g in overview.kernel.concat(overview.other.length ? [{title: 'Other', text: '', slots: overview.other}] : [])" :key="g.title">
+            <div class="group">
+              <h3 x-text="g.title"></h3>
+              <p class="muted small" x-text="g.text"></p>
+              <template x-for="s in g.slots" :key="s.id">
+                <button class="slot" :class="{unfilled: s.unfilled}" @click="openSlot(s)" :data-slot="s.id">
+                  <span class="slot-name" x-text="s.id"></span>
+                  <span class="chips">
+                    <template x-for="p in s.providers" :key="p.iri">
+                      <span class="chip" :class="{def: s.defaults.includes(p.name), live: p.lastRun}" x-text="p.name"
+                            :title="(s.defaults.includes(p.name) ? 'default' : 'alternative') + (p.lastRun ? ', last ran ' + ago(p.lastRun.started_at) : '')"></span>
+                    </template>
+                    <span class="chip none" x-show="s.unfilled">unfilled</span>
+                  </span>
+                  <span class="swaps small" x-show="alternatives(s)" x-text="alternatives(s) + (s.cardinality === 'many' ? ' more to add' : (alternatives(s) === 1 ? ' alternative' : ' alternatives'))"></span>
+                </button>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <h2>Vocabularies</h2>
+        <p class="muted">The terms everything is recorded in. Each pack brings its rules: what a complete description has,
+          and the questions to ask when one is missing.</p>
+        <div class="vocab">
+          <template x-for="v in overview.vocabularies" :key="v.iri">
+            <span class="chip" :title="v.iri"><span x-text="v.label"></span> <span class="muted" x-text="v.version"></span></span>
+          </template>
+        </div>
+      </div>
+    </template>
+  </section>
 
   <section x-show="me && tab === 'review'" aria-label="Review">
+    <p class="muted intro">Changes that wait for a person: each plan with its risk, what it would change, what it predicts,
+      and the recorded claims it rests on. Nothing in the review lane is carried out until someone approves it.</p>
     <p class="muted" x-show="!busy && !queue.length">Nothing is waiting for your review.</p>
     <template x-for="r in queue" :key="r.id">
       <article class="card" :data-id="r.id">
@@ -96,6 +187,8 @@
   </section>
 
   <section x-show="me && tab === 'loop'" aria-label="Loop">
+    <p class="muted intro">What the loop has found and done: questions about the maps, drift between what runs and the
+      intent, anomalies in what is observed, and each plan from proposal to the verifier's verdict.</p>
     <h2 x-show="plans.length">Plans</h2>
     <table x-show="plans.length" class="plans">
       <thead><tr><th>Plan</th><th>Risk</th><th>Decided</th><th>Carried out</th><th>Prediction</th></tr></thead>
@@ -129,6 +222,7 @@
   </section>
 
   <section x-show="me && tab === 'systems'" aria-label="Systems">
+    <p class="muted intro">Each managed system as a map: its services and what connects to what, as recorded.</p>
     <div class="row">
       <select x-model="system" @change="run(() => drawSystem())" aria-label="System">
         <template x-for="s in systems" :key="s"><option :value="s" x-text="short(s)"></option></template>
@@ -140,6 +234,7 @@
   </section>
 
   <section x-show="me && tab === 'search'" aria-label="Search">
+    <p class="muted intro">Anything in the record you may see. Open a claim to see where it came from and what rests on it.</p>
     <form class="row" @submit.prevent="find()">
       <input type="search" placeholder="Search claims (any words)" aria-label="Search" x-model="query">
       <button type="submit">Search</button>
@@ -167,10 +262,90 @@
     </dl>
   </section>
 
-  <aside x-show="detail" class="detail" aria-label="Explain">
-    <div class="row"><strong>Claim</strong> <code x-text="detail && detail.id"></code>
-      <button @click="detail = null" aria-label="Close">Close</button></div>
-    <pre x-text="detail ? JSON.stringify(detail.body, null, 2) : ''"></pre>
+  <aside x-show="slot" class="panel" aria-label="Slot" data-test="slot-panel">
+    <template x-if="slot">
+      <div>
+        <div class="row panel-head"><h2 x-text="slot.id"></h2>
+          <button @click="slot = null" aria-label="Close">Close</button></div>
+        <p class="muted" x-text="slot.phase ? 'Morphogen, ' + slot.phase + ' phase' : (slot.kernel ? 'Kernel slot' : '')"></p>
+        <dl>
+          <template x-if="slot.contract"><dt>Contract</dt></template>
+          <template x-if="slot.contract"><dd><code x-text="slot.contract"></code></dd></template>
+          <dt>Runs</dt><dd x-text="slot.cardinality === 'many' ? 'several providers side by side' : 'one provider at a time'"></dd>
+          <dt>Status</dt><dd x-text="slot.status"></dd>
+          <template x-if="slot.usedBy.length"><dt>Used by</dt></template>
+          <template x-if="slot.usedBy.length"><dd x-text="slot.usedBy.join(', ')"></dd></template>
+        </dl>
+        <template x-if="slot.unfilled">
+          <p><strong>Unfilled.</strong> <span x-text="slot.why"></span></p>
+        </template>
+        <h3>Providers</h3>
+        <p class="muted" x-show="!slot.providers.length">No provider in the record fills this slot.</p>
+        <template x-for="p in slot.providers" :key="p.iri">
+          <div class="provider" :data-provider="p.name">
+            <div class="row"><strong x-text="p.label"></strong>
+              <span class="pill on" x-show="slot.defaults.includes(p.name)">default</span>
+              <span class="muted small" x-text="[p.name, p.version, p.license].filter(Boolean).join(' · ')"></span></div>
+            <p class="small" x-show="p.fills[slot.iri]"><a href="#" @click.prevent="explain(p.fills[slot.iri].id)"
+              x-text="'fills this slot: claim ' + String((p.fills[slot.iri] || {}).id).slice(0, 8) + ', belief ' + belief((p.fills[slot.iri] || {}).belief)"></a></p>
+            <p class="muted small" x-text="p.lastRun ? 'Last ran ' + ago(p.lastRun.started_at) + ' (' + p.lastRun.status + ')' : 'No runs recorded'"></p>
+            <details x-show="p.emits.length || p.consumes.length || p.mayConsume.length">
+              <summary>Terms: <span x-text="p.emits.length"></span> written, <span x-text="p.consumes.length + p.mayConsume.length"></span> read</summary>
+              <p class="small" x-show="p.emits.length"><span class="muted">Writes</span>
+                <template x-for="t in p.emits" :key="t"><code class="term" x-text="short(t)" :title="t"></code></template></p>
+              <p class="small" x-show="p.consumes.length"><span class="muted">Needs</span>
+                <template x-for="t in p.consumes" :key="t"><code class="term" x-text="short(t)" :title="t"></code></template></p>
+              <p class="small" x-show="p.mayConsume.length"><span class="muted">Reads if present</span>
+                <template x-for="t in p.mayConsume" :key="t"><code class="term" x-text="short(t)" :title="t"></code></template></p>
+            </details>
+          </div>
+        </template>
+        <h3>Swapping it</h3>
+        <ul class="small swap">
+          <li x-show="slot.where">The default is written at <code x-text="slot.where" data-test="where"></code>
+            (<a href="#" @click.prevent="explain(slot.noteId)">the claim</a>).</li>
+          <li x-show="slot.contract || slot.kernel">A replacement must pass the slot's contract (<code x-text="slot.contract || 'the kernel\'s conformance suite'"></code>).</li>
+          <li x-show="slot.cardinality !== 'many'">One provider runs at a time: a new one runs in the sandbox beside the current one, is measured against it, and takes over through a plan you approve.</li>
+          <li x-show="slot.cardinality === 'many'">Several can run at once: adding one is a plan you approve, and none replaces another.</li>
+          <li>Nothing changes without a person: a swap is a change to the intent, in the review lane like any other.</li>
+        </ul>
+      </div>
+    </template>
+  </aside>
+
+  <aside x-show="detail" class="panel detail" aria-label="Explain">
+    <template x-if="detail">
+      <div>
+        <div class="row panel-head"><h2>Claim <code x-text="String(detail.id).slice(0, 8)"></code></h2>
+          <button @click="detail = null" aria-label="Close">Close</button></div>
+        <template x-if="detail.body && detail.body.claim">
+          <div>
+            <p class="sentence" x-text="sentence(detail.body.claim)"></p>
+            <dl>
+              <dt>Belief</dt><dd x-text="belief(detail.body.claim.belief)"></dd>
+              <dt>Status</dt><dd x-text="detail.body.claim.status"></dd>
+              <dt>By</dt><dd x-text="short(detail.body.claim.attributed_to)"></dd>
+              <dt>Evidence</dt><dd x-text="detail.body.claim.evidence_type"></dd>
+              <dt>Recorded</dt><dd x-text="String(detail.body.claim.recorded_at || '').slice(0, 19).replace('T', ' ')"></dd>
+            </dl>
+            <h3 x-show="(detail.body.references || []).length">Where it came from</h3>
+            <ul class="small">
+              <template x-for="(r, i) in detail.body.references || []" :key="i"><li><code x-text="refText(r)"></code></li></template>
+            </ul>
+            <h3 x-show="(detail.body.derived_from || []).length">Because of</h3>
+            <ul class="small">
+              <template x-for="d in detail.body.derived_from || []" :key="d"><li><a href="#" @click.prevent="explain(d)" x-text="String(d).slice(0, 8)"></a></li></template>
+            </ul>
+            <h3 x-show="(detail.body.used_by || []).length">Used by</h3>
+            <ul class="small">
+              <template x-for="d in detail.body.used_by || []" :key="d"><li><a href="#" @click.prevent="explain(d)" x-text="String(d).slice(0, 8)"></a></li></template>
+            </ul>
+          </div>
+        </template>
+        <details><summary>As recorded</summary>
+          <pre x-text="detail ? JSON.stringify(detail.body, null, 2) : ''"></pre></details>
+      </div>
+    </template>
   </aside>
 </main>
 </body>

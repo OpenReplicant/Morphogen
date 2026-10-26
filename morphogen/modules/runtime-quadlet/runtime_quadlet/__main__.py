@@ -89,6 +89,9 @@ def render(project: str, text: bytes) -> dict[str, str]:
             container.append(f"PublishPort={p}")
         for k, v in pairs(svc.get("labels")):
             container.append(f"Label={quote(f'{k}={v}')}")
+        # The compose project and service, as Compose labels its containers, so an encoder of what runs (encoder-engine)
+        # finds them under either runtime.
+        container += [f"Label={quote(f'com.docker.compose.project={project}')}", f"Label={quote(f'com.docker.compose.service={name}')}"]
         if "working_dir" in svc:
             container.append(f"WorkingDir={raw(svc['working_dir'])}")
         if "user" in svc:

@@ -16,7 +16,7 @@ inferred from every map claim the file was rendered from. The intent actuator wr
 as described then still renders to that text.
 Env: DATABASE_URL (a login that may SET ROLE to KK_ROLE), KK_ROLE (default kkm_design_blueprint),
 KK_INTENT_DIR (default morphogen/intent), KK_GAP_AGENTS (the agents whose gaps are its gate, comma-separated; default
-the agent of the kernel's gap finder, urn:kk:agent:gaps-shacl; map-gaps' is urn:kk:agent:map-gaps).
+the agent of the kernel's gap finder, urn:kk:agent:gaps-shacl).
 """
 from __future__ import annotations
 

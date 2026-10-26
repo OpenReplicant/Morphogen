@@ -1,0 +1,22 @@
+id: urn:kk:eval:gap-finder/drift-novel
+text: a running node that no template on the map describes is asked about, whether it names no template or one not on the map
+input:
+  services:
+    shop/web:
+      image: true
+      limit: true
+  running:
+    shop/web:
+      of: shop/web
+      image: true
+    shop/debug:
+      image: example/debug:1
+    shop/old:
+      of: shop/old
+      image: example/old:1
+expect:
+  gaps:
+  - kind: drift-novel
+    target: running:shop/debug
+  - kind: drift-novel
+    target: running:shop/old

@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "modules"), str(ROOT / "morphogen" / "ui"),
                 str(ROOT / "morphogen" / "modules" / "planner"),
                 str(ROOT / "morphogen" / "modules" / "prediction-verifier"), str(ROOT / "kernel" / "providers" / "validator-shacl"),
-                str(ROOT / "kernel" / "providers" / "belief-corroboration")]
+                str(ROOT / "kernel" / "providers" / "belief-corroboration"), str(ROOT / "kernel" / "providers" / "self-encoder")]
 import install  # noqa: E402  (morphogen/modules/install.py)
 import people  # noqa: E402
 from kk.lib import connect, follow, run, submit  # noqa: E402
@@ -34,6 +34,7 @@ from prediction_verifier import verify  # noqa: E402
 
 validator = importlib.import_module("validator.__main__")
 belief = importlib.import_module("belief_corroboration.__main__")
+self_encoder = importlib.import_module("self_encoder.__main__")
 
 DB = "kk_ui_test"
 URL = f"dbname={DB}"
@@ -81,6 +82,7 @@ def post(url, body, token=None):
 
 subprocess.run(["dropdb", "--if-exists", "--force", DB], check=True)
 install.install(DB, ["lane-autonomy", "planner"])
+install.kernel.install(DB, ["self-encoder"])
 password, secret = secrets.token_urlsafe(18), secrets.token_urlsafe(40)
 auth_pw = secrets.token_urlsafe(18)
 with connect(url=URL) as su:
@@ -102,6 +104,12 @@ with connect(url=URL) as su:
     verifier = su.pgconn.encrypt_password(auth_pw.encode(), b"kk_authenticator", b"scram-sha-256").decode()
     su.execute(sql.SQL("alter role kk_authenticator password {}").format(sql.Literal(verifier)))
     su.execute(f'grant connect on database "{DB}" to kk_authenticator, person_alice, person_eve, person_mallory')
+
+# What Morphogen is made of, as the overview reads it: the kernel's blueprint, every provider and the distribution.
+os.environ["DATABASE_URL"] = URL
+scanned = self_encoder.scan(ROOT, [str(ROOT / "morphogen" / "distribution.yaml")], [], [str(ROOT / "morphogen" / "modules")])
+check(all(r.get("status") in ("submitted", "applied", "unchanged") for r in scanned), "the self-encoder records the slots and providers")
+settle()
 
 # A small system's map, an observation over its limit, the anomaly on it, and the planner's plan in the review lane.
 record("t_ui_observer", SEED, "map", [
@@ -179,6 +187,17 @@ try:
     check(seen["after"] == 0, "after approving, nothing waits for review")
     check(any("exceeds the limit" in t for t in seen["loop"]), "the loop lists the anomaly")
     check(int(seen["nodes"]) >= 3, f"the systems view draws the mapped system ({seen['nodes']} nodes)")
+    import yaml
+    declared = len(yaml.safe_load((ROOT / "kernel" / "blueprint" / "slots.yaml").read_text())["slots"]) + \
+        len(yaml.safe_load((ROOT / "morphogen" / "distribution.yaml").read_text())["slots"])
+    check(seen["slots"] == declared and seen["tiles"]["slots"].endswith(f"/ {declared}"),
+          f"the overview shows every slot of the kernel and of Morphogen ({seen['slots']} of {declared}, {seen['tiles']})")
+    check(seen["gapFinder"] == ["gaps-shacl"], f"each slot names its default provider ({seen['gapFinder']})")
+    check(sorted(seen["runtime"]["providers"]) == ["runtime-compose", "runtime-quadlet"] and seen["runtime"]["defaults"] == ["runtime-compose"],
+          f"a slot opens with every provider that fills it, its default marked ({seen['runtime']})")
+    check(seen["runtime"]["where"].startswith("morphogen/distribution.yaml line "),
+          f"and where its default is written, from the claim's own reference ({seen['runtime']['where']})")
+    check(seen["tiles"]["review"] == "1" and seen["tiles"]["systems"] == "1", f"the tiles count what waits and what is mapped ({seen['tiles']})")
     with connect(url=URL) as su:
         st, by = su.execute("select status, decided_by from kernel.change_set where id = %s", (cs["id"],)).fetchone()
     check(st in ("approved", "applied") and by == "person_alice", f"the store records the approval as Alice's own ({st}, {by})")

@@ -1,6 +1,6 @@
 """The shape-driven gap finder's own tests (R5-O18 (5), R5-47): rules the gap-finder cases do not reach, what the
 finder takes from a shape (kind, question, order, premises), and the predicates a service reads. Its parity with
-Morphogen's map-gaps is checked in that distribution, next to map-gaps.
+the Python rules it replaced was checked until they were retired (R5-49).
 
   python3 tests/test_gaps.py
 """

@@ -280,10 +280,10 @@ Rules that keep a provider correct:
 
 | Command | What it checks | Needs |
 | --- | --- | --- |
-| `sh kernel/contract/run.sh` | the API against `api.yaml`, then each kernel provider against its slots' cases: 66 record, 6 lane policy, 13 validator, 17 belief, 9 intake filter, 8 verifier, 11 truth maintenance, 8 recall, 8 agent interface, 6 vocabulary pack, 8 self-encoder, 6 evaluator, 15 gap finder | Postgres |
+| `sh kernel/contract/run.sh` | the API against `api.yaml`, then each kernel provider against its slots' cases: 66 record, 6 lane policy, 13 validator, 17 belief, 9 intake filter, 8 verifier, 11 truth maintenance, 8 recall, 8 agent interface, 6 vocabulary pack, 8 self-encoder, 6 evaluator, 18 gap finder | Postgres |
 | `python3 kernel/contract/mutants.py` | every mutant fails the contract | Postgres |
 | `python3 kernel/providers/test.py` | each kernel provider's own tests, then the services end to end | Postgres |
-| `sh morphogen/contract/run.sh [--mutants]` | Morphogen's slot contracts (analyser, runtime), and the kernel slots its modules fill (map-gaps: gap-finder) | Postgres for the analyser's service cases |
+| `sh morphogen/contract/run.sh [--mutants]` | Morphogen's slot contracts (analyser, runtime), and the kernel slots its modules fill (lane-autonomy: lane policy) | Postgres for the analyser's service cases |
 | `python3 morphogen/modules/test.py` | each module's tests, then the full loop (T5), G2, G3, the design agent, catalog lookup, the UI, the local bring-up and the container image | everything in section 1, as root |
 | `python3 scripts/check_boundary.py` | `kernel/` never depends on `morphogen/` | nothing |
 

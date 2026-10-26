@@ -1,0 +1,29 @@
+id: urn:kk:eval:gap-finder/drift-modified
+text: a running node whose setting differs from its template's, or lacks it, is asked about; settings only the running node has are not
+input:
+  services:
+    shop/web:
+      image: true
+      limit: true
+      settings:
+        LOG: info
+  running:
+    shop/web:
+      of: shop/web
+      image: true
+      settings:
+        LOG: debug
+expect:
+  gaps:
+  - kind: drift-modified
+    target: running:shop/web
+then:
+  running:
+    shop/web:
+      of: shop/web
+      image: true
+      settings:
+        LOG: info
+        PATH: /usr/bin
+  expect:
+    gaps: []
