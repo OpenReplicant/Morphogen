@@ -3,7 +3,8 @@
 // the overview it opens on (the slots, their providers, one slot's panel). Prints one JSON line of what it saw.
 // Env: UI (the page), NAME, PASSWORD, PLAN (the plan's label); SHOT, a file for a screenshot of the review lane.
 // With STEP=plans it only signs in and reads the plan's row in the loop (who decided it, its run, its verdict),
-// then opens the verdict.
+// then opens the verdict. With STEP=vocab it reads the vocabularies view: the packs, the mappings (followed and waiting),
+// and two terms' panels (who writes and reads sosa:hasSimpleResult; sosa:Observation's mapping), then explains a mapping.
 const { chromium } = require('playwright');
 
 (async () => {
@@ -31,6 +32,35 @@ const { chromium } = require('playwright');
       const detail = await page.locator('aside.detail pre').textContent();
       if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
       console.log(JSON.stringify({ decided, run, verdict, detail: JSON.parse(detail) }));
+      return;
+    }
+    if (process.env.STEP === 'vocab') {
+      await page.locator('[data-test=agent]').waitFor({ timeout: 30000 });
+      await page.locator('nav').getByRole('button', { name: 'Vocabularies' }).click();
+      await page.locator('[data-test=terms] tr[data-term]').first().waitFor({ timeout: 30000 });
+      if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT, fullPage: true });
+      const packs = await page.locator('[data-test=vocab] [data-pack]').evaluateAll(es => es.map(e => e.dataset.pack));
+      const rows = await page.locator('[data-test=mappings] tbody tr').evaluateAll(rs => rs.map(r => [...r.cells].map(c => c.innerText.trim())));
+      const pending = (await page.locator('[data-test=pending-tile] strong').innerText()).trim();
+      const followed = (await page.locator('[data-test=followed]').innerText()).trim();
+      const panel = async name => {
+        await page.getByLabel('Find a term').fill(name);
+        await page.locator(`[data-test=terms] tr[data-term="${name}"]`).click();
+        await page.locator('[data-test=term-panel] h2', { hasText: name }).waitFor({ timeout: 30000 });
+        const got = { writers: await page.locator('[data-test=writers]').innerText(),
+                      readers: await page.locator('[data-test=readers]').innerText(),
+                      mappings: await page.locator('[data-test=term-mappings] li a').allInnerTexts() };
+        await page.locator('[data-test=term-panel]').getByRole('button', { name: 'Close' }).click();
+        return got;
+      };
+      const result = await panel('hasSimpleResult');
+      const observation = await panel('Observation');
+      await page.locator('[data-test=mappings] tr[data-mapping="Observation Activity"]').click();
+      await page.waitForFunction(() => document.querySelector('aside.detail pre') && document.querySelector('aside.detail pre').textContent.length > 2,
+                                 null, { timeout: 30000 });
+      const detail = JSON.parse(await page.locator('aside.detail pre').textContent());
+      if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
+      console.log(JSON.stringify({ packs, rows, pending, followed, result, observation, detail }));
       return;
     }
     // The overview first: every slot from the record, with its providers; a slot opens with where its default is written.

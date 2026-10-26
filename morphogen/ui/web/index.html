@@ -118,7 +118,7 @@
           and the questions to ask when one is missing.</p>
         <div class="vocab">
           <template x-for="v in overview.vocabularies" :key="v.iri">
-            <span class="chip" :title="v.iri"><span x-text="v.label"></span> <span class="muted" x-text="v.version"></span></span>
+            <button class="chip" :title="v.iri" @click="packFilter = v.iri; open('vocab')"><span x-text="v.label"></span> <span class="muted" x-text="v.version"></span></button>
           </template>
         </div>
       </div>
@@ -233,6 +233,68 @@
     <div id="cy" data-nodes="0" data-edges="0"></div>
   </section>
 
+  <section x-show="me && tab === 'vocab'" aria-label="Vocabularies" data-test="vocab">
+    <p class="muted intro">The terms everything is recorded in and the standards they come from. Where two standards
+      name the same thing, a mapping joins them; a reader follows a mapping only once a person has approved it, and never a "related" one.</p>
+    <template x-if="vocab">
+      <div>
+        <div class="tiles">
+          <div class="tile"><strong x-text="vocab.packs.length"></strong><span>vocabularies</span></div>
+          <div class="tile"><strong x-text="vocab.terms.length"></strong><span>terms</span></div>
+          <div class="tile"><strong x-text="vocab.followed" data-test="followed"></strong><span>mappings readers follow</span></div>
+          <button class="tile" :class="{alert: vocab.pending}" @click="open('review')" data-test="pending-tile">
+            <strong x-text="vocab.pending"></strong><span>mappings waiting for review</span></button>
+        </div>
+
+        <h2>Vocabularies</h2>
+        <div class="vocab">
+          <button class="chip" :class="{def: !packFilter}" @click="packFilter = ''">all</button>
+          <template x-for="p in vocab.packs" :key="p.iri">
+            <button class="chip" :class="{def: packFilter === p.iri}" @click="packFilter = (packFilter === p.iri ? '' : p.iri)"
+                    :title="p.iri + (p.license ? ' · ' + p.license : '')" :data-pack="p.label">
+              <span x-text="p.label"></span> <span class="muted" x-show="p.terms" x-text="p.terms"></span></button>
+          </template>
+        </div>
+
+        <h2>Mappings</h2>
+        <table data-test="mappings">
+          <thead><tr><th>Term</th><th></th><th>Term</th><th>Why</th><th>Belief</th><th>Status</th></tr></thead>
+          <tbody>
+            <template x-for="m in vocab.mappings" :key="(m.id || m.changeSet) + m.from + m.rel + m.to">
+              <tr :class="{click: m.id}" @click="m.id ? explain(m.id) : open('review')" :data-mapping="short(m.from) + ' ' + short(m.to)">
+                <td x-text="short(m.from)" :title="m.from"></td><td class="muted" x-text="m.rel"></td>
+                <td x-text="short(m.to)" :title="m.to"></td>
+                <td class="small" x-text="[m.justification, m.confidence === null ? '' : 'confidence ' + m.confidence].filter(Boolean).join(' · ')"></td>
+                <td class="num" x-text="belief(m.belief)"></td>
+                <td :class="m.pending ? 'swaps' : ''" x-text="m.pending ? 'waiting for review (from ' + m.by + ')' : m.status"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+
+        <h2>Terms</h2>
+        <p class="muted small">Showing <span x-text="vocabTerms().length"></span> of <span x-text="vocab.terms.length"></span>:
+          <span x-text="packFilter || termFilter || allTerms ? 'those matching' : 'the terms a provider writes or reads, or a mapping joins'"></span>.</p>
+        <div class="row"><input type="search" placeholder="Find a term (name, label or definition)" aria-label="Find a term" x-model="termFilter">
+          <label class="small check"><input type="checkbox" x-model="allTerms"> every term</label></div>
+        <table data-test="terms">
+          <thead><tr><th>Term</th><th>Kind</th><th>Vocabulary</th><th>Written by</th><th>Read by</th><th class="nowrap">Mappings</th></tr></thead>
+          <tbody>
+            <template x-for="t in vocabTerms().slice(0, 300)" :key="t.iri">
+              <tr class="click" @click="openTerm(t)" :data-term="t.name">
+                <td><span x-text="t.name" :title="t.iri"></span><div class="small muted" x-text="t.definition.slice(0, 120)"></div></td>
+                <td class="nowrap" x-text="t.kind"></td><td x-text="t.pack"></td>
+                <td class="small" x-text="t.writers.join(', ')"></td><td class="small" x-text="t.readers.join(', ')"></td>
+                <td class="num" x-text="t.mappings.length || ''"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <p class="muted small" x-show="vocabTerms().length > 300" x-text="'Showing 300 of ' + vocabTerms().length + '; narrow the search.'"></p>
+      </div>
+    </template>
+  </section>
+
   <section x-show="me && tab === 'search'" aria-label="Search">
     <p class="muted intro">Anything in the record you may see. Open a claim to see where it came from and what rests on it.</p>
     <form class="row" @submit.prevent="find()">
@@ -308,6 +370,31 @@
           <li x-show="slot.cardinality !== 'many'">One provider runs at a time: a new one runs in the sandbox beside the current one, is measured against it, and takes over through a plan you approve.</li>
           <li x-show="slot.cardinality === 'many'">Several can run at once: adding one is a plan you approve, and none replaces another.</li>
           <li>Nothing changes without a person: a swap is a change to the intent, in the review lane like any other.</li>
+        </ul>
+      </div>
+    </template>
+  </aside>
+
+  <aside x-show="term" class="panel" aria-label="Term" data-test="term-panel">
+    <template x-if="term">
+      <div>
+        <div class="row panel-head"><h2 x-text="term.name"></h2><button @click="term = null">Close</button></div>
+        <p class="small muted" x-text="term.iri"></p>
+        <p x-show="term.label && term.label !== term.name" x-text="term.label"></p>
+        <p x-text="term.definition || 'No definition recorded.'"></p>
+        <dl><dt>Kind</dt><dd x-text="term.kind"></dd><dt>Vocabulary</dt><dd x-text="term.pack"></dd></dl>
+        <h3>Written by</h3>
+        <p class="small" data-test="writers" x-text="term.writers.join(', ') || 'No provider declares it emits this term.'"></p>
+        <h3>Read by</h3>
+        <p class="small" data-test="readers" x-text="term.readers.join(', ') || 'No provider declares it reads this term.'"></p>
+        <h3>Mappings</h3>
+        <ul class="swap" data-test="term-mappings">
+          <template x-for="m in term.mappings" :key="(m.id || m.changeSet) + m.from + m.rel + m.to">
+            <li><a href="#" @click.prevent="m.id ? explain(m.id) : open('review')" x-text="mappingText(m, term)"></a>
+              <span class="small muted" x-text="m.pending ? '(waiting for review)' : '(belief ' + belief(m.belief) + ')'"></span></li>
+          </template>
+          <li class="muted" x-show="!term.mappings.length">None. Terms from other standards that name the same thing can be
+            mapped to it, by a pack or an SSSOM mapping set a person approves.</li>
         </ul>
       </div>
     </template>

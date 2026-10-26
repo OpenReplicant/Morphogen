@@ -28,7 +28,27 @@ const NS = {
   emits: 'https://w3id.org/knowledge-kernel/ns#emits',
   consumes: 'https://w3id.org/knowledge-kernel/ns#consumes',
   mayConsume: 'https://w3id.org/knowledge-kernel/ns#mayConsume',
+  definition: 'http://www.w3.org/2004/02/skos/core#definition',
+  definedBy: 'http://www.w3.org/2000/01/rdf-schema#isDefinedBy',
+  source: 'http://purl.org/dc/terms/source',
 };
+
+// The vocabularies view (T35, R5-51): what each mapping says, read left to right, and the kinds of term a pack defines.
+const SKOS = 'http://www.w3.org/2004/02/skos/core#';
+const MATCHES = { [SKOS + 'exactMatch']: 'is the same as', [SKOS + 'closeMatch']: 'is close to',
+                  [SKOS + 'broadMatch']: 'is narrower than', [SKOS + 'narrowMatch']: 'is broader than',
+                  [SKOS + 'relatedMatch']: 'is related to' };
+// How readers use an accepted mapping (kk.mappings, R5-51): closeMatch at most once on a way, relatedMatch never.
+const FOLLOWED = { [SKOS + 'closeMatch']: 'followed one step', [SKOS + 'relatedMatch']: 'not followed (related)' };
+const TERM_KINDS = {
+  'http://www.w3.org/2002/07/owl#Class': 'class', 'http://www.w3.org/2000/01/rdf-schema#Class': 'class',
+  'http://www.w3.org/1999/02/22-rdf-syntax-ns#Property': 'property', 'http://www.w3.org/2002/07/owl#ObjectProperty': 'property',
+  'http://www.w3.org/2002/07/owl#DatatypeProperty': 'property', 'http://www.w3.org/2002/07/owl#AnnotationProperty': 'property',
+  [SKOS + 'Concept']: 'concept', 'http://www.w3.org/ns/sosa/ObservableProperty': 'concept',
+};
+const SSSOM = 'https://w3id.org/sssom/';
+const expandSkos = t => String(t || '').replace(/^skos:/, SKOS);
+const namespace = iri => { const m = String(iri).match(/^(.*[#/:])[^#/:]+$/); return m ? m[1] : iri; };
 
 // How the overview lays the slots out. A distribution's slots carry their phase in the record (its contract reads
 // "<phase> phase"); the kernel's are grouped by where they sit around the commit. A slot in neither list still shows,
@@ -110,7 +130,7 @@ function shell() {
   return {
     tab: 'overview', token: '', name: '', password: '', me: null, error: '', busy: false,
     queue: [], notes: {}, loop: [], plans: [], systems: [], system: '', graphInfo: '', rows: [], query: '', searched: false,
-    detail: null, slot: null, overview: null, phases: PHASES, kernelGroups: KERNEL_GROUPS,
+    detail: null, slot: null, overview: null, vocab: null, term: null, termFilter: '', packFilter: '', allTerms: false, phases: PHASES, kernelGroups: KERNEL_GROUPS,
 
     async init() {
       try { this.token = sessionStorage.getItem('kk_token') || ''; } catch (e) { /* storage blocked */ }
@@ -118,7 +138,7 @@ function shell() {
     },
     tabs() {
       return [{ id: 'overview', title: 'Overview' }, { id: 'review', title: 'Review' }, { id: 'loop', title: 'Loop' },
-              { id: 'systems', title: 'Systems' },
+              { id: 'systems', title: 'Systems' }, { id: 'vocab', title: 'Vocabularies' },
               { id: 'search', title: 'Search' }, { id: 'me', title: 'Me' }];
     },
     async signIn() {
@@ -139,7 +159,8 @@ function shell() {
       if (this.token) await this.signIn();
     },
     signOut(keepError = false) {
-      this.token = ''; this.me = null; this.overview = null; this.slot = null; this.queue = []; this.loop = []; this.plans = []; this.rows = []; this.detail = null; KK.token = '';
+      this.packFilter = ''; this.termFilter = ''; this.allTerms = false;
+      this.token = ''; this.me = null; this.overview = null; this.vocab = null; this.term = null; this.slot = null; this.queue = []; this.loop = []; this.plans = []; this.rows = []; this.detail = null; KK.token = '';
       if (!keepError) this.error = '';
       try { sessionStorage.removeItem('kk_token'); } catch (e) { /* storage blocked */ }
     },
@@ -148,11 +169,12 @@ function shell() {
       try { await fn(); } catch (e) { this.error = e.message; } finally { this.busy = false; }
     },
     async open(tab) {
-      this.tab = tab; this.detail = null; this.slot = null;
+      this.tab = tab; this.detail = null; this.slot = null; this.term = null;
       if (tab === 'overview') await this.run(() => this.loadOverview());
       if (tab === 'review') await this.run(() => this.loadQueue());
       if (tab === 'loop') await this.run(() => this.loadLoop());
       if (tab === 'systems') await this.run(() => this.loadSystems());
+      if (tab === 'vocab') await this.run(() => this.loadVocab());
       if (tab === 'me') await this.run(async () => { this.me = await KK.call('whoami'); });
     },
 
@@ -326,6 +348,73 @@ function shell() {
           .sort((a, b) => a.label.localeCompare(b.label)),
       };
     },
+    // The vocabularies: every pack in the record, the terms each defines (classes, properties and the concepts of a
+    // scheme), who writes and who reads each term (the providers' declared lines, R5-47), and the mappings joining terms
+    // that name the same thing, accepted (current claims) or waiting for a person in the review lane (which no reader
+    // follows yet). An accepted mapping is followed by the rules kk.mappings applies: a redacted one (its object gone)
+    // never, a relatedMatch never, a closeMatch one step. Read as the person, like everything else here.
+    async loadVocab() {
+      const q = (predicate, scope = 'urn:kk:scope:vocab') => KK.call('query_claims', { predicate, scope, limit: 1000 });
+      const [types, labels, defs, comments, definedBy, ontologies, emits, consumes, may, queue, ...maps] = await Promise.all([
+        q(NS.rdfType), q(NS.label), q(NS.definition), q(NS.comment), q(NS.definedBy),
+        KK.call('query_claims', { predicate: NS.rdfType, object_entity: NS.ontology, limit: 200 }),
+        q(NS.emits), q(NS.consumes), q(NS.mayConsume), KK.call('review_queue', { limit: 200 }),
+        ...Object.keys(MATCHES).map(p => KK.call('query_claims', { predicate: p, limit: 1000 }))]);
+      const text = c => value({ value: c.object_value });
+      const first = rows => { const m = {}; for (const c of rows) if (!(c.subject in m)) m[c.subject] = c; return m; };
+      const label = first(labels), def = first(defs), note = first(comments), home = first(definedBy);
+      const byObject = rows => { const m = {}; for (const c of rows) (m[c.object_entity] ||= []).push(KK.short(c.subject)); return m; };
+      const writes = byObject(emits), reads = byObject([...consumes, ...may]);
+      const packs = await Promise.all(ontologies.map(async c => {
+        const card = await KK.call('get_entity', { iri: c.subject });
+        const one = p => { const x = card.claims.find(y => y.predicate === p); return x ? (x.object_entity || text(x)) : ''; };
+        return { iri: c.subject, label: one(NS.label) || KK.short(c.subject), version: one(NS.version),
+                 license: one(NS.license), source: one(NS.source), terms: 0 };
+      }));
+      const norm = i => String(i).replace(/[#/]$/, '');
+      const packOf = iri => {
+        const by = home[iri] && packs.find(p => norm(p.iri) === norm(home[iri].object_entity));
+        if (by) return by;
+        const ns = namespace(iri);
+        return packs.find(p => norm(p.iri) === norm(ns) || p.iri.startsWith(ns)) || null;
+      };
+      const accepted = maps.flat().filter(c => c.object_entity).map(c => ({ id: c.id, from: c.subject, rel: MATCHES[c.predicate], to: c.object_entity,
+        justification: KK.short((c.qualifiers || {})[SSSOM + 'mapping_justification'] || ''),
+        confidence: (c.qualifiers || {})[SSSOM + 'confidence'] ?? null, belief: c.belief, pending: false,
+        followed: c.predicate !== SKOS + 'relatedMatch', status: FOLLOWED[c.predicate] ? `${c.status}, ${FOLLOWED[c.predicate]}` : c.status }));
+      const pending = queue.flatMap(r => (r.ops || []).filter(op => op.op === 'add_claim' && MATCHES[expandSkos(op.predicate)])
+        .map(op => ({ id: null, changeSet: r.id, from: op.subject, rel: MATCHES[expandSkos(op.predicate)], to: value(op.object),
+                      justification: KK.short((op.qualifiers || {})[SSSOM + 'mapping_justification'] || ''),
+                      confidence: (op.qualifiers || {})[SSSOM + 'confidence'] ?? null, belief: null, status: 'waiting for review',
+                      pending: true, by: KK.short(r.attributed_to || '') })));
+      const mappings = [...pending, ...accepted];
+      const kindOf = {};
+      for (const c of types) if (TERM_KINDS[c.object_entity] && !(c.subject in kindOf)) kindOf[c.subject] = TERM_KINDS[c.object_entity];
+      const terms = Object.keys(kindOf).map(iri => {
+        const pack = packOf(iri);
+        if (pack) pack.terms += 1;
+        return { iri, name: KK.short(iri), kind: kindOf[iri], label: label[iri] ? text(label[iri]) : '',
+                 definition: def[iri] ? text(def[iri]) : (note[iri] ? text(note[iri]) : ''),
+                 pack: pack ? pack.label : namespace(iri), packIri: pack ? pack.iri : '',
+                 writers: writes[iri] || [], readers: reads[iri] || [],
+                 mappings: mappings.filter(m => m.from === iri || m.to === iri) };
+      }).sort((a, b) => a.pack.localeCompare(b.pack) || a.name.localeCompare(b.name));
+      this.vocab = { packs: packs.sort((a, b) => a.label.localeCompare(b.label)), terms, mappings,
+                     pending: pending.length, followed: accepted.filter(m => m.followed).length };
+    },
+    vocabTerms() {
+      if (!this.vocab) return [];
+      const f = (this.termFilter || '').trim().toLowerCase();
+      const inUse = t => t.writers.length || t.readers.length || t.mappings.length;
+      return this.vocab.terms.filter(t => (!this.packFilter || t.packIri === this.packFilter)
+        && (this.allTerms || this.packFilter || f || inUse(t))
+        && (!f || t.name.toLowerCase().includes(f) || t.label.toLowerCase().includes(f) || t.definition.toLowerCase().includes(f)));
+    },
+    openTerm(t) { this.detail = null; this.slot = null; this.term = t; },
+    mappingText(m, t) {      // a mapping read from the open term's side
+      return m.from === t.iri ? `${m.rel} ${KK.short(m.to)}` : `${KK.short(m.from)} ${m.rel} this`;
+    },
+
     // One slot in the side panel: its contract, who fills it, which is the default and where that is written (the
     // file and line the self-encoder's claim cites), and how a provider is swapped.
     async openSlot(s) {
@@ -355,7 +444,7 @@ function shell() {
       await this.run(async () => { this.rows = await KK.call('search', { text: this.query, limit: 50 }); this.searched = true; });
     },
     async explain(id) {
-      this.slot = null;
+      this.slot = null; this.term = null;
       await this.run(async () => { this.detail = { id, body: await KK.call('explain', { claim_id: id }) }; });
     },
     // A claim read as a sentence, with where it came from.
