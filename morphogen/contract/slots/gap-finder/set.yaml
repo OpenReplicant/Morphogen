@@ -11,12 +11,12 @@
 # then (optional):  {services: {...}} merged into the input (a person's answers), and expect: every gap after it
 slot: gap-finder
 runner: runner.py
-version: 0.3.0
+version: 0.4.0
 rules: >-
   For a system map: a connection to something not on the map is a gap (unknown-peer, on the peer); a service with
   no image setting is a gap (no-image); a service whose images are none pinned by digest (name@sha256:<64 hex>) is
-  a gap (unpinned-image); in a system of two or more services, a service nothing connects to and
-  that connects to nothing is a gap (unconnected); a service no other service of its system connects to (an entry
+  a gap (unpinned-image); in a system of two or more services, a service nothing of its own system connects to
+  and that connects to nothing is a gap (unconnected); a service no other service of its system connects to (an entry
   point) with no documented limit is a gap (no-limit), and a plan's prediction is not a documented limit; a system
   each of whose services is called by another of its services, none with a limit, is a gap on the system (no-limit).
   Each gap derives from claims about its own target (the service's, the connections to an unknown peer, the

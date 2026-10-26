@@ -21,7 +21,7 @@ was measured or the other's results. For each of the two providers it
   3. times full passes of the provider there from this process (driver.py runs its benchmark entry,
      `<package>.__main__.one_pass(conn)`, one pass per signal), adding one new window of input before
      each pass, as production does (every third one an outlier), and the validator's verdicts between
-     passes; the mean of the timed passes is the metric. What the passes submitted and the kernel applied
+     passes; the mean and the median of the timed passes are the metric. What the passes submitted and the kernel applied
      is kept (the slot's service.py `outputs`); then the database is dropped;
   4. requires the candidate's outputs on the benchmark to equal the incumbent's on the same inputs: one
      more contract case (`agreement`; the incumbent agrees with itself);
@@ -61,6 +61,7 @@ import secrets
 import subprocess
 import select
 import sys
+import statistics
 import tempfile
 import time
 from datetime import datetime
@@ -231,7 +232,8 @@ def pass_times(provider_dir: Path, db: str, bench: dict, login: tuple[str, str, 
     """Time the provider's passes from this process (R5-23): its `<package>.__main__.<entry>(conn)`, run by
     driver.py as the run user and `login` (role, login, password) on the sandbox database. `between()`
     changes the record before each pass, as production does, so a pass cannot skip its work because nothing
-    changed. The first `warmup` passes are not counted. Returns {"passes", "mean", "times"} or {"error"}."""
+    changed. The first `warmup` passes are not counted. Returns {"passes", "mean", "median", "times"} or {"error"}
+    (the median, unlike the mean, is not moved by one slow pass)."""
     meta = yaml.safe_load((provider_dir / "provider.yaml").read_text())
     m = re.fullmatch(r"python3 -m ([a-z_][a-z0-9_]*)", str(meta.get("service", "")))
     if not m:
@@ -280,7 +282,8 @@ def pass_times(provider_dir: Path, db: str, bench: dict, login: tuple[str, str, 
             stderr = log.read().decode(errors="replace")
     if err:
         return {"error": (err + " " + stderr.strip()[-300:]).strip()}
-    return {"passes": len(times), "mean": round(sum(times) / len(times), 6), "times": times}
+    return {"passes": len(times), "mean": round(sum(times) / len(times), 6), "median": round(statistics.median(times), 6),
+            "times": times}
 
 
 def validate(db: str) -> None:

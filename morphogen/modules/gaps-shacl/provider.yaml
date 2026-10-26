@@ -1,0 +1,10 @@
+id: urn:kk:provider:gaps-shacl
+name: Shape-driven gap finder
+version: 0.0.1
+license: Apache-2.0
+slots: [gap-finder]
+origin: new (R5-O18 (5)); the proof that map-gaps' rules can be a pack's shapes
+requires: Python 3.12+, pyshacl, rdflib; the shapes of the installed packs (kernel/packs/*.shapes.ttl)
+service: python3 -m gaps_shacl
+note: gaps.py only so far, judged by the gap-finder case set (contract/slots/gap-finder) and against map-gaps on random maps; moves to the kernel with the slot if R5-O18 is taken
+tests: [python3 tests/test_gaps.py, python3 tests/shape_mutants.py]

@@ -16,7 +16,8 @@ submit claims; their effects are observed.
 | sandbox | sandbox | Written (T6) | New: the slot's contract, then candidate and incumbent measured on a copy of the record; the evaluator records the scores |
 | interview-encoder | design-agent | Ported (T13) | rebuild 4 `encoder-interaction`, unchanged but for names: a conversation as notes an interviewer quotes |
 | design-blueprint | design-agent | Written (T13) | New: a described system with no open question becomes a review-lane plan to write its compose file (`morphogen.blueprint`) |
-| map-gaps | gap-finder | Written (T13) | Rules new (system maps), shape from rebuild 4 `map-gaps`; 12 contract cases, 11 mutants |
+| map-gaps | gap-finder | Written (T13) | Rules new (system maps), shape from rebuild 4 `map-gaps`; 15 contract cases, 13 mutants |
+| gaps-shacl | gap-finder | Written (R5-O18 proof) | New: the same rules as warning shapes of the kk-tosca pack (`kernel/packs/kk-tosca.shapes.ttl`), applied by a finder that knows no domain; no service yet, not the default |
 | encoder-compose | system-encoder | Written (T9) | New: a compose file as a TOSCA topology, every claim citing its line; `scan --adopt` asks a person to approve a file brought in as it is (T26) |
 | runtime-compose | runtime | Written (T9 as deploy/compose.py; T26, T27) | New: runs a system's compose file as committed, only when a person approved that file (morphogen.plans.approval); the runtime case set (16 cases, 11 mutants) on a stub engine |
 | observer-prometheus | observer | Written (T9) | rebuild 4 `observer-prometheus`: request times from a service's metrics |
