@@ -3,6 +3,8 @@ name: Prediction verifier
 version: 0.1.0
 license: Apache-2.0
 slots: [outcome-verifier]
+emits: [oa:Annotation, oa:hasTarget, oa:bodyValue, dcterms:type]
+consumes: [bbo:maxValue, sosa:observedProperty, dcterms:isPartOf, pplan:isStepOfPlan, sosa:hasSimpleResult]
 origin: new (T5)
 requires: Python 3.12+, psycopg
 migration: migration.sql

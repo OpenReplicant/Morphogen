@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
+sys.path[:0] = [str(HERE.parent), str(HERE.parents[2] / "src")]   # the provider, and kk
 from validator.core import validate  # noqa: E402
 
 sys.path.insert(0, str(HERE.parent / "shapes" / "tests"))

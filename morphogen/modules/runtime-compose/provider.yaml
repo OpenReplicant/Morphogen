@@ -3,6 +3,8 @@ name: 'Runtime: Docker Compose'
 version: 0.3.0
 license: Apache-2.0
 slots: [runtime]
+emits: []
+consumes: [pplan:isStepOfPlan, sosa:hasSimpleResult]
 origin: morphogen/deploy/compose.py (T9, R5-25) moved into the runtime slot (T27, R5-O9 as amended by R5-42 (c)); runs only a file an approved plan step names (T26)
 requires: Python 3.12+, psycopg, PyYAML, git, the Docker CLI with Compose (or Podman through its Docker-compatible socket)
 migration: migration.sql

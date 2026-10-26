@@ -3,6 +3,8 @@ name: Anomaly detection
 version: 0.4.0
 license: Apache-2.0
 slots: [analyser]
+emits: [oa:Annotation, oa:hasTarget, oa:bodyValue, dcterms:type]
+consumes: [sosa:hasSimpleResult, sosa:observedProperty, {term: bbo:maxValue, optional: true, from: people}]
 origin: OpenReplicant/kernel (rebuild 4) modules/anomaly; the service follows the change feed from a durable cursor (T15)
 requires: Python 3.12+, psycopg
 migration: migration.sql

@@ -1,8 +1,10 @@
 id: urn:kk:provider:self-encoder
 name: 'Self-encoder: blueprint, providers, distribution'
-version: 0.4.0
+version: 0.5.0
 license: Apache-2.0
 slots: [self-encoder]
+emits: [rdf:type, rdfs:label, rdfs:comment, owl:versionInfo, dcterms:license, dcterms:isPartOf, dcterms:hasPart, kk:Slot, kk:fills, kk:slotContract, kk:cardinality, kk:emits, kk:consumes, kk:mayConsume]
+consumes: []
 origin: rewrite (T4) of OpenReplicant/kernel (rebuild 4) modules/self-encoder, which scanned module manifests, compose files and packages
 requires: Python 3.12+, psycopg, PyYAML; the kk-core and dcterms packs (pack-loader)
 migration: migration.sql

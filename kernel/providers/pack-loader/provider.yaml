@@ -3,6 +3,8 @@ name: Vocabulary pack loader
 version: 0.2.0
 license: Apache-2.0
 slots: [vocabulary-pack]
+emits: [rdf:type, rdfs:label, rdfs:subClassOf, rdfs:subPropertyOf, rdfs:domain, rdfs:range, skos:definition, skos:closeMatch, skos:broadMatch, owl:versionInfo]
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/pack-loader; packs.sql identical but for file paths, the slot catalog moved to the self-encoder
 requires: Python 3.12+ with rdflib and PyYAML (to regenerate packs.sql only)
 migration: migration.sql            # its role, then \ir packs.sql

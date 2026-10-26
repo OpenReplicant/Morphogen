@@ -3,6 +3,8 @@ name: Quote verifier
 version: 0.2.0
 license: Apache-2.0
 slots: [verifier]
+emits: []
+consumes: []
 origin: OpenReplicant/kernel (rebuild 4) modules/verifier-quotes; check.py unchanged, the service follows the change feed
 requires: Python 3.12+, psycopg (service)
 migration: migration.sql

@@ -3,6 +3,8 @@ name: Catalog lookup
 version: 0.1.0
 license: Apache-2.0
 slots: [catalog-lookup]
+emits: [kkt:fulfills, kkt:propertyValue, kkt:propertyName, rdfs:label, owl:versionInfo, dcterms:license, dcterms:isPartOf, dcterms:source, dcterms:description, oa:hasTarget, oa:bodyValue]
+consumes: [{term: kkt:Profile, optional: true, from: people}, {term: kkt:constraint, optional: true, from: people}, {term: kkt:propertyValue, optional: true, from: people}, {term: kkt:propertyName, optional: true, from: people}]
 origin: new (R5-30)
 requires: Python 3.12+, psycopg, PyYAML, packaging (requirements.txt), git; the kk-tosca, owl and dcterms packs
 migration: migration.sql

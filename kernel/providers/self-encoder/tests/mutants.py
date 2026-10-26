@@ -9,4 +9,6 @@ MUTANTS = [
         ("        ops.append(claim(d, HAS_PART, entity(slot_iri(slot[\"id\"])), src.ref(at)))\n", "")]),
     ("a changed file does not supersede", MAIN, [("from kk.changes import supersede", "supersede = lambda cs, prior: None")]),
     ("a removed provider is kept", MAIN, [("        for rel in sorted(set(gone)):", "        for rel in []:")]),
+  ("declared terms not recorded", "self_encoder/encode.py", [("        if found:\n", "        if False:\n")]),
+  ("an optional need recorded as a need", "self_encoder/encode.py", [('("consumes", "mayConsume", may)', '("consumes", "consumes", may)')]),
 ]

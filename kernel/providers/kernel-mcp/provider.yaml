@@ -3,6 +3,8 @@ name: Kernel MCP server (operator tools)
 version: 0.8.0
 license: Apache-2.0
 slots: [agent-interface]
+emits: []
+consumes: [{term: kk:fills, optional: true, from: self-encoder}, {term: kkt:NodeTemplate, optional: true, from: encoders}, {term: kkt:connectsTo, optional: true, from: encoders}]
 origin: OpenReplicant/kernel (rebuild 4) modules/kernel-mcp; server.py's operator tools and graph.py unchanged, whoami fixed for non-reviewers
 requires: Python 3.12+, requirements.txt (mcp 2.3.0, psycopg, PyJWT, uvicorn)
 service: python3 -m kernel_mcp            # stdio as the agent's own login; --http with JWTs (kk_authenticator)

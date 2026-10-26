@@ -24,7 +24,7 @@
 <https://w3id.org/knowledge-kernel/ns>
     a owl:Ontology ;
     rdfs:label "Knowledge Kernel core vocabulary" ;
-    owl:versionInfo "0.4.4" ;
+    owl:versionInfo "0.5.0" ;
     dcterms:license <https://www.apache.org/licenses/LICENSE-2.0> ;
     owl:imports <http://www.w3.org/ns/prov-o> .
 
@@ -51,6 +51,13 @@ kk:fills a owl:ObjectProperty ;
 kk:slotContract a owl:DatatypeProperty ; rdfs:domain kk:Slot ; rdfs:range xsd:string ; rdfs:label "slot contract" .
 kk:cardinality a owl:DatatypeProperty ; rdfs:domain kk:Slot ; rdfs:range xsd:string ; rdfs:label "cardinality" ;
     skos:definition "'one' (single active module, others in shadow) or 'many'." .
+
+kk:emits a owl:ObjectProperty ; rdfs:domain kk:Module ; rdfs:label "emits" ;
+    skos:definition "A term (a class or a property) the claims this module writes use: provider.yaml `emits` (R5-O18 (7))." .
+kk:consumes a owl:ObjectProperty ; rdfs:domain kk:Module ; rdfs:label "consumes" ;
+    skos:definition "A term this module reads and needs another module of the selection to emit: provider.yaml `consumes` (R5-O18 (7))." .
+kk:mayConsume a owl:ObjectProperty ; rdfs:domain kk:Module ; rdfs:label "may consume" ;
+    skos:definition "A term this module reads when it is there, which people may supply or which may be absent: provider.yaml `consumes` with `optional: true`." .
 
 kk:ModuleKindScheme a skos:ConceptScheme ; rdfs:label "module kinds" .
 kk:moduleKind a owl:ObjectProperty ; rdfs:domain kk:Module ; rdfs:range skos:Concept ; rdfs:label "module kind" .

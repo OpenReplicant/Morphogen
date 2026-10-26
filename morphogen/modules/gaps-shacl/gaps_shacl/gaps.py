@@ -29,10 +29,13 @@ from pyshacl import validate
 from rdflib import RDF, RDFS, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS
 
+from kk.sparql import prepare_queries
+
 SH = Namespace("http://www.w3.org/ns/shacl#")
 KK = Namespace("https://w3id.org/knowledge-kernel/ns#")
 PACKS = Path(__file__).resolve().parents[4] / "kernel" / "packs"
 IRI_SCHEMES = ("urn:", "http://", "https://")
+prepare_queries()          # each SPARQL rule parsed once, not once per service
 
 
 class ShapeError(ValueError):

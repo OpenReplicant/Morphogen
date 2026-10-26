@@ -3,6 +3,8 @@ name: 'Sandbox: candidates measured on a copy of the record'
 version: 0.1.0
 license: Apache-2.0
 slots: [sandbox]
+emits: []
+consumes: [dcterms:source, {term: sosa:hasSimpleResult, optional: true, from: observers}]
 origin: new (T6, R5-21)
 requires: Python 3.12+, psycopg, PyYAML; a superuser login for the sandbox cluster (it creates and drops databases)
 migration: migration.sql

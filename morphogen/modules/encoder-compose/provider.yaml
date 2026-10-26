@@ -3,6 +3,8 @@ name: 'Encoder: compose files'
 version: 0.1.0
 license: Apache-2.0
 slots: [system-encoder]
+emits: [kkt:NodeTemplate, kkt:ServiceTemplate, kkt:memberOf, kkt:connectsTo, kkt:propertyValue, kkt:propertyName, pplan:Plan, pplan:isStepOfPlan, sosa:Actuation, sosa:hasFeatureOfInterest, sosa:hasSimpleResult, dcterms:type, rdfs:label]
+consumes: []
 origin: new (T9, R5-25); the citation shape is the self-encoder's
 requires: Python 3.12+, psycopg, PyYAML; the kk-tosca pack
 migration: migration.sql
