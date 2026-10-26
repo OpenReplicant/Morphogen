@@ -93,6 +93,6 @@ morphogen/                 the distribution
   ui/                      the review and loop UI (T21): serve.py (kernel-mcp + sign-in), people.py (a person's login), web/
   deploy/                  reconcile.py (services from intent), local.py + LOCAL.md (a machine of your own, T23),
                            container.py + container/Containerfile (the image: three users, Claude Code as its own, T24)
-docs/                      rebuild-5.md, decisions.md, LESSONS.md, DEVELOPING.md (setup, concepts, writing a provider), slots-rebuild4.yaml
+docs/                      rebuild-5.md, decisions.md, LESSONS.md, DEVELOPING.md (setup, concepts, writing a provider)
 scripts/                   check_boundary.py
 ```
