@@ -3,7 +3,8 @@
 An overview of what Morphogen is made of (every slot of the kernel and of Morphogen, the providers that fill each, the
 default and where it is written, how a provider is swapped; the vocabularies; what waits, open questions and drift,
 R5-50), the review lane, the loop (each plan with who decided it, the run that carried it out and the verifier's
-verdict) and the managed systems, in a browser. The page is an MCP client of kernel-mcp: every
+verdict), the managed systems and the vocabularies (each pack with its terms, who writes and reads each term, and the
+mappings readers follow beside those waiting for a person, R5-52), in a browser. The page is an MCP client of kernel-mcp: every
 call carries the signed-in person's own token, so the record decides what they see and what they may approve.
 
 ```sh

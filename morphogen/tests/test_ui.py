@@ -28,6 +28,7 @@ sys.path[:0] = [str(ROOT / "kernel" / "src"), str(ROOT / "morphogen" / "modules"
                 str(ROOT / "kernel" / "providers" / "belief-corroboration"), str(ROOT / "kernel" / "providers" / "self-encoder")]
 import install  # noqa: E402  (morphogen/modules/install.py)
 import people  # noqa: E402
+from kk import mappings  # noqa: E402
 from kk.lib import connect, follow, run, submit  # noqa: E402
 from planner.plan import change_set  # noqa: E402
 from prediction_verifier import verify  # noqa: E402
@@ -43,6 +44,7 @@ ACTUATOR, VERIFIER = "urn:kk:agent:ui-test-actuator", "urn:kk:agent:ui-test-veri
 SOSA, OA, KKT = "http://www.w3.org/ns/sosa/", "http://www.w3.org/ns/oa#", "https://w3id.org/knowledge-kernel/tosca#"
 RDF_TYPE, DCT_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "http://purl.org/dc/terms/type"
 NODE = "urn:kk:node:shop:web"
+SKOS = "http://www.w3.org/2004/02/skos/core#"
 
 
 def check(cond, msg):
@@ -234,6 +236,61 @@ try:
     check(row["verdict"].startswith("holds") and "0.12" in row["verdict"] and "(belief 0." in row["verdict"],
           f"the plan shows its verdict and the verdict's belief ({row['verdict']})")
     check(set(row["detail"]["derived_from"]) == {pred, after}, "the verdict explains itself: the prediction and the observation")
+
+    # The vocabularies: every pack, the mappings readers follow and one software proposed, waiting for a person (R5-51);
+    # a term shows who writes and reads it (the providers' declared lines) and its mappings, each opening its claim.
+    # Two more a person approved: a relatedMatch (accepted, never followed) and one a steward then redacts (gone).
+    approved = record("t_ui_planner", PLANNER, "mappings-approved", [
+        claim("https://example.org/ns#Task", SKOS + "relatedMatch", {"entity": "http://purl.org/net/p-plan#Step"}, evidence="deterministic"),
+        claim("https://example.org/ns#Gone", SKOS + "exactMatch", {"entity": "http://www.w3.org/ns/prov#Activity"}, evidence="deterministic")])
+    with connect("person_alice", URL) as person:
+        person.execute("select api.review(%s, true, 'test: mappings')", (approved["id"],))
+    with connect(url=URL) as su:
+        su.execute("do $$ begin if not exists (select 1 from pg_roles where rolname = 't_ui_steward') then create role t_ui_steward nologin; "
+                   "end if; end $$")
+        su.execute("grant kk_agent, kk_steward to t_ui_steward")
+        su.execute("set role kk_owner")
+        su.execute("insert into kernel.agent(iri, db_role, kind, label) values ('urn:kk:agent:ui-test-steward', 't_ui_steward', "
+                   "'person', 'steward') on conflict do nothing")
+        gone = str(su.execute("select id from api.claims where subject = 'https://example.org/ns#Gone'").fetchone()[0])
+    with connect("t_ui_steward", URL) as st, st.cursor() as cur, run(cur, None) as (rid, _):
+        cur.execute("select api.redact('claim', %s, 'test erasure', %s)", (gone, rid))
+    proposed = record("t_ui_planner", PLANNER, "mapping", [
+        claim("https://example.org/ns#Job", SKOS + "broadMatch", {"entity": "http://purl.org/net/p-plan#Step"}, evidence="deterministic",
+              qualifiers={"https://w3id.org/sssom/mapping_justification": "https://w3id.org/semapv/vocab/ManualMappingCuration"})])
+    out = subprocess.run(["node", str(ROOT / "morphogen" / "tests" / "ui_browser.js")], capture_output=True, text=True,
+                         timeout=300, env={**os.environ, "UI": base + "/ui/", "NAME": "alice", "PASSWORD": password, "STEP": "vocab",
+                                           **({"SHOT": os.environ["KK_UI_SHOT_VOCAB"]} if os.environ.get("KK_UI_SHOT_VOCAB") else {})})
+    check(out.returncode == 0, f"the vocabularies view loads ({out.stderr.strip()[-800:]})")
+    seen = json.loads(out.stdout.strip().splitlines()[-1])
+    with connect(url=URL) as su:
+        ontologies = su.execute("select count(*) from api.claims where predicate = %s and object_entity = %s",
+                                (RDF_TYPE, "http://www.w3.org/2002/07/owl#Ontology")).fetchone()[0]
+        mapping, mapping_belief = su.execute("select id::text, belief from api.claims where subject = 'http://www.w3.org/ns/sosa/Observation' "
+                                             "and predicate = %s and object_entity = 'http://www.w3.org/ns/prov#Activity'",
+                                             (SKOS + "broadMatch",)).fetchone()
+        followed = su.execute(mappings.CURRENT, {"matches": [p for p in mappings.MATCHES if p != mappings.RELATED]}).fetchall()
+    check(len(seen["packs"]) == ontologies and any(p.startswith("SSSOM") for p in seen["packs"]),
+          f"the view lists every vocabulary in the record ({len(seen['packs'])} of {ontologies})")
+    check(["Observation", "is narrower than", "Activity"] == next((r[:3] for r in seen["rows"] if r[0] == "Observation"), None),
+          "a pack's mapping reads left to right: Observation is narrower than Activity")
+    obs = next(r for r in seen["rows"] if r[0] == "Observation")
+    check(obs[4] == f"{float(mapping_belief):.2f}", f"a followed mapping shows its claim's belief ({obs[4]}, {mapping_belief})")
+    check(seen["followed"] == str(len(followed)) and not any(r[0] == "Gone" for r in seen["rows"]),
+          f"the followed count is what readers follow (kk.mappings), and a redacted mapping is gone ({seen['followed']} of {len(followed)})")
+    related = [r for r in seen["rows"] if r[0] == "Task"]
+    check(len(related) == 1 and related[0][1] == "is related to" and "not followed" in related[0][5],
+          f"an approved relatedMatch shows as accepted but not followed ({related})")
+    waiting = [r for r in seen["rows"] if r[0] == "Job"]
+    check(proposed["status"] in ("submitted", "valid") and seen["pending"] == "1" and len(waiting) == 1
+          and waiting[0][1] == "is narrower than" and "waiting for review" in waiting[0][5] and "ManualMappingCuration" in waiting[0][3]
+          and waiting[0][4] == "—",
+          f"a mapping software proposed shows as waiting for review, never as followed ({waiting}, {seen['pending']})")
+    check("observer-otel" in seen["result"]["writers"] and "anomaly" in seen["result"]["readers"],
+          f"a term shows who writes it and who reads it ({seen['result']})")
+    check({"is narrower than Activity", "QualityMeasurement is narrower than this"} == set(seen["observation"]["mappings"])
+          and seen["detail"]["claim"]["id"] == mapping,
+          f"a term shows its mappings, and a mapping opens its own claim ({seen['observation']['mappings']})")
 
     # Alice proposes a change herself (a person is an agent too): the store refuses her approving it.
     code, body = post(base + "/ui/login", {"name": "alice", "password": password})
