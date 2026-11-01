@@ -192,6 +192,12 @@ components:
     provides: [catalogs]
     lock: free
 
+  - name: research
+    kind: Resource
+    description: Working notes and theses from operator sessions; candidate inputs to the intent, not intent.
+    path: research/
+    lock: gated
+
   - name: journal
     kind: Resource
     description: Append-only record of every change and why.
