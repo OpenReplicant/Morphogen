@@ -1,126 +1,272 @@
 # Thesis: a regime selector and constructor, trained on games
 
-Working note from the operator session of 2026-11-01. Not yet intent: the
-operator decides whether and how it enters `map/intent.md`.
+Working note from the operator session of 2026-11-01. Not intent: the operator
+decides whether and how any of it enters `map/intent.md`.
 
-## The idea
+Confidence marks: **[solid]** grounded in prior art or evidence;
+**[plausible]** reasoned but untested here; **[speculative]** a framing, not a
+finding.
 
-The value is not a harness that rewrites itself. It is **decision points** in
-the harness that **choose, combine or construct** models from different
-paradigms (graph, vector, simulator, causal model, solver, rules, statistical
-model, LLM reasoning, distilled policy) for the situation at hand, learn which
-works from scored outcomes, and over time **compile** slow LLM reasoning into
-fast, cheap parts.
+## 1. First principles, and where to cut
 
-Self-modification stays, as the slow outer loop that improves the portfolios
-and selectors. Morphogen's locked judge, archive and autonomy dial are what
-keep that loop honest.
+What any adaptive system needs, and what Morphogen has: **[solid]**
 
-One step up the ladder:
+| Principle | Meaning | Status |
+|---|---|---|
+| Variation | generate candidates | strong: LLM, catalogs, strategies, subagents |
+| Feedback | a signal of what worked | **weak**: structural checks only |
+| Retention | keep what works, remember what failed | strong: git, gate, archive, journal |
+| Credit assignment | which part caused the outcome | **missing** |
+| Abstraction | compress experience into reusable units | partial: skills, strategies; no distillation |
+| Allocation | where effort goes | partial: improvement strategies |
+| Timescales | fast (in-step), medium (across episodes), slow (architecture) | mixed, not separated |
+
+**The shaping constraint [solid]:** the top-level LLM does not learn; its
+weights are fixed. All adaptation must live outside it, in files, code, small
+models and records.
+
+**The unit [plausible]:** a *versioned, executable, scorable artifact with a
+record of where it was used*. A skill, a strategy card, a component and a
+distilled model are each one. Structure (where it plugs in), procedure (how it
+is built or chosen), representation (which paradigm) and function (which
+decision it serves) are labels on that unit, not competing framings.
+
+**One-way doors, get right now [solid]:**
+
+1. The judge and its feedback: hard to game, out of the agent's reach, fed by
+   real outcomes.
+2. The record format: every trial logs artifact versions, context, decision,
+   outcome and cost. Good records allow re-cutting later; bad ones lose early
+   data for good.
+3. Safety boundaries: locks, autonomy, budgets (already in place).
+
+**Two-way doors, start light [solid]:** graph schema, strategy-card format,
+the list of decision points, the memory store, whether a part is a skill, a
+script or a model.
+
+**Is the cut right? Measure it from the archive [plausible]:**
+
+- *Locality:* most improvements touch one artifact.
+- *Attribution:* score changes trace to specific artifacts.
+- *Reuse:* artifacts work in more than one context or game without edits.
+
+If these stay low after a few dozen trials, re-cut.
+
+## 2. The thesis
+
+**[plausible]** The value is not a harness that rewrites itself. It is
+**decision points** that **choose, combine or construct** models from
+different paradigms (graph, vector, simulator, causal model, solver, rules,
+statistical model, LLM reasoning, distilled policy) for the situation at hand,
+learn which works from scored outcomes, and over time **compile** slow LLM
+reasoning into fast, cheap parts. Self-modification remains as the slow outer
+loop that improves portfolios and selectors; the locked judge, archive and
+autonomy dial keep it honest.
+
+**[speculative]** One step up the ladder:
 
 | Level | Answers |
 |---|---|
 | Tools | what can I do |
 | Skills | how do I do it |
 | Models | what is true and what will happen |
-| Meta-models | which way of seeing fits this situation; choose, combine or build one |
+| Meta-models | which way of seeing fits; choose, combine or build one |
 
-## Claude Code as the top-level loop
+The hard parts are not choosing from a menu but **inventing** representations
+and **combining** them coherently. Both are open problems.
 
-- An interactive or headless Claude Code session is the **integrator**: it
-  watches the system as a whole, designs and combines components, reads the
-  archive and journal, and decides what to try next.
-- **Smaller models do the routine work**: small LLMs, classifiers, distilled
-  policies, solvers. The top level designs and compiles; it does not sit in
-  the fast loop.
+## 3. The map is a decision space
+
+**[solid]** Every slot is a decision: alternatives are options, KPIs are
+criteria, the lock says who decides, the journal holds the rationale. The
+blueprint is already half a decision model. Related forms: Zwicky's general
+morphological analysis (dimensions × options plus cross-consistency), AutoML
+conditional configuration spaces (ConfigSpace), influence diagrams (decision,
+chance and utility nodes), architecture decision records, software
+product-line feature models.
+
+**[plausible]** Two kinds of decision:
+
+| | Design time | Run time |
+|---|---|---|
+| Question | what is installed in this slot | which option now, for this situation |
+| Decided by | trial, gate, operator | the selector, each time |
+| Output | a choice | a policy: situation → option(s) |
+
+**A slot holds either a fixed choice or a policy over options.** A slot filled
+by a selector is a run-time decision point. This joins the component map, the
+strategy library and the regime selector into one model.
+
+To become a full decision map, each slot needs: options with track records;
+criteria (KPIs, cost, latency); uncertainty about each option (the missing
+chance nodes, which also say which decision to revisit); constraints between
+options; status (open, decided, policy, review); decider (lock, autonomy);
+rationale (journal and archive links). If every trial writes a decision record,
+track records and uncertainty can be **computed** from records, not kept by hand.
+
+**[plausible]** The pattern is recursive: a system is made of components, and
+any component can be a system (as in Backstage and C4). One node shape at every
+level: provides/consumes, interface, KPIs, lock, alternatives, status.
+
+## 4. The harness: Claude Code
+
+**As the top-level loop [plausible]:**
+
+- An interactive or headless session is the **integrator**: it watches the
+  whole system, designs and combines components, reads the archive and
+  journal, decides what to try next.
+- **Smaller models do routine work** (small LLMs, classifiers, distilled
+  policies, solvers), reachable through tools or MCP; this environment can
+  reach OpenRouter. The top level designs and compiles; it does not sit in the
+  fast loop.
 - Why Claude Code: many points of modification (skills, hooks, subagents,
-  settings, MCP, headless mode), widely regarded as the strongest coding
-  harness, and usable on a Claude subscription. Check plan limits and terms
-  for unattended runs.
-- Small models are reachable through tools or MCP (this environment can reach
-  OpenRouter, for example).
+  settings, MCP, headless mode), regarded as the strongest coding harness,
+  usable on a Claude subscription. Check plan limits and terms for unattended
+  runs.
 
-## Self-model: ship a graph, let it be replaced
+**As a mapped system [plausible].** Today it is one opaque node
+(`operator-session`). Mapped, it shows where the system can change itself:
 
-- The blueprint graph is a **starting scaffold**: it gives the system a
-  concept of *slots and connections* from day one, which it can correct and
-  expand.
-- It is itself a slot. The system may swap its self-representation later if a
-  trial shows something better.
-- To make the graph earn its place: generate it (mapper script, runtime
-  traces) rather than writing it by hand; give interfaces typed contracts so a
-  swap can be checked; attribute score to components so the search aims at the
-  bottleneck; use it for impact analysis to pick which tests to run.
+| Component | Where | Role | Lock |
+|---|---|---|---|
+| Model | settings, session | top-level reasoner | locked |
+| Instructions | built-in prompt, `CLAUDE.md` | standing behaviour | locked |
+| Context window | runtime | working memory; compaction is its policy | observed only |
+| File memory | `CLAUDE.md` files, auto-memory | default long-term memory | gated |
+| Skills | `.claude/skills/` | procedures | gated |
+| Subagents | `.claude/agents/` (none) | delegated workers; slot for cheap models | gated |
+| Hooks | `.claude/settings.json` → `tools/hooks/` | enforcement, observation, traces | locked |
+| Permissions | `.claude/settings.json` | reach | locked |
+| MCP servers | `.mcp.json` (none) | adapters to tools, small LLMs, simulators | gated |
+| Plugins | marketplace | bundles of the above | gated |
+| Headless | `claude -p`, `tools/headless` | unattended outer loop | gated, autonomy 4 |
 
-## Memory: a catalog and a workbench, not a prescription
+Parts of the harness are closed and change per release: record what is
+observable, mark the rest `observed only`.
 
-- No built-in epistemic memory (Graphiti, Cognee or similar). There are many
-  ways to model memory; a developed system can opt for one.
-- Give the agent a **catalog** (where to find options) and a **workbench**
-  (a sandboxed place to build, combine and benchmark candidates against the
-  judge), and let trials decide.
-- Generalises: every slot gets catalog plus workbench, not a default answer.
+## 5. Seed portfolio, and memory
 
-## Ways to combine paradigms (the integrator's menu)
+**[solid]** Morphogen already ships memory, as plain files in git:
+
+| Kind | Holds | Shipped as |
+|---|---|---|
+| Self-model | what I am made of | `map/blueprint.yaml`, as-built map |
+| Index | where options are | `catalogs.yaml` |
+| Procedural | how to do things | `.claude/skills/`, `strategies/` |
+| Episodic, narrative | what I did and why | `journal/` |
+| Episodic, scored | what I tried and how it scored | `archive/*` tags |
+| Values and goals | what matters, what is forbidden | `map/intent.md`, `CLAUDE.md` |
+| Judgement | what counts as better | `evals/` |
+| Working | what is in view | context window (unmanaged) |
+
+**Principle:** ship a **seed portfolio**, the simplest working default in each
+slot, every one replaceable by trial.
+
+**Core-primitive test [plausible]:** a part is core only if the loop cannot
+run, or cannot stay safe, without it. Judge, goals, archive and journal,
+procedures: core. Self-model and index: core as replaceable seeds.
+**World-knowledge store: not core, an empty slot.** Its shape depends on the
+domain; world knowledge already lives in the LLM's weights and in the
+portfolio's models (a learned dynamics model *is* compressed world knowledge);
+and it is a good first test of the thesis: start without it and see whether
+the system discovers it needs one. Baseline any chosen store must beat: plain
+files plus grep.
+
+## 6. Modelling strategies as a library
+
+**[plausible]** Slots say *where* things plug in; a strategy library says *how*
+to model a kind of situation. They connect: the selector chooses a strategy,
+the strategy builds or configures a model, the model fills a slot, the judge
+scores it, the graph records which strategy produced what. Morphogen already
+does this one level up for improvement strategies.
+
+Skill format as the container: native to Claude Code, descriptions act as a
+cheap index, can bundle scripts and references, versioned. Fixes for its
+limits:
+
+1. Prose cannot run or be scored: the executable part goes in `scripts/`, the
+   scoring in the judge.
+2. Selection by reading has no memory: each card carries a track record from
+   the archive.
+3. Context bloat: keep modelling strategies in `strategies/modeling/` as
+   unregistered skill-format files, with one registered `model-select` skill
+   that searches them (with an index once the library grows).
+4. A few cards will dominate (Auto-Evolve's finding): usage and score stats
+   guide pruning and invention.
+
+```yaml
+name: graph-plus-vector-recall
+applies_when: many named entities; lookups by relation and by similarity
+paradigms: [graph, vector]
+interface: remember(event) / recall(query) -> items
+cost: low; latency ms
+implementation: scripts/recall.py
+scored_by: eval:recall_at_k on game episodes
+record: {trials: 0, wins: 0, archive: []}
+```
+
+## 7. Ways to combine paradigms
+
+**[solid]** The integrator's menu:
 
 | Pattern | Example |
 |---|---|
-| Hybrid retrieval | graph plus vector, either one narrowing the other |
+| Hybrid retrieval | graph plus vector, either narrowing the other |
 | Cascade | cheap model answers when confident, passes hard cases up |
 | Distillation | LLM decisions or an online-learned index become a small model or rules |
 | Residual | physics or rules model plus a learned correction |
 | Prior and posterior | one model's output seeds another's update |
-| Surrogate | fast learned stand-in for a slow simulator, re-checked |
+| Surrogate | fast stand-in for a slow simulator, re-checked |
 | Hierarchy | slow planner sets goals for a fast controller |
 | Verification | one paradigm proposes, another checks |
 | Gating | learned gate weights experts per situation |
 | Ensemble plus reconciliation | independent models, a supervisor resolves disagreement |
 
-## Decision points (a checklist, not a fixed taxonomy)
+## 8. Decision points
 
-Attending, observing, interpreting, remembering, predicting, explaining,
-counterfactuals, valuing, deciding, planning, acting, modelling others,
-communicating, verifying, learning, metacognition, self-modelling.
+**[solid]** A checklist, not a fixed taxonomy: attending, observing,
+interpreting, remembering, predicting, explaining, counterfactuals, valuing,
+deciding, planning, acting, modelling others, communicating, verifying,
+learning, metacognition, self-modelling.
 
 Accept a point only if it recurs, its outcome can be scored, and more than one
 paradigm is plausible. Predicting, diagnosing, remembering and verifying are
-the easiest first experiments.
+the easiest first experiments; valuing and modelling others the hardest.
 
-## Games as training and test ground
+## 9. Games as training and test ground
 
-Free, unlimited, hard-to-game feedback that needs several kinds of model at
-once (perception, maps, dynamics, planning, memory). Existing environments
-used as test beds:
+**[solid]** Free, unlimited, hard-to-game feedback that needs several kinds of
+model at once. Existing environments used as test beds:
 
-- **Inner loop:** Crafter or Craftax (cheap, open-ended).
-- **Hidden held-out set:** different games (MiniHack levels, ARC-AGI-3 if
+- Inner loop: Crafter or Craftax (cheap, open-ended).
+- Hidden held-out set: different games (MiniHack levels, ARC-AGI-3 if
   available), so gains must generalise.
-- **Later:** robotics simulators (MuJoCo, ManiSkill, PyBullet) with the same
-  harness.
+- Later: robotics simulators (MuJoCo, ManiSkill, PyBullet), same harness.
 - Prefer turn-based or pausable environments while compiled parts are immature.
 
-Candidate KPIs:
+## 10. Measures and falsifiable steps
 
-1. score on development games
-2. score on held-out games
-3. score per dollar
-4. share of decisions made without the top-level LLM, at equal score (the
-   compiling measure)
+**KPIs [plausible]:** score on development games; score on held-out games;
+score per dollar; share of decisions made without the top-level LLM at equal
+score (the compiling measure); locality, attribution and reuse (is the cut
+right).
 
-## Falsifiable steps
+**Steps:**
 
 1. **Selector gain:** a learned selector over 3 to 5 paradigms beats the best
-   single one on held-out games. (If only this holds, it is a good router.)
+   single one on held-out games. (Alone, this is a good router.)
 2. **Combination gain:** combined answers beat selected ones.
 3. **Construction:** the system adds a new paradigm or combination that joins
    the portfolio and wins somewhere.
 
-Disconfirmed if one strong LLM with tools matches it everywhere, if selection
-costs more than it gains, or if gains vanish on held-out games.
+**Disconfirmed if:** one strong LLM with tools matches it everywhere;
+selection costs more than it gains; gains vanish on held-out games.
 
-## Prior art (from a first search; summaries, not full readings)
+## 11. Prior art
 
-- **OpenCog Hyperon**, cognitive synergy over a shared metagraph: the closest
+From a first search; summaries, not full readings. **[solid]** as pointers.
+
+- **OpenCog Hyperon**, cognitive synergy over a shared metagraph: closest
   relative; combining paradigms is where it has stalled.
   [paper](https://arxiv.org/pdf/2310.18318)
 - **Representation selection:** Epstein's portfolio architecture
@@ -130,36 +276,48 @@ costs more than it gains, or if gains vanish on held-out games.
   Polyscheme, Peebles and Cheng
   ([Huddersfield](https://pure.hud.ac.uk/en/publications/multiple-representations-in-cognitive-architectures-2/)).
 - **LLMs choosing reasoning methods:** Self-Discover
-  ([HF](https://huggingface.co/papers/2402.03620)); Auto-Evolve, which found a
-  fixed module set gets dominated and invents modules
+  ([HF](https://huggingface.co/papers/2402.03620)); Auto-Evolve
   ([arXiv](https://arxiv.org/html/2410.06328v2)).
 - **Routing between paradigms:** Adaptive LLM-Symbolic Reasoning
   ([arXiv](https://ar5iv.arxiv.org/html/2510.06774)); When Do Symbolic Solvers
-  Enhance Reasoning, evidence that the winner depends on the regime
-  ([NeurIPS 2025](https://neurips.cc/virtual/2025/126669)); CodeSteer
-  ([blog](https://chrisg777.github.io/blog/2025/ml-tea-llms-symbolic-computing/)).
-- **Building world models on demand:** Li, Fox and Goodman
-  ([arXiv](https://arxiv.org/abs/2402.17879v1)); Wong et al., on-demand
-  synthesis of probabilistic models ([arXiv](https://www.arxiv.org/pdf/2507.12547));
-  a probabilistic framework for LLM model discovery
-  ([arXiv](https://arxiv.org/html/2602.18266v1)).
-- **Mixture of world models** (ICLR 2026), learned routing within one paradigm
+  Enhance Reasoning ([NeurIPS 2025](https://neurips.cc/virtual/2025/126669));
+  CodeSteer ([blog](https://chrisg777.github.io/blog/2025/ml-tea-llms-symbolic-computing/)).
+- **World models on demand:** Li, Fox and Goodman
+  ([arXiv](https://arxiv.org/abs/2402.17879v1)); Wong et al.
+  ([arXiv](https://www.arxiv.org/pdf/2507.12547)); probabilistic framework for
+  LLM model discovery ([arXiv](https://arxiv.org/html/2602.18266v1)).
+- **Mixture of world models** (ICLR 2026)
   ([pdf](https://proceedings.iclr.cc/paper_files/paper/2026/file/33b47b3d2441a17b95344cd635f3dd01-Paper-Conference.pdf)).
 - **Forecast aggregation:** AIA Forecaster
   ([arXiv](https://arxiv.org/html/2511.07678v1)), LEAP
   ([arXiv](https://arxiv.org/pdf/2609.01337)).
-- Background: Minsky (*Society of Mind*), Rice's algorithm selection problem,
-  rational metareasoning (Russell and Wefald; Lieder and Griffiths), DreamCoder,
-  Darwin Gödel Machine, AlphaEvolve, GEPA, auto-sklearn, AutoGluon, Rainbow and
-  MAPE-K.
+- **Decision spaces:** Zwicky's general morphological analysis; ConfigSpace
+  and SMAC; influence diagrams; architecture decision records; feature models.
+- **Libraries of procedures:** Voyager, Agent Workflow Memory, Agent Skills,
+  DreamCoder.
+- Background: Minsky, Rice's algorithm selection problem, rational
+  metareasoning (Russell and Wefald; Lieder and Griffiths), Darwin Gödel
+  Machine, AlphaEvolve, GEPA, auto-sklearn, AutoGluon, Rainbow and MAPE-K.
 
-**What looks open:** learned selection across genuinely different paradigms
-while the agent works; a portfolio that grows by trial under a judge the agent
-cannot edit; one selection interface across many decision points; evidence
-that combining beats selecting.
+**What looks open:** learned selection across genuinely different paradigms at
+run time; a portfolio that grows by trial under a judge the agent cannot edit;
+one selection interface across many decision points; evidence that combining
+beats selecting.
 
-## Open decisions (operator)
+## 12. Next steps and open decisions
+
+Proposed order, one-way doors first:
+
+1. **Trace and record schema** that every trial writes (hooks can capture much
+   of it).
+2. **One game environment wired to the judge.**
+3. **Three or four strategy cards** on one decision point, plus `model-select`.
+4. **Blueprint changes:** decision fields per slot; Claude Code as a mapped
+   system; slots that hold a choice or a policy.
+
+Operator decisions:
 
 - Whether this becomes Morphogen's purpose (via `onboard`), or a new repository.
-- Where trials run: needs Docker, and likely a GPU for Craftax.
+- Where trials run: needs Docker, likely a GPU for Craftax.
 - Budgets for LLM-driven episodes.
+- Guard: it blocks pushing archive tags the gate wrote, so they stay local.
