@@ -1,2 +1,0 @@
-id: urn:kk:contract:lane-policy/waits-for-person
-description: A change set in review is not applied until a reviewer approves it, and its submitter cannot approve it.

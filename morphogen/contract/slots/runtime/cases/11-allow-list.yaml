@@ -1,2 +1,0 @@
-id: urn:kk:contract:runtime/allow-list
-description: An approved file off the allow list (a privileged service) is refused and not run.

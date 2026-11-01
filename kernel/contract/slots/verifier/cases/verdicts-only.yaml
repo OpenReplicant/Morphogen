@@ -1,2 +1,0 @@
-id: urn:kk:contract:verifier/verdicts-only
-description: 'Every change set the verifier has applied holds add_verification ops only: a verifier never writes claims.'

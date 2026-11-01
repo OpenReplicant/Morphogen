@@ -1,2 +1,0 @@
-id: urn:kk:contract:runtime/recorded
-description: 'The runtime records a run for the file it ran: outputs name the system and the sha256 applied, and used names the approving step''s claims.'

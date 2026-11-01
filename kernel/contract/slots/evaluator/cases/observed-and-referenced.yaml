@@ -1,2 +1,0 @@
-id: urn:kk:contract:evaluator/observed-and-referenced
-description: Each measurement is observed and references the stored file, whose bytes hash to the file given.

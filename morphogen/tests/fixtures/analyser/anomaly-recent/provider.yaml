@@ -1,9 +1,0 @@
-id: urn:kk:provider:anomaly-recent
-name: Anomaly detection, lean passes
-version: 0.2.0
-license: Apache-2.0
-slots: [analyser]
-origin: candidate for the analyser slot (G2 fixture, the builder CI uses); the incumbent's rules and reading of the feed, with fewer round trips per pass and a run only when it submits
-requires: Python 3.12+, psycopg
-service: python3 -m anomaly_recent
-note: takes over the analyser's agent and role (urn:kk:agent:anomaly, kkm_anomaly); its runs name its own module

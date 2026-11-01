@@ -1,2 +1,0 @@
-id: urn:kk:contract:runtime/per-system
-description: 'An approval names a file for one system: the same bytes committed as another system are not run.'

@@ -1,2 +1,0 @@
-id: urn:kk:contract:recall/clearance
-description: A claim in a scope the reader may not read is never returned, though it matches best.
