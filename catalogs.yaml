@@ -95,7 +95,7 @@ parts:
     url: https://github.com/maximhq/bifrost
     docs: https://docs.getbifrost.ai/providers/supported-providers
     finds: LLM gateway (Go, Apache 2.0); OpenAI-compatible; Ollama, OpenRouter, Anthropic; virtual keys with budgets; USD cost tracking
-    fills: model-gateway slot (preferred: lighter than LiteLLM)
+    fills: "model-gateway slot (preferred, lighter than LiteLLM)"
 
   - name: LiteLLM
     url: https://github.com/BerriAI/litellm
