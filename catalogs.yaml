@@ -86,3 +86,58 @@ strategies:
   - name: Voyager
     url: https://arxiv.org/abs/2305.16291
     finds: automatic curriculum, skill library, self-verification
+
+# Parts noted for the regime-selector direction (research/thesis.md).
+# Candidates only: pin version and digest, check licence, trial before adopting.
+parts:
+
+  - name: Bifrost
+    url: https://github.com/maximhq/bifrost
+    docs: https://docs.getbifrost.ai/providers/supported-providers
+    finds: LLM gateway (Go, Apache 2.0); OpenAI-compatible; Ollama, OpenRouter, Anthropic; virtual keys with budgets; USD cost tracking
+    fills: model-gateway slot (preferred: lighter than LiteLLM)
+
+  - name: LiteLLM
+    url: https://github.com/BerriAI/litellm
+    finds: LLM gateway (Python); cost tracking, budgets, fallbacks
+    fills: model-gateway slot (alternative)
+
+  - name: Ollama
+    url: https://ollama.com
+    finds: local model serving (8-12B models), OpenAI-compatible endpoint
+    fills: local model tier
+
+  - name: Rerun
+    url: https://rerun.io
+    finds: open-source viewer for multimodal time series; live and recorded episodes
+    fills: game viewer
+
+  - name: Arize Phoenix
+    url: https://github.com/Arize-ai/phoenix
+    finds: local LLM call tracing (prompts, tokens, latency, cost) over OpenTelemetry
+    fills: call tracing
+
+  - name: Gymnasium
+    url: https://gymnasium.farama.org
+    finds: standard environment API, video recording wrappers
+    fills: environment adapter interface
+
+  - name: Crafter / Craftax
+    url: https://github.com/danijar/crafter
+    finds: open-ended survival and crafting benchmark with a standard score; Craftax is the JAX version
+    fills: inner-loop game environment
+
+  - name: MiniHack / NetHack Learning Environment
+    url: https://github.com/facebookresearch/minihack
+    finds: partially observable roguelike tasks
+    fills: held-out game environments
+
+  - name: ARC-AGI-3
+    url: https://arcprize.org
+    finds: interactive games built to test learning new environments
+    fills: held-out game environments (check access and rules)
+
+  - name: BALROG
+    url: https://github.com/balrog-ai/BALROG
+    finds: benchmark of LLM agents across several game environments
+    fills: baselines

@@ -262,7 +262,75 @@ right).
 **Disconfirmed if:** one strong LLM with tools matches it everywhere;
 selection costs more than it gains; gains vanish on held-out games.
 
-## 11. Prior art
+## 11. Fresh start: operator decisions and stack
+
+Decided by the operator (2026-11-01):
+
+- **Runs on the operator's machine with Docker.** The operator wants to
+  **watch it play** and work.
+- **Model tiers**, used side by side: local 8–12B models, OpenRouter, Haiku,
+  Sonnet, Opus.
+- **Goal: lowest cost within constraints.**
+
+Consequences **[plausible]**:
+
+- **Cost ladder as a slot:** the policy is the cheapest tier that meets the
+  constraint. Tiers: 0 compiled rules or distilled policy; 1 local 8–12B;
+  2 cheap OpenRouter models; 3 Haiku; 4 Sonnet; 5 Opus, rarely, as teacher or
+  for hard cases. Upper tiers' decisions become training data for tiers 0–1.
+- **Lexicographic gate:** first, held-out score does not regress (or stays
+  above an operator target) and latency fits; then, lower cost per episode is
+  better.
+- **Cost ledger in the record schema:** per call model, tokens, price,
+  dollars; local models at GPU-seconds × a nominal rate, so they are not free;
+  the integrator's subscription usage in a separate column.
+- **Subscription versus API:** the Claude subscription covers the Claude Code
+  integrator. Claude models called from game code go through the API and are
+  billed per token; do not route per-step calls through `claude -p`.
+- **The game loop pays for itself only if compiled:** Crafter episodes run for
+  thousands of steps, so the top LLM acts through macro-actions or every N
+  steps, and the rest must be compiled. That pressure is the thesis.
+
+Stack (candidates in `catalogs.yaml` under `parts`; pin versions and digests):
+
+| Slot | Choice | Alternative |
+|---|---|---|
+| Model gateway | **Bifrost** (Go, Apache 2.0; Ollama, OpenRouter, Anthropic; per-key budgets; USD cost tracking) | LiteLLM |
+| Local models | Ollama | llama.cpp server, vLLM |
+| Game viewer | Rerun (live and recorded, per-step frame, action, card, model, cost) | Gymnasium `RecordVideo` mp4s |
+| Call tracing | Arize Phoenix | — |
+| Environments | Gymnasium API; Crafter first; MiniHack, ARC-AGI-3 held out | Craftax with a GPU |
+
+Check during setup: OpenRouter cost passes through Bifrost; Bifrost exports
+OpenTelemetry to Phoenix (otherwise the client sends spans); capability matrix
+for the models used. Bifrost cannot price local tokens; the ledger does.
+
+Layout for the fresh repository:
+
+```
+CLAUDE.md        loop and rules, short
+intent.md        purpose, KPIs, budgets, autonomy (operator)
+space.yaml       decision space: nested systems, slots (choice | policy)
+cards/           modelling strategies, skill format, scripts, contracts
+.claude/skills/  map, model-select, trial, distill
+envs/            environment adapters
+judge/           dev evaluation, read-only mount (operator)
+records/         decision records with cost ledger (committed)
+runs/            raw traces and episodes (ignored)
+catalogs.yaml, journal/
+```
+
+Hidden held-out evaluation lives outside the agent's repo (CI or a private
+repo); the agent can read anything in its own repo. Two lock levels:
+operator-owned, and open through the gate. Isolation from the devcontainer and
+CI, not from pattern matching.
+
+Phases, each ending in a measurement: 0 frame (records, judge, Crafter,
+baselines, viewer, held-out set); 1 selector gain; 2 compiling (share without
+the LLM rises at equal score); 3 combination and construction; 4 transfer to a
+second game, then a robotics simulator.
+
+## 12. Prior art
 
 From a first search; summaries, not full readings. **[solid]** as pointers.
 
@@ -304,7 +372,7 @@ run time; a portfolio that grows by trial under a judge the agent cannot edit;
 one selection interface across many decision points; evidence that combining
 beats selecting.
 
-## 12. Next steps and open decisions
+## 13. Next steps and open decisions
 
 Proposed order, one-way doors first:
 
@@ -318,6 +386,8 @@ Proposed order, one-way doors first:
 Operator decisions:
 
 - Whether this becomes Morphogen's purpose (via `onboard`), or a new repository.
-- Where trials run: needs Docker, likely a GPU for Craftax.
-- Budgets for LLM-driven episodes.
+- Repository name (operator creates it empty).
+- Operator machine: OS, GPU and VRAM (8B at 4-bit needs about 6 GB, 12B about 8–9 GB).
+- Monthly API cap, and the score constraint (for example, match a
+  Sonnet-every-N-steps baseline).
 - Guard: it blocks pushing archive tags the gate wrote, so they stay local.
