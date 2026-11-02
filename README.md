@@ -235,12 +235,13 @@ sixth:
 | sources | where parts come from: PyPI, the standard library, this project | |
 | components | a specific part, with version; can itself be a system | type, source |
 
-`init_project` seeds them with a self-map of three systems, so Morphogen
+`init_project` seeds them with a self-map of four systems, so Morphogen
 starts from a worked example instead of a blank page:
 
 | System | Slots | Depends on |
 |---|---|---|
-| `morphogen` | judge, evidence log, list store, improvement strategy, sandbox, harness, host | `claude-code` (harness), `host` (sandbox, Python, git) |
+| `morphogen` | judge, evidence log, list store, improvement strategy, sandbox, harness, host, admin UI | `claude-code` (harness), `host` (sandbox, Python, git), `admin-ui` |
+| `admin-ui` | shell, map viewer, evidence viewer, sessions, terminal, editor | |
 | `claude-code` | model, plugins, host | `host`; hosts `morphogen` as a plugin |
 | `host` | OS, container engine, Python, git | |
 
@@ -406,6 +407,39 @@ The MCP server's tools, which any MCP-capable harness can call:
 | `judge` | score a candidate against a base; records the verdict |
 | `strategy`, `archive`, `strategies_list` | the next strategy and why; judged variants with lineage and payoff; the catalog |
 | `journal_append` | append a journal entry |
+| `admin_pages` | write the admin menu and the read-only report |
+
+## Admin UI
+
+The admin UI is a system in the map like any other: a `shell` slot that lists
+what fills the rest (`map-viewer`, `evidence-viewer`, `sessions`, `terminal`,
+`editor`). Morphogen fills three of them itself, with static pages written to
+`.morphogen/admin/` (ignored by git):
+
+- `index.html`, the menu: what fills each slot, with links that open in new
+  tabs;
+- `report.html`: the map, the evidence chain's state, each target's archive as
+  a lineage tree with each strategy's payoff, and recent evidence.
+
+Write them with the `admin_pages` tool, or outside any agent session:
+
+```
+uv run --project server morphogen-admin --project .            # write the pages
+uv run --project server morphogen-admin --project . --serve 8765   # and serve them on localhost
+```
+
+The pages read and never write. `--serve` is a separate process that answers
+GET and HEAD only and binds to 127.0.0.1. All text from the lists and evidence
+is escaped, and only http, https and relative links are kept, since the agent
+writes those entries. Approvals never go through the admin UI: anything on
+the machine, the agent included, can reach a local web page. They stay in the
+conversation and in pull requests.
+
+Sessions, terminal and editor are empty until you run a tool for them.
+`catalogs.yaml` lists candidates under `admin_ui` (session managers for Claude
+Code and Codex, a web terminal, a web editor, a web desktop such as Puter that
+could fill the shell slot). Morphogen never installs them. To show one in the
+menu, add a component with `status: in use` and its `url`, and fill its slot.
 
 ## Testing and evals
 

@@ -12,6 +12,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
+from . import admin as admin_mod
 from . import judge as judge_mod
 from . import project
 from . import strategies as strategies_mod
@@ -206,6 +207,15 @@ def journal_append(title: str, gap: str, options: str, choice: str, rung: str,
     return project.journal_append(root, cfg, {"title": title, "gap": gap, "options": options,
                                               "choice": choice, "why": why, "rung": rung,
                                               "gate": gate, "commit": commit})
+
+
+@server.tool()
+@_safe
+def admin_pages() -> dict:
+    """Write the admin menu (what fills each admin-ui slot, links open in new tabs) and a read-only
+    report (map, evidence chain, archive lineage) as static HTML in the data directory."""
+    root, cfg = _ctx()
+    return admin_mod.write(root, cfg)
 
 
 def main() -> None:

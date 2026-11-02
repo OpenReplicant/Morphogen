@@ -45,11 +45,12 @@ def init_project(root: Path) -> dict:
         shutil.copy(SAMPLES / "catalogs.yaml", root / "catalogs.yaml")
         done.append("wrote catalogs.yaml")
     gi = root / ".gitignore"
-    line = f"{cfg.get('data_dir', '.morphogen')}/traces.jsonl"
-    existing = gi.read_text() if gi.exists() else ""
-    if line not in existing.splitlines():
-        gi.write_text(existing + ("" if existing.endswith("\n") or not existing else "\n") + line + "\n")
-        done.append("ignored traces in .gitignore")
+    d = cfg.get("data_dir", ".morphogen")
+    for line, what in ((f"{d}/traces.jsonl", "traces"), (f"{d}/admin/", "generated admin pages")):
+        existing = gi.read_text() if gi.exists() else ""
+        if line not in existing.splitlines():
+            gi.write_text(existing + ("" if existing.endswith("\n") or not existing else "\n") + line + "\n")
+            done.append(f"ignored {what} in .gitignore")
     return {"project": str(root), "done": done or ["already set up"]}
 
 

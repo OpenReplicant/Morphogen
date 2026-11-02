@@ -101,3 +101,54 @@ progressive_delivery:
   - name: Flagger
     url: https://flagger.app
     finds: canary and A/B analysis for Kubernetes services
+
+# Side-car tools for the admin-ui slots. Found by search on 2026-11-02; none has
+# been read or run yet. Morphogen lists them and never installs them: pin a
+# version, check the licence and advisories, and read it before running one.
+# To show one in the menu, add a component (status: in use, url: ...) and fill
+# its slot. None of them may take approvals.
+admin_ui:
+  - name: CloudCLI (claudecodeui)
+    url: https://github.com/siteboon/claudecodeui
+    slot: admin-ui/sessions
+    finds: web and mobile UI for Claude Code, Cursor CLI and Codex sessions
+    licence: "unclear: GPL-3.0 per GitHub metadata, AGPL-3.0-or-later per other sources"
+    interface: separate process, HTTP; controls sessions
+    trust: open
+    notes: Snyk lists advisories for some versions; forks and mirrors exist, use the original
+  - name: TwiCC
+    url: https://pypi.org/project/twicc/
+    slot: admin-ui/sessions
+    finds: one web interface for Claude Code and Codex, several terminals, quota graphs
+    licence: unknown
+    interface: separate process, HTTP; needs Python 3.13+
+    trust: open
+  - name: Claude Code Web
+    url: https://github.com/fafawlf/claude-code-web
+    slot: admin-ui/sessions
+    finds: self-hosted web workspace for Claude Code, experimental Codex support
+    licence: unknown
+    interface: separate process, HTTP over localhost or an SSH tunnel
+    trust: unvetted
+    notes: early (few users)
+  - name: ttyd
+    url: https://github.com/tsl0922/ttyd
+    slot: admin-ui/terminal
+    finds: a terminal shared over the web
+    licence: MIT (reported, not confirmed from the project)
+    interface: separate process, HTTP and WebSocket
+    trust: open
+  - name: code-server
+    url: https://github.com/coder/code-server
+    slot: admin-ui/editor
+    finds: VS Code in the browser
+    licence: MIT; recent versions reportedly bundle a Copilot component with other terms
+    interface: separate process, HTTP
+    trust: open
+  - name: Puter
+    url: https://github.com/heyputer/puter
+    slot: admin-ui/shell
+    finds: a self-hostable web desktop that could hold the other tools
+    licence: AGPL-3.0 (puter.js SDK also Apache-2.0)
+    interface: separate process, HTTP; self-hosted build is alpha per its maintainers
+    trust: open
