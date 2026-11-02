@@ -119,3 +119,34 @@ class TrialBudget(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SimulatedTargets(unittest.TestCase):
+    def test_simulated_target_gets_simulated_trust_and_a_note(self):
+        from tests.fixture import git
+        p = SampleProject()
+        try:
+            spec = p.path("target.yaml")
+            spec.write_text(spec.read_text().replace(
+                "interface: direct", "interface: simulated\nsimulates: a word-frequency service in production"))
+            git(p.repo, "commit", "-q", "-am", "make it a simulator")
+            r = p.judge(p.branch("fast", {"topwords.py": FAST}))
+            self.assertEqual(r["verdict"], "pass", r)
+            self.assertEqual(r["trust"], "simulated")
+            self.assertTrue(any("simulator" in n for n in r["notes"]))
+            rec = p.evidence.query(by="judge", limit=1)[0]
+            self.assertEqual((rec["trust"], rec["interface"]), ("simulated", "simulated"))
+        finally:
+            p.close()
+
+    def test_unknown_interface_or_missing_simulates_is_an_error(self):
+        from tests.fixture import git
+        p = SampleProject()
+        try:
+            spec = p.path("target.yaml")
+            spec.write_text(spec.read_text().replace("interface: direct", "interface: simulated"))
+            git(p.repo, "commit", "-q", "-am", "simulated without saying of what")
+            with self.assertRaises(judge_mod.JudgeError):
+                p.judge(p.branch("x", {"topwords.py": FAST}))
+        finally:
+            p.close()

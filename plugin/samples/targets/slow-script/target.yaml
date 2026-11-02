@@ -3,6 +3,11 @@
 name: slow-script
 description: Most frequent words in a text. Correct but quadratic; make it faster without changing results.
 
+# direct: the judge acts on the real thing (here, the code itself).
+# simulated: the target is a model of something the judge cannot act on; then
+# also say what it simulates (simulates: ...). Verdicts get trust "simulated".
+interface: direct
+
 # Files that belong to the judge, not to the code under improvement.
 harness: [bench.py, gen.py, test_topwords.py]
 

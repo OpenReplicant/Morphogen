@@ -2,7 +2,7 @@
 
 A backend implements a port and declares capability flags, so callers know
 which guarantees are real instead of assuming the strongest backend.
-Every backend must pass the same conformance tests (tests/test_conformance.py).
+Every backend must pass the same conformance tests (the Conformance class in tests/test_morphogen.py).
 """
 
 from __future__ import annotations
@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 KINDS = ("systems", "slots", "types", "sources", "components")
-TRUST = ("measured", "stated", "inferred", "asserted")
+TRUST = ("measured", "simulated", "stated", "inferred", "asserted")
+INTERFACES = ("direct", "simulated")
 
 
 class ListStore(Protocol):

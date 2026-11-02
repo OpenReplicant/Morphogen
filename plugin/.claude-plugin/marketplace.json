@@ -1,0 +1,17 @@
+{
+  "name": "morphogen",
+  "owner": {
+    "name": "OpenReplicant"
+  },
+  "metadata": {
+    "description": "Morphogen: an agent that maps, measures and improves systems under an outside judge."
+  },
+  "plugins": [
+    {
+      "name": "morphogen",
+      "source": "./",
+      "description": "Maps, measures and improves systems, itself included, with a judge the agent cannot edit.",
+      "version": "0.1.0"
+    }
+  ]
+}

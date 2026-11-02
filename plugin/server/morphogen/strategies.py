@@ -72,6 +72,7 @@ def archive(evidence, target: str) -> list[dict]:
             "strategy": labels.get("strategy", "unlabelled"),
             "approach": labels.get("approach"), "family": labels.get("family"),
             "parent": labels.get("parent"),
+            "trust": r.get("trust"), "interface": r.get("interface", "direct"),
             "reasons": r.get("outcome", {}).get("forbidden") or None,
         })
     return out

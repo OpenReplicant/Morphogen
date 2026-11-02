@@ -19,17 +19,17 @@ catalogs, intent and the slow-script sample, committed on `main`.
 ## Run
 
 The cases need their scaffold scripts and the real MCP server (the judge), so
-run with `--scaffold` and `--mocks off`, from the repository root:
+run with `--scaffold` and `--mocks off`, from the plugin's root:
 
 ```
-claude plugin eval plugin --scaffold --mocks off \
+claude plugin eval . --scaffold --mocks off \
   --allow-tools mcp__plugin_morphogen_morphogen --no-publish
 ```
 
 One case:
 
 ```
-claude plugin eval plugin --case 06-strategy-after-stall --scaffold --mocks off \
+claude plugin eval . --case 06-strategy-after-stall --scaffold --mocks off \
   --allow-tools mcp__plugin_morphogen_morphogen --no-publish
 ```
 

@@ -38,6 +38,7 @@ from pathlib import Path
 
 import yaml
 
+from .ports import INTERFACES
 from .runner import run, sandbox_mode
 
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
@@ -106,6 +107,24 @@ def load_spec(tree: Path, rel: Path) -> dict:
 
 def _target_name(spec: dict, rel: Path) -> str:
     return spec.get("name") or rel.name
+
+
+def _interface(spec: dict) -> tuple[str, str]:
+    """`direct`: the judge acts on the real system. `simulated`: on a model of it.
+
+    Returns the interface and the trust level its verdicts get. A verdict on a
+    simulator is evidence about the model, not about reality.
+    """
+    interface = spec.get("interface", "direct")
+    if interface not in INTERFACES:
+        raise JudgeError(f"target.yaml interface must be one of {', '.join(INTERFACES)}, not {interface!r}")
+    if interface == "simulated" and not spec.get("simulates"):
+        raise JudgeError("a simulated target must say what it simulates (simulates: ...)")
+    return interface, ("measured" if interface == "direct" else "simulated")
+
+
+SIMULATED_NOTE = ("this verdict is about a simulator ({what}), not reality; applying the change to the real "
+                  "system needs a direct trial or the operator's explicit approval")
 
 
 def _overlay(spec: dict, base_dir: Path, cand_dir: Path) -> None:
@@ -249,6 +268,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         spec = load_spec(tree, rel)
         _check_spec(spec)
         name = _target_name(spec, rel)
+        interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
         m = spec["measure"]
         seed = secrets.randbelow(2**31)
@@ -266,11 +286,17 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         "outcome": metrics,
         "refs": {"commit": sha},
         "seeds": {"bench": seed},
+        "interface": interface,
+        **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
         "sandbox": sandbox_mode(cfg),
-        "trust": "measured",
+        "trust": trust,
         "by": "judge",
     })
-    return {"target": name, "commit": sha, "metrics": metrics, "sandbox": rec["sandbox"], "evidence_seq": rec["seq"]}
+    out = {"target": name, "commit": sha, "metrics": metrics, "interface": interface, "trust": trust,
+           "sandbox": rec["sandbox"], "evidence_seq": rec["seq"]}
+    if interface == "simulated":
+        out["note"] = SIMULATED_NOTE.format(what=spec["simulates"])
+    return out
 
 
 def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
@@ -290,6 +316,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         spec = load_spec(btree, rel)
         metrics_spec = _check_spec(spec)
         name = _target_name(spec, rel)
+        interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
         harness = set(spec.get("harness", [])) | {"target.yaml"}
         harness_touched = [p for p in changed if str(Path(p).relative_to(rel)) in harness]
@@ -353,6 +380,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                            f"{c['ci95'][1]:+.1%}, sign test p={c['sign_test_p']}) does not meet the bar")
     notes = [f"harness files changed by the candidate were replaced by the base's: {', '.join(harness_touched)}"] \
         if harness_touched else []
+    if interface == "simulated":
+        notes.append(SIMULATED_NOTE.format(what=spec["simulates"]))
     verdict = "pass" if passed else "fail"
     rec = evidence.append({
         "claim": f"{name}: {cand_sha[:12]} is {'better than' if passed else 'not better than'} {base_sha[:12]}",
@@ -366,8 +395,10 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "refs": {"base": base_sha, "candidate": cand_sha},
         "seeds": {"equivalence": eq_seeds, "bench": bench_seed},
         "labels": {str(k): str(v) for k, v in (labels or {}).items()},
+        "interface": interface,
+        **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
         "sandbox": sandbox_mode(cfg),
-        "trust": "measured",
+        "trust": trust,
         "by": "judge",
     })
     return {
@@ -380,6 +411,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "metrics": comparisons,
         "reasons": reasons,
         "notes": notes,
+        "interface": interface,
+        "trust": trust,
         "sandbox": rec["sandbox"],
         "evidence_seq": rec["seq"],
     }

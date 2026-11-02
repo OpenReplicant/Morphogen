@@ -145,7 +145,9 @@ def judge(target: str, candidate: str = "HEAD", base: str | None = None,
     """Score a candidate commit against a base (default: the trunk) using the base's tests, harness
     and freshly generated inputs. Passes only if tests pass, outputs match, and the primary metric
     improves by its bar, beyond chance, without other metrics regressing. The verdict is recorded.
-    labels: optional {strategy, approach, family, parent} for the archive; they never affect the verdict."""
+    labels: optional {strategy, approach, family, parent} for the archive; they never affect the verdict.
+    A target with `interface: simulated` gets verdicts with trust 'simulated': evidence about the model,
+    not reality."""
     root, cfg = _ctx()
     _, evidence = project.stores(root, cfg)
     return judge_mod.judge(root, cfg, target, base or cfg.get("trunk", "main"), candidate, evidence, labels)

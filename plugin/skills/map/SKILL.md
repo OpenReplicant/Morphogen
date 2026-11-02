@@ -20,6 +20,13 @@ knows; keep them true and small.
 | components | a specific part, with version | `type`, `source`; may itself be a system |
 | evidence | claims with support (written through tools, never by hand) | anything above |
 
+Record how Morphogen can act on each system: `interface: direct` when there is
+an API, a shell or code it can change; `interface: simulated` when it can only
+act on a model, with the model as a slot of its own (`<system>/simulator`) and
+`simulates:` saying what it stands for. People and teams are systems too, and
+roles are slots; a swap is an assignment made through whatever system holds
+it (an HR, ticketing or scheduling API), and only with the operator's approval.
+
 Ids are short and stable: `targets/slow-script`, `slow-script/counting`,
 `type/hash-count`, `comp/collections-counter`. References are ids.
 

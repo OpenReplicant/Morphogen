@@ -53,6 +53,10 @@ These steps never change, whatever the strategy.
   the judge. Never tune code to the benchmark's input.
 - A failed verdict is a result: record it, use it, do not repeat it with
   cosmetic changes.
+- A target with `interface: simulated` is a model of something you cannot act
+  on directly. Its verdicts have trust `simulated`: report them as results
+  about the model, and never apply the change to the real system without a
+  direct trial or the operator's explicit approval.
 - Stop when the budget in `morphogen.yaml` is spent, and report.
 
 ## Strategies
