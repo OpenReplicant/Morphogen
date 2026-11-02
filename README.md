@@ -387,7 +387,7 @@ uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam
 ```
 
 The skills are scored with `claude plugin eval` against a run without the
-plugin; see `eval-cases/README.md` for the six cases and the run command.
+plugin; see `evals/README.md` for the six cases and the run command.
 
 On GitHub, `.github/workflows/judge.yml` runs the tests on every push to main
 and judges every pull request with main's tests and samples. Make `judge` a
@@ -414,7 +414,7 @@ required status check for main.
 | `server/` | MCP server, judge, backends, tests | yes (MCP) |
 | `strategies/` | improvement strategy cards | yes |
 | `samples/` | example config and intent, catalogs, Morphogen's own map, the slow-script target | yes |
-| `eval-cases/` | `claude plugin eval` suite | Claude Code |
+| `evals/` | `claude plugin eval` suite | Claude Code |
 | `agents/` | `explorer`, `worker`, `reviewer` | Claude Code |
 | `hooks/` | session briefing, budget, traces | Claude Code |
 | `.claude-plugin/` | plugin and marketplace manifests | Claude Code |
