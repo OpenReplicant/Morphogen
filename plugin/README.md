@@ -36,8 +36,9 @@ belong to the judge.
 ```
 
 The judge passes a candidate only if the trunk's tests pass on it, its output
-matches the trunk on hidden inputs, and it is at least 10% faster on a
-benchmark seeded by a value only the judge knows. You approve the merge.
+matches the trunk on freshly generated inputs, and it is at least 10% faster,
+timed from outside the process, by more than chance explains. You approve the
+merge.
 
 ## What is in the plugin
 
@@ -56,13 +57,14 @@ and which are specific to Claude Code (manifest, hooks, subagents).
 
 - **Lists** (`.morphogen/lists/`): systems, slots, types, sources and
   components. What is known about each system, as JSONL you can read and diff.
-- **Evidence** (`.morphogen/evidence.jsonl`): claims with their support. The
-  judge writes `measured` records; the agent can only add `inferred` or
+- **Evidence** (`.git/morphogen/evidence.jsonl`): claims with their support.
+  The judge writes `measured` records; the agent can only add `inferred` or
   `stated` notes. Each record carries the hash of the previous one, so edits
-  show up.
+  show up. It lives in git's own directory so candidate commits cannot sweep
+  it up and branch switches cannot lose it; every worktree shares it.
 - **Journal** (`.morphogen/journal.md`): why each change was made.
 
-Commit the lists, evidence and journal with your code. Traces are ignored.
+Commit the lists and journal with your code. Traces are ignored.
 
 ## Guarantees, stated plainly
 
@@ -71,10 +73,19 @@ Commit the lists, evidence and journal with your code. Traces are ignored.
 | Guarantee | How |
 |---|---|
 | A candidate cannot change how it is scored | the judge reads `target.yaml` and harness files from the base commit |
-| No tuning to the benchmark | hidden seeds, stored outside the project |
+| Timing cannot be faked by the code under test | a separate wrapper process times the run and reads its resource usage; printed numbers are only "reported" |
+| No tuning to the benchmark | fresh random seeds every judge run; nothing stored to read in advance |
+| No interpreter tricks | candidates may not add files that shadow standard modules, `sitecustomize`, or `.pth` files |
+| No lucky wins | warm-up; paired rounds in alternating order; the median paired gain must clear the bar and a sign test must reject luck at p ≤ 0.01; more rounds on close calls. Identical code passed 0 of 12 times in an A/A test |
+| Trial budget | `budget.trials_per_day` enforced by the judge |
 | Measured evidence only from the judge | the agent's tool writes `inferred` or `stated` only |
 | Evidence edits are detectable | hash chain, checked by `doctor` and the session briefing |
 | Trials isolated | only with Docker (`sandbox: docker`); otherwise trials run directly |
+
+`server/tests/test_redteam.py` holds known cheats (patching the timer,
+printing fake measurements, rigging or deleting the harness, lowering the
+bar, shadowing `unittest` or `json`, `sitecustomize`, memoising). Every one
+must fail; a new cheat that passes is a judge bug.
 
 On a local machine an agent with shell access can reach any file you can.
 For the strong version, run in a container with the plugin mounted
@@ -90,7 +101,7 @@ harnesses.
 
 ```
 cd server
-uv run --project . python -m unittest -v tests.test_morphogen
+uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam
 ```
 
 Apache 2.0.

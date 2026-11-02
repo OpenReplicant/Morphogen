@@ -53,12 +53,28 @@ def evidence_summary(path):
     return n, "intact", last_verdict
 
 
+def evidence_file(cfg_text):
+    """Same rule as the server: git's common directory, else the data directory."""
+    import subprocess
+    explicit = setting(cfg_text, "evidence_path", "")
+    if explicit:
+        return ROOT / explicit
+    try:
+        p = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, capture_output=True, text=True)
+        if p.returncode == 0 and p.stdout.strip():
+            common = Path(p.stdout.strip())
+            return (common if common.is_absolute() else ROOT / common).resolve() / "morphogen" / "evidence.jsonl"
+    except OSError:
+        pass
+    return ROOT / setting(cfg_text, "data_dir", ".morphogen") / "evidence.jsonl"
+
+
 def session(cfg_text):
     if not cfg_text:
         print("Morphogen is installed but not set up in this project. To start: /morphogen:onboard")
         return
     data = ROOT / setting(cfg_text, "data_dir", ".morphogen")
-    n, chain, verdict = evidence_summary(data / "evidence.jsonl")
+    n, chain, verdict = evidence_summary(evidence_file(cfg_text))
     targets = re.findall(r"^\s*-\s*(\S+)", cfg_text.split("targets:", 1)[1], re.M) if "targets:" in cfg_text else []
     lines = [
         f"Morphogen: autonomy {setting(cfg_text, 'autonomy', '2')}, trunk {setting(cfg_text, 'trunk', 'main')}, "

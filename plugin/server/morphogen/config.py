@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
-import secrets
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -47,20 +46,24 @@ def data_dir(root: Path, cfg: dict) -> Path:
     return d
 
 
-def private_dir(root: Path) -> Path:
-    """Judge-only files (secret seeds), kept outside the project."""
-    base = Path(os.environ.get("MORPHOGEN_PRIVATE") or Path.home() / ".local" / "share" / "morphogen")
-    d = base / hashlib.sha256(str(root).encode()).hexdigest()[:16]
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def evidence_path(root: Path, cfg: dict) -> Path:
+    """The evidence log lives in git's own directory, not the working tree.
 
-
-def judge_secret(root: Path) -> bytes:
-    f = private_dir(root) / "secret"
-    if not f.exists():
-        f.write_text(secrets.token_hex(32))
-        f.chmod(0o600)
-    return bytes.fromhex(f.read_text().strip())
+    There it is untracked, so candidate commits cannot sweep it up, it
+    survives branch switches, and every worktree of the repository shares it.
+    Outside a git repository it falls back to the data directory.
+    """
+    if cfg.get("evidence_path"):
+        return root / cfg["evidence_path"]
+    try:
+        p = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=root, capture_output=True, text=True)
+        if p.returncode == 0 and p.stdout.strip():
+            common = Path(p.stdout.strip())
+            common = common if common.is_absolute() else (root / common)
+            return common.resolve() / "morphogen" / "evidence.jsonl"
+    except OSError:
+        pass
+    return data_dir(root, cfg) / "evidence.jsonl"
 
 
 def plugin_root() -> Path:

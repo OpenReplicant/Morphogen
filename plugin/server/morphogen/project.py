@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from .backend_files import FilesEvidenceLog, FilesListStore
-from .config import data_dir, load_config, plugin_root, private_dir
+from .config import data_dir, evidence_path, load_config, plugin_root
 from .runner import docker_available
 
 SAMPLES = plugin_root() / "samples"
@@ -22,7 +22,7 @@ def stores(root: Path, cfg: dict):
     if backend != "files":
         raise RuntimeError(f"backend {backend!r} is not available in this version; use 'files'")
     d = data_dir(root, cfg)
-    return FilesListStore(d / "lists"), FilesEvidenceLog(d / "evidence.jsonl")
+    return FilesListStore(d / "lists"), FilesEvidenceLog(evidence_path(root, cfg))
 
 
 def init_project(root: Path) -> dict:
@@ -90,16 +90,19 @@ def doctor(root: Path) -> dict:
         ok, bad = evidence.verify()
         report["backend"] = (cfg.get("backends") or {}).get("default", "files")
         report["capabilities"] = {"lists": lists.capabilities, "evidence": evidence.capabilities}
-        report["evidence"] = {"records": len(evidence.dump()),
+        report["evidence"] = {"records": len(evidence.dump()), "path": str(evidence.path),
                               "chain": "intact" if ok else f"broken at record {bad}"}
     except Exception as e:  # report, do not crash
         report["backend"] = f"error: {e}"
     server_dir = Path(__file__).resolve().parent
     inside = root in server_dir.parents
+    budget = (cfg.get("budget") or {}).get("trials_per_day", 0)
     report["guarantees"] = {
         "judge_outside_project": not inside,
-        "judge_private_files": str(private_dir(root)),
+        "timing": "measured outside the process under test",
+        "inputs": "fresh random seeds per judge run; nothing stored to read in advance",
         "sandbox": "docker" if docker_available() else "none: trials run directly on this machine",
+        "trials_per_day": budget or "no limit",
         "enforced_append_only": False,
         "note": "On the files backend the evidence log is tamper-evident (hash chain), not tamper-proof. "
                 "An agent with shell access can still reach files you can; run in a container for "

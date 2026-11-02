@@ -1,41 +1,18 @@
-"""End-to-end tests: conformance of the files backend, and the judge on the sample target."""
+"""Conformance of the files backend, and the judge's ordinary behaviour on the sample target."""
 
 import json
-import os
 import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from morphogen.backend_files import FilesEvidenceLog, FilesListStore
 from morphogen import judge as judge_mod
 from morphogen import project
-from morphogen.config import load_config
+from morphogen.backend_files import FilesEvidenceLog, FilesListStore
 
-SAMPLE = Path(__file__).resolve().parents[2] / "samples" / "targets" / "slow-script"
-
-FAST = '''"""Most frequent words in a text."""
-from collections import Counter
-
-
-def normalise(text):
-    words = [w.strip(".,;:!?\\"'()[]").lower() for w in text.split()]
-    return [w for w in words if w]
-
-
-def top_words(text, k):
-    counts = Counter(normalise(text))
-    return sorted(counts.items(), key=lambda p: (-p[1], p[0]))[:k]
-'''
+from tests.fixture import FAST, TARGET, SampleProject
 
 WRONG = FAST.replace("(-p[1], p[0])", "(-p[1], len(p[0]))")  # breaks alphabetical tie order
-
-CHEAT_BENCH = 'import json\nprint(json.dumps({"seconds": 0.000001}))\n'
-
-
-def git(cwd, *args):
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
 
 class Conformance(unittest.TestCase):
@@ -83,68 +60,61 @@ class Conformance(unittest.TestCase):
 
 
 class JudgeOnSample(unittest.TestCase):
-    """The judge passes a real speed-up and fails a wrong answer and a rigged benchmark."""
-
     @classmethod
     def setUpClass(cls):
-        cls.tmp = Path(tempfile.mkdtemp())
-        os.environ["MORPHOGEN_PRIVATE"] = str(cls.tmp / "private")
-        cls.repo = cls.tmp / "proj"
-        cls.repo.mkdir()
-        git(cls.repo, "init", "-q", "-b", "main")
-        git(cls.repo, "config", "user.email", "t@example.com")
-        git(cls.repo, "config", "user.name", "test")
-        project.init_project(cls.repo)
-        project.install_sample(cls.repo, "slow-script", None)
-        (cls.repo / "morphogen.yaml").write_text(
-            (cls.repo / "morphogen.yaml").read_text().replace("sandbox: auto", "sandbox: none"))
-        git(cls.repo, "add", "-A")
-        git(cls.repo, "commit", "-q", "-m", "base")
-        cls.cfg = load_config(cls.repo)
-        _, cls.evidence = project.stores(cls.repo, cls.cfg)
+        cls.p = SampleProject()
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmp)
-
-    def branch(self, name, files):
-        git(self.repo, "checkout", "-q", "-B", name, "main")
-        for rel, text in files.items():
-            (self.repo / "targets/slow-script" / rel).write_text(text)
-        git(self.repo, "commit", "-q", "-am", name)
-        git(self.repo, "checkout", "-q", "main")
-        return name
-
-    def run_judge(self, candidate):
-        return judge_mod.judge(self.repo, self.cfg, "targets/slow-script", "main", candidate, self.evidence)
+        cls.p.close()
 
     def test_faster_and_correct_passes(self):
-        r = self.run_judge(self.branch("fast", {"topwords.py": FAST}))
+        r = self.p.judge(self.p.branch("fast", {"topwords.py": FAST}))
         self.assertEqual(r["verdict"], "pass", r)
-        self.assertGreater(r["metrics"]["seconds"]["gain"], 0.5)
+        self.assertGreater(r["metrics"]["wall_seconds"]["gain"], 0.5)
+        self.assertGreater(r["metrics"]["wall_seconds"]["ci95"][0], 0)
 
     def test_wrong_tie_order_fails(self):
-        r = self.run_judge(self.branch("wrong", {"topwords.py": WRONG}))
+        r = self.p.judge(self.p.branch("wrong", {"topwords.py": WRONG}))
         self.assertEqual(r["verdict"], "fail", r)
 
-    def test_rigged_benchmark_is_ignored(self):
-        r = self.run_judge(self.branch("cheat", {"bench.py": CHEAT_BENCH}))
-        self.assertEqual(r["verdict"], "fail", r)  # base's bench.py is used; no real gain
+    def test_no_change_fails(self):
+        r = self.p.judge(self.p.branch("same", {"README": "no code change\n"}))
+        self.assertEqual(r["verdict"], "fail", r)
 
-    def test_verdicts_are_measured_evidence_and_chain_holds(self):
-        self.run_judge(self.branch("fast2", {"topwords.py": FAST}))
-        recs = self.evidence.query(by="judge")
+    def test_verdicts_are_measured_evidence_with_seeds(self):
+        self.p.judge(self.p.branch("fast2", {"topwords.py": FAST}))
+        recs = self.p.evidence.query(by="judge")
         self.assertTrue(recs and all(r["trust"] == "measured" for r in recs))
-        self.assertEqual(self.evidence.verify(), (True, None))
+        self.assertTrue(recs[0]["seeds"]["equivalence"])
+        self.assertEqual(self.p.evidence.verify(), (True, None))
+
+    def test_evidence_survives_candidate_commits_and_branch_switches(self):
+        before = len(self.p.evidence.dump())
+        self.p.judge(self.p.branch("fast3", {"topwords.py": FAST}))
+        self.p.branch("unrelated", {"notes.txt": "x\n"})  # commits with `git add -A`
+        self.assertEqual(len(self.p.evidence.dump()), before + 1)
+        self.assertIn("/.git/", str(self.p.evidence.path))
 
     def test_measure_records_baseline(self):
-        r = judge_mod.measure(self.repo, self.cfg, "targets/slow-script", "main", self.evidence)
-        self.assertIn("seconds", r["metrics"])
+        r = judge_mod.measure(self.p.repo, self.p.cfg, TARGET, "main", self.p.evidence)
+        self.assertIn("wall_seconds", r["metrics"])
 
     def test_doctor_reports_guarantees(self):
-        d = project.doctor(self.repo)
+        d = project.doctor(self.p.repo)
         self.assertEqual(d["evidence"]["chain"], "intact")
-        self.assertIn("judge_outside_project", d["guarantees"])
+        self.assertIn("timing", d["guarantees"])
+
+
+class TrialBudget(unittest.TestCase):
+    def test_budget_stops_judging(self):
+        p = SampleProject(trials_per_day=1)
+        try:
+            p.judge(p.branch("wrong", {"topwords.py": WRONG}))
+            with self.assertRaises(judge_mod.JudgeError):
+                p.judge(p.branch("fast", {"topwords.py": FAST}))
+        finally:
+            p.close()
 
 
 if __name__ == "__main__":

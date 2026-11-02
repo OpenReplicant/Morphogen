@@ -8,16 +8,21 @@ harness: [bench.py, gen.py, test_topwords.py]
 
 check: python -m unittest -q test_topwords
 
-# Outputs must match the base on inputs generated from seeds only the judge knows.
+# Outputs must match the base on inputs generated from fresh random seeds.
 equivalence:
   gen: python gen.py {seed} 3000
   run: python solve.py
   cases: 5
 
+# The judge times `run` from outside the process. Judge metrics:
+# wall_seconds, cpu_seconds, max_rss_kb. The primary metric must be one of them.
 measure:
   run: python bench.py
-  repeats: 3
+  warmup: 1
+  repeats: 10
+  max_repeats: 30
   metrics:
-    seconds: {direction: lower, primary: true, min_improvement: 0.10}
+    wall_seconds: {direction: lower, primary: true, min_improvement: 0.10}
+    max_rss_kb: {direction: lower, max_regression: 0.50}
 
 timeout: 120

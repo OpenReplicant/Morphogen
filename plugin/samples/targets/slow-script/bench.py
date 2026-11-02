@@ -1,7 +1,8 @@
-"""Time top_words on a generated text. Part of the judge's harness.
+"""The benchmark workload: run top_words on a generated text. Part of the judge's harness.
 
-The judge sets MORPHOGEN_SEED to a value only it knows, so the benchmark input
-cannot be predicted from the repository. Prints one JSON line of metrics.
+The judge times this whole process from outside and sets MORPHOGEN_SEED to a
+fresh random value, so the input cannot be predicted. Anything printed here
+is recorded as "reported" and never decides a verdict.
 """
 
 import json
@@ -11,7 +12,7 @@ import time
 from gen import text
 from topwords import top_words
 
-WORDS = 12000
+WORDS = 15000
 
 
 def main():
