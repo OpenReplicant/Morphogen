@@ -30,11 +30,22 @@ it (an HR, ticketing or scheduling API), and only with the operator's approval.
 Ids are short and stable: `targets/slow-script`, `slow-script/counting`,
 `type/hash-count`, `comp/collections-counter`. References are ids.
 
+## Worked example: the self-map
+
+The lists start with three mapped systems: `morphogen`, `claude-code` (the
+harness it runs in) and `host` (the machine). Before mapping something new,
+read one with `lists_query` (the `morphogen` system, then `slots` where
+`system` is `morphogen`) and copy its shape. A dependency is a slot filled by
+a component that is itself a system: `morphogen/harness` is filled by
+`comp/claude-code`, whose `system` is `claude-code`. The `host` entries are
+generic; when mapping this machine, replace them with what it actually has.
+
 ## Steps
 
 1. Use the `explorer` subagent to inventory the system: entry points,
    components, interfaces, and where time or cost goes. Keep only its summary.
 2. Read what is already known: `lists_query` for the system and its slots.
+   If the system is new, follow the shape of the self-map above.
 3. Write or update entries with `lists_put`: the system, one slot per role
    that could be filled differently, the type and source of what fills each
    slot. Do not record every file; record what could be swapped.
