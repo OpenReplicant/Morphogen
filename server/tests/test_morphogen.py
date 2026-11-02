@@ -187,3 +187,55 @@ class Runners(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     runner.sandbox_mode({"sandbox": engine})
         self.assertIn(runner.sandbox_mode({"sandbox": "auto"}), ("docker", "podman", "none"))
+
+
+class ContainerGuarantees(unittest.TestCase):
+    """What the container runners claim in their capabilities, checked by running commands.
+
+    Skipped for engines that are not installed and answering.
+    """
+
+    def check(self, engine):
+        from morphogen import runner
+        if not runner.available(engine):
+            self.skipTest(f"{engine} is not available")
+        caps = runner.capabilities({"sandbox": engine})
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "f.txt").write_text("base")
+            cfg = {"sandbox": engine}
+
+            def py(code, **kw):
+                return runner.run(f"python -c {json.dumps(code)}", tmp, cfg, **kw)
+
+            r = py("print(open('f.txt').read())")
+            self.assertEqual((r.rc, r.out.strip()), (0, "base"), r.err)
+            r = py("import os; print(os.environ['X'])", env={"X": "y"})
+            self.assertEqual(r.out.strip(), "y", r.err)
+            r = py("import sys; print(sys.stdin.read())", stdin="in")
+            self.assertEqual(r.out.strip(), "in", r.err)
+            self.assertTrue(caps["read_only_tree"])
+            r = py("open('f.txt', 'w').write('changed')")
+            self.assertNotEqual(r.rc, 0)
+            self.assertEqual((tmp / "f.txt").read_text(), "base")
+            r = py("open('new.txt', 'w').write('x')")
+            self.assertNotEqual(r.rc, 0)
+            self.assertFalse((tmp / "new.txt").exists())
+            self.assertTrue(caps["network_isolated"])
+            r = py("import socket; socket.create_connection(('1.1.1.1', 53), 3)")
+            self.assertNotEqual(r.rc, 0)
+            self.assertTrue(caps["resource_limits"])
+            r = py("b = bytearray(2 * 1024 ** 3); print(len(b))")
+            self.assertNotEqual(r.rc, 0, "allocated 2 GiB under a 1 GiB limit")
+            r = py("import tempfile, os; p = os.path.join(tempfile.gettempdir(), 'mg'); open(p, 'w').write('1')")
+            self.assertEqual(r.rc, 0, r.err)
+            r = py("import tempfile, os; print(os.path.exists(os.path.join(tempfile.gettempdir(), 'mg')))")
+            self.assertEqual(r.out.strip(), "False", "a file written by one run was visible to the next")
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_docker(self):
+        self.check("docker")
+
+    def test_podman(self):
+        self.check("podman")

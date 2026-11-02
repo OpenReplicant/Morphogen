@@ -34,10 +34,20 @@ Skill changes: also run the eval suite (costs money; start with one case):
 claude plugin eval . --case 06-strategy-after-stall --scaffold --mocks off --allow-tools mcp__plugin_morphogen_morphogen --no-publish
 ```
 
+## Install the judge from GitHub, not from this folder
+`/plugin marketplace add OpenReplicant/morphogen` installs a copy of main into
+the plugin cache. Adding this clone as a local marketplace runs the plugin
+from the clone itself, so the judge would be the candidate.
+
+## Verified (2026-11-02)
+- Plugin install from GitHub; the MCP server connects and exposes 15 tools as
+  mcp__plugin_morphogen_morphogen__*; a server-level allow rule grants them.
+- Docker and Podman runners: all suites pass with MORPHOGEN_TEST_SANDBOX set,
+  and ContainerGuarantees checks no network, read-only tree, memory limit and
+  nothing kept between runs. CI: run the judge workflow by hand.
+
 ## Not yet verified
-A real plugin install and the mcp__plugin_morphogen_morphogen__* tool names
-(skills' allowed-tools depend on them), the eval suite, and the Docker and
-Podman runners. Verify these before trusting self-improvement runs.
+The eval suite. Verify it before trusting self-improvement runs.
 
 ## Releases
 Bump version in .claude-plugin/plugin.json and in the marketplace entry,

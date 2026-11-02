@@ -322,7 +322,9 @@ else. The rule that matters: **the installed plugin is the judge, the
 repository is the candidate.**
 
 1. Run Claude Code in a clone of this repository, with the plugin installed
-   from the marketplace (the stable version).
+   from the GitHub marketplace (the stable version). Do not add the clone
+   itself as a marketplace: the plugin would then run from the clone, and the
+   judge would be the candidate.
 2. `/morphogen:evolve` builds candidates on branches; workers use worktrees.
    The installed version's server judges them; candidates cannot change it.
 3. You approve the merge. Open a pull request: the `judge` workflow re-runs
@@ -392,6 +394,12 @@ plugin; see `evals/README.md` for the six cases and the run command.
 On GitHub, `.github/workflows/judge.yml` runs the tests on every push to main
 and judges every pull request with main's tests and samples. Make `judge` a
 required status check for main.
+
+To run the suites with trials inside a container, set
+`MORPHOGEN_TEST_SANDBOX=docker` (or `podman`). `ContainerGuarantees` checks
+that a container runner really has no network, a read-only tree, a memory
+limit and nothing kept between runs; it skips engines that are not installed.
+In CI this is the `containers` job, started by hand.
 
 ## Limits
 
