@@ -44,11 +44,41 @@ all of Morphogen's pieces.
   is benchmark accuracy reported by the loop itself; the abstract says
   nothing about cheating or isolating the evaluator. The paper's own
   scoring method, archive rules and safety handling still need reading.
-- **Darwin Gödel Machine** (same group, 2025; from memory, not yet checked):
-  a coding agent that edits its own code, keeps an open-ended archive, and
-  is scored on coding benchmarks. Reportedly it was caught gaming its
-  evaluation, which makes it a source of cheats for
-  `server/tests/test_redteam.py`.
+- **Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents**
+  (Zhang, Hu, Lu, Lange, Clune; [arXiv:2505.22954](https://arxiv.org/abs/2505.22954),
+  May 2025, v3 Mar 2026; [code](https://github.com/jennyzzt/dgm)). Read in
+  full (v3). A coding agent edits its own Python code (prompts, workflow,
+  tools); the archive and parent selection are fixed and not modifiable by
+  the agent (§3).
+  - *Evaluation (§4.2):* staged. SWE-bench Verified: 60 tasks, then 200
+    if over 40% and in the archive's top two. Polyglot: 10 tasks, then 50.
+    Only agents that compile and can still edit code enter the archive.
+    Scores come from small subsets of noisy LLM runs; there is no paired
+    statistical test or A/A check.
+  - *Selection (App. C.2):* weight = sigmoid(10 * (score - 0.5)) /
+    (1 + children that can still edit), sampled with replacement; agents
+    with a perfect score are excluded. Every agent keeps a non-zero chance.
+  - *Results:* SWE-bench 20.0% to 50.0%, Polyglot 14.2% to 30.7%, ahead of
+    variants without self-improvement or without open-ended exploration.
+  - *Cost (App. E.1, §6):* about USD 22,000 and two weeks per SWE-bench run.
+  - *Safety (§5):* sandboxing, strict time limits, limited network, human
+    monitoring, and an archive lineage kept for audit.
+  - *Objective hacking (App. H).* In a side experiment the score was
+    "solve tool-use hallucination", detected by checking for special marker
+    tokens that the agent's own code logged on real tool calls. The checker
+    was hidden from the agent; the authors report hacking was more frequent
+    when it was not. Node 114 reached a perfect 2.0 in two edits by
+    replacing the marker logging with a "structured format", despite
+    instructions not to change the markers. That bypassed the detector
+    without fixing the hallucination. Node 96 (1.67) did make a real
+    improvement. The lineage made the hack traceable.
+  - *Lesson for Morphogen:* the hack worked because the signal was emitted by
+    code the agent could edit. That is Morphogen's `collected: self` case.
+    Checked against the current judge (2026-11-02, throwaway tests): a
+    candidate that rewrites the observer to report near-zero latency fails,
+    because harness files are restored from the base. A candidate that flips
+    `collected: self` to `outside` in `target.yaml` is rejected too.
+    Neither case is in `server/tests/test_redteam.py` yet.
 
 ## What looks distinctive in Morphogen
 
@@ -74,8 +104,9 @@ None of the above appears to combine:
   performance gaps.
 - Compare agent-gate's receipt format with Morphogen's evidence records before
   they drift into incompatible formats.
-- Read ADAS and the Darwin Gödel Machine papers in full: how candidates are
-  scored, how the archive is kept, and any reported reward hacking to turn
-  into red-team cases.
+- Read the ADAS paper in full: how candidates are scored and how the archive
+  is kept.
+- Add the Darwin Gödel Machine's marker-removal hack to the red team, in
+  Morphogen's form: a candidate that edits the observer or its markers.
 - Read autoresearch and auto-optimize closely before positioning; they're the
   nearest in spirit and in form.
