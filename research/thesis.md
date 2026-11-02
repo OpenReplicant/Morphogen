@@ -264,20 +264,49 @@ semi-naive Datalog, CEP automata, and today's incremental view maintenance
 
 **The scope language is a hard-to-reverse choice:** it is part of the program
 contract, so every program uses it. Small, declarative, covering tiers A–C,
-easy for an LLM to write and the judge to check. Proposal: S-expressions over
-the envelope with window and sequence operators, compiled into an alpha and
-beta network.
+easy for an LLM to write and the judge to check.
 
-```lisp
-(on (and (source camera) (type frame)))
-(on (and (type log) (matches msg "error|timeout")))
-(seq (event (type frame) (has label zombie))
-     (event (type state) (< health 3))
-     (within 2s))
-(absent (event (type heartbeat) (source robot)) (for 5s))
+## 6b. Pattern languages that already exist
+
+[solid as a survey; versions and status to check before adopting] Reuse
+before inventing: each tier already has a standard or widely used language.
+
+| Tier | Languages | Notes |
+|---|---|---|
+| Envelope | **CloudEvents** (CNCF) | standard attributes: id, source, type, time, subject, data content type, data schema; extensions for shape and provenance |
+| A · route | **CloudEvents Subscriptions filter dialects**: exact, prefix, suffix, all, any, not | trivial to implement; used by Knative triggers ([Knative](https://knative.dev/docs/eventing/triggers/)) |
+| A/B · route and test | **AWS EventBridge event patterns** (JSON patterns: prefix, numeric ranges, exists, anything-but) | **Event Ruler**, Apache 2.0, Java, built to match many patterns at high throughput ([AWS](https://aws.amazon.com/blogs/opensource/open-sourcing-event-ruler)); a third-party Python package exists ([PyPI](https://pypi.org/project/event-ruler/)) |
+| B · test | **CEL** (Common Expression Language): safe, fast predicates over structured data, used in Kubernetes and Envoy | pure Python `cel-python` ([GitHub](https://github.com/cloud-custodian/cel-python)); Google's CEL-expr-python wraps the reference C++ implementation, announced March 2026 ([Google](https://opensource.googleblog.com/2026/03/announcing-cel-expr-python-the-common-expression-language-in-python-now-open-source.html?m=0)) |
+| B · test | **CESQL** (CloudEvents SQL): SQL-WHERE-like expressions over events | a filter dialect in the Subscriptions API; parsers in the Go and Java SDKs |
+| B · test | regular expressions; Hyperscan; jq, JMESPath, JSONata; embedding similarity | for text, documents, fuzzy matches |
+| C · bind | **SQL `MATCH_RECOGNIZE`** (SQL:2016): regular expressions over ordered rows | native in Flink SQL (which adds `WITHIN`), Trino, Oracle, Snowflake; **not** in PostgreSQL or DuckDB. A VLDB 2025 transpiler turns it into window functions and recursive SQL, demonstrated on DuckDB ([Tübingen](https://db.cs.uni-tuebingen.de/publications/2025/democratize-match_recognize/)) |
+| C · bind | Flink CEP pattern API, Esper EPL, Siddhi | stream engines; heavy for a default |
+| D · hop | **SQL/PGQ** (ISO/IEC 9075-16:2023): `CREATE PROPERTY GRAPH` over ordinary tables, queried with `GRAPH_TABLE … MATCH` | **PostgreSQL 19** implements the core as a metadata layer rewritten into ordinary joins; variable-length paths and shortest path are missing, with `WITH RECURSIVE` as the workaround ([Cybertec](https://www.cybertec-postgresql.com/en/handling-graphs-with-sql-pgq-in-postgresql/), [Neon](https://neon.com/postgresql/postgresql-19/sql-pgq-graph-queries)); check release notes. DuckPGQ for DuckDB |
+| D · hop | **openCypher** via Apache AGE (PostgreSQL extension); **GQL** (ISO/IEC 39075:2024) | Cypher-style syntax |
+| D · hop | **Datalog** (Soufflé, CozoDB, Datomic, XTDB) | recursion as rules; fits plain relations |
+| Policy | **Rego** (Open Policy Agent), Datalog-based | who may do what; routing policy |
+
+**Proposal [plausible]:** the scope is a small record with one expression per
+tier, each in an existing language, rather than a new language:
+
+```yaml
+scope:
+  route: {type: [{prefix: "game.frame"}], source: ["crafter"]}   # EventBridge-style / CloudEvents filter
+  test: "'zombie' in event.data.labels"                           # CEL
+  bind: |                                                         # MATCH_RECOGNIZE subset
+    PATTERN (Z L) WITHIN INTERVAL '2' SECOND
+    DEFINE Z AS type = 'game.frame' AND 'zombie' IN labels,
+           L AS type = 'game.state' AND health < 3
 ```
 
-## 6b. Memory, knowledge and storage
+Tier D runs in the backend that can do it natively (SQL/PGQ or recursive SQL
+on Postgres; DuckDB or Datalog over files). Matching engines are behind ports
+too (section 6d), so each tier's engine can be trialled. An S-expression
+language remains an alternative if a single uniform syntax proves easier for
+the LLM to write and the judge to check; that is an experiment, not an
+assumption.
+
+## 6c. Memory and knowledge
 
 **Graphs are optional** [plausible]. Relationships exist as references between
 list entries; a graph store is a slot, adopted only where a trial shows it
@@ -307,27 +336,70 @@ the judge, stated in docs, inferred by an LLM, asserted by the operator). A
 claim counts only at the level of its evidence; contradictions are recorded,
 not overwritten.
 
-**Storage split** [plausible]:
+## 6d. Backends behind ports
 
-| Store | Holds | Why |
-|---|---|---|
-| **Postgres** | the six lists, evidence, events, indexes, embeddings | transactions, many writers, roles as enforcement, extensions |
-| **Git** | code, programs, skills, contracts, intent, judge | gating works on diffs and commits |
-| **Filesystem** | blobs, scratch, execution | where things run |
+[plausible] Morphogen does not depend on any one store. Its backends are slots
+(ports and adapters, Cockburn's hexagonal architecture): Morphogen defines
+what each feature needs; backends provide it. **Flat files are the default;
+Postgres is the recommended, tested backend**, chosen at startup. A fuller
+cognitive platform can inject heavier backends through the same ports.
 
-Postgres extensions to consider (pin one image and check compatibility):
-pgvector (semantic search), built-in full text, recursive SQL or Apache AGE
-(multi-hop), pg_duckdb or TimescaleDB (analytics, time series), pg_ivm
-(incremental views), pgmq and LISTEN/NOTIFY (queues), pg_cron. Roles: explorers
-read only; workers write candidates; only the judge's role writes evidence;
-evidence is insert-only. Trials run on a copy (`CREATE DATABASE … TEMPLATE`).
-Export evidence to Parquet for the archive; keep the SQL portable so the engine
-stays replaceable. The fast-path bus stays in memory; the database receives
-batched writes.
+| Port | Operations | Files (default) | Postgres (recommended) |
+|---|---|---|---|
+| Lists | get, put, query by fields, follow references N hops | YAML or JSONL per list | tables plus JSONB; SQL/PGQ or recursive SQL |
+| Evidence | append, query; never update or delete | append-only JSONL | insert-only table, roles |
+| Events | publish, subscribe by pattern, replay a range | in-process bus, JSONL segments | LISTEN/NOTIFY or pgmq, plus a table |
+| Blobs | put, get by reference | local directory via `fsspec` (S3 and others for free) | local directory or object store |
+| Search | text; vector (optional) | ripgrep, in-memory scan | full text, pgvector |
+| Matching | tiers A–D (section 6b) | in-process engines; DuckDB or Datalog for D | in-process A–C; D in SQL |
 
-Plain files plus DuckDB would also do at this scale (files stay practical to
-about 10⁵ list entries and millions of evidence rows); Postgres wins on
-concurrent writers and permissions.
+What keeps backends interchangeable:
+
+1. **A conformance suite** every backend passes (append-only holds,
+   references resolve, replay is ordered). "Tested against files and
+   Postgres" means both pass it.
+2. **Capability flags, not a lowest common denominator.** Backends declare
+   what they support (`vector_search`, `enforced_append_only`,
+   `concurrent_writers`, `native_multi_hop`); callers use a capability or fall
+   back. Vector-store wrappers in LLM frameworks are the warning case.
+3. **A canonical dump format** (JSONL per list; evidence and events as JSONL
+   or Parquet) that every backend exports and imports. Migration is
+   `dump | load` for any pair of backends; backups come free; the judge diffs
+   dumps, so gating does not depend on the backend.
+
+Guarantees that hold on any backend:
+
+- **Tamper-evident evidence:** each record carries the hash of the previous
+  one; the judge checks the chain. Postgres roles add enforcement on top.
+- **Stated write permissions:** roles on Postgres; sandbox and read-only
+  mounts on files. The capability flag says which applies.
+
+```yaml
+# morphogen.yaml
+backends:
+  default: files          # files | postgres
+  evidence: postgres      # per-port override
+  blobs: files
+```
+
+At startup Morphogen checks each backend's health and conformance level and
+reports which guarantees are active. Each port is a slot the loop can trial,
+with the conformance suite as part of its judge.
+
+**Postgres, when chosen:** pin one image and check extension compatibility:
+pgvector, built-in full text, SQL/PGQ (PostgreSQL 19) or Apache AGE, pg_duckdb
+or TimescaleDB, pg_ivm (incremental views), pgmq, pg_cron. Roles: explorers
+read only; workers write candidates; only the judge's role writes evidence.
+Trials run on a copy (`CREATE DATABASE … TEMPLATE`). The fast-path bus stays
+in memory and writes in batches.
+
+**Files, when chosen:** practical to about 10⁵ list entries and millions of
+evidence rows, with DuckDB for structured queries over JSONL and Parquet.
+Postgres wins on concurrent writers and enforced permissions.
+
+**Where things live:** git for everything gated (code, programs, skills,
+contracts, intent, judge); the data ports for lists, evidence, events and
+indexes; the filesystem for blobs, scratch and execution.
 
 **Graphiti, if trialled** [solid, from reading `graphiti-core` 0.31.2]: its
 value is turning unstructured text into a deduplicated, contradiction-aware,
@@ -506,12 +578,14 @@ judge/           scoring and validity checks, read-only mount (operator)
 targets/         one adapter per target (self, games, ...)
 library/         programs and parts: code or prompt + contract (scope pattern) + record
 playbook/        the crafts as skills, revisable
-db/              Postgres schema and migrations (six lists, evidence, events)
+ports/           port interfaces, conformance suite, dump format
+backends/        files (default), postgres (recommended)
 journal/
 ```
 
-Postgres holds the lists, evidence, events and indexes (section 6b); the
-filesystem holds blobs and execution scratch; git holds what is gated.
+Data lives behind ports (section 6d): flat files by default, Postgres when
+chosen at startup. Git holds what is gated; the filesystem holds blobs and
+execution scratch.
 
 Hidden held-out evaluation lives outside the agent's repository (CI or a
 private repository). Two lock levels: operator-owned, and open through the
@@ -577,8 +651,9 @@ beats selecting.
 
 Proposed order, one-way doors first:
 
-1. Record schema with the cost ledger, subgoal tags and call graph; the six
-   lists and evidence as a Postgres schema with roles; the scope language.
+1. Record schema with the cost ledger, subgoal tags and call graph; the
+   ports, conformance suite and dump format, with the files backend first and
+   Postgres second; the scope record (section 6b).
 2. Judge with validity checks, SLOs and a hidden held-out set outside the
    repository.
 3. First target adapter: the agent playing Crafter; viewer.
