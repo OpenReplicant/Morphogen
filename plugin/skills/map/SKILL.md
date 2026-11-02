@@ -1,6 +1,7 @@
 ---
 name: map
 description: Map a system into Morphogen's lists (systems, slots, types, sources, components) and measure its baseline. Use when the user asks what a system or target is made of, to map or inventory something, or before improving a target that has not been mapped.
+allowed-tools: Read, Glob, Grep, Agent, Bash(git:*), Bash(python:*), Bash(python3:*), mcp__plugin_morphogen_morphogen
 ---
 
 # Map

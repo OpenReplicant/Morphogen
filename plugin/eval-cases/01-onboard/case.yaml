@@ -1,0 +1,39 @@
+schema_version: "1.1"
+name: 01-onboard
+description: Onboard sets up Morphogen in an empty repository and installs the sample target.
+tags: [onboard]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: |
+    Set Morphogen up in this repository. You won't be able to ask me questions, so here are my answers:
+    I want to make the slow-script sample faster without changing its results. Autonomy 2: I approve every merge.
+    No tool-call budget. Use the sandbox if there is one. Install the sample target, commit the setup on main,
+    and tell me what to run next.
+  max_turns: 30
+  timeout_seconds: 600
+  allowed_tools: [Skill, Read, Glob, Grep, Write, Edit, "Bash(git:*)", mcp__plugin_morphogen_morphogen]
+runs: 3
+graders:
+  - name: skill-fired
+    type: tool_used
+    tool: Skill
+  - name: config-written
+    type: file_exists
+    path: morphogen.yaml
+  - name: sample-installed
+    type: file_exists
+    path: targets/slow-script/target.yaml
+  - name: config-registers-target
+    type: regex
+    target: {source: file, path: morphogen.yaml}
+    pattern: "targets/slow-script"
+  - name: intent-written
+    type: file_exists
+    path: intent.md
+  - name: report
+    type: llm
+    criteria: |
+      The final message (1) says Morphogen is set up, (2) states whether trials are sandboxed or run directly on
+      this machine, (3) mentions the slow-script target, and (4) names a next step such as /morphogen:map or
+      /morphogen:evolve. It does not claim any speed-up was achieved.

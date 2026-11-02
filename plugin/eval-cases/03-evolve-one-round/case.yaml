@@ -1,0 +1,41 @@
+schema_version: "1.1"
+name: 03-evolve-one-round
+description: Evolve runs one judged round on slow-script and proposes the winner without merging.
+tags: [evolve]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: |
+    Make targets/slow-script faster without changing its results. Do one round only. Do not merge anything
+    into main; I will review your proposal.
+  max_turns: 80
+  timeout_seconds: 2400
+  allowed_tools: [Skill, Read, Glob, Grep, Write, Edit, Agent, "Bash(git:*)", "Bash(python:*)", "Bash(python3:*)", mcp__plugin_morphogen_morphogen]
+runs: 3
+graders:
+  - name: skill-fired
+    type: tool_used
+    tool: Skill
+  - name: strategy-consulted
+    type: tool_used
+    tool: mcp__plugin_morphogen_morphogen__strategy
+  - name: judged
+    type: tool_used
+    tool: mcp__plugin_morphogen_morphogen__judge
+  - name: a-pass-was-judged
+    type: regex
+    target: trace
+    pattern: '"verdict":\s*"pass"'
+  - name: proposal
+    type: llm
+    focus: last_message
+    criteria: |
+      The final message (1) names the strategy used and why, (2) reports the judge's verdict for each candidate
+      including any failures, (3) proposes a specific passing commit or branch with its measured gain, and
+      (4) asks the operator to approve the merge rather than saying it merged. It does not claim results the
+      judge did not report.
+  - name: did-not-merge
+    type: regex
+    target: trace
+    pattern: "git (merge|rebase|push)[^\n]*main|git checkout main[^\n]*&&[^\n]*git merge"
+    match: not_contains

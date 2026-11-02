@@ -131,4 +131,7 @@ cd server
 uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam tests.test_strategies
 ```
 
+The skills are scored with `claude plugin eval`; see `eval-cases/README.md`
+for the six cases and the run command.
+
 Apache 2.0.

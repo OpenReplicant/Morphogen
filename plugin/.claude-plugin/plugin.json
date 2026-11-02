@@ -9,5 +9,14 @@
   "homepage": "https://github.com/OpenReplicant/morphogen",
   "repository": "https://github.com/OpenReplicant/morphogen",
   "license": "Apache-2.0",
-  "keywords": ["self-improvement", "evaluation", "judge", "mcp", "platform-engineering"]
+  "keywords": [
+    "self-improvement",
+    "evaluation",
+    "judge",
+    "mcp",
+    "platform-engineering"
+  ],
+  "experimental": {
+    "evals": "eval-cases"
+  }
 }

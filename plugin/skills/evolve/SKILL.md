@@ -1,6 +1,7 @@
 ---
 name: evolve
 description: Close one gap in a target through Morphogen's loop - locate the bottleneck, follow the selected improvement strategy to build candidates on branches, have the judge score each, and propose the winner to the operator. Use when the user asks to improve, speed up or optimise a target, or to work through Morphogen's gaps.
+allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(git:*), Bash(python:*), Bash(python3:*), mcp__plugin_morphogen_morphogen
 ---
 
 # Evolve

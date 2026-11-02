@@ -1,6 +1,7 @@
 ---
 name: onboard
 description: Set Morphogen up in a project and agree its intent with the operator. Use when the user says "set up Morphogen", "onboard", "start Morphogen here", or when the session briefing says Morphogen is not set up.
+allowed-tools: Read, Glob, Grep, Write, Edit, Bash(git:*), mcp__plugin_morphogen_morphogen
 ---
 
 # Onboard

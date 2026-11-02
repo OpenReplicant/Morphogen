@@ -1,6 +1,7 @@
 ---
 name: playbook
 description: Morphogen's working methods - the systems engineer, data scientist and DevOps crafts, program shapes and when each wins, and the rules that keep trials honest. Use when planning an improvement, choosing between approaches, or when a trial result is surprising.
+allowed-tools: Read
 ---
 
 # Playbook
