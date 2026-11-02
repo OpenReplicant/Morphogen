@@ -10,7 +10,7 @@ from morphogen import judge as judge_mod
 from morphogen import project
 from morphogen.backend_files import FilesEvidenceLog, FilesListStore
 
-from tests.fixture import FAST, TARGET, SampleProject
+from tests.fixture import FAST, TARGET, SampleProject, observed_project
 
 WRONG = FAST.replace("(-p[1], p[0])", "(-p[1], len(p[0]))")  # breaks alphabetical tie order
 
@@ -152,31 +152,9 @@ class SimulatedTargets(unittest.TestCase):
             p.close()
 
 
-OBSERVER = '''import json, os
-# Stands in for a query to a telemetry backend: the run's latency, from the
-# time window the judge passed in (collected outside the code under test).
-start, end = float(os.environ["MORPHOGEN_RUN_START"]), float(os.environ["MORPHOGEN_RUN_END"])
-assert os.environ["MORPHOGEN_RUN_ID"] and os.environ["MORPHOGEN_SIDE"] in ("base", "candidate", "measured")
-print(json.dumps({"latency_ms": (end - start) * 1000}))
-'''
-
-
 class Observer(unittest.TestCase):
     def make(self, collected):
-        from tests.fixture import git
-        p = SampleProject()
-        (p.path("observe.py")).write_text(OBSERVER)
-        spec = p.path("target.yaml")
-        text = spec.read_text().replace("harness: [bench.py, gen.py, test_topwords.py]",
-                                        "harness: [bench.py, gen.py, test_topwords.py, observe.py]")
-        text = text.replace("    wall_seconds: {direction: lower, primary: true, min_improvement: 0.10}",
-                            "    wall_seconds: {direction: lower}\n"
-                            "    observed.latency_ms: {direction: lower, primary: true, min_improvement: 0.10}")
-        text = text.replace("  metrics:\n", f"  observer: {{run: python observe.py, collected: {collected}}}\n  metrics:\n", 1)
-        spec.write_text(text)
-        git(p.repo, "add", "-A")
-        git(p.repo, "commit", "-q", "-m", "observe latency")
-        return p
+        return observed_project(collected)
 
     def test_observed_metric_from_outside_can_decide(self):
         p = self.make("outside")

@@ -74,11 +74,12 @@ all of Morphogen's pieces.
     improvement. The lineage made the hack traceable.
   - *Lesson for Morphogen:* the hack worked because the signal was emitted by
     code the agent could edit. That is Morphogen's `collected: self` case.
-    Checked against the current judge (2026-11-02, throwaway tests): a
-    candidate that rewrites the observer to report near-zero latency fails,
-    because harness files are restored from the base. A candidate that flips
-    `collected: self` to `outside` in `target.yaml` is rejected too.
-    Neither case is in `server/tests/test_redteam.py` yet.
+    Both forms are now red-team cases (`ObserverCheats` in
+    `server/tests/test_redteam.py`) and fail: a candidate that rewrites the
+    observer to report near-zero latency, and one that also edits
+    `target.yaml` to make self-reported telemetry primary and claim it is
+    `collected: outside`. Harness files and `target.yaml` are restored from
+    the base, so the base's primary metric still decides.
 
 ## What looks distinctive in Morphogen
 
@@ -106,7 +107,5 @@ None of the above appears to combine:
   they drift into incompatible formats.
 - Read the ADAS paper in full: how candidates are scored and how the archive
   is kept.
-- Add the Darwin Gödel Machine's marker-removal hack to the red team, in
-  Morphogen's form: a candidate that edits the observer or its markers.
 - Read autoresearch and auto-optimize closely before positioning; they're the
   nearest in spirit and in form.

@@ -74,3 +74,34 @@ def top_words(text, k):
     counts = Counter(normalise(text))
     return sorted(counts.items(), key=lambda p: (-p[1], p[0]))[:k]
 '''
+
+
+OBSERVER = '''import json, os
+# Stands in for a query to a telemetry backend: the run's latency, from the
+# time window the judge passed in (collected outside the code under test).
+start, end = float(os.environ["MORPHOGEN_RUN_START"]), float(os.environ["MORPHOGEN_RUN_END"])
+assert os.environ["MORPHOGEN_RUN_ID"] and os.environ["MORPHOGEN_SIDE"] in ("base", "candidate", "measured")
+print(json.dumps({"latency_ms": (end - start) * 1000}))
+'''
+
+
+def observed_project(collected, primary=True):
+    """The sample project with an observer; its latency is the primary metric unless primary=False."""
+    p = SampleProject()
+    p.path("observe.py").write_text(OBSERVER)
+    spec = p.path("target.yaml")
+    text = spec.read_text().replace("harness: [bench.py, gen.py, test_topwords.py]",
+                                    "harness: [bench.py, gen.py, test_topwords.py, observe.py]")
+    if primary:
+        text = text.replace("    wall_seconds: {direction: lower, primary: true, min_improvement: 0.10}",
+                            "    wall_seconds: {direction: lower}\n"
+                            "    observed.latency_ms: {direction: lower, primary: true, min_improvement: 0.10}")
+    else:
+        text = text.replace("    wall_seconds: {direction: lower, primary: true, min_improvement: 0.10}",
+                            "    wall_seconds: {direction: lower, primary: true, min_improvement: 0.10}\n"
+                            "    observed.latency_ms: {direction: lower}")
+    text = text.replace("  metrics:\n", f"  observer: {{run: python observe.py, collected: {collected}}}\n  metrics:\n", 1)
+    spec.write_text(text)
+    git(p.repo, "add", "-A")
+    git(p.repo, "commit", "-q", "-m", "observe latency")
+    return p
