@@ -12,6 +12,8 @@ claude-code:
   - path: .mcp.json        # how Claude Code starts the MCP server
   - path: hooks/           # session briefing, budget, traces
   - path: agents/          # subagent definitions (explorer, worker, reviewer)
+github:
+  - path: .github/workflows/judge.yml   # CI judge for pull requests
 notes:
   - Skills refer to MCP tools by their short names (doctor, judge, ...), which other harnesses also expose.
   - Skills mention Claude Code subagents by name; harnesses without subagents can follow the same steps inline.

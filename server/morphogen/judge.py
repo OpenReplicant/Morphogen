@@ -33,13 +33,14 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
 
 from .ports import INTERFACES
-from .runner import run, sandbox_mode
+from .runner import capabilities, run, sandbox_mode
 
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
 MARK = "__MORPHOGEN_JUDGE__"
@@ -177,19 +178,44 @@ def _reported(out: str) -> dict[str, float]:
     return {}
 
 
+def _observe(spec: dict, observer_dir: Path, cfg: dict, env: dict, timeout: int) -> dict[str, float]:
+    """Run the harness's observer after a workload run and return its metrics as observed.*.
+
+    The observer comes from the base commit and runs in the base's directory, so a
+    candidate cannot change it. Typically it queries telemetry (an OpenTelemetry
+    collector, Prometheus, a proxy's access log) for this run's id and time window.
+    """
+    obs = (spec.get("measure") or {}).get("observer") or {}
+    if not obs.get("run"):
+        return {}
+    r = run(obs["run"], observer_dir, cfg, env=env, timeout=timeout)
+    if r.rc != 0:
+        raise JudgeError(f"the observer failed (exit {r.rc}): {r.err.strip()[-400:]}")
+    return {f"observed.{k}": v for k, v in _reported(r.out).items()}
+
+
 def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
-               samples: list[dict[str, list[float]]]) -> None:
+               samples: list[dict[str, list[float]]], observer_dir: Path | None = None,
+               sides: tuple[str, ...] = ("base", "candidate")) -> None:
     """One run per side. Order alternates between rounds (ABBA) so drift and warm-up hit both."""
     rnd = len(next(iter(samples[0].values()), []))
     order = list(range(len(dirs)))
     if rnd % 2:
         order.reverse()
     for i in order:
-        stats, out = _timed(spec["measure"]["run"], dirs[i], cfg, {"MORPHOGEN_SEED": str(seed)}, timeout)
+        run_id = secrets.token_hex(8)
+        side = sides[i] if i < len(sides) else str(i)
+        env = {"MORPHOGEN_SEED": str(seed), "MORPHOGEN_RUN_ID": run_id, "MORPHOGEN_SIDE": side,
+               "OTEL_RESOURCE_ATTRIBUTES": f"morphogen.run_id={run_id},morphogen.side={side}"}
+        start = time.time()
+        stats, out = _timed(spec["measure"]["run"], dirs[i], cfg, env, timeout)
+        env.update({"MORPHOGEN_RUN_START": f"{start:.6f}", "MORPHOGEN_RUN_END": f"{time.time():.6f}"})
         for k in JUDGE_METRICS:
             samples[i].setdefault(k, []).append(float(stats[k]))
         for k, v in _reported(out).items():
             samples[i].setdefault(f"reported.{k}", []).append(v)
+        for k, v in _observe(spec, observer_dir or dirs[i], cfg, env, timeout).items():
+            samples[i].setdefault(k, []).append(v)
 
 
 def _gain(b: float, c: float, lower: bool) -> float:
@@ -249,8 +275,15 @@ def _check_spec(spec: dict) -> dict:
     primaries = [k for k, v in metrics.items() if v.get("primary")]
     if len(primaries) != 1:
         raise JudgeError("target.yaml must mark exactly one metric as primary")
-    if primaries[0] not in JUDGE_METRICS:
-        raise JudgeError(f"the primary metric must be measured by the judge: one of {', '.join(JUDGE_METRICS)}")
+    primary = primaries[0]
+    observer = m.get("observer") or {}
+    if primary.startswith("observed."):
+        if observer.get("collected") != "outside":
+            raise JudgeError("an observed metric can be primary only if the observer's data is collected outside "
+                             "the code under test (measure.observer.collected: outside)")
+    elif primary not in JUDGE_METRICS:
+        raise JudgeError(f"the primary metric must be measured by the judge ({', '.join(JUDGE_METRICS)}) "
+                         "or observed outside the code under test (observed.*)")
     return metrics
 
 
@@ -274,9 +307,9 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         seed = secrets.randbelow(2**31)
         samples: list[dict[str, list[float]]] = [{}]
         for _ in range(int(m.get("warmup", 1))):
-            _one_round(spec, [tree / rel], cfg, seed, timeout, [{}])
+            _one_round(spec, [tree / rel], cfg, seed, timeout, [{}], tree / rel, ("measured",))
         for _ in range(int(m.get("repeats", 10))):
-            _one_round(spec, [tree / rel], cfg, seed, timeout, samples)
+            _one_round(spec, [tree / rel], cfg, seed, timeout, samples, tree / rel, ("measured",))
     metrics = {k: statistics.median(v) for k, v in samples[0].items()}
     rec = evidence.append({
         "claim": f"{name} at {sha[:12]} measures {json.dumps({k: round(v, 6) for k, v in metrics.items()}, sort_keys=True)}",
@@ -289,6 +322,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         "interface": interface,
         **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
         "sandbox": sandbox_mode(cfg),
+        "runner": capabilities(cfg),
         "trust": trust,
         "by": "judge",
     })
@@ -356,13 +390,13 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
             bench_seed = secrets.randbelow(2**31)
             dirs = [bdir, cdir]
             for _ in range(int(m.get("warmup", 1))):
-                _one_round(spec, dirs, cfg, bench_seed, timeout, [{}, {}])
+                _one_round(spec, dirs, cfg, bench_seed, timeout, [{}, {}], bdir)
             samples: list[dict[str, list[float]]] = [{}, {}]
             for _ in range(int(m.get("repeats", 10))):
-                _one_round(spec, dirs, cfg, bench_seed, timeout, samples)
+                _one_round(spec, dirs, cfg, bench_seed, timeout, samples, bdir)
             comparisons, undecided = _compare(metrics_spec, *samples)
             while undecided and len(samples[0]["wall_seconds"]) < int(m.get("max_repeats", 30)):
-                _one_round(spec, dirs, cfg, bench_seed, timeout, samples)
+                _one_round(spec, dirs, cfg, bench_seed, timeout, samples, bdir)
                 comparisons, undecided = _compare(metrics_spec, *samples)
             perf_ok = all(c["ok"] for c in comparisons.values())
 
@@ -398,6 +432,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "interface": interface,
         **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
         "sandbox": sandbox_mode(cfg),
+        "runner": capabilities(cfg),
         "trust": trust,
         "by": "judge",
     })

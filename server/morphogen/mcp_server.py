@@ -15,6 +15,7 @@ from mcp.server.mcpserver import MCPServer
 from . import judge as judge_mod
 from . import project
 from . import strategies as strategies_mod
+from . import telemetry
 from .config import load_config, project_root
 
 server = MCPServer(
@@ -135,7 +136,11 @@ def measure(target: str, ref: str = "HEAD") -> dict:
     """Benchmark a target at a commit with the judge's hidden seed; recorded as measured evidence."""
     root, cfg = _ctx()
     _, evidence = project.stores(root, cfg)
-    return judge_mod.measure(root, cfg, target, ref, evidence)
+    with telemetry.span("morphogen.measure", target=target, ref=ref) as s:
+        out = judge_mod.measure(root, cfg, target, ref, evidence)
+        if s is not None:
+            s.set_attribute("morphogen.trust", out.get("trust", ""))
+        return out
 
 
 @server.tool()
@@ -150,7 +155,14 @@ def judge(target: str, candidate: str = "HEAD", base: str | None = None,
     not reality."""
     root, cfg = _ctx()
     _, evidence = project.stores(root, cfg)
-    return judge_mod.judge(root, cfg, target, base or cfg.get("trunk", "main"), candidate, evidence, labels)
+    with telemetry.span("morphogen.judge", target=target, candidate=candidate,
+                        strategy=(labels or {}).get("strategy")) as s:
+        out = judge_mod.judge(root, cfg, target, base or cfg.get("trunk", "main"), candidate, evidence, labels)
+        if s is not None:
+            s.set_attribute("morphogen.verdict", out["verdict"])
+            for metric, c in out.get("metrics", {}).items():
+                s.set_attribute(f"morphogen.gain.{metric}", c["gain"])
+        return out
 
 
 @server.tool()

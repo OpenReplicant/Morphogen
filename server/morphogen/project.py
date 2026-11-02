@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -12,7 +13,7 @@ import yaml
 
 from .backend_files import FilesEvidenceLog, FilesListStore
 from .config import data_dir, evidence_path, load_config, plugin_root
-from .runner import docker_available
+from .runner import capabilities
 
 SAMPLES = plugin_root() / "samples"
 
@@ -101,7 +102,9 @@ def doctor(root: Path) -> dict:
         "judge_outside_project": not inside,
         "timing": "measured outside the process under test",
         "inputs": "fresh random seeds per judge run; nothing stored to read in advance",
-        "sandbox": "docker" if docker_available() else "none: trials run directly on this machine",
+        "runner": capabilities(cfg),
+        "telemetry": "spans to " + os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"]
+                     if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") else "off (set OTEL_EXPORTER_OTLP_ENDPOINT)",
         "trials_per_day": budget or "no limit",
         "enforced_append_only": False,
         "note": "On the files backend the evidence log is tamper-evident (hash chain), not tamper-proof. "

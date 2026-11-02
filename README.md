@@ -16,6 +16,9 @@ Skills, the server and samples are portable to other agent harnesses.
 - [Evidence and trust](#evidence-and-trust)
 - [What Morphogen knows: the lists](#what-morphogen-knows-the-lists)
 - [Improvement strategies](#improvement-strategies)
+- [Runners](#runners)
+- [Services and telemetry](#services-and-telemetry)
+- [Improving Morphogen itself](#improving-morphogen-itself)
 - [Settings](#settings)
 - [Tools](#tools)
 - [Testing and evals](#testing-and-evals)
@@ -109,10 +112,12 @@ timeout: 120
 - **check**: any command whose exit code means the candidate still works.
 - **equivalence**: optional; compares outputs with the base on inputs only
   generated at judging time.
-- **measure.metrics**: exactly one primary metric, which must be one the judge
-  measures itself (`wall_seconds`, `cpu_seconds`, `max_rss_kb`). Numbers the
-  workload prints are kept as `reported.*` and can be constraints, never the
-  primary metric.
+- **measure.metrics**: exactly one primary metric. It must be one the judge
+  measures itself (`wall_seconds`, `cpu_seconds`, `max_rss_kb`), or one an
+  observer collects outside the code under test (`observed.*`, see
+  [Services and telemetry](#services-and-telemetry)). Numbers the workload
+  prints are kept as `reported.*` and can be constraints, never the primary
+  metric.
 
 To make your own code a target, copy the sample's layout: move the code
 under improvement next to a benchmark script, a test file and an input
@@ -140,6 +145,14 @@ carry a note: they are evidence about the model, not about reality. Morphogen
 never applies such a change to the real system without a direct trial or your
 explicit approval. The simulator is a slot of its own and can be improved or
 swapped like anything else.
+
+A staging environment is a simulation in this sense: the same code, with
+synthetic or replayed traffic instead of real traffic. The direct trial is a
+canary or a feature flag: real traffic, limited blast radius. So the path to
+production is a pass in simulation, then a pass in a limited direct trial,
+then your approval. Progressive-delivery tools such as Argo Rollouts and
+Flagger already judge canaries against baseline metrics and roll back; they
+are candidates for that slot.
 
 ## The judge
 
@@ -242,6 +255,90 @@ Strategies only propose. None can change the judge, the budgets, or the rule
 that a candidate is merged only after it passes against the trunk and you
 approve.
 
+## Runners
+
+Where the judge's commands run is a slot too. Each runner declares what it
+guarantees, and `doctor` reports it.
+
+| Runner | Network | Tree | Limits | Notes |
+|---|---|---|---|---|
+| `docker` | none | read-only | 1 CPU, 1 GB | needs the Docker daemon |
+| `podman` | none | read-only | 1 CPU, 1 GB | rootless, no daemon |
+| `none` | yours | writable | none | trials run directly on your machine |
+
+`sandbox: auto` uses Docker, then Podman, then none. Timing is measured
+inside the container by the judge's wrapper, so container start-up does not
+count. Planned runners are listed in `samples/catalogs.yaml`: Kubernetes Jobs
+and Nomad batch jobs for running trials on a cluster, and gVisor or
+Firecracker for stronger isolation. A shared cluster makes timings noisier, so
+a cluster runner should pin CPUs or use dedicated nodes, or declare its timing
+noisy so the judge plans more rounds.
+
+## Services and telemetry
+
+For a target that is a service, the useful metrics are latency, error rate or
+cost per request, not process time. The judge gets them through an
+**observer**: a harness script it runs after each workload run.
+
+```yaml
+measure:
+  run: python load.py              # drives the service for this run
+  observer:
+    run: python observe.py         # queries telemetry for this run, prints JSON
+    collected: outside             # outside | self
+  metrics:
+    observed.p95_ms: {direction: lower, primary: true, min_improvement: 0.10}
+    observed.error_rate: {direction: lower, max_regression: 0.0}
+```
+
+The workload gets `MORPHOGEN_RUN_ID`, `MORPHOGEN_SIDE` (base or candidate) and
+`OTEL_RESOURCE_ATTRIBUTES` tagging its telemetry with both. The observer gets
+the same plus `MORPHOGEN_RUN_START` and `MORPHOGEN_RUN_END`, and typically
+queries an OpenTelemetry collector, Prometheus, or a proxy's access log for
+that run. The observer comes from the base commit, so a candidate cannot
+change it.
+
+Trust depends on where the data is collected. `collected: outside` means the
+numbers come from something the candidate cannot alter: a load generator's
+own view, a sidecar or mesh proxy, eBPF. Only then can an observed metric be
+primary. `collected: self` means the service reports on itself through its
+own SDK; such metrics can be constraints, never the deciding metric.
+
+Containers have no network, so a service target that sends telemetry needs
+`sandbox: none` for now, or a runner with a network to the collector only.
+
+**Morphogen's own telemetry.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` (and
+optionally `OTEL_SERVICE_NAME`) in the environment Claude Code starts the
+server from, and every `judge` and `measure` call becomes a span with the
+target, candidate, strategy, verdict and gains, viewable in a collector,
+Jaeger, Grafana or Arize Phoenix. Claude Code can export its own telemetry
+over OpenTelemetry too, so the agent's activity and cost can sit beside the
+judge's spans. Telemetry never affects a verdict.
+
+## Improving Morphogen itself
+
+Morphogen can improve this repository the same way it improves anything
+else. The rule that matters: **the installed plugin is the judge, the
+repository is the candidate.**
+
+1. Run Claude Code in a clone of this repository, with the plugin installed
+   from the marketplace (the stable version).
+2. `/morphogen:evolve` builds candidates on branches; workers use worktrees.
+   The installed version's server judges them; candidates cannot change it.
+3. You approve the merge. Open a pull request: the `judge` workflow re-runs
+   the tests, the red-team suite and strategy selection with **main's** tests
+   and samples against the candidate's code, outside any agent's reach.
+4. Release: bump `version` in `.claude-plugin/plugin.json` and the
+   marketplace entry, tag it, then `/plugin update morphogen@morphogen` and
+   start a new session. The new version judges only from then on.
+
+Do not point Morphogen at the installed plugin's own directory: that is the
+judge editing itself mid-session.
+
+Because the red-team suite is part of what the base uses to judge, a
+candidate that weakens the judge fails at least one known cheat. The judge
+can get stricter; it cannot quietly get looser.
+
 ## Settings
 
 `morphogen.yaml`, written by onboarding; you own it.
@@ -255,7 +352,7 @@ strategy: auto           # or hill-climb, archive-search, simplify, or your own 
 #   targets/slow-script: archive-search
 backends:
   default: files
-sandbox: auto            # auto (Docker if available) · docker · none
+sandbox: auto            # auto (Docker, then Podman) · docker · podman · none
 sandbox_image: python:3.12-slim
 budget:
   tool_calls: 0          # per session; 0 means no limit (enforced by a hook)
@@ -272,7 +369,7 @@ The MCP server's tools, which any MCP-capable harness can call:
 
 | Tool | Does |
 |---|---|
-| `doctor` | reports the project, backend, evidence chain, sandbox and which guarantees are active |
+| `doctor` | reports the project, backend, evidence chain, runner and its guarantees, telemetry |
 | `init_project`, `install_sample` | set a project up; copy a sample target in |
 | `lists_get`, `lists_put`, `lists_query` | read and write the lists; follow references |
 | `evidence_query`, `evidence_note` | read evidence; add an inferred or stated note |
@@ -292,13 +389,20 @@ uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam
 The skills are scored with `claude plugin eval` against a run without the
 plugin; see `eval-cases/README.md` for the six cases and the run command.
 
+On GitHub, `.github/workflows/judge.yml` runs the tests on every push to main
+and judges every pull request with main's tests and samples. Make `judge` a
+required status check for main.
+
 ## Limits
 
 - On a local machine an agent with shell access can reach any file you can.
   The evidence chain makes edits detectable, not impossible. For the strong
   version, run in a container with the plugin mounted read-only, or have CI
   run the judge on pull requests.
-- Without Docker, trials run directly on your machine; `doctor` says so.
+- Without Docker or Podman, trials run directly on your machine; `doctor`
+  says so.
+- Containers have no network, so service targets that send telemetry run
+  with `sandbox: none` for now.
 - The runner uses `sh`, so Windows needs WSL.
 - Only the files backend exists so far; Postgres is planned.
 
@@ -314,6 +418,7 @@ plugin; see `eval-cases/README.md` for the six cases and the run command.
 | `agents/` | `explorer`, `worker`, `reviewer` | Claude Code |
 | `hooks/` | session briefing, budget, traces | Claude Code |
 | `.claude-plugin/` | plugin and marketplace manifests | Claude Code |
+| `.github/workflows/judge.yml` | judges pull requests with main's tests | GitHub |
 | `harness.yaml` | which parts are portable | |
 
 ## License

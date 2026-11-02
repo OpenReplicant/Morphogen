@@ -150,3 +150,62 @@ class SimulatedTargets(unittest.TestCase):
                 p.judge(p.branch("x", {"topwords.py": FAST}))
         finally:
             p.close()
+
+
+OBSERVER = '''import json, os
+# Stands in for a query to a telemetry backend: the run's latency, from the
+# time window the judge passed in (collected outside the code under test).
+start, end = float(os.environ["MORPHOGEN_RUN_START"]), float(os.environ["MORPHOGEN_RUN_END"])
+assert os.environ["MORPHOGEN_RUN_ID"] and os.environ["MORPHOGEN_SIDE"] in ("base", "candidate", "measured")
+print(json.dumps({"latency_ms": (end - start) * 1000}))
+'''
+
+
+class Observer(unittest.TestCase):
+    def make(self, collected):
+        from tests.fixture import git
+        p = SampleProject()
+        (p.path("observe.py")).write_text(OBSERVER)
+        spec = p.path("target.yaml")
+        text = spec.read_text().replace("harness: [bench.py, gen.py, test_topwords.py]",
+                                        "harness: [bench.py, gen.py, test_topwords.py, observe.py]")
+        text = text.replace("    wall_seconds: {direction: lower, primary: true, min_improvement: 0.10}",
+                            "    wall_seconds: {direction: lower}\n"
+                            "    observed.latency_ms: {direction: lower, primary: true, min_improvement: 0.10}")
+        text = text.replace("  metrics:\n", f"  observer: {{run: python observe.py, collected: {collected}}}\n  metrics:\n", 1)
+        spec.write_text(text)
+        git(p.repo, "add", "-A")
+        git(p.repo, "commit", "-q", "-m", "observe latency")
+        return p
+
+    def test_observed_metric_from_outside_can_decide(self):
+        p = self.make("outside")
+        try:
+            r = p.judge(p.branch("fast", {"topwords.py": FAST}))
+            self.assertEqual(r["verdict"], "pass", r)
+            self.assertIn("observed.latency_ms", r["metrics"])
+            self.assertTrue(r["metrics"]["observed.latency_ms"]["primary"])
+        finally:
+            p.close()
+
+    def test_self_reported_telemetry_cannot_be_primary(self):
+        p = self.make("self")
+        try:
+            with self.assertRaises(judge_mod.JudgeError):
+                p.judge(p.branch("fast", {"topwords.py": FAST}))
+        finally:
+            p.close()
+
+
+class Runners(unittest.TestCase):
+    def test_runner_settings(self):
+        from morphogen import runner
+        self.assertEqual(runner.sandbox_mode({"sandbox": "none"}), "none")
+        self.assertFalse(runner.capabilities({"sandbox": "none"})["network_isolated"])
+        with self.assertRaises(RuntimeError):
+            runner.sandbox_mode({"sandbox": "kubernetes"})
+        for engine in ("docker", "podman"):
+            if not runner.available(engine):
+                with self.assertRaises(RuntimeError):
+                    runner.sandbox_mode({"sandbox": engine})
+        self.assertIn(runner.sandbox_mode({"sandbox": "auto"}), ("docker", "podman", "none"))
