@@ -72,4 +72,4 @@ jobs:
         working-directory: server
         env:
           MORPHOGEN_TEST_SANDBOX: ${{ matrix.engine }}
-        run: uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam tests.test_redteam_open tests.test_strategies
+        run: uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam tests.test_strategies

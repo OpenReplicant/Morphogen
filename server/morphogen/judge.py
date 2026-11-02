@@ -9,14 +9,20 @@ What makes it hard to fool:
   wrapper that waits for it and reads the operating system's resource usage.
   Numbers the measured code prints are recorded as "reported" and can never
   decide the verdict.
-- Inputs come from fresh random seeds on every run: nothing to read in
-  advance, nothing stored. Base and candidate get the same seeds in a run.
+- Inputs come from a fresh random seed every round: nothing to read in
+  advance, and nothing one round learns helps the next. Base and candidate
+  share the seed within a round. Without a container, each run of the code
+  under test also gets its own empty TMPDIR and HOME.
 - A candidate may not add or change files that shadow standard-library
-  modules or customise the interpreter (`json.py`, `sitecustomize.py`, `.pth`).
+  modules, customise the interpreter (`json.py`, `sitecustomize.py`, `.pth`),
+  or shadow a harness module (a `gen/` package or `gen.so` beside `gen.py`).
+- Every timed run must print what the base prints on the same input, so code
+  cannot do less work only when it is being timed.
 - Runs are paired and alternate order between rounds (ABBA) after a warm-up.
-  A gain counts only if the median paired gain clears the bar and a sign test
-  says the candidate wins more pairs than luck explains (p <= 0.01); close
-  calls get more rounds, up to a limit.
+  A gain counts only if the median paired gain (or the mean, for scores that
+  often tie) clears the bar and a sign test says the candidate wins more
+  untied pairs than luck explains (p <= 0.01); close calls get more rounds,
+  up to a limit.
 - Every verdict is written to the evidence log as `trust: measured, by: judge`.
 """
 
@@ -144,20 +150,38 @@ def _changed(repo: Path, base: str, cand: str, rel: Path) -> list[str]:
     return [line for line in out.splitlines() if line]
 
 
-def _forbidden(changed: list[str], rel: Path) -> list[str]:
+def _import_name(filename: str) -> str:
+    """The module name a file or directory would be imported as: gen.py, gen.cpython-312.so, gen/ -> gen."""
+    return filename.split(".", 1)[0]
+
+
+def _forbidden(changed: list[str], rel: Path, harness: list[str] = ()) -> list[str]:
+    """Changed paths that shadow a standard module, customise the interpreter, or shadow a harness
+    module (a package `gen/` or `gen.so` beside the harness's `gen.py` would be imported instead)."""
+    harness_mods = {(Path(h).parent, _import_name(Path(h).name)) for h in harness if h.endswith(".py")}
+    harness_files = {Path(h) for h in harness} | {Path("target.yaml")}
     bad = []
     for path in changed:
-        parts = Path(path).relative_to(rel).parts
+        local = Path(path).relative_to(rel)
+        parts = local.parts
         top = parts[0]
         name = top[:-3] if top.endswith(".py") else top
         if top.endswith(".pth") or (name in FORBIDDEN_MODULES and (top.endswith(".py") or len(parts) > 1)):
             bad.append(path)
+            continue
+        if local in harness_files:
+            continue  # replaced by the base's copy
+        # Any prefix of the path may be a package or module beside a harness module of that name.
+        for depth in range(1, len(parts) + 1):
+            if (Path(*parts[:depth - 1]), _import_name(parts[depth - 1])) in harness_mods:
+                bad.append(path)
+                break
     return bad
 
 
 def _timed(cmd: str, cwd: Path, cfg: dict, env: dict, timeout: int) -> tuple[dict, str]:
     full = f"python3 -c {shlex.quote(WRAPPER)} {shlex.quote(cmd)}"
-    r = run(full, cwd, cfg, env=env, timeout=timeout)
+    r = run(full, cwd, cfg, env=env, timeout=timeout, private=True)
     lines = r.out.rstrip("\n").splitlines()
     if r.rc != 0 or not lines or not lines[-1].startswith(MARK):
         raise JudgeError(f"the measuring wrapper failed (exit {r.rc}): {r.err.strip()[-400:]}")
@@ -165,6 +189,16 @@ def _timed(cmd: str, cwd: Path, cfg: dict, env: dict, timeout: int) -> tuple[dic
     if stats["rc"] != 0:
         raise JudgeError(f"benchmark failed (exit {stats['rc']}): {r.err.strip()[-400:]}")
     return stats, "\n".join(lines[:-1])
+
+
+def _result(out: str) -> str:
+    """What a measured run produced, without the line of reported metrics (timings vary run to run)."""
+    lines = out.strip().splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip().startswith("{"):
+            del lines[i]
+            break
+    return "\n".join(line.rstrip() for line in lines).strip()
 
 
 def _reported(out: str) -> dict[str, float]:
@@ -196,8 +230,10 @@ def _observe(spec: dict, observer_dir: Path, cfg: dict, env: dict, timeout: int)
 
 def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
                samples: list[dict[str, list[float]]], observer_dir: Path | None = None,
-               sides: tuple[str, ...] = ("base", "candidate")) -> None:
-    """One run per side. Order alternates between rounds (ABBA) so drift and warm-up hit both."""
+               sides: tuple[str, ...] = ("base", "candidate"), outputs: list | None = None) -> None:
+    """One run per side. Order alternates between rounds (ABBA) so drift and warm-up hit both.
+    With `outputs`, appends each side's result (stdout without reported metrics) for this round."""
+    results = [""] * len(dirs)
     rnd = len(next(iter(samples[0].values()), []))
     order = list(range(len(dirs)))
     if rnd % 2:
@@ -209,6 +245,7 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
                "OTEL_RESOURCE_ATTRIBUTES": f"morphogen.run_id={run_id},morphogen.side={side}"}
         start = time.time()
         stats, out = _timed(spec["measure"]["run"], dirs[i], cfg, env, timeout)
+        results[i] = _result(out)
         env.update({"MORPHOGEN_RUN_START": f"{start:.6f}", "MORPHOGEN_RUN_END": f"{time.time():.6f}"})
         for k in JUDGE_METRICS:
             samples[i].setdefault(k, []).append(float(stats[k]))
@@ -216,54 +253,69 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
             samples[i].setdefault(f"reported.{k}", []).append(v)
         for k, v in _observe(spec, observer_dir or dirs[i], cfg, env, timeout).items():
             samples[i].setdefault(k, []).append(v)
+    if outputs is not None:
+        outputs.append(results)
 
 
-def _gain(b: float, c: float, lower: bool) -> float:
+def _gain(b: float, c: float, lower: bool, absolute: bool = False) -> float:
+    """Improvement of c over b: relative to b (the default), or in the metric's own units."""
+    if absolute:
+        return b - c if lower else c - b
     if not b:
         return 0.0
     return (b - c) / b if lower else (c - b) / b
 
 
 def _sign_p(wins: int, n: int) -> float:
-    """One-sided sign test: chance of at least `wins` of `n` pairs favouring the candidate by luck."""
+    """One-sided sign test: chance of at least `wins` of `n` pairs favouring the candidate by luck.
+    Callers pass n without tied pairs, as the sign test requires."""
     return sum(math.comb(n, j) for j in range(wins, n + 1)) / 2 ** n if n else 1.0
 
 
-def _paired(bs: list[float], cs: list[float], lower: bool, n: int = 2000) -> dict:
-    gains = [_gain(b, c, lower) for b, c in zip(bs, cs)]
+def _paired(bs: list[float], cs: list[float], lower: bool, n: int = 2000, absolute: bool = False,
+            aggregate: str = "median") -> dict:
+    gains = [_gain(b, c, lower, absolute) for b, c in zip(bs, cs)]
+    agg = statistics.fmean if aggregate == "mean" else statistics.median
     rng = random.Random(0)
-    draws = sorted(statistics.median(rng.choices(gains, k=len(gains))) for _ in range(n))
-    return {"gains": gains, "point": statistics.median(gains),
+    draws = sorted(agg(rng.choices(gains, k=len(gains))) for _ in range(n))
+    return {"gains": gains, "point": agg(gains),
             "ci95": (draws[int(0.025 * n)], draws[int(0.975 * n) - 1])}
 
 
 def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tuple[dict, bool]:
     """Per-metric comparison over paired rounds, and whether more rounds could change the verdict.
 
-    Primary metric: passes when the median paired gain clears the bar and a sign
-    test says the candidate wins more pairs than luck explains (p <= alpha).
+    Primary metric: passes when the paired gain (median by default, or `aggregate: mean`) clears
+    the bar and a sign test says the candidate wins more pairs than luck explains (p <= alpha).
     Other metrics: fail only when a sign test says they regress beyond their limit.
+    Tied pairs say nothing about which side is better and are left out of the sign test. Gains are
+    relative to the base by default; `gain: absolute` uses the metric's units (for scores that can be 0).
     """
     out, undecided = {}, False
     for metric, ms in metrics_spec.items():
         if metric not in bs or metric not in cs:
             raise JudgeError(f"no measurements for {metric!r}")
         lower = ms.get("direction", "lower") == "lower"
-        pr = _paired(bs[metric], cs[metric], lower)
+        aggregate = ms.get("aggregate", "median")
+        if aggregate not in ("median", "mean") or ms.get("gain", "relative") not in ("relative", "absolute"):
+            raise JudgeError(f"{metric}: aggregate must be median or mean, gain relative or absolute")
+        pr = _paired(bs[metric], cs[metric], lower, absolute=ms.get("gain") == "absolute", aggregate=aggregate)
         n = len(pr["gains"])
+        untied = sum(g != 0 for g in pr["gains"])
         if ms.get("primary"):
             bar = float(ms.get("min_improvement", 0.05))
-            p = _sign_p(sum(g > 0 for g in pr["gains"]), n)
+            p = _sign_p(sum(g > 0 for g in pr["gains"]), untied)
             ok = pr["point"] >= bar and p <= alpha
             undecided |= (not ok) and pr["point"] >= bar / 2
         else:
             limit = float(ms.get("max_regression", 0.05))
-            p = _sign_p(sum(g < -limit for g in pr["gains"]), n)
+            p = _sign_p(sum(g < -limit for g in pr["gains"]), untied)
             ok = not (p <= alpha)
             undecided |= ok and pr["point"] < -limit
         out[metric] = {"base": statistics.median(bs[metric]), "candidate": statistics.median(cs[metric]),
                        "gain": round(pr["point"], 4), "ci95": [round(x, 4) for x in pr["ci95"]],
-                       "sign_test_p": round(p, 5), "ok": ok, "primary": bool(ms.get("primary")), "runs": n}
+                       "sign_test_p": round(p, 5), "ok": ok, "primary": bool(ms.get("primary")), "runs": n,
+                       "tied": n - untied}
     return out, undecided
 
 
@@ -304,12 +356,12 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
         m = spec["measure"]
-        seed = secrets.randbelow(2**31)
+        seeds = []
         samples: list[dict[str, list[float]]] = [{}]
-        for _ in range(int(m.get("warmup", 1))):
-            _one_round(spec, [tree / rel], cfg, seed, timeout, [{}], tree / rel, ("measured",))
-        for _ in range(int(m.get("repeats", 10))):
-            _one_round(spec, [tree / rel], cfg, seed, timeout, samples, tree / rel, ("measured",))
+        for i in range(int(m.get("warmup", 1)) + int(m.get("repeats", 10))):
+            seeds.append(secrets.randbelow(2**31))
+            _one_round(spec, [tree / rel], cfg, seeds[-1], timeout, samples if i >= int(m.get("warmup", 1)) else [{}],
+                       tree / rel, ("measured",))
     metrics = {k: statistics.median(v) for k, v in samples[0].items()}
     rec = evidence.append({
         "claim": f"{name} at {sha[:12]} measures {json.dumps({k: round(v, 6) for k, v in metrics.items()}, sort_keys=True)}",
@@ -318,7 +370,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         "method": f"median of {len(next(iter(samples[0].values())))} runs timed outside the process; random seed",
         "outcome": metrics,
         "refs": {"commit": sha},
-        "seeds": {"bench": seed},
+        "seeds": {"bench": seeds},
         "interface": interface,
         **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
         "sandbox": sandbox_mode(cfg),
@@ -345,9 +397,9 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
     rel = (root / target).resolve().relative_to(repo)
     base_sha, cand_sha = resolve(repo, base), resolve(repo, candidate)
     changed = _changed(repo, base_sha, cand_sha, rel)
-    forbidden = _forbidden(changed, rel)
     with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
         spec = load_spec(btree, rel)
+        forbidden = _forbidden(changed, rel, list(spec.get("harness", [])))
         metrics_spec = _check_spec(spec)
         name = _target_name(spec, rel)
         interface, trust = _interface(spec)
@@ -361,7 +413,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
 
         check_ok, check_detail = True, "no check defined"
         if spec.get("check") and not forbidden:
-            r = run(spec["check"], cdir, cfg, timeout=timeout)
+            r = run(spec["check"], cdir, cfg, timeout=timeout, private=True)
             check_ok = r.rc == 0
             check_detail = "passed" if check_ok else (r.err or r.out).strip()[-600:]
 
@@ -374,40 +426,56 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                 g = run(eq["gen"].format(seed=seed), bdir, cfg, timeout=timeout)
                 if g.rc != 0:
                     raise JudgeError(f"input generator failed on the base: {g.err.strip()[-400:]}")
-                ob = run(eq["run"], bdir, cfg, stdin=g.out, timeout=timeout)
+                ob = run(eq["run"], bdir, cfg, stdin=g.out, timeout=timeout, private=True)
                 if ob.rc != 0:
                     raise JudgeError(f"the base failed on a generated input: {ob.err.strip()[-400:]}")
-                oc = run(eq["run"], cdir, cfg, stdin=g.out, timeout=timeout)
+                oc = run(eq["run"], cdir, cfg, stdin=g.out, timeout=timeout, private=True)
                 if oc.rc != 0:
                     failures += 1
                 elif oc.out.strip() != ob.out.strip():
                     mismatches += 1
         equivalent = mismatches == 0 and failures == 0
 
-        comparisons, perf_ok, bench_seed = {}, False, None
+        comparisons, perf_ok, bench_seeds, outputs, timed_mismatches = {}, False, [], [], 0
         if check_ok and equivalent and not forbidden:
             m = spec["measure"]
-            bench_seed = secrets.randbelow(2**31)
+            # A fresh seed every round: base and candidate share it within a round (a fair pair),
+            # but no two rounds see the same input, so nothing learned in one round helps the next.
+            bench_seeds, outputs = [], []
+
+            def round_(samples):
+                bench_seeds.append(secrets.randbelow(2**31))
+                _one_round(spec, dirs, cfg, bench_seeds[-1], timeout, samples, bdir, outputs=outputs)
+
             dirs = [bdir, cdir]
             for _ in range(int(m.get("warmup", 1))):
-                _one_round(spec, dirs, cfg, bench_seed, timeout, [{}, {}], bdir)
+                round_([{}, {}])
             samples: list[dict[str, list[float]]] = [{}, {}]
             for _ in range(int(m.get("repeats", 10))):
-                _one_round(spec, dirs, cfg, bench_seed, timeout, samples, bdir)
+                round_(samples)
             comparisons, undecided = _compare(metrics_spec, *samples)
             while undecided and len(samples[0]["wall_seconds"]) < int(m.get("max_repeats", 30)):
-                _one_round(spec, dirs, cfg, bench_seed, timeout, samples, bdir)
+                round_(samples)
                 comparisons, undecided = _compare(metrics_spec, *samples)
-            perf_ok = all(c["ok"] for c in comparisons.values())
+            # The timed runs must produce what the base produces on the same input. Otherwise code
+            # that can tell a timed run from a checked one (an environment variable, argv, the caller)
+            # could do less work only when timed. Opt out only for workloads whose output varies.
+            if m.get("same_output", True):
+                timed_mismatches = sum(1 for b, c in outputs if b != c)
+            perf_ok = not timed_mismatches and all(c["ok"] for c in comparisons.values())
 
     passed = not forbidden and check_ok and equivalent and perf_ok
     reasons = []
     if forbidden:
-        reasons.append(f"changes files that shadow standard modules or customise Python: {', '.join(forbidden)}")
+        reasons.append(f"changes files that shadow standard or harness modules, or customise Python: "
+                       f"{', '.join(forbidden)}")
     if not check_ok:
         reasons.append("the base's tests fail on the candidate")
     if not equivalent:
         reasons.append(f"{mismatches} wrong and {failures} failed outputs on {len(eq_seeds)} generated inputs")
+    if timed_mismatches:
+        reasons.append(f"{timed_mismatches} of {len(outputs)} timed runs gave different output from the base "
+                       "on the same input")
     for metric, c in comparisons.items():
         if not c["ok"]:
             reasons.append(f"{metric}: gain {c['gain']:+.1%} (95% interval {c['ci95'][0]:+.1%} to "
@@ -423,11 +491,13 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "verdict": verdict,
         "subject": {"system": name, "path": str(rel)},
         "method": "base's spec and harness; forbidden-file check; base's tests; output equivalence on fresh "
-                  "random inputs; paired ABBA runs timed outside the process, sign test",
+                  "random inputs; paired ABBA runs timed outside the process, each checked for the base's "
+                  "output; sign test",
         "outcome": {"forbidden": forbidden, "check": check_ok, "generated_inputs": len(eq_seeds),
-                    "wrong": mismatches, "failed": failures, "metrics": comparisons},
+                    "wrong": mismatches, "failed": failures, "timed_output_mismatches": timed_mismatches,
+                    "metrics": comparisons},
         "refs": {"base": base_sha, "candidate": cand_sha},
-        "seeds": {"equivalence": eq_seeds, "bench": bench_seed},
+        "seeds": {"equivalence": eq_seeds, "bench": bench_seeds},
         "labels": {str(k): str(v) for k, v in (labels or {}).items()},
         "interface": interface,
         **({"simulates": spec["simulates"]} if interface == "simulated" else {}),

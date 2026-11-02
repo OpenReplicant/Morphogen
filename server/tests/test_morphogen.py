@@ -1,6 +1,7 @@
 """Conformance of the files backend, and the judge's ordinary behaviour on the sample target."""
 
 import json
+import random
 import shutil
 import tempfile
 import unittest
@@ -117,9 +118,6 @@ class TrialBudget(unittest.TestCase):
             p.close()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class SimulatedTargets(unittest.TestCase):
     def test_simulated_target_gets_simulated_trust_and_a_note(self):
@@ -150,6 +148,58 @@ class SimulatedTargets(unittest.TestCase):
                 p.judge(p.branch("x", {"topwords.py": FAST}))
         finally:
             p.close()
+
+
+class Statistics(unittest.TestCase):
+    """The judge's comparison on synthetic paired scores (no runs)."""
+
+    @staticmethod
+    def episodes(rng, rate, n):
+        return [100.0 if rng.random() < rate else 0.0 for _ in range(n)]
+
+    def compare(self, bs, cs, **metric):
+        spec = {"score": {"direction": "higher", "primary": True, **metric}}
+        return judge_mod._compare(spec, {"score": bs}, {"score": cs})[0]["score"]
+
+    def test_ties_are_left_out_of_the_sign_test(self):
+        # 8 wins and 2 ties: with ties counted as losses p = 0.055; without them p = 1/256.
+        bs = [1.0] * 10
+        cs = [2.0] * 8 + [1.0] * 2
+        c = self.compare(bs, cs, min_improvement=0.10)
+        self.assertEqual(c["tied"], 2)
+        self.assertAlmostEqual(c["sign_test_p"], 1 / 256, places=5)
+        self.assertTrue(c["ok"])
+
+    def test_all_tied_never_passes(self):
+        c = self.compare([100.0] * 30, [100.0] * 30, gain="absolute", aggregate="mean", min_improvement=0)
+        self.assertFalse(c["ok"])
+
+    def test_pass_fail_scores_a_a_rarely_passes(self):
+        rng, passes = random.Random(1), 0
+        for _ in range(300):
+            bs, cs = self.episodes(rng, 0.5, 30), self.episodes(rng, 0.5, 30)
+            passes += self.compare(bs, cs, gain="absolute", aggregate="mean", min_improvement=10)["ok"]
+        self.assertLessEqual(passes, 3, "identical success rates passed more often than p <= 0.01 allows")
+
+    def test_pass_fail_scores_detect_a_real_improvement(self):
+        # Success rate 30% -> 70% over 30 pairs (the default max_repeats) is detected about 3 times
+        # in 4 (74 of 100 when measured). Detecting smaller gains needs more episodes.
+        rng, passes = random.Random(2), 0
+        for _ in range(100):
+            bs, cs = self.episodes(rng, 0.3, 30), self.episodes(rng, 0.7, 30)
+            passes += self.compare(bs, cs, gain="absolute", aggregate="mean", min_improvement=10)["ok"]
+        self.assertGreaterEqual(passes, 65)
+
+    def test_relative_median_cannot_see_pass_fail_gains(self):
+        # Why the options exist: a base episode scoring 0 makes the relative gain 0, and with
+        # mostly tied pairs the median gain is 0.
+        rng = random.Random(3)
+        c = self.compare(self.episodes(rng, 0.3, 30), self.episodes(rng, 0.7, 30), min_improvement=0.10)
+        self.assertFalse(c["ok"])
+
+    def test_bad_options_are_refused(self):
+        with self.assertRaises(judge_mod.JudgeError):
+            self.compare([1.0], [2.0], aggregate="max")
 
 
 class SelfMap(unittest.TestCase):
@@ -276,3 +326,7 @@ class ContainerGuarantees(unittest.TestCase):
 
     def test_podman(self):
         self.check("podman")
+
+
+if __name__ == "__main__":
+    unittest.main()

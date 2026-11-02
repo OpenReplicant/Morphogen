@@ -23,6 +23,10 @@ equivalence:
 # wall_seconds, cpu_seconds, max_rss_kb. The primary metric must be one of them,
 # or an observed.* metric from an observer whose data is collected outside the
 # code under test (measure.observer: {run: ..., collected: outside}).
+# `run` prints its result; every timed run must print what the base prints on
+# the same input (same_output: false opts out, for output that varies).
+# For scores that often tie or can be 0, set gain: absolute and aggregate: mean
+# on the metric.
 measure:
   run: python bench.py
   warmup: 1
