@@ -195,6 +195,152 @@ LLM; fall-through rate (rises with novelty).
 after each batch, `compile` runs; plot score, cost and fall-through rate over
 iterations.
 
+## 6a. Input: one bus, a workspace, pattern matching
+
+[plausible] All sources write to **one bus** in the event envelope; large
+payloads (frames, audio) go by reference to blob storage. This is
+log-centric architecture (event sourcing, Kafka, Jay Kreps' "The Log").
+
+**A program's scope is a pattern over the bus.** Programs subscribe by pattern
+(source, type, shape, content, time windows). Unmatched events fall through to
+the top LLM, sampled if there are too many: novelty is what nothing matched.
+
+**A global workspace** (Baars' Global Workspace Theory; Dehaene's neuronal
+version; Franklin's LIDA implements it) avoids a serial bottleneck:
+
+| Global workspace | Here |
+|---|---|
+| Many specialised processors, in parallel | library programs subscribed by pattern |
+| Competition for access | salience: prediction error, goal match, urgency |
+| The workspace | a small bounded buffer the top LLM reads at its own pace (its context) |
+| Broadcast | workspace contents sent back to all matchers |
+| Practice makes it automatic | compiled patterns stop competing for the workspace |
+
+This also closes three cognitive gaps from section 11: attention, working
+memory, priority.
+
+**Rete** (Forgy, 1979–82) is the classic engine for matching many rules
+against changing facts: compile every rule into one network and push only the
+changes through it. *Alpha* nodes test single facts (shared across rules);
+*beta* nodes join facts and keep memories of partial matches; the *agenda*
+holds fully matched rules and conflict resolution picks which fires (salience,
+recency, specificity). Variants: TREAT, LEAPS, Rete/UL (Soar), Phreak (Drools).
+Implementations: CLIPS, Drools, Jess, Soar, `durable_rules` (Python, for
+streams; check maintenance). It maps directly: alpha = routing, beta =
+binding across modalities, agenda = salience competition for the workspace.
+[solid]
+
+**The wider family, by what is matched** [solid]:
+
+- *One event:* discrimination nets (index on the first distinguishing field),
+  content-based publish/subscribe matching, Aho-Corasick and Hyperscan for many
+  string patterns at once, learned matchers (embeddings, classifiers).
+- *Combinations of facts:* Rete and variants.
+- *Sequences over time:* complex event processing: windows, sequences, absence,
+  repetition, aggregates; automata (Flink CEP, SASE), Esper's EPL, SQL
+  `MATCH_RECOGNIZE` (SQL:2016); Allen's interval algebra for "while", "just
+  after", "at the same time".
+- *Structure:* Datalog (recursion; semi-naive evaluation is the same
+  incremental idea), recursive SQL, SQL/PGQ and GQL (Cypher-style `MATCH` over
+  ordinary tables; DuckPGQ for DuckDB), worst-case-optimal joins for cyclic
+  patterns, subgraph isomorphism (Ullmann, VF2). Cypher is one notation for this
+  one kind.
+- *Terms and trees:* unification, structural pattern matching, term rewriting,
+  jq and JSONPath, tree-sitter queries and Semgrep for code.
+
+Common thread: incremental matching of patterns against changing facts. Rete,
+semi-naive Datalog, CEP automata, and today's incremental view maintenance
+(Materialize on differential dataflow, Feldera on DBSP, `pg_ivm`).
+
+**Tiers** [plausible]:
+
+| Tier | Matches | Seed | Path |
+|---|---|---|---|
+| A. Route | envelope fields | dictionary index (discrimination net) | fast |
+| B. Test | one event's content | compiled predicates, regex sets, small classifiers | fast |
+| C. Bind | several events over windows | small CEP or Rete layer | fast |
+| D. Hop | structure in the lists | recursive SQL or Datalog | slow |
+| Agenda | which match wins | salience | into the workspace |
+
+**The scope language is a hard-to-reverse choice:** it is part of the program
+contract, so every program uses it. Small, declarative, covering tiers A–C,
+easy for an LLM to write and the judge to check. Proposal: S-expressions over
+the envelope with window and sequence operators, compiled into an alpha and
+beta network.
+
+```lisp
+(on (and (source camera) (type frame)))
+(on (and (type log) (matches msg "error|timeout")))
+(seq (event (type frame) (has label zombie))
+     (event (type state) (< health 3))
+     (within 2s))
+(absent (event (type heartbeat) (source robot)) (for 5s))
+```
+
+## 6b. Memory, knowledge and storage
+
+**Graphs are optional** [plausible]. Relationships exist as references between
+list entries; a graph store is a slot, adopted only where a trial shows it
+helps (messy unstructured knowledge, entity resolution across sources).
+
+**Six lists** (the ontology: fixed schema, unbounded instances):
+
+| List | Entry | Refers to |
+|---|---|---|
+| Systems | a whole (Crafter, a ROS stack, Morphogen, Claude Code) | its slots, its judge |
+| Slots | a role in a system | its system, accepted types, interface |
+| Types | a kind of component | interface it provides, parent type |
+| Sources | where parts come from | — |
+| Components | a specific part; can itself be a system | type, source, slots filled |
+| Evidence | claims with support (below) | component, slot, system, archive tag |
+
+Entries may carry external IDs (Wikidata, PyPI, repository URLs) to link into
+the wider graph of knowledge without importing it. The lists describe
+Morphogen too, so self-mapping is an ordinary entry. Earlier pieces fold in:
+blueprint → systems and slots; `catalogs.yaml` → sources; library →
+components; archive and records → evidence; program shapes → types.
+
+**Evidence as micropublications** [plausible] (Clark, Ciccarese and Goble,
+2014; nanopublications as the minimal form): a claim, what supports and
+challenges it, the method, who asserted it and a **trust level** (measured by
+the judge, stated in docs, inferred by an LLM, asserted by the operator). A
+claim counts only at the level of its evidence; contradictions are recorded,
+not overwritten.
+
+**Storage split** [plausible]:
+
+| Store | Holds | Why |
+|---|---|---|
+| **Postgres** | the six lists, evidence, events, indexes, embeddings | transactions, many writers, roles as enforcement, extensions |
+| **Git** | code, programs, skills, contracts, intent, judge | gating works on diffs and commits |
+| **Filesystem** | blobs, scratch, execution | where things run |
+
+Postgres extensions to consider (pin one image and check compatibility):
+pgvector (semantic search), built-in full text, recursive SQL or Apache AGE
+(multi-hop), pg_duckdb or TimescaleDB (analytics, time series), pg_ivm
+(incremental views), pgmq and LISTEN/NOTIFY (queues), pg_cron. Roles: explorers
+read only; workers write candidates; only the judge's role writes evidence;
+evidence is insert-only. Trials run on a copy (`CREATE DATABASE … TEMPLATE`).
+Export evidence to Parquet for the archive; keep the SQL portable so the engine
+stays replaceable. The fast-path bus stays in memory; the database receives
+batched writes.
+
+Plain files plus DuckDB would also do at this scale (files stay practical to
+about 10⁵ list entries and millions of evidence rows); Postgres wins on
+concurrent writers and permissions.
+
+**Graphiti, if trialled** [solid, from reading `graphiti-core` 0.31.2]: its
+value is turning unstructured text into a deduplicated, contradiction-aware,
+searchable graph, incrementally. `add_triplet` is not fully deterministic:
+nodes that are new, and edges with similar existing facts, go through LLM
+resolution. The deterministic path is writing `EntityNode`, `EntityEdge` and
+`EpisodicNode` directly (`save`, or `add_nodes_and_edges_bulk`) with stable
+UUIDs derived from list IDs. Edge resolution searches only within the edge's
+`group_id`, so keep judged facts in a `truth` group and LLM-ingested text in an
+`inferred` group. Pin the version, and test that no LLM is called during
+`truth` writes. Cognee, LightRAG and GraphRAG are alternatives for the
+knowledge-index slot.
+
 ## 7. First principles
 
 Facts that cannot be reduced further: [plausible]
@@ -358,12 +504,14 @@ CLAUDE.md        the role, the loop, the fixed frame (short)
 intent.md        goals, SLOs, error budget, money budget, autonomy (operator)
 judge/           scoring and validity checks, read-only mount (operator)
 targets/         one adapter per target (self, games, ...)
-library/         programs and parts: code or prompt + contract + record
-catalogs.yaml    where to look before building
+library/         programs and parts: code or prompt + contract (scope pattern) + record
 playbook/        the crafts as skills, revisable
-log/             events, calls, costs, outcomes (raw ignored, summaries kept)
+db/              Postgres schema and migrations (six lists, evidence, events)
 journal/
 ```
+
+Postgres holds the lists, evidence, events and indexes (section 6b); the
+filesystem holds blobs and execution scratch; git holds what is gated.
 
 Hidden held-out evaluation lives outside the agent's repository (CI or a
 private repository). Two lock levels: operator-owned, and open through the
@@ -429,7 +577,8 @@ beats selecting.
 
 Proposed order, one-way doors first:
 
-1. Record schema with the cost ledger, subgoal tags and call graph.
+1. Record schema with the cost ledger, subgoal tags and call graph; the six
+   lists and evidence as a Postgres schema with roles; the scope language.
 2. Judge with validity checks, SLOs and a hidden held-out set outside the
    repository.
 3. First target adapter: the agent playing Crafter; viewer.
