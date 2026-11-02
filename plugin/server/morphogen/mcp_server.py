@@ -14,6 +14,7 @@ from mcp.server.mcpserver import MCPServer
 
 from . import judge as judge_mod
 from . import project
+from . import strategies as strategies_mod
 from .config import load_config, project_root
 
 server = MCPServer(
@@ -139,13 +140,46 @@ def measure(target: str, ref: str = "HEAD") -> dict:
 
 @server.tool()
 @_safe
-def judge(target: str, candidate: str = "HEAD", base: str | None = None) -> dict:
+def judge(target: str, candidate: str = "HEAD", base: str | None = None,
+          labels: dict[str, str] | None = None) -> dict:
     """Score a candidate commit against a base (default: the trunk) using the base's tests, harness
-    and hidden inputs. Passes only if tests pass, outputs match on hidden inputs, and the primary
-    metric improves by its bar without other metrics regressing. The verdict is recorded."""
+    and freshly generated inputs. Passes only if tests pass, outputs match, and the primary metric
+    improves by its bar, beyond chance, without other metrics regressing. The verdict is recorded.
+    labels: optional {strategy, approach, family, parent} for the archive; they never affect the verdict."""
     root, cfg = _ctx()
     _, evidence = project.stores(root, cfg)
-    return judge_mod.judge(root, cfg, target, base or cfg.get("trunk", "main"), candidate, evidence)
+    return judge_mod.judge(root, cfg, target, base or cfg.get("trunk", "main"), candidate, evidence, labels)
+
+
+@server.tool()
+@_safe
+def strategy(target: str) -> dict:
+    """Which improvement strategy to follow for the next round on a target, why, and its card.
+    'auto' in morphogen.yaml picks from evidence; a name there forces that strategy."""
+    root, cfg = _ctx()
+    _, evidence = project.stores(root, cfg)
+    return strategies_mod.choose(root, cfg, evidence, target)
+
+
+@server.tool()
+@_safe
+def archive(target: str, limit: int = 30) -> dict:
+    """Judged variants of a target, newest last, with lineage, labels, verdicts and primary gains;
+    plus how many children each commit has and the payoff of each strategy."""
+    root, cfg = _ctx()
+    _, evidence = project.stores(root, cfg)
+    variants = strategies_mod.archive(evidence, target)
+    return {"variants": variants[-limit:], "children": strategies_mod.children(variants),
+            "payoff": strategies_mod.payoff(variants)}
+
+
+@server.tool()
+@_safe
+def strategies_list() -> dict:
+    """The strategy catalog: the plugin's cards plus any in the project's strategies/ directory."""
+    root, _ = _ctx()
+    return {"strategies": [{k: v for k, v in c.items() if k != "body"}
+                           for c in strategies_mod.catalog(root).values()]}
 
 
 @server.tool()

@@ -5,6 +5,7 @@ portable:
     standard: agentskills.io
   - path: server/          # Python package and MCP server
     standard: Model Context Protocol
+  - path: strategies/      # improvement strategy cards (Markdown with front matter)
   - path: samples/
 claude-code:
   - path: .claude-plugin/plugin.json

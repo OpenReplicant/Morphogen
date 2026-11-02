@@ -40,12 +40,39 @@ matches the trunk on freshly generated inputs, and it is at least 10% faster,
 timed from outside the process, by more than chance explains. You approve the
 merge.
 
+## Improvement strategies
+
+`evolve` runs a fixed loop (locate, build candidates, judge, review, propose,
+record). What to try is decided by a **strategy**, chosen from a catalog of
+cards in `strategies/`:
+
+| Strategy | Parent | Good when |
+|---|---|---|
+| `hill-climb` | the trunk; best of two or three different approaches | one clear bottleneck; the first rounds |
+| `archive-search` | promising and under-explored variants from the archive, failures included (after the Darwin Gödel Machine) | hill-climbing has stalled |
+| `simplify` | a large pass; smaller versions of it from the trunk (delta debugging) | a pass changes more than it needs to |
+
+`strategy: auto` (the default) chooses from the evidence: hill-climb first;
+simplify when a pass that is not merged changes more than 20 lines; switch to
+archive-search after four trials in a row without a pass; prefer the
+strategy with the best gain per trial once two have a record; stop and report
+when all have stalled. Set a card name to force one, per project or per
+target. Add your own cards in your project's `strategies/` directory; the
+catalog in `catalogs.yaml` lists more strategies to write as cards (beam
+search, islands, reflective evolution, annealing, bandits).
+
+Strategies only propose. None of them can change the judge, the budgets, or
+the rule that a candidate is merged only after it passes against the trunk
+and you approve. `archive(target)` shows every judged variant with its
+lineage, and the payoff of each strategy.
+
 ## What is in the plugin
 
 | Part | What it does |
 |---|---|
 | `skills/` | `onboard`, `map`, `evolve`, `playbook` |
-| `server/` | MCP server: lists, evidence, catalog search, `measure`, `judge`, journal, `doctor` |
+| `server/` | MCP server: lists, evidence, catalog search, `measure`, `judge`, `strategy`, `archive`, journal, `doctor` |
+| `strategies/` | improvement strategy cards: `hill-climb`, `archive-search`, `simplify` |
 | `agents/` | `explorer` (read-only), `worker` (one candidate per branch), `reviewer` (blind review) |
 | `hooks/` | session briefing, optional tool-call budget, traces |
 | `samples/` | example config and intent, catalogs, Morphogen's own map, the slow-script target |
@@ -101,7 +128,7 @@ harnesses.
 
 ```
 cd server
-uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam
+uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam tests.test_strategies
 ```
 
 Apache 2.0.

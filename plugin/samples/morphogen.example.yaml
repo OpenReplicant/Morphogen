@@ -4,6 +4,10 @@ trunk: main              # the branch that changes only by judged, approved merg
 autonomy: 2              # 1 assist · 2 propose (every merge needs the operator) · 3 merge free changes · 4 autonomous
 data_dir: .morphogen     # lists, evidence log, journal, traces
 
+strategy: auto           # auto (chosen from evidence) or a card name: hill-climb, archive-search, simplify
+# strategies:            # per-target overrides, e.g.
+#   targets/slow-script: archive-search
+
 backends:
   default: files         # files (this version); postgres is planned as the recommended backend
 

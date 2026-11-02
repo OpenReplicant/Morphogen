@@ -273,7 +273,10 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
     return {"target": name, "commit": sha, "metrics": metrics, "sandbox": rec["sandbox"], "evidence_seq": rec["seq"]}
 
 
-def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence) -> dict:
+def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
+          labels: dict | None = None) -> dict:
+    """Score `candidate` against `base`. `labels` (strategy, approach, family) are recorded with the
+    verdict for the archive and never affect it."""
     limit = int((cfg.get("budget") or {}).get("trials_per_day", 0) or 0)
     if limit and _trials_today(evidence) >= limit:
         raise JudgeError(f"the trial budget for today ({limit}) is spent; the operator can raise "
@@ -362,6 +365,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                     "wrong": mismatches, "failed": failures, "metrics": comparisons},
         "refs": {"base": base_sha, "candidate": cand_sha},
         "seeds": {"equivalence": eq_seeds, "bench": bench_seed},
+        "labels": {str(k): str(v) for k, v in (labels or {}).items()},
         "sandbox": sandbox_mode(cfg),
         "trust": "measured",
         "by": "judge",
