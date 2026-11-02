@@ -419,6 +419,7 @@ required status check for main.
 | `hooks/` | session briefing, budget, traces | Claude Code |
 | `.claude-plugin/` | plugin and marketplace manifests | Claude Code |
 | `.github/workflows/judge.yml` | judges pull requests with main's tests | GitHub |
+| `docs/` | notes, including related work | yes |
 | `harness.yaml` | which parts are portable | |
 
 ## License

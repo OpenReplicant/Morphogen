@@ -7,6 +7,7 @@ portable:
     standard: Model Context Protocol
   - path: strategies/      # improvement strategy cards (Markdown with front matter)
   - path: samples/
+  - path: docs/            # notes (Markdown)
 claude-code:
   - path: .claude-plugin/plugin.json
   - path: .mcp.json        # how Claude Code starts the MCP server
