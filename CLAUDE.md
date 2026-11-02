@@ -29,9 +29,10 @@ cd server && uv run --project . python -m unittest -v tests.test_morphogen tests
 claude plugin validate . && claude plugin validate .claude-plugin/plugin.json
 ```
 
-Skill changes: also run the eval suite (costs money; start with one case):
+Skill changes: also run the eval suite (costs money; start with one case;
+run from a clean copy, see evals/README.md):
 ```
-claude plugin eval . --case 06-strategy-after-stall --scaffold --mocks off --allow-tools mcp__plugin_morphogen_morphogen --no-publish
+claude plugin eval . --case 06-strategy-after-stall --scaffold --mocks off --judge-model sonnet --allow-tools mcp__plugin_morphogen_morphogen --no-publish
 ```
 
 ## Install the judge from GitHub, not from this folder
@@ -47,7 +48,8 @@ from the clone itself, so the judge would be the candidate.
   nothing kept between runs. CI: run the judge workflow by hand.
 
 ## Not yet verified
-The eval suite. Verify it before trusting self-improvement runs.
+The eval suite beyond one run of 02-map-baseline (passed). Verify the rest,
+especially 03-evolve-one-round, before trusting self-improvement runs.
 
 ## Releases
 Bump version in .claude-plugin/plugin.json and in the marketplace entry,
