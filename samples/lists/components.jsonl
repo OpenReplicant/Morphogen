@@ -1,10 +1,18 @@
-{"id":"comp/claude-code","notes":"the first harness; others later through portable skills and MCP","source":"src/own","status":"in use","type":"type/agent-harness"}
-{"id":"comp/docker-sandbox","source":"src/docker-hub","status":"in use when Docker is available","type":"type/sandbox","version":"python:3.12-slim"}
-{"capabilities":{"enforced_append_only":false,"tamper_evident":true},"id":"comp/files-evidence-log","source":"src/own","status":"in use","type":"type/evidence-log"}
-{"id":"comp/files-list-store","source":"src/own","status":"in use","type":"type/list-store"}
-{"id":"comp/morphogen-judge","source":"src/own","status":"in use","type":"type/judge"}
-{"id":"comp/postgres-backend","notes":"recommended backend: concurrent writers, roles, insert-only evidence","source":"src/own","status":"planned","type":"type/list-store"}
-{"after":"Darwin G\u00f6del Machine","card":"strategies/archive-search.md","id":"comp/strategy-archive-search","source":"src/own","status":"available","type":"type/improvement-strategy"}
-{"id":"comp/strategy-auto","notes":"selects among the cards below from evidence","source":"src/own","status":"in use","type":"type/improvement-strategy"}
-{"card":"strategies/hill-climb.md","id":"comp/strategy-hill-climb","source":"src/own","status":"available","type":"type/improvement-strategy"}
-{"after":"delta debugging","card":"strategies/simplify.md","id":"comp/strategy-simplify","source":"src/own","status":"available","type":"type/improvement-strategy"}
+{"id": "comp/claude-code", "notes": "the first harness; others later through portable skills and MCP", "source": "src/anthropic", "status": "in use", "system": "claude-code", "type": "type/agent-harness"}
+{"id": "comp/docker-sandbox", "source": "src/docker-hub", "status": "in use when Docker is available", "type": "type/sandbox", "version": "python:3.12-slim"}
+{"capabilities": {"enforced_append_only": false, "tamper_evident": true}, "id": "comp/files-evidence-log", "source": "src/own", "status": "in use", "type": "type/evidence-log"}
+{"id": "comp/files-list-store", "source": "src/own", "status": "in use", "type": "type/list-store"}
+{"id": "comp/git", "notes": "record version", "source": "src/host", "status": "in use", "type": "type/vcs"}
+{"id": "comp/host-os", "notes": "Linux or macOS; record name and version", "source": "src/host", "status": "in use", "type": "type/os"}
+{"id": "comp/morphogen-judge", "source": "src/own", "status": "in use", "type": "type/judge"}
+{"id": "comp/morphogen-plugin", "source": "src/own", "status": "in use", "system": "morphogen", "type": "type/plugin"}
+{"id": "comp/no-sandbox", "notes": "trials run directly on the machine: no network isolation, writable tree", "source": "src/own", "status": "in use when no container engine is available", "type": "type/sandbox"}
+{"id": "comp/podman-sandbox", "source": "src/docker-hub", "status": "in use when Podman is available and Docker is not", "type": "type/sandbox", "version": "python:3.12-slim"}
+{"id": "comp/postgres-backend", "notes": "recommended backend: concurrent writers, roles, insert-only evidence", "source": "src/own", "status": "planned", "type": "type/list-store"}
+{"id": "comp/python", "notes": "record version", "source": "src/host", "status": "in use", "type": "type/python-runtime"}
+{"id": "comp/session-model", "notes": "whichever model the session runs; not fixed", "source": "src/anthropic", "status": "in use", "type": "type/llm"}
+{"after": "Darwin Gödel Machine", "card": "strategies/archive-search.md", "id": "comp/strategy-archive-search", "source": "src/own", "status": "available", "type": "type/improvement-strategy"}
+{"id": "comp/strategy-auto", "notes": "selects among the cards below from evidence", "source": "src/own", "status": "in use", "type": "type/improvement-strategy"}
+{"card": "strategies/hill-climb.md", "id": "comp/strategy-hill-climb", "source": "src/own", "status": "available", "type": "type/improvement-strategy"}
+{"after": "delta debugging", "card": "strategies/simplify.md", "id": "comp/strategy-simplify", "source": "src/own", "status": "available", "type": "type/improvement-strategy"}
+{"id": "comp/this-machine", "source": "src/host", "status": "in use", "system": "host", "type": "type/machine"}

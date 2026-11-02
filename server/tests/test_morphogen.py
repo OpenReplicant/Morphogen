@@ -152,6 +152,43 @@ class SimulatedTargets(unittest.TestCase):
             p.close()
 
 
+class SelfMap(unittest.TestCase):
+    """The map init_project seeds: Morphogen, Claude Code and the host. Also the example for other maps."""
+
+    REFS = {"systems": ["slots"], "slots": ["system", "accepts", "filled_by"], "components": ["type", "source", "system"]}
+
+    def test_references_resolve_and_slots_point_back(self):
+        lists = {f.stem: [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+                 for f in (project.SAMPLES / "lists").glob("*.jsonl")}
+        ids = {e["id"] for rows in lists.values() for e in rows}
+        for kind, fields in self.REFS.items():
+            for e in lists[kind]:
+                for field in fields:
+                    refs = e.get(field) or []
+                    for r in refs if isinstance(refs, list) else [refs]:
+                        self.assertIn(r, ids, f"{kind} {e['id']}: {field} -> {r} does not exist")
+        systems = {e["id"]: e for e in lists["systems"]}
+        self.assertEqual(set(systems), {"morphogen", "claude-code", "host"})
+        for slot in lists["slots"]:
+            self.assertIn(slot["id"], systems[slot["system"]]["slots"], f"{slot['id']} is not listed by its system")
+        for system in systems.values():
+            self.assertIn(system.get("interface"), ("direct", "simulated"), system["id"])
+
+    def test_init_project_seeds_it(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            project.init_project(tmp)
+            lists, _ = project.stores(tmp, project.load_config(tmp))
+            self.assertEqual({e["id"] for e in lists.query("systems")}, {"morphogen", "claude-code", "host"})
+            # Morphogen -> its harness slot -> Claude Code, which runs on the host.
+            harness = lists.get("slots", "morphogen/harness")
+            self.assertEqual(lists.get("components", harness["filled_by"])["system"], "claude-code")
+            host = lists.get("slots", "claude-code/host")
+            self.assertEqual(lists.get("components", host["filled_by"])["system"], "host")
+        finally:
+            shutil.rmtree(tmp)
+
+
 class Observer(unittest.TestCase):
     def make(self, collected):
         return observed_project(collected)
@@ -187,3 +224,55 @@ class Runners(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     runner.sandbox_mode({"sandbox": engine})
         self.assertIn(runner.sandbox_mode({"sandbox": "auto"}), ("docker", "podman", "none"))
+
+
+class ContainerGuarantees(unittest.TestCase):
+    """What the container runners claim in their capabilities, checked by running commands.
+
+    Skipped for engines that are not installed and answering.
+    """
+
+    def check(self, engine):
+        from morphogen import runner
+        if not runner.available(engine):
+            self.skipTest(f"{engine} is not available")
+        caps = runner.capabilities({"sandbox": engine})
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "f.txt").write_text("base")
+            cfg = {"sandbox": engine}
+
+            def py(code, **kw):
+                return runner.run(f"python -c {json.dumps(code)}", tmp, cfg, **kw)
+
+            r = py("print(open('f.txt').read())")
+            self.assertEqual((r.rc, r.out.strip()), (0, "base"), r.err)
+            r = py("import os; print(os.environ['X'])", env={"X": "y"})
+            self.assertEqual(r.out.strip(), "y", r.err)
+            r = py("import sys; print(sys.stdin.read())", stdin="in")
+            self.assertEqual(r.out.strip(), "in", r.err)
+            self.assertTrue(caps["read_only_tree"])
+            r = py("open('f.txt', 'w').write('changed')")
+            self.assertNotEqual(r.rc, 0)
+            self.assertEqual((tmp / "f.txt").read_text(), "base")
+            r = py("open('new.txt', 'w').write('x')")
+            self.assertNotEqual(r.rc, 0)
+            self.assertFalse((tmp / "new.txt").exists())
+            self.assertTrue(caps["network_isolated"])
+            r = py("import socket; socket.create_connection(('1.1.1.1', 53), 3)")
+            self.assertNotEqual(r.rc, 0)
+            self.assertTrue(caps["resource_limits"])
+            r = py("b = bytearray(2 * 1024 ** 3); print(len(b))")
+            self.assertNotEqual(r.rc, 0, "allocated 2 GiB under a 1 GiB limit")
+            r = py("import tempfile, os; p = os.path.join(tempfile.gettempdir(), 'mg'); open(p, 'w').write('1')")
+            self.assertEqual(r.rc, 0, r.err)
+            r = py("import tempfile, os; print(os.path.exists(os.path.join(tempfile.gettempdir(), 'mg')))")
+            self.assertEqual(r.out.strip(), "False", "a file written by one run was visible to the next")
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_docker(self):
+        self.check("docker")
+
+    def test_podman(self):
+        self.check("podman")

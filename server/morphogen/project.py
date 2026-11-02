@@ -40,7 +40,7 @@ def init_project(root: Path) -> dict:
             for line in f.read_text().splitlines():
                 if line.strip():
                     lists.put(f.stem, json.loads(line))
-        done.append("seeded the six lists with Morphogen's own map")
+        done.append("seeded the lists with the self-map: morphogen, claude-code and host")
     if not (root / "catalogs.yaml").exists():
         shutil.copy(SAMPLES / "catalogs.yaml", root / "catalogs.yaml")
         done.append("wrote catalogs.yaml")

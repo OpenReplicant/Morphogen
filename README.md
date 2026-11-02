@@ -220,9 +220,20 @@ sixth:
 | sources | where parts come from: PyPI, the standard library, this project | |
 | components | a specific part, with version; can itself be a system | type, source |
 
-`init_project` seeds them with Morphogen's own map, including its judge, its
-backends and its improvement strategies, so Morphogen can treat its own parts
-as things to improve. They are JSONL files: commit them with your code.
+`init_project` seeds them with a self-map of three systems, so Morphogen
+starts from a worked example instead of a blank page:
+
+| System | Slots | Depends on |
+|---|---|---|
+| `morphogen` | judge, evidence log, list store, improvement strategy, sandbox, harness, host | `claude-code` (harness), `host` (sandbox, Python, git) |
+| `claude-code` | model, plugins, host | `host`; hosts `morphogen` as a plugin |
+| `host` | OS, container engine, Python, git | |
+
+A dependency is a slot filled by a component that is itself a system
+(`"system": "claude-code"` on `comp/claude-code`). The host entries are
+generic; mapping fills in this machine's actual values. Morphogen can then
+treat its own parts, and what it stands on, as things to improve. The lists
+are JSONL files: commit them with your code.
 
 Behind the lists and the evidence log are ports with a files backend today.
 Each backend declares its capabilities (for example whether append-only is
@@ -322,7 +333,9 @@ else. The rule that matters: **the installed plugin is the judge, the
 repository is the candidate.**
 
 1. Run Claude Code in a clone of this repository, with the plugin installed
-   from the marketplace (the stable version).
+   from the GitHub marketplace (the stable version). Do not add the clone
+   itself as a marketplace: the plugin would then run from the clone, and the
+   judge would be the candidate.
 2. `/morphogen:evolve` builds candidates on branches; workers use worktrees.
    The installed version's server judges them; candidates cannot change it.
 3. You approve the merge. Open a pull request: the `judge` workflow re-runs
@@ -393,6 +406,12 @@ On GitHub, `.github/workflows/judge.yml` runs the tests on every push to main
 and judges every pull request with main's tests and samples. Make `judge` a
 required status check for main.
 
+To run the suites with trials inside a container, set
+`MORPHOGEN_TEST_SANDBOX=docker` (or `podman`). `ContainerGuarantees` checks
+that a container runner really has no network, a read-only tree, a memory
+limit and nothing kept between runs; it skips engines that are not installed.
+In CI this is the `containers` job, started by hand.
+
 ## Limits
 
 - On a local machine an agent with shell access can reach any file you can.
@@ -413,7 +432,7 @@ required status check for main.
 | `skills/` | `onboard`, `map`, `evolve`, `playbook` | yes (Agent Skills) |
 | `server/` | MCP server, judge, backends, tests | yes (MCP) |
 | `strategies/` | improvement strategy cards | yes |
-| `samples/` | example config and intent, catalogs, Morphogen's own map, the slow-script target | yes |
+| `samples/` | example config and intent, catalogs, the self-map, the slow-script target | yes |
 | `evals/` | `claude plugin eval` suite | Claude Code |
 | `agents/` | `explorer`, `worker`, `reviewer` | Claude Code |
 | `hooks/` | session briefing, budget, traces | Claude Code |

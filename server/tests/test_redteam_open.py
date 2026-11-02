@@ -16,7 +16,7 @@ bench seed per round; give each run its own TMPDIR and HOME without a sandbox.
 
 import unittest
 
-from tests.fixture import SampleProject
+from tests.fixture import SANDBOX, SampleProject
 
 # 1. Behave correctly everywhere except under the benchmark, which never checks
 #    output. MORPHOGEN_SEED is set for measured runs only; the check and the
@@ -43,8 +43,8 @@ FAKE_GEN = '''def text(seed, n):
 
 # 3. Cache results on disk across processes: one judge call uses the same
 #    bench seed for every round, so after the first run every run is a hit.
-#    Applies to sandbox: none (the fixture's setting); a container runner with
-#    --rm and a read-only tree should stop it.
+#    Applies to sandbox: none only. Under Docker each run is a fresh container
+#    (--rm, read-only tree), so the cache never hits and the judge fails it.
 DISK_CACHE_TAIL = '''
 import hashlib as _h, json as _j, os as _o, tempfile as _tf
 _SLOW = top_words
@@ -85,7 +85,8 @@ class OpenCheats(unittest.TestCase):
     def test_shadow_a_harness_module_with_a_package(self):
         self.assertFails("gen-package", {"gen/__init__.py": FAKE_GEN})
 
-    @unittest.expectedFailure
+    # Open only without a sandbox; under a container runner the judge already catches it.
+    @(unittest.expectedFailure if SANDBOX == "none" else (lambda f: f))
     def test_cache_results_on_disk_across_runs(self):
         self.assertFails("disk-cache", {"topwords.py": self.slow + DISK_CACHE_TAIL})
 

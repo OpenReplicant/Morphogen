@@ -1,6 +1,12 @@
-{"description":"Runs the top-level LLM loop with tools and skills","id":"type/agent-harness"}
-{"description":"Append-only record of claims and their support","id":"type/evidence-log"}
-{"description":"Chooses where the next candidate starts and what to try","id":"type/improvement-strategy"}
-{"description":"Scores a candidate against a base by rules the candidate cannot change","id":"type/judge"}
-{"description":"Stores the six lists by id with references","id":"type/list-store"}
-{"description":"Isolated place to run untrusted trials","id":"type/sandbox"}
+{"description": "Runs the top-level LLM loop with tools and skills", "id": "type/agent-harness"}
+{"description": "Append-only record of claims and their support", "id": "type/evidence-log"}
+{"description": "Chooses where the next candidate starts and what to try", "id": "type/improvement-strategy"}
+{"description": "Scores a candidate against a base by rules the candidate cannot change", "id": "type/judge"}
+{"description": "Stores the six lists by id with references", "id": "type/list-store"}
+{"description": "A language model the harness calls", "id": "type/llm"}
+{"description": "A computer, VM or container that runs other systems", "id": "type/machine"}
+{"description": "An operating system", "id": "type/os"}
+{"description": "A bundle of skills, agents, hooks and MCP servers loaded by a harness", "id": "type/plugin"}
+{"description": "A Python interpreter with a package manager", "id": "type/python-runtime"}
+{"description": "Isolated place to run untrusted trials", "id": "type/sandbox"}
+{"description": "Version control", "id": "type/vcs"}

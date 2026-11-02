@@ -9,8 +9,7 @@ portable:
   - path: samples/
   - path: docs/            # notes (Markdown)
 claude-code:
-  - path: .claude-plugin/plugin.json
-  - path: .mcp.json        # how Claude Code starts the MCP server
+  - path: .claude-plugin/plugin.json   # also how Claude Code starts the MCP server (mcpServers)
   - path: hooks/           # session briefing, budget, traces
   - path: agents/          # subagent definitions (explorer, worker, reviewer)
 github:

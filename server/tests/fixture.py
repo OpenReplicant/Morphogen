@@ -1,5 +1,10 @@
-"""A throwaway git project with the slow-script sample committed on main."""
+"""A throwaway git project with the slow-script sample committed on main.
 
+Trials run with `sandbox: none` unless MORPHOGEN_TEST_SANDBOX names another
+runner (docker or podman), so the same suites can be run inside a container.
+"""
+
+import os
 import shutil
 import subprocess
 import tempfile
@@ -10,6 +15,7 @@ from morphogen import project
 from morphogen.config import load_config
 
 TARGET = "targets/slow-script"
+SANDBOX = os.environ.get("MORPHOGEN_TEST_SANDBOX", "none")
 
 
 def git(cwd, *args):
@@ -27,7 +33,7 @@ class SampleProject:
         project.init_project(self.repo)
         project.install_sample(self.repo, "slow-script", None)
         cfg_file = self.repo / "morphogen.yaml"
-        cfg_file.write_text(cfg_file.read_text().replace("sandbox: auto", "sandbox: none")
+        cfg_file.write_text(cfg_file.read_text().replace("sandbox: auto", f"sandbox: {SANDBOX}")
                             .replace("trials_per_day: 20", f"trials_per_day: {trials_per_day}"))
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "base")
