@@ -175,9 +175,12 @@ How it measures:
 - A separate wrapper process runs the workload and reads its resource usage
   from the operating system, so code under test cannot fake its own timing.
 - Base and candidate run in paired rounds, alternating which goes first, after
-  a warm-up. The median paired gain must clear the bar, and a sign test must
-  reject luck at p ≤ 0.01. Close calls get more rounds, up to `max_repeats`.
-  In an A/A test (identical code on both sides) the judge passed
+  a warm-up. The median paired gain must clear the bar, and a sign test on
+  the untied pairs must reject luck at p ≤ 0.01. Close calls get more rounds,
+  up to `max_repeats`. For scores that often tie or can be 0 (a task solved
+  or not), set `gain: absolute` and `aggregate: mean` on the metric; a jump
+  in success rate from 30% to 70% is then detected about 3 times in 4 within
+  30 rounds. In an A/A test (identical code on both sides) the judge passed
   0 of 12 times, while a real speed-up passed (2026-11-02).
 - Timing and correctness are checked in the same runs: the harness prints its
   result, and the judge compares each timed run's output (all but the line of

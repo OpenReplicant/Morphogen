@@ -19,9 +19,10 @@ What makes it hard to fool:
 - Every timed run must print what the base prints on the same input, so code
   cannot do less work only when it is being timed.
 - Runs are paired and alternate order between rounds (ABBA) after a warm-up.
-  A gain counts only if the median paired gain clears the bar and a sign test
-  says the candidate wins more pairs than luck explains (p <= 0.01); close
-  calls get more rounds, up to a limit.
+  A gain counts only if the median paired gain (or the mean, for scores that
+  often tie) clears the bar and a sign test says the candidate wins more
+  untied pairs than luck explains (p <= 0.01); close calls get more rounds,
+  up to a limit.
 - Every verdict is written to the evidence log as `trust: measured, by: judge`.
 """
 
@@ -256,52 +257,65 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
         outputs.append(results)
 
 
-def _gain(b: float, c: float, lower: bool) -> float:
+def _gain(b: float, c: float, lower: bool, absolute: bool = False) -> float:
+    """Improvement of c over b: relative to b (the default), or in the metric's own units."""
+    if absolute:
+        return b - c if lower else c - b
     if not b:
         return 0.0
     return (b - c) / b if lower else (c - b) / b
 
 
 def _sign_p(wins: int, n: int) -> float:
-    """One-sided sign test: chance of at least `wins` of `n` pairs favouring the candidate by luck."""
+    """One-sided sign test: chance of at least `wins` of `n` pairs favouring the candidate by luck.
+    Callers pass n without tied pairs, as the sign test requires."""
     return sum(math.comb(n, j) for j in range(wins, n + 1)) / 2 ** n if n else 1.0
 
 
-def _paired(bs: list[float], cs: list[float], lower: bool, n: int = 2000) -> dict:
-    gains = [_gain(b, c, lower) for b, c in zip(bs, cs)]
+def _paired(bs: list[float], cs: list[float], lower: bool, n: int = 2000, absolute: bool = False,
+            aggregate: str = "median") -> dict:
+    gains = [_gain(b, c, lower, absolute) for b, c in zip(bs, cs)]
+    agg = statistics.fmean if aggregate == "mean" else statistics.median
     rng = random.Random(0)
-    draws = sorted(statistics.median(rng.choices(gains, k=len(gains))) for _ in range(n))
-    return {"gains": gains, "point": statistics.median(gains),
+    draws = sorted(agg(rng.choices(gains, k=len(gains))) for _ in range(n))
+    return {"gains": gains, "point": agg(gains),
             "ci95": (draws[int(0.025 * n)], draws[int(0.975 * n) - 1])}
 
 
 def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tuple[dict, bool]:
     """Per-metric comparison over paired rounds, and whether more rounds could change the verdict.
 
-    Primary metric: passes when the median paired gain clears the bar and a sign
-    test says the candidate wins more pairs than luck explains (p <= alpha).
+    Primary metric: passes when the paired gain (median by default, or `aggregate: mean`) clears
+    the bar and a sign test says the candidate wins more pairs than luck explains (p <= alpha).
     Other metrics: fail only when a sign test says they regress beyond their limit.
+    Tied pairs say nothing about which side is better and are left out of the sign test. Gains are
+    relative to the base by default; `gain: absolute` uses the metric's units (for scores that can be 0).
     """
     out, undecided = {}, False
     for metric, ms in metrics_spec.items():
         if metric not in bs or metric not in cs:
             raise JudgeError(f"no measurements for {metric!r}")
         lower = ms.get("direction", "lower") == "lower"
-        pr = _paired(bs[metric], cs[metric], lower)
+        aggregate = ms.get("aggregate", "median")
+        if aggregate not in ("median", "mean") or ms.get("gain", "relative") not in ("relative", "absolute"):
+            raise JudgeError(f"{metric}: aggregate must be median or mean, gain relative or absolute")
+        pr = _paired(bs[metric], cs[metric], lower, absolute=ms.get("gain") == "absolute", aggregate=aggregate)
         n = len(pr["gains"])
+        untied = sum(g != 0 for g in pr["gains"])
         if ms.get("primary"):
             bar = float(ms.get("min_improvement", 0.05))
-            p = _sign_p(sum(g > 0 for g in pr["gains"]), n)
+            p = _sign_p(sum(g > 0 for g in pr["gains"]), untied)
             ok = pr["point"] >= bar and p <= alpha
             undecided |= (not ok) and pr["point"] >= bar / 2
         else:
             limit = float(ms.get("max_regression", 0.05))
-            p = _sign_p(sum(g < -limit for g in pr["gains"]), n)
+            p = _sign_p(sum(g < -limit for g in pr["gains"]), untied)
             ok = not (p <= alpha)
             undecided |= ok and pr["point"] < -limit
         out[metric] = {"base": statistics.median(bs[metric]), "candidate": statistics.median(cs[metric]),
                        "gain": round(pr["point"], 4), "ci95": [round(x, 4) for x in pr["ci95"]],
-                       "sign_test_p": round(p, 5), "ok": ok, "primary": bool(ms.get("primary")), "runs": n}
+                       "sign_test_p": round(p, 5), "ok": ok, "primary": bool(ms.get("primary")), "runs": n,
+                       "tied": n - untied}
     return out, undecided
 
 
