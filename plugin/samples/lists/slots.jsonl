@@ -1,0 +1,5 @@
+{"id":"morphogen/evidence-log","system":"morphogen","accepts":["type/evidence-log"],"interface":"append, query, verify; never update or delete","filled_by":"comp/files-evidence-log"}
+{"id":"morphogen/harness","system":"morphogen","accepts":["type/agent-harness"],"interface":"skills, subagents, hooks, MCP client","filled_by":"comp/claude-code"}
+{"id":"morphogen/judge","system":"morphogen","accepts":["type/judge"],"interface":"judge(target, base, candidate) -> verdict","filled_by":"comp/morphogen-judge"}
+{"id":"morphogen/list-store","system":"morphogen","accepts":["type/list-store"],"interface":"get, put, query, follow, dump, load","filled_by":"comp/files-list-store"}
+{"id":"morphogen/sandbox","system":"morphogen","accepts":["type/sandbox"],"interface":"run(cmd) with no network and a read-only tree","filled_by":"comp/docker-sandbox"}

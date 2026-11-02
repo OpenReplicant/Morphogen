@@ -1,0 +1,17 @@
+# Morphogen settings for this project. The operator owns this file.
+
+trunk: main              # the branch that changes only by judged, approved merges
+autonomy: 2              # 1 assist · 2 propose (every merge needs the operator) · 3 merge free changes · 4 autonomous
+data_dir: .morphogen     # lists, evidence log, journal, traces
+
+backends:
+  default: files         # files (this version); postgres is planned as the recommended backend
+
+sandbox: auto            # auto (Docker if available) · docker (required) · none (run trials directly)
+sandbox_image: python:3.12-slim
+
+budget:
+  tool_calls: 0          # per session; 0 means no limit
+  trials_per_day: 20
+
+targets: []              # paths to directories with a target.yaml

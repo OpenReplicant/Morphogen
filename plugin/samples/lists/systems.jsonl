@@ -1,0 +1,1 @@
+{"id":"morphogen","description":"An agent that maps, measures and improves systems, itself included","slots":["morphogen/harness","morphogen/judge","morphogen/list-store","morphogen/evidence-log","morphogen/sandbox"],"judge":"evidence verdicts by the judge"}

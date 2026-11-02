@@ -1,0 +1,16 @@
+# Which parts of this plugin work in any agent harness, and which are written
+# for one. A packager can wrap the portable parts per harness and swap the rest.
+portable:
+  - path: skills/          # Agent Skills format (SKILL.md)
+    standard: agentskills.io
+  - path: server/          # Python package and MCP server
+    standard: Model Context Protocol
+  - path: samples/
+claude-code:
+  - path: .claude-plugin/plugin.json
+  - path: .mcp.json        # how Claude Code starts the MCP server
+  - path: hooks/           # session briefing, budget, traces
+  - path: agents/          # subagent definitions (explorer, worker, reviewer)
+notes:
+  - Skills refer to MCP tools by their short names (doctor, judge, ...), which other harnesses also expose.
+  - Skills mention Claude Code subagents by name; harnesses without subagents can follow the same steps inline.

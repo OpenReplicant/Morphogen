@@ -1,0 +1,23 @@
+# How the judge scores this target. The judge reads this file, and the harness
+# files listed below, from the BASE commit, so a candidate cannot change them.
+name: slow-script
+description: Most frequent words in a text. Correct but quadratic; make it faster without changing results.
+
+# Files that belong to the judge, not to the code under improvement.
+harness: [bench.py, gen.py, test_topwords.py]
+
+check: python -m unittest -q test_topwords
+
+# Outputs must match the base on inputs generated from seeds only the judge knows.
+equivalence:
+  gen: python gen.py {seed} 3000
+  run: python solve.py
+  cases: 5
+
+measure:
+  run: python bench.py
+  repeats: 3
+  metrics:
+    seconds: {direction: lower, primary: true, min_improvement: 0.10}
+
+timeout: 120

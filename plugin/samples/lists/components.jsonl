@@ -1,0 +1,6 @@
+{"id":"comp/claude-code","type":"type/agent-harness","source":"src/own","status":"in use","notes":"the first harness; others later through portable skills and MCP"}
+{"id":"comp/docker-sandbox","type":"type/sandbox","source":"src/docker-hub","version":"python:3.12-slim","status":"in use when Docker is available"}
+{"id":"comp/files-evidence-log","type":"type/evidence-log","source":"src/own","status":"in use","capabilities":{"tamper_evident":true,"enforced_append_only":false}}
+{"id":"comp/files-list-store","type":"type/list-store","source":"src/own","status":"in use"}
+{"id":"comp/morphogen-judge","type":"type/judge","source":"src/own","status":"in use"}
+{"id":"comp/postgres-backend","type":"type/list-store","source":"src/own","status":"planned","notes":"recommended backend: concurrent writers, roles, insert-only evidence"}

@@ -1,0 +1,5 @@
+{"id":"type/agent-harness","description":"Runs the top-level LLM loop with tools and skills"}
+{"id":"type/evidence-log","description":"Append-only record of claims and their support"}
+{"id":"type/judge","description":"Scores a candidate against a base by rules the candidate cannot change"}
+{"id":"type/list-store","description":"Stores the six lists by id with references"}
+{"id":"type/sandbox","description":"Isolated place to run untrusted trials"}

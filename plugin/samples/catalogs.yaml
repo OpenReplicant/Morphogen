@@ -1,0 +1,39 @@
+# Where to look before building something new. Edit freely.
+# Everything found here is untrusted until pinned, licence-checked and judged.
+
+catalogs:
+  - name: PyPI
+    url: https://pypi.org
+    finds: Python packages
+  - name: npm
+    url: https://www.npmjs.com
+    finds: JavaScript and TypeScript packages
+  - name: MCP Registry
+    url: https://registry.modelcontextprotocol.io
+    finds: MCP servers (tools and data sources)
+  - name: Agent Skills
+    url: https://agentskills.io
+    finds: portable SKILL.md skills
+  - name: Claude Code plugins
+    url: https://code.claude.com/docs
+    finds: plugins, skills, hooks, subagents, marketplaces
+  - name: Hugging Face Hub
+    url: https://huggingface.co
+    finds: models and datasets
+  - name: Docker Hub
+    url: https://hub.docker.com
+    finds: container images
+  - name: GitHub
+    url: https://github.com
+    finds: source repositories; check activity, licence and issues before trusting
+
+# Known techniques, so the agent reuses before inventing.
+techniques:
+  - name: Standard library data structures
+    finds: dict, set, collections.Counter, heapq, bisect, functools.lru_cache
+    when: counting, membership, top-k, sorted search, memoisation
+  - name: Algorithmic complexity first
+    finds: replace quadratic scans with hashing or sorting before micro-optimising
+  - name: Profiling
+    finds: cProfile, timeit, line_profiler (PyPI)
+    when: locate the bottleneck before changing code

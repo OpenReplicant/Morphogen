@@ -192,6 +192,24 @@ components:
     provides: [catalogs]
     lock: free
 
+  - name: plugin
+    kind: Component
+    description: Minimum viable Morphogen as a Claude Code plugin - skills (onboard, map, evolve, playbook), an MCP server with lists, hash-chained evidence and a judge, subagents, hooks, and a slow-script sample target.
+    path: plugin/
+    provides: [as-built-map, gap-closure, regression-gate, archive, catalogs]
+    version: 0.1.0 (mcp 2.3.0, pyyaml 6.0.3; locked in plugin/server/uv.lock)
+    kpis:
+      - metric: plugin tests passing
+        target: pass
+        measured_by: "prose: cd plugin/server && uv run python -m unittest tests.test_morphogen (needs uv and network; not yet a cmd: KPI)"
+    lock: gated
+
+  - name: plugin-marketplace
+    kind: Resource
+    description: Claude Code marketplace manifest listing the plugin, so it installs with /plugin marketplace add.
+    path: .claude-plugin/
+    lock: gated
+
   - name: research
     kind: Resource
     description: Working notes and theses from operator sessions; candidate inputs to the intent, not intent.
