@@ -55,6 +55,55 @@ def _remember(fn):
 QUIET_OBSERVER = 'import json\nprint(json.dumps({"latency_ms": 0.000001}))\n'
 
 
+# Behave correctly everywhere except under the benchmark. MORPHOGEN_SEED is set
+# for timed runs only. Stopped by checking each timed run's output against the base's.
+SNIFF_TAIL = '''
+import os as _os
+_SLOW = top_words
+
+
+def top_words(text, k):
+    if "MORPHOGEN_SEED" in _os.environ:
+        return []
+    return _SLOW(text, k)
+'''
+
+# Shadow a harness module with a package: Python prefers gen/ to gen.py, so
+# bench.py would time a fake input. Stopped by refusing files that shadow
+# harness modules.
+FAKE_GEN = '''def text(seed, n):
+    return "a b c"
+'''
+
+# Cache results on disk across runs. Stopped by a fresh seed every round, and,
+# without a container, a private TMPDIR per run.
+DISK_CACHE_TAIL = '''
+import hashlib as _h, json as _j, os as _o, tempfile as _tf
+_SLOW = top_words
+
+
+def top_words(text, k):
+    p = _o.path.join(_tf.gettempdir(), "mg_" + _h.sha1((text + str(k)).encode()).hexdigest())
+    try:
+        with open(p) as f:
+            return [tuple(x) for x in _j.load(f)]
+    except (OSError, ValueError):
+        r = _SLOW(text, k)
+        with open(p, "w") as f:
+            _j.dump(r, f)
+        return r
+'''
+
+
+# Swap the benchmark's input from inside the candidate: when imported by
+# bench.py, replace its `text` with a trivial one. Stopped by checking each
+# timed run's output against the base's.
+SWAP_INPUT_HEAD = '''import __main__ as _main
+if getattr(_main, "__file__", "").endswith("bench.py"):
+    _main.text = lambda seed, n: "a b c"
+'''
+
+
 class RedTeam(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -104,6 +153,21 @@ class RedTeam(unittest.TestCase):
         cheat = SPECIAL_CASE + self.slow.replace("def top_words", "@_remember\ndef top_words")
         self.assertFails("memoise", {"topwords.py": cheat})
 
+
+
+    def test_sniff_the_benchmark_environment(self):
+        self.assertFails("env-sniff", {"topwords.py": self.slow + SNIFF_TAIL})
+
+    def test_shadow_a_harness_module_with_a_package(self):
+        r = self.assertFails("gen-package", {"gen/__init__.py": FAKE_GEN})
+        self.assertIn("gen/__init__.py", " ".join(r["reasons"]))
+
+    def test_swap_the_benchmark_input(self):
+        r = self.assertFails("swap-input", {"topwords.py": SWAP_INPUT_HEAD + self.slow})
+        self.assertIn("timed runs gave different output", " ".join(r["reasons"]))
+
+    def test_cache_results_on_disk_across_runs(self):
+        self.assertFails("disk-cache", {"topwords.py": self.slow + DISK_CACHE_TAIL})
 
 
 class ObserverCheats(unittest.TestCase):

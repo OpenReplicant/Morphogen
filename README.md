@@ -161,11 +161,13 @@ cannot change how scoring works or write measured evidence.
 
 A candidate passes only if all of these hold:
 
-1. it adds no files that shadow standard modules or customise the
-   interpreter (`json.py`, `unittest.py`, `sitecustomize.py`, `.pth`);
+1. it adds no files that shadow standard modules, customise the interpreter
+   (`json.py`, `unittest.py`, `sitecustomize.py`, `.pth`) or shadow a harness
+   module (a `gen/` package beside the harness's `gen.py`);
 2. the base's `check` passes on it;
 3. its output matches the base's on freshly generated inputs;
-4. the primary metric improves by at least its bar, by more than chance
+4. every timed run prints what the base prints on the same input;
+5. the primary metric improves by at least its bar, by more than chance
    explains, and no other metric regresses beyond its limit.
 
 How it measures:
@@ -175,17 +177,27 @@ How it measures:
 - Base and candidate run in paired rounds, alternating which goes first, after
   a warm-up. The median paired gain must clear the bar, and a sign test must
   reject luck at p ≤ 0.01. Close calls get more rounds, up to `max_repeats`.
-  In an A/A test (identical code on both sides) this passed 0 of 12 times,
-  while a real speed-up passed 5 of 5.
-- Seeds are fresh and random for every run and recorded afterwards, so there
-  is nothing to read in advance.
+  In an A/A test (identical code on both sides) the judge passed
+  0 of 12 times, while a real speed-up passed (2026-11-02).
+- Timing and correctness are checked in the same runs: the harness prints its
+  result, and the judge compares each timed run's output (all but the line of
+  reported metrics) with the base's. Code that can tell it is being timed
+  gains nothing by doing less. A workload whose output varies run to run can
+  opt out with `measure.same_output: false`.
+- Every round gets a fresh random seed, recorded afterwards, so there is
+  nothing to read in advance and nothing one round can learn for the next.
+  Without a container, each run of the code under test also gets its own
+  empty `TMPDIR` and `HOME`.
 - With Docker, every command runs in a container with no network, a read-only
   tree and resource limits.
 
 `server/tests/test_redteam.py` holds known ways to cheat: patching the timer,
 printing a fake measurement, rigging or deleting the harness, lowering the bar
 in `target.yaml`, shadowing `unittest` or `json` (as a file or a package),
-`sitecustomize`, memoising. Every one must fail. A new cheat that passes is a
+`sitecustomize`, memoising, shadowing a harness module with a package,
+behaving differently when the benchmark's environment is set, swapping the
+benchmark's input from inside the candidate, caching results on disk across
+runs, and tampering with the observer. Every one must fail. A new cheat that passes is a
 judge bug: add it there first, then fix the judge.
 
 ## Evidence and trust

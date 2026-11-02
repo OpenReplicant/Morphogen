@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,9 +80,13 @@ class Result:
 
 
 def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict | None = None,
-        timeout: int = 300) -> Result:
+        timeout: int = 300, private: bool = False) -> Result:
+    """Run `cmd` in `cwd`. `private`: for code under test. In a container every run is fresh
+    anyway; without one, the run gets its own empty TMPDIR and HOME, removed afterwards, so
+    nothing it writes there reaches the next run."""
     mode = sandbox_mode(cfg)
     env = {"PYTHONDONTWRITEBYTECODE": "1", **(env or {})}
+    scratch = None
     if mode in ("docker", "podman"):
         mount = f"{cwd}:/w:ro" + (",Z" if mode == "podman" else "")  # Z: SELinux relabel for rootless Podman
         args = [mode, "run", "--rm", "-i", "--network", "none", "--memory", "1g", "--cpus", "1",
@@ -93,6 +98,12 @@ def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict |
     else:
         args = ["sh", "-c", cmd]
         full_env = {**os.environ, **env}
+        if private:
+            scratch = Path(tempfile.mkdtemp(prefix="morphogen-run-"))
+            (scratch / "tmp").mkdir()
+            (scratch / "home").mkdir()
+            tmp = str(scratch / "tmp")
+            full_env.update({"TMPDIR": tmp, "TEMP": tmp, "TMP": tmp, "HOME": str(scratch / "home")})
     t0 = time.perf_counter()
     try:
         p = subprocess.run(args, cwd=cwd, input=stdin, capture_output=True, text=True,
@@ -100,3 +111,6 @@ def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict |
         return Result(p.returncode, p.stdout, p.stderr, time.perf_counter() - t0)
     except subprocess.TimeoutExpired:
         return Result(124, "", f"timed out after {timeout}s", time.perf_counter() - t0)
+    finally:
+        if scratch:
+            shutil.rmtree(scratch, ignore_errors=True)

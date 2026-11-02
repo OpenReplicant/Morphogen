@@ -101,7 +101,7 @@ def doctor(root: Path) -> dict:
     report["guarantees"] = {
         "judge_outside_project": not inside,
         "timing": "measured outside the process under test",
-        "inputs": "fresh random seeds per judge run; nothing stored to read in advance",
+        "inputs": "a fresh random seed every round; without a container, a private TMPDIR and HOME per run",
         "runner": capabilities(cfg),
         "telemetry": "spans to " + os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"]
                      if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") else "off (set OTEL_EXPORTER_OTLP_ENDPOINT)",
