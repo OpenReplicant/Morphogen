@@ -30,6 +30,26 @@ all of Morphogen's pieces.
   cycles), torque-loop (evidence-gated single-artifact loops), learning-loop,
   MLflow's skill-refinement loop.
 
+## Research
+
+- **ADAS: Automated Design of Agentic Systems** (Hu, Lu, Clune;
+  [arXiv:2408.08435](https://arxiv.org/abs/2408.08435), Aug 2024, revised
+  Mar 2025; [project page](https://shengranhu.com/ADAS)). Meta Agent Search:
+  a meta agent writes new agents as code (prompts, tool use, workflows),
+  drawing on an ever-growing archive of earlier discoveries. Tested on
+  coding, science and maths; the discovered agents beat hand-designed ones
+  and transfer across domains and models. Overlap: an archive-driven search
+  over code, the same shape as `archive-search`, and Morphogen's own
+  agents and skills could be a target. Unlike Morphogen, the search objective
+  is benchmark accuracy reported by the loop itself; the abstract says
+  nothing about cheating or isolating the evaluator. The paper's own
+  scoring method, archive rules and safety handling still need reading.
+- **Darwin Gödel Machine** (same group, 2025; from memory, not yet checked):
+  a coding agent that edits its own code, keeps an open-ended archive, and
+  is scored on coding benchmarks. Reportedly it was caught gaming its
+  evaluation, which makes it a source of cheats for
+  `server/tests/test_redteam.py`.
+
 ## What looks distinctive in Morphogen
 
 None of the above appears to combine:
@@ -54,5 +74,8 @@ None of the above appears to combine:
   performance gaps.
 - Compare agent-gate's receipt format with Morphogen's evidence records before
   they drift into incompatible formats.
+- Read ADAS and the Darwin Gödel Machine papers in full: how candidates are
+  scored, how the archive is kept, and any reported reward hacking to turn
+  into red-team cases.
 - Read autoresearch and auto-optimize closely before positioning; they're the
   nearest in spirit and in form.
