@@ -20,7 +20,9 @@ equivalence:
   cases: 5
 
 # The judge times `run` from outside the process. Judge metrics:
-# wall_seconds, cpu_seconds, max_rss_kb. The primary metric must be one of them.
+# wall_seconds, cpu_seconds, max_rss_kb. The primary metric must be one of them,
+# or an observed.* metric from an observer whose data is collected outside the
+# code under test (measure.observer: {run: ..., collected: outside}).
 measure:
   run: python bench.py
   warmup: 1

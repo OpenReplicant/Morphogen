@@ -15,8 +15,5 @@
     "judge",
     "mcp",
     "platform-engineering"
-  ],
-  "experimental": {
-    "evals": "eval-cases"
-  }
+  ]
 }

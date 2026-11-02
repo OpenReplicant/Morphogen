@@ -11,7 +11,7 @@ strategy: auto           # auto (chosen from evidence) or a card name: hill-clim
 backends:
   default: files         # files (this version); postgres is planned as the recommended backend
 
-sandbox: auto            # auto (Docker if available) · docker (required) · none (run trials directly)
+sandbox: auto            # auto (Docker, then Podman) · docker · podman · none (run trials directly)
 sandbox_image: python:3.12-slim
 
 budget:

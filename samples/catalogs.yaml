@@ -57,3 +57,47 @@ strategies:
   - name: Darwin Gödel Machine
     url: https://arxiv.org/abs/2505.22954
     finds: open-ended archive search (shipped as archive-search)
+
+# Where trials run. Shipped: docker, podman, none. The rest are planned runners.
+runners:
+  - name: Podman
+    url: https://podman.io
+    finds: rootless, daemonless containers (shipped as sandbox podman)
+  - name: Kubernetes Jobs
+    url: https://kubernetes.io/docs/concepts/workloads/controllers/job/
+    finds: trials on a cluster in a throwaway namespace; pin CPUs or use dedicated nodes for timing
+  - name: Nomad batch jobs
+    url: https://developer.hashicorp.com/nomad/docs/job-specification
+    finds: trials on a Nomad cluster
+  - name: gVisor
+    url: https://gvisor.dev
+    finds: a user-space kernel for stronger container isolation (runsc)
+  - name: Firecracker
+    url: https://firecracker-microvm.github.io
+    finds: microVMs for untrusted trials
+
+# Measuring services and observing Morphogen.
+observability:
+  - name: OpenTelemetry
+    url: https://opentelemetry.io
+    finds: traces, metrics and logs; the collector as a source for observers
+  - name: Prometheus
+    url: https://prometheus.io
+    finds: metrics queries for observers
+  - name: Jaeger
+    url: https://www.jaegertracing.io
+    finds: trace viewer for Morphogen's spans
+  - name: Arize Phoenix
+    url: https://github.com/Arize-ai/phoenix
+    finds: LLM call tracing
+  - name: Envoy, Linkerd
+    finds: proxy-level metrics collected outside the service (collected outside)
+
+# Judges for direct trials in production.
+progressive_delivery:
+  - name: Argo Rollouts
+    url: https://argoproj.github.io/rollouts/
+    finds: canary analysis against baseline metrics, automatic rollback
+  - name: Flagger
+    url: https://flagger.app
+    finds: canary and A/B analysis for Kubernetes services
