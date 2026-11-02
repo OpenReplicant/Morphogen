@@ -152,6 +152,43 @@ class SimulatedTargets(unittest.TestCase):
             p.close()
 
 
+class SelfMap(unittest.TestCase):
+    """The map init_project seeds: Morphogen, Claude Code and the host. Also the example for other maps."""
+
+    REFS = {"systems": ["slots"], "slots": ["system", "accepts", "filled_by"], "components": ["type", "source", "system"]}
+
+    def test_references_resolve_and_slots_point_back(self):
+        lists = {f.stem: [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+                 for f in (project.SAMPLES / "lists").glob("*.jsonl")}
+        ids = {e["id"] for rows in lists.values() for e in rows}
+        for kind, fields in self.REFS.items():
+            for e in lists[kind]:
+                for field in fields:
+                    refs = e.get(field) or []
+                    for r in refs if isinstance(refs, list) else [refs]:
+                        self.assertIn(r, ids, f"{kind} {e['id']}: {field} -> {r} does not exist")
+        systems = {e["id"]: e for e in lists["systems"]}
+        self.assertEqual(set(systems), {"morphogen", "claude-code", "host"})
+        for slot in lists["slots"]:
+            self.assertIn(slot["id"], systems[slot["system"]]["slots"], f"{slot['id']} is not listed by its system")
+        for system in systems.values():
+            self.assertIn(system.get("interface"), ("direct", "simulated"), system["id"])
+
+    def test_init_project_seeds_it(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            project.init_project(tmp)
+            lists, _ = project.stores(tmp, project.load_config(tmp))
+            self.assertEqual({e["id"] for e in lists.query("systems")}, {"morphogen", "claude-code", "host"})
+            # Morphogen -> its harness slot -> Claude Code, which runs on the host.
+            harness = lists.get("slots", "morphogen/harness")
+            self.assertEqual(lists.get("components", harness["filled_by"])["system"], "claude-code")
+            host = lists.get("slots", "claude-code/host")
+            self.assertEqual(lists.get("components", host["filled_by"])["system"], "host")
+        finally:
+            shutil.rmtree(tmp)
+
+
 class Observer(unittest.TestCase):
     def make(self, collected):
         return observed_project(collected)

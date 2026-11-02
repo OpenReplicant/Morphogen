@@ -220,9 +220,20 @@ sixth:
 | sources | where parts come from: PyPI, the standard library, this project | |
 | components | a specific part, with version; can itself be a system | type, source |
 
-`init_project` seeds them with Morphogen's own map, including its judge, its
-backends and its improvement strategies, so Morphogen can treat its own parts
-as things to improve. They are JSONL files: commit them with your code.
+`init_project` seeds them with a self-map of three systems, so Morphogen
+starts from a worked example instead of a blank page:
+
+| System | Slots | Depends on |
+|---|---|---|
+| `morphogen` | judge, evidence log, list store, improvement strategy, sandbox, harness, host | `claude-code` (harness), `host` (sandbox, Python, git) |
+| `claude-code` | model, plugins, host | `host`; hosts `morphogen` as a plugin |
+| `host` | OS, container engine, Python, git | |
+
+A dependency is a slot filled by a component that is itself a system
+(`"system": "claude-code"` on `comp/claude-code`). The host entries are
+generic; mapping fills in this machine's actual values. Morphogen can then
+treat its own parts, and what it stands on, as things to improve. The lists
+are JSONL files: commit them with your code.
 
 Behind the lists and the evidence log are ports with a files backend today.
 Each backend declares its capabilities (for example whether append-only is
@@ -421,7 +432,7 @@ In CI this is the `containers` job, started by hand.
 | `skills/` | `onboard`, `map`, `evolve`, `playbook` | yes (Agent Skills) |
 | `server/` | MCP server, judge, backends, tests | yes (MCP) |
 | `strategies/` | improvement strategy cards | yes |
-| `samples/` | example config and intent, catalogs, Morphogen's own map, the slow-script target | yes |
+| `samples/` | example config and intent, catalogs, the self-map, the slow-script target | yes |
 | `evals/` | `claude plugin eval` suite | Claude Code |
 | `agents/` | `explorer`, `worker`, `reviewer` | Claude Code |
 | `hooks/` | session briefing, budget, traces | Claude Code |
