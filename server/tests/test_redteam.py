@@ -105,9 +105,6 @@ class RedTeam(unittest.TestCase):
         self.assertFails("memoise", {"topwords.py": cheat})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ObserverCheats(unittest.TestCase):
     """The candidate keeps the slow code and tampers with the telemetry instead."""
@@ -141,3 +138,7 @@ class ObserverCheats(unittest.TestCase):
             self.assertIn("target.yaml", " ".join(r["notes"]))
         finally:
             p.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

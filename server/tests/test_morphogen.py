@@ -117,9 +117,6 @@ class TrialBudget(unittest.TestCase):
             p.close()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class SimulatedTargets(unittest.TestCase):
     def test_simulated_target_gets_simulated_trust_and_a_note(self):
@@ -276,3 +273,7 @@ class ContainerGuarantees(unittest.TestCase):
 
     def test_podman(self):
         self.check("podman")
+
+
+if __name__ == "__main__":
+    unittest.main()
