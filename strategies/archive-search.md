@@ -1,19 +1,29 @@
-# archive-search (Darwin Gödel Machine style)
+---
+name: archive-search
+description: Open-ended search over every judged variant, not only the trunk, after the Darwin Gödel Machine. Build on promising and under-explored variants, including ones that failed.
+when: Hill-climbing has stalled; a better design may need a step that does not pay off alone.
+weak_when: The archive is nearly empty; there is nothing to choose from yet.
+---
 
-Open-ended search over the archive instead of one lineage. After the Darwin
-Gödel Machine (Zhang et al., 2025): keep every variant, branch from promising
-and under-explored ones, not only the best.
+# archive-search
 
-- **parent:** pick from `tools/archive/list --json`, weighting each variant by
-  its scores and by how few children it already has (count archive records whose
-  `base` is that commit). Failed variants are eligible: a step that regressed may
-  lead somewhere a passing one cannot.
-- **candidates:** two to four per round, each on its own branch from the parent,
-  each run through `evals/gate --base <parent> --strategy archive-search`.
-- **after:** variants are archived by the gate. A variant is *adopted* (merged
-  to `main`) only when it passes the gate against `main` itself, not just
-  against its parent.
+**Parent:** read `archive(target)`. Score each variant by its primary gain
+(failed or negative counts as zero) plus a bonus for having few children
+(`children` in the archive). Pick two or three parents by that score, at least
+one of them not the trunk. A failed variant is eligible when its reasons show
+a near miss, for example a gain just under the bar, or a single wrong output
+from an otherwise promising approach.
 
-Needs: a trial budget of at least ten a day, and KPIs that measure real
-capability, not just map hygiene. Without good evals this searches noise.
-Costs several times more than hill-climb per gap closed.
+**Candidates:** one change per parent, built on that parent's commit (a
+worker branches from the parent, not the trunk). Label each with
+`strategy: archive-search`, its family and `parent: <commit>`.
+
+**Judging:** judge each candidate against its **parent** first, to see whether
+the step helped. Only a candidate that also passes against the **trunk** can be
+proposed for merging.
+
+**After:** propose the best variant that passes against the trunk. Keep the
+rest in the archive; they are the stepping stones for later rounds.
+
+**Stop:** after two rounds without a step that improves on its parent, report
+the most promising lineage to the operator.

@@ -1,0 +1,20 @@
+[project]
+name = "morphogen"
+version = "0.1.0"
+description = "Minimum viable Morphogen: lists, evidence and an outside judge, served over MCP."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp==2.3.0",
+  "pyyaml==6.0.3",
+]
+
+[project.scripts]
+morphogen-mcp = "morphogen.mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["morphogen"]

@@ -1,0 +1,33 @@
+# How the judge scores this target. The judge reads this file, and the harness
+# files listed below, from the BASE commit, so a candidate cannot change them.
+name: slow-script
+description: Most frequent words in a text. Correct but quadratic; make it faster without changing results.
+
+# direct: the judge acts on the real thing (here, the code itself).
+# simulated: the target is a model of something the judge cannot act on; then
+# also say what it simulates (simulates: ...). Verdicts get trust "simulated".
+interface: direct
+
+# Files that belong to the judge, not to the code under improvement.
+harness: [bench.py, gen.py, test_topwords.py]
+
+check: python -m unittest -q test_topwords
+
+# Outputs must match the base on inputs generated from fresh random seeds.
+equivalence:
+  gen: python gen.py {seed} 3000
+  run: python solve.py
+  cases: 5
+
+# The judge times `run` from outside the process. Judge metrics:
+# wall_seconds, cpu_seconds, max_rss_kb. The primary metric must be one of them.
+measure:
+  run: python bench.py
+  warmup: 1
+  repeats: 10
+  max_repeats: 30
+  metrics:
+    wall_seconds: {direction: lower, primary: true, min_improvement: 0.10}
+    max_rss_kb: {direction: lower, max_regression: 0.50}
+
+timeout: 120

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "morphogen",
+  "version": "0.1.0",
+  "description": "Maps, measures and improves systems, itself included: skills for the loop, an MCP server with lists, evidence and a judge the agent cannot edit.",
+  "author": {
+    "name": "OpenReplicant"
+  },
+  "homepage": "https://github.com/OpenReplicant/morphogen",
+  "repository": "https://github.com/OpenReplicant/morphogen",
+  "license": "Apache-2.0",
+  "keywords": [
+    "self-improvement",
+    "evaluation",
+    "judge",
+    "mcp",
+    "platform-engineering"
+  ],
+  "experimental": {
+    "evals": "eval-cases"
+  }
+}

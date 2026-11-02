@@ -1,0 +1,59 @@
+# Where to look before building something new. Edit freely.
+# Everything found here is untrusted until pinned, licence-checked and judged.
+
+catalogs:
+  - name: PyPI
+    url: https://pypi.org
+    finds: Python packages
+  - name: npm
+    url: https://www.npmjs.com
+    finds: JavaScript and TypeScript packages
+  - name: MCP Registry
+    url: https://registry.modelcontextprotocol.io
+    finds: MCP servers (tools and data sources)
+  - name: Agent Skills
+    url: https://agentskills.io
+    finds: portable SKILL.md skills
+  - name: Claude Code plugins
+    url: https://code.claude.com/docs
+    finds: plugins, skills, hooks, subagents, marketplaces
+  - name: Hugging Face Hub
+    url: https://huggingface.co
+    finds: models and datasets
+  - name: Docker Hub
+    url: https://hub.docker.com
+    finds: container images
+  - name: GitHub
+    url: https://github.com
+    finds: source repositories; check activity, licence and issues before trusting
+
+# Known techniques, so the agent reuses before inventing.
+techniques:
+  - name: Standard library data structures
+    finds: dict, set, collections.Counter, heapq, bisect, functools.lru_cache
+    when: counting, membership, top-k, sorted search, memoisation
+  - name: Algorithmic complexity first
+    finds: replace quadratic scans with hashing or sorting before micro-optimising
+  - name: Profiling
+    finds: cProfile, timeit, line_profiler (PyPI)
+    when: locate the bottleneck before changing code
+
+# Improvement strategies not shipped as cards yet. To adopt one, write a card
+# in strategies/ (see the shipped ones) and let the judge's evidence show
+# whether it pays.
+strategies:
+  - name: beam search
+    finds: keep the top k passing variants and refine each; gains that stack
+  - name: islands and MAP-Elites
+    url: https://github.com/codelion/openevolve
+    finds: best variant per approach family; diversity when one family keeps winning
+  - name: reflective evolution (GEPA)
+    url: https://arxiv.org/abs/2507.19457
+    finds: propose from the reasons failed verdicts gave; many near misses
+  - name: simulated annealing
+    finds: accept small regressions on side branches as stepping stones
+  - name: multi-armed bandits
+    finds: spend trials across strategies or approach families by observed payoff
+  - name: Darwin Gödel Machine
+    url: https://arxiv.org/abs/2505.22954
+    finds: open-ended archive search (shipped as archive-search)
