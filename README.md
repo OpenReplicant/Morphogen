@@ -66,7 +66,7 @@ One loop, the same for every system:
 | **Trial** | build candidates on branches, in parallel, one subagent each |
 | **Judge** | score each candidate against the trunk by rules it cannot change |
 | **Swap** | propose the winner; you approve the merge |
-| **Record** | append the verdicts and the reasons to the journal |
+| **Record** | append the decision to the journal; verdicts and map changes are logged as they happen |
 
 Three crafts guide the work (the `playbook` skill): the data scientist's
 (baseline first, several model families, beware leakage and lucky wins), the
@@ -250,8 +250,42 @@ starts from a worked example instead of a blank page:
 A dependency is a slot filled by a component that is itself a system
 (`"system": "claude-code"` on `comp/claude-code`). The host entries are
 generic; mapping fills in this machine's actual values. Morphogen can then
-treat its own parts, and what it stands on, as things to improve. The lists
-are JSONL files: commit them with your code.
+treat its own parts, and what it stands on, as things to improve. Every write
+to the lists is recorded in the change log (see Storage backends), so the
+map's history does not depend on git; commit the lists with your code only if
+you want them reviewed alongside it.
+
+### Capabilities and patterns
+
+A slot can say what it `requires` and a component what it `provides`, as
+capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
+`concurrent-writers`, `enforced-append-only`, ...). `catalog_search` with
+`slot:` lists what could fill that slot: components and catalog entries of an
+accepted type, those that cover every requirement first, then those missing
+the fewest, then those bringing the fewest *extra* capabilities. What the
+design does not call for is overhead: the seeded `morphogen/list-store`
+requires only exact lookups, so flat files come first; require `graph` too
+and the Postgres store moves ahead.
+
+A **pattern** is a system with `pattern: true` and slots that nothing fills:
+an architecture to realise, not a running thing, such as "knowledge memory"
+(ingest, extract, resolve, invalidate, index, retrieve, store). A concrete
+system says `realizes: <pattern>` and each of its slots the pattern slot it
+plays, so two products that realise the same pattern can be compared slot by
+slot. Patterns belong in a library of their own, mounted as a map
+(`patterns:knowledge-memory`), not in each project.
+
+Each requirement should carry its reason, in the slot's `because`
+(`{"graph": "evidence:42"}`), so it can be dropped when the reason goes away.
+`maps` and `doctor` report, for every slot that requires something:
+
+- **gaps**: what fills it does not provide everything required (a requirement
+  was added, or the filler changed). This is where improvement starts:
+  `catalog_search(slot=...)` proposes the smallest filler that covers it, and
+  the swap is judged like any other change.
+- **overhead**: what fills it provides beyond the requirements, a candidate
+  for something smaller. Leave a capability out until something requires it.
+- **unexplained**: requirements with no reason.
 
 ### Several maps
 
@@ -276,10 +310,57 @@ from here is refused. The `maps` tool, `doctor` and the admin report list the
 mounted maps, whether each is pinned, and any reference, in any map, that does
 not resolve.
 
-Behind the lists and the evidence log are ports with a files backend today.
-Each backend declares its capabilities (for example whether append-only is
-enforced or only tamper-evident), and all must pass the same conformance
-tests, so a Postgres backend can be added without changing callers.
+### Storage backends
+
+Morphogen treats the filesystem like a database: everything goes through
+ports, and every backend passes the same conformance tests, so callers do not
+change when the backend does. The core asks only for what files can do:
+
+- **the lists**: get, put, query, follow, dump, load;
+- **three append-only, hash-chained logs**: `evidence` (claims and
+  verdicts), `changes` (every write to the lists: list, id, hashes before and
+  after, the new entry, who wrote it and why) and `journal` (decisions:
+  gap, options, choice, rung, result, commit).
+
+Anything beyond that is an optional capability that a backend reports and a
+slot must require, with a reason. Git versions what you would roll back
+(code, targets and harnesses, config, skills, strategy cards); the logs keep
+the history of everything else. Two backends exist:
+
+- `files` (the default): one JSONL file per list; the three logs as JSONL in
+  git's own directory, untracked, so candidate commits cannot touch them.
+  Tamper-evident (hash chains), not enforced.
+- `postgres`: for distributions that need a database. Install the driver with
+  `uv sync --project server --extra postgres` (pg8000, pure Python).
+
+```yaml
+backends:
+  default: postgres
+  postgres:
+    url: postgresql://morphogen@localhost:5432/morphogen   # or MORPHOGEN_POSTGRES_URL
+    schema: morphogen
+    layout: tables          # tables | labels
+```
+
+The two layouts hold the same data. `tables` makes each list a table
+(`systems`, `slots`, ...) and adds a `nodes (label, id, data)` view over them;
+`labels` stores one `nodes` table with the list as its label and adds a view
+per list. Either way, an `edges (src_label, src_id, field, dst_id)` table holds
+every reference and is kept in step with each write, so recursive SQL or a
+graph extension can walk the map; `follow` is a recursive query. For
+[pgGraph](https://github.com/evokoa/pggraph), which indexes existing tables
+as a graph, use the `tables` layout: it needs real tables with a
+single-column key. The backend's `pggraph_sql()` returns the statements that
+register the lists as node tables and `edges` as an edge table labelled by
+field (written against pgGraph 1.2's documented API, not yet run against the
+extension). `labels` suits tools that want one labelled node table. `catalogs.yaml` is mirrored into a `catalog` table (the file
+stays the source). The three logs are tables whose rows a trigger refuses to
+update or delete, with the same hash chains, so append-only is enforced, not
+only evident; a list write and its change record commit together. `doctor` reports the backend's capabilities, including
+`vector_search` when the pgvector extension is installed.
+
+Config, targets and catalogs stay as files in the repository, reviewed with
+the code. To move between backends, `dump` from one and `load` into the other.
 
 ## Improvement strategies
 
@@ -421,7 +502,7 @@ those repositories, not here. Releases are tagged `morphogen--v<version>`
 ```yaml
 trunk: main              # changes only by judged, approved merges
 autonomy: 2              # 1 assist · 2 propose · 3 merge free changes · 4 autonomous
-data_dir: .morphogen     # lists, journal, traces
+data_dir: .morphogen     # lists, traces, admin pages
 strategy: auto           # or hill-climb, archive-search, simplify, or your own card
 # strategies:            # per-target overrides
 #   targets/slow-script: archive-search
@@ -446,15 +527,16 @@ The MCP server's tools, which any MCP-capable harness can call:
 |---|---|
 | `doctor` | reports the project, backend, evidence chain, runner and its guarantees, telemetry |
 | `init_project`, `install_sample` | set a project up; copy a sample target in |
-| `lists_get`, `lists_put`, `lists_query` | read and write the lists; follow references, across maps |
-| `maps` | mounted maps, whether each is pinned, references that do not resolve |
+| `lists_get`, `lists_put`, `lists_query` | read and write the lists (a write can say its `reason`); follow references, across maps |
+| `lists_history` | recorded writes to the map: what changed, who wrote it, why |
+| `maps` | mounted maps, whether each is pinned, references that do not resolve, capability gaps and overhead |
 | `evidence_query`, `evidence_note` | read evidence; add an inferred or stated note |
 | `catalog_search` | search `catalogs.yaml` and the lists before building |
 | `measure` | baseline a target at a commit |
 | `judge` | score a candidate against a base; records the verdict |
 | `probe` | a practice run on a candidate: per-case results and quick metrics; never a verdict |
 | `strategy`, `archive`, `strategies_list` | the next strategy and why; judged variants with lineage and payoff; the catalog |
-| `journal_append` | append a journal entry |
+| `journal_append` | append a decision to the journal log |
 | `admin_pages` | write the admin menu and the read-only report |
 
 ## Admin UI
@@ -520,7 +602,8 @@ In CI this is the `containers` job, started by hand.
 - Containers have no network, so service targets that send telemetry run
   with `sandbox: none` for now.
 - The runner uses `sh`, so Windows needs WSL.
-- Only the files backend exists so far; Postgres is planned.
+- On the files backend, append-only is tamper-evident, not enforced; the
+  postgres backend enforces it.
 - No model gateway yet: a target that calls an LLM needs `sandbox: none`, its
   token cost is not measured from outside, and `budget.trials_per_day` caps
   trials, not spending (#43).

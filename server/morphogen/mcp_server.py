@@ -81,12 +81,23 @@ def lists_get(kind: str, id: str) -> dict:
 
 @server.tool()
 @_safe
-def lists_put(kind: str, entry: dict[str, Any]) -> dict:
+def lists_put(kind: str, entry: dict[str, Any], reason: str | None = None) -> dict:
     """Add or replace an entry (needs an 'id') in this project's map. References to other entries are
-    their ids; `map:id` refers to an entry in a mounted map. Mounted maps are read-only."""
+    their ids; `map:id` refers to an entry in a mounted map. Mounted maps are read-only.
+    Every write is recorded in the change log; `reason` (for example `evidence:42`) says why."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
-    return lists.put(kind, entry)
+    return lists.put(kind, entry, by="agent", reason=reason)
+
+
+@server.tool()
+@_safe
+def lists_history(kind: str | None = None, id: str | None = None, limit: int = 50) -> dict:
+    """Recorded writes to this project's map, newest first: what changed (hashes before and after, the new
+    entry), who wrote it and why. Filter by list (`kind`) and `id`."""
+    root, cfg = _ctx()
+    lists, _ = project.stores(root, cfg)
+    return {"changes": lists.history(kind, id, limit)}
 
 
 @server.tool()
@@ -139,9 +150,14 @@ def evidence_note(claim: str, source: str, trust: str = "inferred",
 
 @server.tool()
 @_safe
-def catalog_search(query: str, limit: int = 20) -> dict:
-    """Search catalogs.yaml and the sources, components and types lists before building anything new."""
+def catalog_search(query: str = "", limit: int = 20, slot: str | None = None) -> dict:
+    """Search catalogs.yaml and the sources, components and types lists before building anything new.
+    With `slot`, list what could fill that slot instead: components and catalog entries of an accepted
+    type, ranked by whether they provide every capability the slot `requires`, then by fewest missing,
+    then by fewest extra capabilities (overhead the design does not call for)."""
     root, cfg = _ctx()
+    if slot:
+        return project.candidates(root, cfg, slot, limit)
     return {"results": project.catalog_search(root, cfg, query, limit)}
 
 

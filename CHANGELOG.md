@@ -6,6 +6,39 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+- One append-only, hash-chained log mechanism under three logs: `evidence`,
+  `changes` (new: every write to the lists, with hashes before and after, the
+  entry, who and why) and `journal` (now a log behind the port, not a
+  Markdown file). On Postgres, the logs are trigger-guarded tables, and a list
+  write commits together with its change record. `lists_put` takes a
+  `reason`; `lists_history` reads the change log. The map's history no longer
+  depends on git.
+- Requirements carry reasons (`because`), and `maps`/`doctor` report
+  capability gaps, overhead and unexplained requirements. The evolve skill
+  treats a gap as a located gap.
+- The core storage requirements are stated so files can always meet them;
+  anything more is an optional capability with a flag.
+
+- Capabilities and patterns: slots can `require` capabilities and components
+  `provide` them; `catalog_search(slot=...)` ranks fillers by coverage, then
+  by fewest extra capabilities. Systems marked `pattern: true` are
+  architectures without fillers; `realizes` (a reference field) links a
+  system or slot to the pattern it implements, across maps. The self-map's
+  storage slots and both backends carry this data. The map skill records it,
+  and separates the general method from domain ontologies and integrations.
+
+- A `postgres` backend (optional extra; pg8000, BSD-3-Clause, pinned with its
+  dependencies to releases at least four months old). Lists in either of two
+  layouts, `tables` (a table per list, a `nodes` view) or `labels` (one
+  `nodes` table labelled by list, a view per list); an `edges` table of every
+  reference, kept in step with each write; `follow` as a recursive query; a
+  `catalog` table mirroring `catalogs.yaml`; an evidence table whose rows a
+  trigger refuses to change, so append-only is enforced. The conformance
+  tests run against every backend, and the whole suite passes on Postgres
+  (`MORPHOGEN_TEST_BACKEND=postgres`).
+- `pggraph_sql()` on the postgres backend: the statements that register the
+  map with pgGraph (`tables` layout), per its API reference.
+
 - `probe`: a practice run on a candidate under the judge's rules, returning
   per-case results (expected and actual output where they differ) and quick
   metrics. Recorded as evidence of kind `probe`, never a verdict; it does not

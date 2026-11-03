@@ -36,9 +36,10 @@ def _matches(entry: dict, where: dict[str, Any]) -> bool:
 class FilesListStore:
     capabilities = {"concurrent_writers": False, "native_multi_hop": False, "vector_search": False}
 
-    def __init__(self, directory: Path):
+    def __init__(self, directory: Path, changes: "FilesLog | None" = None):
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
+        self.changes = changes  # every write is recorded here when given
 
     def _path(self, kind: str) -> Path:
         if kind not in KINDS:
@@ -65,12 +66,15 @@ class FilesListStore:
     def get(self, kind: str, id: str) -> dict | None:
         return self._read(kind).get(id)
 
-    def put(self, kind: str, entry: dict) -> dict:
+    def put(self, kind: str, entry: dict, by: str = "agent", reason: str | None = None) -> dict:
         if not isinstance(entry, dict) or not entry.get("id"):
             raise ValueError("an entry needs a non-empty 'id'")
         entries = self._read(kind)
+        before = entries.get(entry["id"])
         entries[entry["id"]] = entry
         self._write(kind, entries)
+        if self.changes is not None and before != entry:
+            self.changes.append(change_record(kind, entry, before, "put", by, reason))
         return entry
 
     def query(self, kind: str, where: dict[str, Any] | None = None) -> list[dict]:
@@ -102,13 +106,29 @@ class FilesListStore:
     def dump(self) -> dict[str, list[dict]]:
         return {k: [self._read(k)[i] for i in sorted(self._read(k))] for k in KINDS}
 
-    def load(self, data: dict[str, list[dict]]) -> None:
+    def load(self, data: dict[str, list[dict]], by: str = "operator") -> None:
         for kind, entries in data.items():
+            before = self._read(kind)
             self._write(kind, {e["id"]: e for e in entries})
+            if self.changes is not None:
+                for e in entries:
+                    if before.get(e["id"]) != e:
+                        self.changes.append(change_record(kind, e, before.get(e["id"]), "load", by, None))
+
+    def history(self, kind: str | None = None, id: str | None = None, limit: int = 50) -> list[dict]:
+        """Recorded writes, newest first; empty when this store keeps no change log."""
+        if self.changes is None:
+            return []
+        where = {k: v for k, v in (("list", kind), ("id", id)) if v}
+        return self.changes.query(where=where, limit=limit)
 
 
-class FilesEvidenceLog:
-    """Append-only JSONL; each record carries the hash of the one before it."""
+class FilesLog:
+    """An append-only JSONL log; each record carries the hash of the one before it.
+
+    The mechanism under every log Morphogen keeps (evidence, changes, journal): append, query,
+    verify, dump. Subclasses add their own checks on what may be appended.
+    """
 
     capabilities = {"enforced_append_only": False, "tamper_evident": True}
     GENESIS = "0" * 64
@@ -127,11 +147,12 @@ class FilesEvidenceLog:
         body = {k: v for k, v in record.items() if k != "hash"}
         return hashlib.sha256(canonical(body).encode()).hexdigest()
 
+    def _check(self, record: dict) -> None:
+        if not isinstance(record, dict):
+            raise ValueError("a log record is a mapping")
+
     def append(self, record: dict) -> dict:
-        if record.get("trust") not in TRUST:
-            raise ValueError(f"trust must be one of {', '.join(TRUST)}")
-        if not record.get("claim") or not record.get("by"):
-            raise ValueError("evidence needs 'claim' and 'by'")
+        self._check(record)
         records = self._records()
         rec = dict(record)
         rec["seq"] = len(records) + 1
@@ -151,12 +172,16 @@ class FilesEvidenceLog:
             prev = rec["hash"]
         return True, None
 
-    def query(self, contains: str | None = None, by: str | None = None, limit: int = 20) -> list[dict]:
+    def query(self, contains: str | None = None, by: str | None = None, limit: int = 20,
+              where: dict[str, Any] | None = None) -> list[dict]:
+        """Newest first. `where` matches fields as list queries do."""
         out = []
         for rec in reversed(self._records()):
             if by and rec.get("by") != by:
                 continue
             if contains and contains.lower() not in canonical(rec).lower():
+                continue
+            if where and not _matches(rec, where):
                 continue
             out.append(rec)
             if len(out) >= limit:
@@ -165,3 +190,26 @@ class FilesEvidenceLog:
 
     def dump(self) -> list[dict]:
         return self._records()
+
+
+def check_evidence(record: dict) -> None:
+    """What every evidence record needs, on any backend."""
+    if not isinstance(record, dict):
+        raise ValueError("a log record is a mapping")
+    if record.get("trust") not in TRUST:
+        raise ValueError(f"trust must be one of {', '.join(TRUST)}")
+    if not record.get("claim") or not record.get("by"):
+        raise ValueError("evidence needs 'claim' and 'by'")
+
+
+class FilesEvidenceLog(FilesLog):
+    """Claims with their support. Only the judge writes `measured` evidence (enforced by the tools)."""
+
+    def _check(self, record: dict) -> None:
+        check_evidence(record)
+
+
+def change_record(kind: str, entry: dict, before: dict | None, op: str, by: str, reason: str | None) -> dict:
+    """What a change log records for one write to a list."""
+    return {"op": op, "list": kind, "id": entry["id"], "before": FilesLog._hash(before) if before else None,
+            "after": FilesLog._hash(entry), "entry": entry, "by": by, **({"reason": reason} if reason else {})}

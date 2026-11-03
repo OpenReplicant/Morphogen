@@ -37,6 +37,22 @@ Record what could be filled differently, not every file or person.
 (`"system": "claude-code"` on `comp/claude-code`). Follow those links to see
 what a system stands on.
 
+**Say what each slot needs and what each part offers.** On a slot,
+`requires` lists the capabilities the role needs (`exact`, `semantic`,
+`temporal`, ...); on a component, `provides` lists what it offers. Then
+`catalog_search` with `slot:` can propose the smallest sufficient filler, and
+what a part offers beyond the need shows up as overhead. Give each requirement
+its reason in the slot's `because` (`{"graph": "evidence:42"}`), and pass a
+`reason` to `lists_put` when you change an entry: every write is logged, and
+`lists_history` shows why the map is the way it is.
+
+**Patterns.** If the system follows a known architecture, look for it in a
+mounted pattern library (`lists_query` on `systems` with `map: "*"` and
+`pattern: true`) and record `realizes` on the system and on each slot that
+plays a pattern slot. Mapping a product someone else built (interface
+`observed`) is how new patterns are found: two products that realise the same
+pattern differ slot by slot, and that difference is the finding.
+
 **Say how Morphogen can reach each system** with `interface`:
 
 - `direct`: Morphogen can act on it (code, a shell, an API it may call);
@@ -51,6 +67,14 @@ scheduling API), and only with the operator's approval.
 
 Ids are short and stable: `targets/slow-script`, `slow-script/counting`,
 `type/hash-count`, `comp/collections-counter`. References are ids.
+
+## General method, domain knowledge
+
+This skill is the method, for any system. A domain brings its own vocabulary
+and access: an ontology (the types and relations that matter there, kept as
+types in a mounted map) and integrations (the APIs, exports and observers that
+reach its systems). Distributions add domain mapping skills that supply those
+and follow this method; use their types when a map of that domain is mounted.
 
 ## How to find out
 

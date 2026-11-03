@@ -2,6 +2,8 @@
 
 Trials run with `sandbox: none` unless MORPHOGEN_TEST_SANDBOX names another
 runner (docker or podman), so the same suites can be run inside a container.
+Data lives in the files backend unless MORPHOGEN_TEST_BACKEND=postgres, which
+uses MORPHOGEN_TEST_POSTGRES (a scratch database) with a fresh schema per project.
 """
 
 import os
@@ -16,6 +18,7 @@ from morphogen.config import load_config
 
 TARGET = "targets/slow-script"
 SANDBOX = os.environ.get("MORPHOGEN_TEST_SANDBOX", "none")
+BACKEND = os.environ.get("MORPHOGEN_TEST_BACKEND", "files")
 
 
 def scratch_stores(root: Path):
@@ -30,6 +33,7 @@ def tamper_first_record(log):
 
     The one place the tests know a storage format: a JSONL file (`log.path` is a file), or a SQLite
     table (`log.path` is `sqlite:///<file>#<table>`, guarded by triggers an attacker would drop first).
+    Other backends test their own tampering (the Postgres classes below).
     """
     import json
     import sqlite3
@@ -72,6 +76,14 @@ class SampleProject:
         cfg_file = self.repo / "morphogen.yaml"
         cfg_file.write_text(cfg_file.read_text().replace("sandbox: auto", f"sandbox: {SANDBOX}")
                             .replace("trials_per_day: 20", f"trials_per_day: {trials_per_day}"))
+        self.schema = None
+        if BACKEND == "postgres":
+            import uuid
+            self.schema = f"mg_fixture_{uuid.uuid4().hex[:12]}"
+            text = cfg_file.read_text().replace("backends:\n", "backends_unused:\n", 1)
+            cfg_file.write_text(text + f"\nbackends:\n  default: postgres\n  postgres:\n"
+                                f"    url: {os.environ['MORPHOGEN_TEST_POSTGRES']}\n    schema: {self.schema}\n")
+            project.init_project(self.repo)  # seeds the lists in the new schema
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "base")
         self.cfg = load_config(self.repo)
@@ -101,6 +113,8 @@ class SampleProject:
         return self.path(rel).read_text()
 
     def close(self):
+        if self.schema:
+            project._PG[os.environ["MORPHOGEN_TEST_POSTGRES"]].run(f"DROP SCHEMA IF EXISTS {self.schema} CASCADE")
         shutil.rmtree(self.tmp)
 
 
