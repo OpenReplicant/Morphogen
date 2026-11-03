@@ -10,55 +10,76 @@ import time
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # only to rewrite morphogen.yaml in onboard()
 
-from .backend_files import FilesEvidenceLog, FilesListStore, FilesLog
-from .config import data_dir, evidence_path, load_config, plugin_root
+from . import documents, store
+from .config import data_dir, load_config, plugin_root, sqlite_path, store_dir
+from .ports import KINDS
 from .maps import mount, provides as _provides
 from .runner import capabilities
 
 SAMPLES = plugin_root() / "samples"
 
 
-_PG: dict[str, Any] = {}  # one connection per URL for the life of the server process
+_DB: dict[tuple, Any] = {}  # one Database per URL and schema for the life of the server process
+
+
+def database(root: Path, cfg: dict) -> store.Database:
+    """The configured database: `database.url` (or MORPHOGEN_DATABASE_URL), else SQLite in git's own
+    directory. A new SQLite database imports a 0.2 project's JSONL files once."""
+    d = cfg.get("database") or {}
+    url = os.environ.get("MORPHOGEN_DATABASE_URL") or d.get("url")
+    path = None
+    if not url:
+        path = sqlite_path(root, cfg)
+        url = f"sqlite:///{path}"
+    key = (url, d.get("schema"))
+    if key not in _DB:
+        new = path is not None and not path.exists()
+        _DB[key] = store.Database(url, d.get("schema"), d.get("options"))
+        if new:
+            _import_files(root, cfg, _DB[key])
+    return _DB[key]
+
+
+def _import_files(root: Path, cfg: dict, db: store.Database) -> None:
+    """A project from 0.2 kept JSONL files: copy its logs in as they are and load its lists, once,
+    when the database is first created. The old files are left where they were."""
+    old = store_dir(root, cfg)
+    for name in store.LOGS:
+        f = old / f"{name}.jsonl"
+        if f.exists():
+            store.Log(db, name).import_jsonl(f)
+    lists_dir = data_dir(root, cfg) / "lists"
+    data = {}
+    for k in KINDS:
+        f = lists_dir / f"{k}.jsonl"
+        if f.exists():
+            data[k] = [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    if data:
+        store.Lists(db).load(data)
 
 
 def logs(root: Path, cfg: dict) -> dict:
-    """The three append-only logs: evidence (claims and verdicts), changes (every write to the lists)
-    and journal (decisions). Files: JSONL beside each other in git's own directory, untracked, so
-    candidate commits cannot touch them. Postgres: tables guarded by a trigger."""
-    backend = (cfg.get("backends") or {}).get("default", "files")
-    if backend == "files":
-        ev = evidence_path(root, cfg)
-        return {"evidence": FilesEvidenceLog(ev), "changes": FilesLog(ev.parent / "changes.jsonl"),
-                "journal": FilesLog(ev.parent / "journal.jsonl")}
-    if backend == "postgres":
-        from . import backend_postgres as pg
-        st = pg.settings(cfg)
-        conn = _PG.get(st["url"]) or _PG.setdefault(st["url"], pg.connect(st["url"]))
-        return {"evidence": pg.PostgresEvidenceLog(conn, st["schema"]),
-                "changes": pg.PostgresLog(conn, st["schema"], "changes"),
-                "journal": pg.PostgresLog(conn, st["schema"], "journal")}
-    raise RuntimeError(f"backend {backend!r} is not available; use 'files' or 'postgres'")
+    """The append-only logs: evidence (claims and verdicts) and journal (decisions). Tables in the
+    database, hash-chained; on SQLite, triggers refuse changes to their rows."""
+    db = database(root, cfg)
+    return {"evidence": store.evidence_log(db), "journal": store.Log(db, "journal")}
+
+
+def catalogs(root: Path) -> dict[str, list[dict]]:
+    """catalogs.yaml, checked against its schema; empty if the project has none."""
+    f = root / "catalogs.yaml"
+    return documents.load("catalogs", f) if f.exists() else {}
 
 
 def stores(root: Path, cfg: dict):
-    """The list store (this project's map plus mounted maps) and the evidence log, on the configured backend.
-    Every write to the lists is recorded in the changes log."""
-    backend = (cfg.get("backends") or {}).get("default", "files")
-    d = data_dir(root, cfg)
+    """The list store (this project's map plus mounted maps) and the evidence log."""
+    db = database(root, cfg)
     lg = logs(root, cfg)
-    if backend == "files":
-        own = FilesListStore(d / "lists", lg["changes"])
-    else:
-        from . import backend_postgres as pg
-        st = pg.settings(cfg)
-        own = pg.PostgresListStore(_PG[st["url"]], st["schema"], st["layout"], lg["changes"])
-        cat = root / "catalogs.yaml"
-        if cat.exists():
-            own.sync_catalog(yaml.safe_load(cat.read_text()) or {})
+    own = store.Lists(db)
     # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
-    return mount(root, cfg, own, d / "maps"), lg["evidence"]
+    return mount(root, cfg, own, data_dir(root, cfg) / "maps"), lg["evidence"]
 
 
 def init_project(root: Path) -> dict:
@@ -126,7 +147,7 @@ def doctor(root: Path) -> dict:
     try:
         lists, evidence = stores(root, cfg)
         ok, bad = evidence.verify()
-        report["backend"] = (cfg.get("backends") or {}).get("default", "files")
+        report["backend"] = lists.own.db.dialect
         report["capabilities"] = {"lists": lists.capabilities, "evidence": evidence.capabilities}
         report["evidence"] = {"records": len(evidence.dump()), "path": str(evidence.path),
                               "chain": "intact" if ok else f"broken at record {bad}"}
@@ -154,9 +175,10 @@ def doctor(root: Path) -> dict:
                      if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") else "off (set OTEL_EXPORTER_OTLP_ENDPOINT)",
         "trials_per_day": budget or "no limit",
         "enforced_append_only": bool(report.get("capabilities", {}).get("evidence", {}).get("enforced_append_only")),
-        "note": "On the files backend the logs are tamper-evident (hash chains), not tamper-proof. "
-                "An agent with shell access can still reach files you can; run in a container, or use the "
-                "postgres backend, for the strong version.",
+        "note": "The logs are hash-chained, and on SQLite triggers refuse changes to their rows; whoever can "
+                "write the database can still drop the triggers, and the chain then shows the edit. For the "
+                "strong version, keep the database out of the agent's reach (a container, or a database "
+                "server the agent's account cannot alter).",
     }
     return report
 
@@ -192,12 +214,10 @@ def candidates(root: Path, cfg: dict, slot_id: str, limit: int = 20) -> dict:
     need = {str(c) for c in slot.get("requires") or []}
     accepts = set(slot.get("accepts") or [])
     pool = [("lists", e) for e in lists.query("components", map="*")]
-    cat = root / "catalogs.yaml"
-    if cat.exists():
-        for section, entries in (yaml.safe_load(cat.read_text()) or {}).items():
-            for e in entries if isinstance(entries, list) else []:
-                if isinstance(e, dict) and (e.get("provides") or e.get("type")):
-                    pool.append((f"catalogs.yaml/{section}", e))
+    for section, entries in catalogs(root).items():
+        for e in entries:
+            if e.get("provides") or e.get("type"):
+                pool.append((f"catalogs.yaml/{section}", e))
     out = []
     for where, e in pool:
         if accepts and e.get("type") not in accepts and not (where != "lists" and not e.get("type")):
@@ -228,9 +248,7 @@ def catalog_search(root: Path, cfg: dict, query: str, limit: int = 20) -> list[d
             for v in node:
                 walk(v, where)
 
-    cat = root / "catalogs.yaml"
-    if cat.exists():
-        walk(yaml.safe_load(cat.read_text()), "catalogs.yaml")
+    walk(catalogs(root), "catalogs.yaml")
     lists, _ = stores(root, cfg)
     for kind in ("sources", "components", "types"):
         walk(lists.query(kind, map="*"), f"lists/{kind}")  # this map and every mounted one

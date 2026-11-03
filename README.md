@@ -66,16 +66,29 @@ One loop, the same for every system:
 | **Trial** | build candidates on branches, in parallel, one subagent each |
 | **Judge** | score each candidate against the trunk by rules it cannot change |
 | **Swap** | propose the winner; you approve the merge |
-| **Record** | append the decision to the journal; verdicts and map changes are logged as they happen |
+| **Record** | append the decision to the journal; verdicts are logged as they happen |
 
 Three crafts guide the work (the `playbook` skill): the data scientist's
 (baseline first, several model families, beware leakage and lucky wins), the
 systems engineer's (decompose by interfaces, contracts before contents, reuse
 before build) and DevOps' (sandbox, small reversible changes, budgets).
 
-Subagents are used for what a separate context gives, not as an org chart:
-`explorer` (read-only investigation), `worker` (one candidate per branch and
-worktree), `reviewer` (reviews a diff without the author's reasoning).
+### Roles
+
+Morphogen is a few roles around a knowledge system (lists, logs, indices),
+with a judge outside their reach. Each role is a slot in the self-map (`morphogen/<role>`), so another
+harness fills it its own way; one without subagents fills explorer, worker
+and reviewer with its main session, working inline. The table is also who may
+write what:
+
+| Role | Filled by (Claude Code) | Does | Writes |
+|---|---|---|---|
+| orchestrator | the main session, following the skills | picks the gap and strategy, delegates, proposes | the map (`lists_put`), `stated` and `inferred` evidence, the journal |
+| explorer | `agents/explorer.md` (Haiku) | observes: reads code, logs and docs, profiles | nothing; it reports |
+| worker | `agents/worker.md` | acts: one candidate on its own branch and worktree | code, on that branch only |
+| reviewer | `agents/reviewer.md` (Sonnet) | checks a candidate's diff after the judge passes it, without the author's reasoning | nothing; findings go in as `inferred` evidence via the orchestrator |
+| judge | the MCP server (code, not a model) | measures under rules no agent can edit | `measured` evidence, and only it does |
+| operator | you | sets intent, approves merges, adoptions and mounted maps | anything, through review |
 
 ## Targets
 
@@ -207,10 +220,10 @@ judge bug: add it there first, then fix the judge.
 
 ## Evidence and trust
 
-Everything Morphogen claims is evidence: an append-only log in
-`.git/morphogen/evidence.jsonl`. It lives in git's own directory so candidate
-commits cannot sweep it up and branch switches cannot lose it; every worktree
-shares it. Each record carries the hash of the previous one, so an edit shows
+Everything Morphogen claims is evidence: an append-only log in the
+database (by default `.git/morphogen/morphogen.db`). It lives in git's own
+directory so candidate commits cannot sweep it up and branch switches cannot
+lose it; every worktree shares it. Each record carries the hash of the previous one, so an edit shows
 up in `doctor` and in the session briefing.
 
 | Trust | Written by | Means |
@@ -226,8 +239,28 @@ and can cite the records they support or challenge.
 
 ## What Morphogen knows: the lists
 
-Five lists in `.morphogen/lists/` describe systems, with evidence as the
-sixth:
+What Morphogen knows is held by its knowledge system, `knowledge` in the
+self-map: three slots, each with ingest, manage and retrieve operations and an
+interface another filler can take over. Swap one slot (a vector index fills
+`knowledge/indices`), or the whole system: a bespoke or ready-made one fills
+`morphogen/knowledge` and provides the same three.
+
+| Slot | Holds | Filled by |
+|---|---|---|
+| `knowledge/lists` | what exists and how it connects: the five lists below, typed, by id, with references | the store (`store.py`; port `ListStore`) |
+| `knowledge/logs` | what happened and how it is known: `evidence` (claims and verdicts, with trust) and `journal` (decisions); append-only, hash-chained | the store (port `Log`) |
+| `knowledge/indices` | ways to find things, derived from the lists and logs and rebuildable, never the source of truth | a scan: queries read everything and match ids and words |
+
+Every claim carries how it is known, and only the judge writes `measured`.
+An index's operations are ingest (build or update it from the lists, logs and
+documents), manage (rebuild, drop) and retrieve (a query of the kinds it
+provides). The kinds are capability names: `exact`, `lexical`, `semantic`,
+`graph`, `temporal`. The base ships no ingestion pipeline and no index beyond
+the scan; a vector, graph or search index, or a product such as Graphiti or
+Cognee, is a distribution's filler for `knowledge/indices` or for the whole
+system, described by what it provides and judged against what ships.
+
+Five lists describe systems:
 
 | List | Entry | Refers to |
 |---|---|---|
@@ -237,12 +270,13 @@ sixth:
 | sources | where parts come from: PyPI, the standard library, this project | |
 | components | a specific part, with version; can itself be a system | type, source |
 
-`init_project` seeds them with a self-map of four systems, so Morphogen
+`init_project` seeds them with a self-map of five systems, so Morphogen
 starts from a worked example instead of a blank page:
 
 | System | Slots | Depends on |
 |---|---|---|
-| `morphogen` | judge, evidence log, list store, improvement strategy, sandbox, harness, host, admin UI | `claude-code` (harness), `host` (sandbox, Python, git), `admin-ui` |
+| `morphogen` | orchestrator, explorer, worker, reviewer, operator, judge, knowledge, improvement strategy, sandbox, model gateway, harness, host, admin UI | `knowledge`, `claude-code` (harness), `host` (sandbox, Python, git), `admin-ui` |
+| `knowledge` | lists, logs, indices | |
 | `admin-ui` | shell, map viewer, evidence viewer, sessions, terminal, editor | |
 | `claude-code` | model, plugins, host | `host`; hosts `morphogen` as a plugin |
 | `host` | OS, container engine, Python, git | |
@@ -250,12 +284,10 @@ starts from a worked example instead of a blank page:
 A dependency is a slot filled by a component that is itself a system
 (`"system": "claude-code"` on `comp/claude-code`). The host entries are
 generic; mapping fills in this machine's actual values. Morphogen can then
-treat its own parts, and what it stands on, as things to improve. Every write
-to the lists is recorded in the change log (see Storage backends), so the
-map's history does not depend on git; commit the lists with your code only if
-you want them reviewed alongside it.
+treat its own parts, and what it stands on, as things to improve. To publish
+a map, `lists_export` it.
 
-### Capabilities and patterns
+### Capabilities
 
 A slot can say what it `requires` and a component what it `provides`, as
 capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
@@ -263,17 +295,10 @@ capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
 `slot:` lists what could fill that slot: components and catalog entries of an
 accepted type, those that cover every requirement first, then those missing
 the fewest, then those bringing the fewest *extra* capabilities. What the
-design does not call for is overhead: the seeded `morphogen/list-store`
-requires only exact lookups, so flat files come first; require `graph` too
-and the Postgres store moves ahead.
-
-A **pattern** is a system with `pattern: true` and slots that nothing fills:
-an architecture to realise, not a running thing, such as "knowledge memory"
-(ingest, extract, resolve, invalidate, index, retrieve, store). A concrete
-system says `realizes: <pattern>` and each of its slots the pattern slot it
-plays, so two products that realise the same pattern can be compared slot by
-slot. Patterns belong in a library of their own, mounted as a map
-(`patterns:knowledge-memory`), not in each project.
+design does not call for is overhead: the seeded `knowledge/logs` requires
+tamper-evident and concurrent writers, so SQLite's enforced append-only shows
+up as overhead; require `semantic` of `knowledge/indices` and the report shows
+a gap the scan cannot fill.
 
 Each requirement should carry its reason, in the slot's `because`
 (`{"graph": "evidence:42"}`), so it can be dropped when the reason goes away.
@@ -297,7 +322,7 @@ catalog) can be referred to without copying them:
 maps:
   homelab: {path: ../homelab, commit: 3f2a9c1}       # a git repository, read at a commit
   games:   {git: https://github.com/you/games-map, commit: 3f2a9c1}
-  notes:   {path: ../notes/.morphogen/lists}           # a directory, read live (unpinned)
+  notes:   {path: ../notes/.knowledge/lists}           # a directory, read live (unpinned)
 ```
 
 A reference into another map is a qualified id: a slot here can be filled by
@@ -310,57 +335,46 @@ from here is refused. The `maps` tool, `doctor` and the admin report list the
 mounted maps, whether each is pinned, and any reference, in any map, that does
 not resolve.
 
-### Storage backends
+### Storage
 
-Morphogen treats the filesystem like a database: everything goes through
-ports, and every backend passes the same conformance tests, so callers do not
-change when the backend does. The core asks only for what files can do:
-
-- **the lists**: get, put, query, follow, dump, load;
-- **three append-only, hash-chained logs**: `evidence` (claims and
-  verdicts), `changes` (every write to the lists: list, id, hashes before and
-  after, the new entry, who wrote it and why) and `journal` (decisions:
-  gap, options, choice, rung, result, commit).
-
-Anything beyond that is an optional capability that a backend reports and a
-slot must require, with a reason. Git versions what you would roll back
-(code, targets and harnesses, config, skills, strategy cards); the logs keep
-the history of everything else. Two backends exist:
-
-- `files` (the default): one JSONL file per list; the three logs as JSONL in
-  git's own directory, untracked, so candidate commits cannot touch them.
-  Tamper-evident (hash chains), not enforced.
-- `postgres`: for distributions that need a database. Install the driver with
-  `uv sync --project server --extra postgres` (pg8000, pure Python).
+Two kinds of files, kept apart. **Documents** are what people write and git
+versions, because you would roll them back: code, `target.yaml` and harnesses,
+`morphogen.yaml`, `catalogs.yaml`, skills and strategy cards. They are read
+through one loader that checks each against its schema (`documents.py`).
+**Records** are what the tools write: the lists and two append-only,
+hash-chained logs, `evidence` (claims and verdicts) and `journal` (decisions:
+gap, options, choice, rung, result, commit).
+Records live in one database, through SQLAlchemy Core: by default SQLite,
+one file at `.git/morphogen/morphogen.db`, in git's own directory, untracked,
+so candidate commits cannot touch it and every worktree shares it. Python
+ships its driver. Any other database SQLAlchemy supports (Postgres, MySQL,
+...) takes a URL; install its driver into the server's environment. Only
+SQLite is tested here.
 
 ```yaml
-backends:
-  default: postgres
-  postgres:
-    url: postgresql://morphogen@localhost:5432/morphogen   # or MORPHOGEN_POSTGRES_URL
-    schema: morphogen
-    layout: tables          # tables | labels
+database:
+  url: postgresql+psycopg://morphogen@db.local/morphogen   # or MORPHOGEN_DATABASE_URL, for passwords
+  schema: morphogen                                        # where the database has schemas
+  options: {pool_pre_ping: true, connect_args: {sslmode: require}}   # passed to create_engine
 ```
 
-The two layouts hold the same data. `tables` makes each list a table
-(`systems`, `slots`, ...) and adds a `nodes (label, id, data)` view over them;
-`labels` stores one `nodes` table with the list as its label and adds a view
-per list. Either way, an `edges (src_label, src_id, field, dst_id)` table holds
-every reference and is kept in step with each write, so recursive SQL or a
-graph extension can walk the map; `follow` is a recursive query. For
-[pgGraph](https://github.com/evokoa/pggraph), which indexes existing tables
-as a graph, use the `tables` layout: it needs real tables with a
-single-column key. The backend's `pggraph_sql()` returns the statements that
-register the lists as node tables and `edges` as an edge table labelled by
-field (written against pgGraph 1.2's documented API, not yet run against the
-extension). `labels` suits tools that want one labelled node table. `catalogs.yaml` is mirrored into a `catalog` table (the file
-stays the source). The three logs are tables whose rows a trigger refuses to
-update or delete, with the same hash chains, so append-only is enforced, not
-only evident; a list write and its change record commit together. `doctor` reports the backend's capabilities, including
-`vector_search` when the pgvector extension is installed.
+The tables: one per list (`systems`, `slots`, ...), each `(id, data)` with
+`data` as JSON, the table's name being the label; and the three logs,
+`(seq, hash, prev, raw, record)`. That is all: references are ids inside
+`data`, and `follow` walks them in Python, since maps are small. A list write and
+its change record commit in one transaction, and `seq` is the key, so two
+writers cannot fork a chain. On SQLite, triggers also refuse updates and
+deletes to the logs; on other databases append-only is evident from the chain,
+not enforced, unless you add your own trigger. Graph or vector extensions
+(pgGraph, pgvector, sqlite-vec) can be added over these tables; they are a
+distribution's choice, a filler for the structure or recall slot, not the
+base's.
 
-Config, targets and catalogs stay as files in the repository, reviewed with
-the code. To move between backends, `dump` from one and `load` into the other.
+To publish a map for other projects to mount, `lists_export` writes it as
+JSONL (`.morphogen/lists/<list>.jsonl`, one entry per line, sorted); commit that, and
+mounts pin it to the commit. A project from 0.2, whose lists and logs were
+JSONL files, is imported once when its database is first created; the old
+files are left in place.
 
 ## Improvement strategies
 
@@ -502,12 +516,11 @@ those repositories, not here. Releases are tagged `morphogen--v<version>`
 ```yaml
 trunk: main              # changes only by judged, approved merges
 autonomy: 2              # 1 assist · 2 propose · 3 merge free changes · 4 autonomous
-data_dir: .morphogen     # lists, traces, admin pages
+data_dir: .morphogen     # traces, admin pages, mounted-map cache
 strategy: auto           # or hill-climb, archive-search, simplify, or your own card
 # strategies:            # per-target overrides
 #   targets/slow-script: archive-search
-backends:
-  default: files
+# database: {url: ..., schema: ..., options: {}}   # default: SQLite in .git/morphogen/
 sandbox: auto            # auto (Docker, then Podman) · docker · podman · none
 sandbox_image: python:3.12-slim
 budget:
@@ -527,8 +540,8 @@ The MCP server's tools, which any MCP-capable harness can call:
 |---|---|
 | `doctor` | reports the project, backend, evidence chain, runner and its guarantees, telemetry |
 | `init_project`, `install_sample` | set a project up; copy a sample target in |
-| `lists_get`, `lists_put`, `lists_query` | read and write the lists (a write can say its `reason`); follow references, across maps |
-| `lists_history` | recorded writes to the map: what changed, who wrote it, why |
+| `lists_get`, `lists_put`, `lists_query` | read and write the lists; follow references, across maps |
+| `lists_export` | publish this project's map as JSONL, for others to mount |
 | `maps` | mounted maps, whether each is pinned, references that do not resolve, capability gaps and overhead |
 | `evidence_query`, `evidence_note` | read evidence; add an inferred or stated note |
 | `catalog_search` | search `catalogs.yaml` and the lists before building |
@@ -602,8 +615,11 @@ In CI this is the `containers` job, started by hand.
 - Containers have no network, so service targets that send telemetry run
   with `sandbox: none` for now.
 - The runner uses `sh`, so Windows needs WSL.
-- On the files backend, append-only is tamper-evident, not enforced; the
-  postgres backend enforces it.
+- On SQLite the database refuses edits to the logs, but whoever can write the
+  file can drop those triggers; the hash chain then shows the edit. Keep the
+  database out of the agent's reach (a container, or a server the agent's
+  account cannot alter) for the strong version. Databases other than SQLite
+  are untested.
 - No model gateway yet: a target that calls an LLM needs `sandbox: none`, its
   token cost is not measured from outside, and `budget.trials_per_day` caps
   trials, not spending (#43).

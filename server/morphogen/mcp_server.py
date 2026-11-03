@@ -81,23 +81,26 @@ def lists_get(kind: str, id: str) -> dict:
 
 @server.tool()
 @_safe
-def lists_put(kind: str, entry: dict[str, Any], reason: str | None = None) -> dict:
+def lists_put(kind: str, entry: dict[str, Any]) -> dict:
     """Add or replace an entry (needs an 'id') in this project's map. References to other entries are
-    their ids; `map:id` refers to an entry in a mounted map. Mounted maps are read-only.
-    Every write is recorded in the change log; `reason` (for example `evidence:42`) says why."""
+    their ids; `map:id` refers to an entry in a mounted map. Mounted maps are read-only."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
-    return lists.put(kind, entry, by="agent", reason=reason)
+    return lists.put(kind, entry)
 
 
 @server.tool()
 @_safe
-def lists_history(kind: str | None = None, id: str | None = None, limit: int = 50) -> dict:
-    """Recorded writes to this project's map, newest first: what changed (hashes before and after, the new
-    entry), who wrote it and why. Filter by list (`kind`) and `id`."""
+def lists_export(dest: str = ".morphogen/lists") -> dict:
+    """Publish this project's map: write each list as `<kind>.jsonl` (one entry per line, sorted by id)
+    into `dest`, a directory inside the project. Commit it, and other projects can mount it by path or
+    git URL, pinned to that commit. The database stays the working copy."""
     root, cfg = _ctx()
+    d = (root / dest).resolve()
+    if root.resolve() not in d.parents and d != root.resolve():
+        return {"error": "dest must be inside the project"}
     lists, _ = project.stores(root, cfg)
-    return {"changes": lists.history(kind, id, limit)}
+    return {"wrote": str(d), "entries": lists.own.export_jsonl(d)}
 
 
 @server.tool()

@@ -2,15 +2,15 @@
 
 trunk: main              # the branch that changes only by judged, approved merges
 autonomy: 2              # 1 assist · 2 propose (every merge needs the operator) · 3 merge free changes · 4 autonomous
-data_dir: .morphogen     # lists, evidence log, journal, traces
+data_dir: .morphogen     # traces, admin pages, mounted-map cache
 
 strategy: auto           # auto (chosen from evidence) or a card name: hill-climb, archive-search, simplify
 # strategies:            # per-target overrides, e.g.
 #   targets/slow-script: archive-search
 
-backends:
-  default: files         # files · postgres (uv sync --extra postgres; see README, Storage backends)
-  # postgres: {url: postgresql://morphogen@localhost:5432/morphogen, schema: morphogen, layout: tables}
+# database:              # default: SQLite in .git/morphogen/morphogen.db
+#   url: postgresql+psycopg://morphogen@db.local/morphogen   # any SQLAlchemy URL (README, Storage)
+#   options: {}          # passed to sqlalchemy.create_engine
 
 sandbox: auto            # auto (Docker, then Podman) · docker · podman · none (run trials directly)
 sandbox_image: python:3.12-slim

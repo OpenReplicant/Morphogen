@@ -46,10 +46,6 @@ def available(engine: str) -> bool:
     return _AVAILABLE[engine]
 
 
-def docker_available() -> bool:  # kept for callers that only ask about Docker
-    return available("docker")
-
-
 def sandbox_mode(cfg: dict) -> str:
     want = cfg.get("sandbox", "auto")
     if want == "none":

@@ -1,18 +1,23 @@
 {"description": "A menu, launcher or web desktop that holds other tools", "id": "type/admin-shell"}
 {"description": "An operator's view of a system, made of viewers and tools", "id": "type/admin-ui"}
 {"description": "Runs the top-level LLM loop with tools and skills", "id": "type/agent-harness"}
-{"description": "Append-only record of claims and their support", "id": "type/evidence-log"}
+{"description": "An LLM session that follows skills and calls tools", "id": "type/agent-session"}
 {"description": "Chooses where the next candidate starts and what to try", "id": "type/improvement-strategy"}
+{"description": "A derived, rebuildable way to find entries: by id, words, meaning, relation or time", "id": "type/index"}
 {"description": "Scores a candidate against a base by rules the candidate cannot change", "id": "type/judge"}
-{"description": "Stores the six lists by id with references", "id": "type/list-store"}
+{"description": "Holds what is known with how it is known, and finds it again: lists, logs, indices", "id": "type/knowledge-system"}
+{"description": "Stores the five lists by id with references", "id": "type/list-store"}
 {"description": "A language model the harness calls", "id": "type/llm"}
 {"description": "A proxy between callers and model providers: routing, budgets, caching, usage records", "id": "type/llm-gateway"}
+{"description": "An append-only, hash-chained record", "id": "type/log"}
 {"description": "A computer, VM or container that runs other systems", "id": "type/machine"}
 {"description": "An operating system", "id": "type/os"}
+{"description": "A person in a role", "id": "type/person"}
 {"description": "A bundle of skills, agents, hooks and MCP servers loaded by a harness", "id": "type/plugin"}
 {"description": "A Python interpreter with a package manager", "id": "type/python-runtime"}
 {"description": "Isolated place to run untrusted trials", "id": "type/sandbox"}
 {"description": "Shows and manages agent sessions", "id": "type/session-manager"}
+{"description": "An agent the session delegates to, with its own context and tools", "id": "type/subagent"}
 {"description": "Version control", "id": "type/vcs"}
 {"description": "A read-only view of lists or evidence", "id": "type/viewer"}
 {"description": "A code editor served to a browser", "id": "type/web-editor"}

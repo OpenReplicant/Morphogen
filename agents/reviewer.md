@@ -22,5 +22,7 @@ Use `git diff <base> <candidate>` and read the changed code. Look for:
 - needless complexity: a simpler change that would clear the same bar;
 - new dependencies, and whether they are pinned and licensed.
 
+## Report
+
 Do not edit anything. Report: approve or object, with each concern tied to a
 file and line, in under 250 words.

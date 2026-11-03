@@ -7,7 +7,7 @@ A project's own lists are one map. `morphogen.yaml` can mount others, read-only:
       games:   {git: https://github.com/you/games-map, commit: 3f2a9c1}
       notes:   {path: ../notes/.morphogen/lists}            # a directory, read as it is now (unpinned)
 
-`lists` names the lists directory inside a repository (default `.morphogen/lists`).
+`lists` names the lists directory inside a repository (default `.morphogen/lists`, where `lists_export` writes).
 A pinned map is read from git objects at its commit, so later commits or edits
 to its files change nothing here. An unpinned map is read live and reported as
 such.
@@ -28,14 +28,14 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .backend_files import FilesListStore, _matches
+from .store import Lists, matches as _matches
 from .ports import KINDS, REF_FIELDS
 
 SEP = ":"
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 # REF_FIELDS (ports.py): fields that hold references. A bare id resolves in the entry's own map.
 ALL_REF_FIELDS = {f for fields in REF_FIELDS.values() for f in fields}
-DEFAULT_LISTS = ".morphogen/lists"
+DEFAULT_LISTS = ".morphogen/lists"  # where lists_export writes
 
 
 class MapError(Exception):
@@ -134,7 +134,7 @@ class Atlas:
     Reads resolve qualified ids; writes go to the own map only.
     """
 
-    def __init__(self, own: FilesListStore, mounts: dict[str, MountedMap] | None = None, own_name: str = "local"):
+    def __init__(self, own: Lists, mounts: dict[str, MountedMap] | None = None, own_name: str = "local"):
         self.own, self.own_name = own, own_name
         self.mounts = mounts or {}
         self.capabilities = {**own.capabilities, "maps": sorted(self.mounts)}
@@ -176,8 +176,8 @@ class Atlas:
         e = self._store_get(m, kind, local)
         return self._present(m, e, kind) if e else None
 
-    def put(self, kind: str, entry: dict, **kw) -> dict:
-        """Write to this project's map. `by` and `reason` go to the change log when the store keeps one."""
+    def put(self, kind: str, entry: dict) -> dict:
+        """Write to this project's map."""
         if not isinstance(entry, dict) or not entry.get("id"):
             raise ValueError("an entry needs a non-empty 'id'")
         m, local = self.split(str(entry["id"]))
@@ -185,8 +185,7 @@ class Atlas:
             raise ValueError(f"{SEP!r} separates a map name from an id, and no map named {m!r} is mounted")
         if m != self.own_name:
             raise PermissionError(f"map {m!r} is read-only here; change it in its own project, through its own judge")
-        return self.own.put(kind, {k: v for k, v in entry.items() if k not in ("_map", "_trust")} | {"id": local},
-                            **kw)
+        return self.own.put(kind, {k: v for k, v in entry.items() if k not in ("_map", "_trust")} | {"id": local})
 
     def query(self, kind: str, where: dict[str, Any] | None = None, map: str | None = None) -> list[dict]:
         """`map`: None or the own map's name (default), a mounted map's name, or '*' for all."""
@@ -292,17 +291,12 @@ class Atlas:
                     unexplained.append({**where, "requirements": sorted(need - set(because))})
         return {"gaps": gaps, "overhead": overhead, "unexplained": unexplained}
 
-    def history(self, kind: str | None = None, id: str | None = None, limit: int = 50) -> list[dict]:
-        """Writes to this project's map, newest first (mounted maps keep their own history)."""
-        h = getattr(self.own, "history", None)
-        return h(kind, id, limit) if h else []
-
     def status(self) -> dict:
         return {"own": self.own_name, "mounted": [m.status() for _, m in sorted(self.mounts.items())],
                 "dangling": self.dangling(), "capabilities": self.capability_report()}
 
 
-def mount(root: Path, cfg: dict, own: FilesListStore, cache: Path) -> Atlas:
+def mount(root: Path, cfg: dict, own: Lists, cache: Path) -> Atlas:
     own_name = str(cfg.get("map_name", "local"))
     if not NAME.match(own_name):
         raise MapError(f"map_name {own_name!r}: use lowercase letters, digits and hyphens")

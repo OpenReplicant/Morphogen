@@ -15,8 +15,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import yaml
-
+from . import documents
 from .config import plugin_root
 
 PREFERENCE = ("hill-climb", "archive-search")  # order auto tries before stopping
@@ -24,15 +23,8 @@ STALL_TRIALS = 4  # this many verdicts in a row without a pass means a strategy 
 SIMPLIFY_MIN_LINES = 20
 
 
-def _card(path: Path) -> dict | None:
-    text = path.read_text()
-    if not text.startswith("---"):
-        return None
-    _, front, body = text.split("---", 2)
-    meta = yaml.safe_load(front) or {}
-    if not meta.get("name"):
-        return None
-    return {**meta, "body": body.strip(), "path": str(path)}
+def _card(path: Path) -> dict:
+    return documents.load("strategy", path)
 
 
 def catalog(root: Path) -> dict[str, dict]:

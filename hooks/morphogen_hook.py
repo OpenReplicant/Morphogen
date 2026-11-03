@@ -35,62 +35,67 @@ def canonical(obj):
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def evidence_summary(path):
-    if not path.exists():
-        return 0, "intact", None
-    prev, last_verdict, n = "0" * 64, None, 0
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        n += 1
-        rec = json.loads(line)
+def database_file(cfg_text):
+    """Same rule as the server (config.sqlite_path): git's common
+    directory, else the data directory. None when morphogen.yaml names another database."""
+    import subprocess
+    named = "database:" in cfg_text and re.search(r"^\s*url:\s*\S", cfg_text.split("database:", 1)[1], re.M)
+    if named or os.environ.get("MORPHOGEN_DATABASE_URL"):
+        return None
+    try:
+        p = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, capture_output=True, text=True)
+        if p.returncode == 0 and p.stdout.strip():
+            common = Path(p.stdout.strip())
+            return (common if common.is_absolute() else ROOT / common).resolve() / "morphogen" / "morphogen.db"
+    except OSError:
+        pass
+    return ROOT / setting(cfg_text, "data_dir", ".morphogen") / "morphogen.db"
+
+
+def read_log(db, name):
+    """A log's records, oldest first, read without writing anything (the server owns the database)."""
+    import sqlite3
+    if db is None or not db.exists():
+        return []
+    try:
+        con = sqlite3.connect(f"{db.as_uri()}?mode=ro", uri=True)
+        try:
+            return [json.loads(r[0]) for r in con.execute(f"SELECT raw FROM {name} ORDER BY seq")]
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+
+
+def evidence_summary(records):
+    prev, last_verdict = "0" * 64, None
+    for n, rec in enumerate(records, start=1):
         body = {k: v for k, v in rec.items() if k != "hash"}
         if rec.get("prev") != prev or hashlib.sha256(canonical(body).encode()).hexdigest() != rec.get("hash"):
             return n, f"BROKEN at record {n}", last_verdict
         prev = rec["hash"]
         if rec.get("kind") == "verdict":
             last_verdict = rec
-    return n, "intact", last_verdict
-
-
-def evidence_file(cfg_text):
-    """Same rule as the server: git's common directory, else the data directory."""
-    import subprocess
-    explicit = setting(cfg_text, "evidence_path", "")
-    if explicit:
-        return ROOT / explicit
-    try:
-        p = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, capture_output=True, text=True)
-        if p.returncode == 0 and p.stdout.strip():
-            common = Path(p.stdout.strip())
-            return (common if common.is_absolute() else ROOT / common).resolve() / "morphogen" / "evidence.jsonl"
-    except OSError:
-        pass
-    return ROOT / setting(cfg_text, "data_dir", ".morphogen") / "evidence.jsonl"
+    return len(records), "intact", last_verdict
 
 
 def session(cfg_text):
     if not cfg_text:
         print("Morphogen is installed but not set up in this project. To start: /morphogen:onboard")
         return
-    data = ROOT / setting(cfg_text, "data_dir", ".morphogen")
-    n, chain, verdict = evidence_summary(evidence_file(cfg_text))
+    db = database_file(cfg_text)
+    n, chain, verdict = evidence_summary(read_log(db, "evidence"))
     targets = re.findall(r"^\s*-\s*(\S+)", cfg_text.split("targets:", 1)[1], re.M) if "targets:" in cfg_text else []
     lines = [
         f"Morphogen: autonomy {setting(cfg_text, 'autonomy', '2')}, trunk {setting(cfg_text, 'trunk', 'main')}, "
         f"targets {', '.join(targets) or 'none'}.",
-        f"Evidence: {n} records, chain {chain}.",
+        f"Evidence: {n} records, chain {chain}." if db else "Evidence: in the configured database (call doctor).",
     ]
     if verdict:
         lines.append(f"Last verdict: {verdict.get('claim')} ({verdict.get('verdict')}).")
-    journal = evidence_file(cfg_text).parent / "journal.jsonl"  # beside the evidence log (files backend)
-    if journal.exists():
-        last = [l for l in journal.read_text().splitlines() if l.strip()][-1:]
-        if last:
-            try:
-                lines.append(f"Last journal entry: {json.loads(last[0]).get('title')}.")
-            except ValueError:
-                pass
+    last = read_log(db, "journal")[-1:]
+    if last:
+        lines.append(f"Last journal entry: {last[0].get('title')}.")
     lines.append("Skills: /morphogen:map, /morphogen:evolve, /morphogen:playbook. The judge is the morphogen MCP server.")
     print("\n".join(lines))
 

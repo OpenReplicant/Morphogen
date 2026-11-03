@@ -37,10 +37,6 @@ def _get():
     return _tracer
 
 
-def enabled() -> bool:
-    return _get() is not None
-
-
 @contextmanager
 def span(name: str, **attrs):
     """A span with morphogen.* attributes, or nothing when telemetry is off."""

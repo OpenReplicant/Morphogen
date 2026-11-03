@@ -42,16 +42,8 @@ what a system stands on.
 `temporal`, ...); on a component, `provides` lists what it offers. Then
 `catalog_search` with `slot:` can propose the smallest sufficient filler, and
 what a part offers beyond the need shows up as overhead. Give each requirement
-its reason in the slot's `because` (`{"graph": "evidence:42"}`), and pass a
-`reason` to `lists_put` when you change an entry: every write is logged, and
-`lists_history` shows why the map is the way it is.
-
-**Patterns.** If the system follows a known architecture, look for it in a
-mounted pattern library (`lists_query` on `systems` with `map: "*"` and
-`pattern: true`) and record `realizes` on the system and on each slot that
-plays a pattern slot. Mapping a product someone else built (interface
-`observed`) is how new patterns are found: two products that realise the same
-pattern differ slot by slot, and that difference is the finding.
+its reason in the slot's `because` (`{"graph": "evidence:42"}`), so it can be
+dropped when the reason goes away.
 
 **Say how Morphogen can reach each system** with `interface`:
 
@@ -95,7 +87,8 @@ with `evidence_note`, trust `inferred`, citing what they rest on.
 
 ## Worked example: the self-map
 
-The lists start with Morphogen's map of itself: `morphogen`, `admin-ui`,
+The lists start with Morphogen's map of itself: `morphogen` (its roles,
+judge and other parts), `knowledge` (lists, logs, indices), `admin-ui`,
 `claude-code` (the harness it runs in) and `host` (the machine). It is an
 example of the shape, not the main use. Before mapping something new, read it
 with `lists_query` (the `morphogen` system, then `slots` where `system` is
