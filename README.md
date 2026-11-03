@@ -276,10 +276,45 @@ from here is refused. The `maps` tool, `doctor` and the admin report list the
 mounted maps, whether each is pinned, and any reference, in any map, that does
 not resolve.
 
-Behind the lists and the evidence log are ports with a files backend today.
-Each backend declares its capabilities (for example whether append-only is
-enforced or only tamper-evident), and all must pass the same conformance
-tests, so a Postgres backend can be added without changing callers.
+### Storage backends
+
+Behind the lists and the evidence log are ports. Each backend declares its
+capabilities, and all pass the same conformance tests, so callers do not
+change when the backend does. Two exist:
+
+- `files` (the default): one JSONL file per list, and the evidence log in
+  git's own directory. Tamper-evident (a hash chain), not enforced.
+- `postgres`: for distributions that need a database. Install the driver with
+  `uv sync --project server --extra postgres` (pg8000, pure Python).
+
+```yaml
+backends:
+  default: postgres
+  postgres:
+    url: postgresql://morphogen@localhost:5432/morphogen   # or MORPHOGEN_POSTGRES_URL
+    schema: morphogen
+    layout: tables          # tables | labels
+```
+
+The two layouts hold the same data. `tables` makes each list a table
+(`systems`, `slots`, ...) and adds a `nodes (label, id, data)` view over them;
+`labels` stores one `nodes` table with the list as its label and adds a view
+per list. Either way, an `edges (src_label, src_id, field, dst_id)` table holds
+every reference and is kept in step with each write, so recursive SQL or a
+graph extension can walk the map; `follow` is a recursive query. For
+[pgGraph](https://github.com/evokoa/pggraph), which indexes existing tables
+as a graph, use the `tables` layout: it needs real tables with a
+single-column key. The backend's `pggraph_sql()` returns the statements that
+register the lists as node tables and `edges` as an edge table labelled by
+field (written against pgGraph 1.2's documented API, not yet run against the
+extension). `labels` suits tools that want one labelled node table. `catalogs.yaml` is mirrored into a `catalog` table (the file
+stays the source). The evidence log is a table whose rows a trigger refuses to
+update or delete, with the same hash chain, so append-only is enforced, not
+only evident. `doctor` reports the backend's capabilities, including
+`vector_search` when the pgvector extension is installed.
+
+Config, targets and catalogs stay as files in the repository, reviewed with
+the code. To move between backends, `dump` from one and `load` into the other.
 
 ## Improvement strategies
 
@@ -520,7 +555,8 @@ In CI this is the `containers` job, started by hand.
 - Containers have no network, so service targets that send telemetry run
   with `sandbox: none` for now.
 - The runner uses `sh`, so Windows needs WSL.
-- Only the files backend exists so far; Postgres is planned.
+- On the files backend, append-only is tamper-evident, not enforced; the
+  postgres backend enforces it.
 - No model gateway yet: a target that calls an LLM needs `sandbox: none`, its
   token cost is not measured from outside, and `budget.trials_per_day` caps
   trials, not spending (#43).

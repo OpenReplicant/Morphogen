@@ -6,6 +6,18 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+- A `postgres` backend (optional extra; pg8000, BSD-3-Clause, pinned with its
+  dependencies to releases at least four months old). Lists in either of two
+  layouts, `tables` (a table per list, a `nodes` view) or `labels` (one
+  `nodes` table labelled by list, a view per list); an `edges` table of every
+  reference, kept in step with each write; `follow` as a recursive query; a
+  `catalog` table mirroring `catalogs.yaml`; an evidence table whose rows a
+  trigger refuses to change, so append-only is enforced. The conformance
+  tests run against every backend, and the whole suite passes on Postgres
+  (`MORPHOGEN_TEST_BACKEND=postgres`).
+- `pggraph_sql()` on the postgres backend: the statements that register the
+  map with pgGraph (`tables` layout), per its API reference.
+
 - `probe`: a practice run on a candidate under the judge's rules, returning
   per-case results (expected and actual output where they differ) and quick
   metrics. Recorded as evidence of kind `probe`, never a verdict; it does not

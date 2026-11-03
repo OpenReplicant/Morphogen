@@ -112,7 +112,10 @@ writes only through `evidence_note`.
 
 **Config:** `morphogen.yaml` keys `trunk`, `autonomy`, `data_dir`,
 `evidence_path`, `strategy`, `strategies`, `backends`, `sandbox`,
-`sandbox_image`, `budget`, `targets`, `map_name`, `maps`.
+`sandbox_image`, `budget`, `targets`, `map_name`, `maps`; under `backends`,
+`default` (`files` or `postgres`) and `postgres` (`url`, `schema`, `layout`).
+On postgres, the table and view names in `README.md` (Storage backends) are
+part of the contract too, so distributions can query them directly.
 
 Anything not listed here (internal modules, file layouts under
 `.morphogen/`, the admin pages' markup) may change in any release.

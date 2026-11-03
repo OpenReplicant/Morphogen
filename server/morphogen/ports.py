@@ -12,6 +12,9 @@ from typing import Any, Protocol
 KINDS = ("systems", "slots", "types", "sources", "components")
 TRUST = ("measured", "simulated", "stated", "inferred", "asserted")
 INTERFACES = ("direct", "simulated")
+# Fields that hold references to other entries, by list. A backend may index them as graph edges.
+REF_FIELDS = {"systems": ("slots",), "slots": ("system", "accepts", "filled_by"),
+              "components": ("type", "source", "system"), "types": (), "sources": ()}
 
 
 class ListStore(Protocol):
