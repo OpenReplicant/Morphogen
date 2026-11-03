@@ -14,7 +14,7 @@ from morphogen import judge as judge_mod
 from morphogen import project
 from morphogen import store
 
-from tests.fixture import FAST, TARGET, SampleProject, observed_project
+from tests.fixture import FAST, TARGET, SampleProject, observed_project, scratch_stores
 
 # Wrong on every input (one word short). A tie-order bug was used before, but it shows only on inputs with
 # ties of different lengths, so about one run in a few hundred passed the judge legitimately (#49).
@@ -430,7 +430,8 @@ class Statistics(unittest.TestCase):
 class SelfMap(unittest.TestCase):
     """The map init_project seeds: Morphogen, its admin UI, Claude Code and the host. Also the example for other maps."""
 
-    REFS = {"systems": ["slots"], "slots": ["system", "accepts", "filled_by"], "components": ["type", "source", "system"]}
+    REFS = {"systems": ["slots"], "slots": ["system", "accepts", "filled_by"], "components": ["type", "source", "system"],
+            "parameters": ["of"]}
     CORE = {"morphogen", "knowledge", "admin-ui", "claude-code", "host"}
     MAP_INTERFACES = ("direct", "simulated", "observed", "none")  # see skills/map/SKILL.md
 
@@ -451,6 +452,22 @@ class SelfMap(unittest.TestCase):
             self.assertIn(slot["id"], systems[slot["system"]]["slots"], f"{slot['id']} is not listed by its system")
         for system in systems.values():
             self.assertIn(system.get("interface"), self.MAP_INTERFACES, system["id"])
+        for kind, rows in lists.items():  # relations resolve too
+            for e in rows:
+                for rel, v in (e.get("links") or {}).items():
+                    for r in v if isinstance(v, list) else [v]:
+                        self.assertIn(r, ids, f"{kind} {e['id']}: links.{rel} -> {r} does not exist")
+
+    def test_morphogen_lists_its_parameters_with_owners(self):
+        from morphogen.ports import OWNERS
+        params = [json.loads(l) for l in (project.SAMPLES / "lists" / "parameters.jsonl").read_text().splitlines() if l]
+        self.assertTrue(params)
+        for p in params:
+            self.assertIn(p.get("owner"), OWNERS, p["id"])
+            self.assertTrue(p.get("set_in"), p["id"])
+        owners = {p["owner"] for p in params}
+        self.assertLessEqual({"judge", "operator", "agent"}, owners)
+        self.assertIn("param/judge-significance", {p["id"] for p in params if p["owner"] == "judge"})
 
     def test_init_project_seeds_it(self):
         tmp = Path(tempfile.mkdtemp())
@@ -467,13 +484,50 @@ class SelfMap(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
+class Structure(unittest.TestCase):
+    """Relations (`links`) and parameters are part of a map, checked like its reference fields."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.lists, _ = scratch_stores(self.tmp)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_relations_are_walked_and_checked(self):
+        s = self.lists
+        s.put("slots", {"id": "wm/goal", "system": "wm"})
+        s.put("systems", {"id": "wm", "slots": ["wm/goal"]})
+        s.put("components", {"id": "comp/planner", "links": {"writes": ["wm/goal"], "next": "comp/actor"}})
+        s.put("components", {"id": "comp/actor", "links": {"reads": "wm/goal"}})
+        self.assertEqual([e["id"] for e in s.follow("components", "comp/planner", "writes")], ["wm/goal"])
+        self.assertEqual([e["id"] for e in s.follow("components", "comp/planner", "next", hops=2)], ["comp/actor"])
+        self.assertEqual(s.dangling(), [])
+        s.put("components", {"id": "comp/ghost", "links": {"writes": "wm/nothing"}})
+        bad = s.dangling()
+        self.assertEqual([(d["id"], d["field"], d["why"]) for d in bad], [("comp/ghost", "links.writes", "no such entry")])
+
+    def test_parameters_report_unset_unowned_orphaned_and_tunable(self):
+        s = self.lists
+        s.put("parameters", {"id": "p/decay", "of": "dm/activation", "default": 0.5, "owner": "agent"})
+        s.put("parameters", {"id": "p/beta", "of": "dm/activation", "owner": "agent"})
+        s.put("parameters", {"id": "p/alpha", "of": "judge", "value": 0.01, "owner": "nobody"})
+        s.put("parameters", {"id": "p/loose", "value": 1, "owner": "operator"})
+        r = s.parameter_report()
+        self.assertEqual([u["parameter"] for u in r["unset"]], ["p/beta"])
+        self.assertEqual([u["parameter"] for u in r["unowned"]], ["p/alpha"])
+        self.assertEqual([u["parameter"] for u in r["orphaned"]], ["p/loose"])
+        self.assertEqual(sorted(r["tunable"]), ["p/beta", "p/decay"])
+        self.assertIn("parameters", s.status())
+
+
 class Maps(unittest.TestCase):
     """Several maps in one project: mounted read-only, pinned to commits, referenced by qualified ids."""
 
     HOMELAB = {
         "systems": [{"id": "gpu-box", "interface": "direct", "slots": ["gpu-box/model-server"]}],
         "slots": [{"id": "gpu-box/model-server", "system": "gpu-box", "accepts": ["type/llm-server"],
-                   "filled_by": "comp/vllm"}],
+                   "filled_by": "comp/vllm", "links": {"runs_on": "gpu-box"}}],
         "components": [{"id": "comp/vllm", "type": "type/llm-server", "source": "src/pypi", "system": "gpu-box"},
                        {"id": "comp/gpu-box", "type": "type/machine", "system": "gpu-box"}],
         "types": [{"id": "type/llm-server"}, {"id": "type/machine"}],
@@ -513,6 +567,7 @@ class Maps(unittest.TestCase):
         self.assertEqual(e["_map"], "homelab")
         self.assertEqual(e["_trust"], "stated")
         self.assertEqual(e["filled_by"], "homelab:comp/vllm")  # qualified, so it resolves in homelab
+        self.assertEqual(e["links"]["runs_on"], "homelab:gpu-box")  # relations are qualified the same way
         self.assertEqual(lists.get("components", e["filled_by"])["system"], "homelab:gpu-box")
         self.assertIsNone(lists.get("components", "comp/vllm"))  # bare ids mean this project's map
 

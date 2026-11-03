@@ -29,12 +29,34 @@ from pathlib import Path
 from typing import Any
 
 from .store import Lists, matches as _matches
-from .ports import KINDS, REF_FIELDS
+from .ports import KINDS, LINKS, OWNERS, REF_FIELDS
 
 SEP = ":"
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 # REF_FIELDS (ports.py): fields that hold references. A bare id resolves in the entry's own map.
 ALL_REF_FIELDS = {f for fields in REF_FIELDS.values() for f in fields}
+
+
+def references(entry: dict, kind: str | None = None) -> list[tuple[str, str]]:
+    """(field, id) for every reference an entry makes: its list's reference fields, then each relation in
+    `links` (reported as `links.<relation>`)."""
+    out = []
+    for field in (REF_FIELDS.get(kind, ()) if kind else ALL_REF_FIELDS):
+        v = entry.get(field)
+        out += [(field, str(r)) for r in (v if isinstance(v, list) else [v] if v else [])]
+    links = entry.get(LINKS)
+    if isinstance(links, dict):
+        for rel, v in links.items():
+            out += [(f"{LINKS}.{rel}", str(r)) for r in (v if isinstance(v, list) else [v] if v else [])]
+    return out
+
+
+def _targets(entry: dict, field: str) -> list:
+    """The ids an entry refers to along `field`: a reference field, or a relation in `links`."""
+    v = entry.get(field)
+    if v is None and isinstance(entry.get(LINKS), dict):
+        v = entry[LINKS].get(field)
+    return v if isinstance(v, list) else [v] if v else []
 DEFAULT_LISTS = ".morphogen/lists"  # where lists_export writes
 
 
@@ -162,12 +184,15 @@ class Atlas:
         if map_name == self.own_name:
             return entry
         out = {**entry, "id": f"{map_name}{SEP}{entry['id']}", "_map": map_name, "_trust": "stated"}
-        for field in (REF_FIELDS.get(kind, ()) if kind else ALL_REF_FIELDS):
-            v = entry.get(field)
+        def q(v):
             if isinstance(v, list):
-                out[field] = [self.qualify(map_name, str(x)) for x in v]
-            elif isinstance(v, str) and v:
-                out[field] = self.qualify(map_name, v)
+                return [self.qualify(map_name, str(x)) for x in v]
+            return self.qualify(map_name, v) if isinstance(v, str) and v else v
+        for field in (REF_FIELDS.get(kind, ()) if kind else ALL_REF_FIELDS):
+            if field in entry:
+                out[field] = q(entry[field])
+        if isinstance(entry.get(LINKS), dict):
+            out[LINKS] = {rel: q(v) for rel, v in entry[LINKS].items()}
         return out
 
     # --- the list-store interface
@@ -211,7 +236,8 @@ class Atlas:
         return None
 
     def follow(self, kind: str, id: str, field: str, hops: int = 1) -> list[dict]:
-        """Entries reachable from `id` along reference `field`, across maps. Each is returned once."""
+        """Entries reachable from `id` along reference `field` (or a relation in `links`), across maps.
+        Each is returned once."""
         start = self.get(kind, id) or self._any(id)
         if start is None:
             return []
@@ -219,8 +245,7 @@ class Atlas:
         for _ in range(max(hops, 0)):
             nxt = []
             for e in frontier:
-                refs = e.get(field) or []
-                for r in refs if isinstance(refs, list) else [refs]:
+                for r in _targets(e, field):
                     if r in seen:
                         continue
                     target = self._any(str(r))
@@ -246,18 +271,16 @@ class Atlas:
         for map_name, entries in sources:
             for kind, rows in entries.items():
                 for e in rows.values():
-                    for field in REF_FIELDS.get(kind, ()):
-                        v = e.get(field)
-                        for r in (v if isinstance(v, list) else [v] if v else []):
-                            target_map, local = self.split(str(r), map_name)
-                            if target_map != self.own_name and target_map not in self.mounts:
-                                why = f"map {target_map!r} is not mounted"
-                            elif not any(self._store_get(target_map, k, local) for k in KINDS):
-                                why = "no such entry"
-                            else:
-                                continue
-                            problems.append({"map": map_name, "kind": kind, "id": e["id"], "field": field,
-                                             "ref": r, "why": why})
+                    for field, r in references(e, kind):
+                        target_map, local = self.split(r, map_name)
+                        if target_map != self.own_name and target_map not in self.mounts:
+                            why = f"map {target_map!r} is not mounted"
+                        elif not any(self._store_get(target_map, k, local) for k in KINDS):
+                            why = "no such entry"
+                        else:
+                            continue
+                        problems.append({"map": map_name, "kind": kind, "id": e["id"], "field": field,
+                                         "ref": r, "why": why})
         return problems
 
     def capability_report(self) -> dict:
@@ -291,9 +314,32 @@ class Atlas:
                     unexplained.append({**where, "requirements": sorted(need - set(because))})
         return {"gaps": gaps, "overhead": overhead, "unexplained": unexplained}
 
+    def parameter_report(self) -> dict:
+        """Parameters, in the own map and in every mounted one, that need attention:
+        - unset: neither a value nor a default;
+        - unowned: no owner, or one other than agent, operator or judge;
+        - orphaned: not attached to anything (`of`).
+        Also the tunable ones: owned by the agent, so a strategy may change them."""
+        unset, unowned, orphaned, tunable = [], [], [], []
+        sources = [(self.own_name, self.own.query("parameters"))]
+        sources += [(n, list(m.entries.get("parameters", {}).values())) for n, m in sorted(self.mounts.items())]
+        for name, rows in sources:
+            for p in rows:
+                pid = p["id"] if name == self.own_name else f"{name}{SEP}{p['id']}"
+                if p.get("value") is None and p.get("default") is None:
+                    unset.append({"map": name, "parameter": pid, "of": p.get("of")})
+                if p.get("owner") not in OWNERS:
+                    unowned.append({"map": name, "parameter": pid, "owner": p.get("owner")})
+                elif p["owner"] == "agent":
+                    tunable.append(pid)
+                if not p.get("of"):
+                    orphaned.append({"map": name, "parameter": pid})
+        return {"unset": unset, "unowned": unowned, "orphaned": orphaned, "tunable": tunable}
+
     def status(self) -> dict:
         return {"own": self.own_name, "mounted": [m.status() for _, m in sorted(self.mounts.items())],
-                "dangling": self.dangling(), "capabilities": self.capability_report()}
+                "dangling": self.dangling(), "capabilities": self.capability_report(),
+                "parameters": self.parameter_report()}
 
 
 def mount(root: Path, cfg: dict, own: Lists, cache: Path) -> Atlas:

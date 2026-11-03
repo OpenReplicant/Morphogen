@@ -12,12 +12,20 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-KINDS = ("systems", "slots", "types", "sources", "components")
+KINDS = ("systems", "slots", "types", "sources", "components", "parameters")
 TRUST = ("measured", "simulated", "stated", "inferred", "asserted")
 INTERFACES = ("direct", "simulated")
 # Fields that hold references to other entries, by list.
 REF_FIELDS = {"systems": ("slots",), "slots": ("system", "accepts", "filled_by"),
-              "components": ("type", "source", "system"), "types": (), "sources": ()}
+              "components": ("type", "source", "system"), "types": (), "sources": (), "parameters": ("of",)}
+# Relations beyond the fields above: any entry may carry `links`, a mapping from a relation name (free
+# text, like capability names: writes, reads, triggers, next, realizes, ...) to an id or a list of ids.
+# They are references like the fields above: checked for dangling ids, walked by follow, qualified across
+# maps.
+LINKS = "links"
+# Who may change a parameter: the agent (a strategy may tune it), the operator (by hand, with review) or
+# the judge (part of the rules a candidate is scored by).
+OWNERS = ("agent", "operator", "judge")
 # Capability names are plain strings, compared exactly: a slot's `requires`, a component's `provides`.
 # Suggested vocabulary (extend freely): exact, lexical, semantic, graph, temporal, concurrent-writers,
 # enforced-append-only, tamper-evident.

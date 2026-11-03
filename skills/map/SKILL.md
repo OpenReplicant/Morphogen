@@ -25,6 +25,7 @@ Morphogen itself. The method is the same.
 | types | a kind of part: "hash map", "LLM call", "approver", "CRM" | — |
 | sources | where parts come from: PyPI, a vendor, a staffing agency, this project | — |
 | components | a specific part, with version or identity; may itself be a system | `type`, `source`, `system` |
+| parameters | a setting of a slot or component: a decay rate, a threshold, a model choice | `of` (the slot or component) |
 | evidence | how each claim is known (written through tools, never by hand) | anything above |
 
 **Slots are the point.** A slot is a role, separate from whatever fills it
@@ -36,6 +37,23 @@ Record what could be filled differently, not every file or person.
 **A dependency is a slot filled by a component that is itself a system**
 (`"system": "claude-code"` on `comp/claude-code`). Follow those links to see
 what a system stands on.
+
+**Record how the parts relate.** Beyond the fields above, any entry can carry
+`links`: relation names mapped to the ids they point at, for example
+`{"writes": ["wm/goal"], "reads": "dm/store", "next": "cycle/close"}`. Name
+relations plainly (writes, reads, triggers, next, depends_on); a sequence is a
+chain of `next`. Relations are checked like the other references, and
+`lists_query` with `follow: "writes"` walks them. A system's structure is its
+slots and fillers plus these relations.
+
+**Record its parameters.** Every setting that shapes behaviour is an entry in
+`parameters`: `of` (the slot or component it belongs to), `type`, `range`,
+`default`, `value`, `set_in` (file and key, environment variable or flag) and
+`owner`: `agent` (a strategy may tune it), `operator` (changed by hand, with
+review) or `judge` (part of the rules candidates are scored by). A parameter
+the source leaves unset gets no value and no default; `maps` reports it as
+unset, which is a finding, not a gap to fill by guessing. A slot's parameters
+stay when its filler changes; a component's leave with it.
 
 **Say what each slot needs and what each part offers.** On a slot,
 `requires` lists the capabilities the role needs (`exact`, `semantic`,

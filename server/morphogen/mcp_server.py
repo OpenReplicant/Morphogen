@@ -72,7 +72,7 @@ def install_sample(name: str = "slow-script", dest: str | None = None) -> dict:
 @server.tool()
 @_safe
 def lists_get(kind: str, id: str) -> dict:
-    """Get one entry. kind: systems | slots | types | sources | components. An id like
+    """Get one entry. kind: systems | slots | types | sources | components | parameters. An id like
     `homelab:comp/gpu-box` reads from a mounted map (see the maps tool)."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
@@ -108,8 +108,8 @@ def lists_export(dest: str = ".morphogen/lists") -> dict:
 def lists_query(kind: str, where: dict[str, Any] | None = None, follow: str | None = None,
                 start: str | None = None, hops: int = 1, map: str | None = None) -> dict:
     """Query a list. `where` matches fields exactly, or by substring with a leading '~'.
-    With `follow` and `start`, return entries reachable from `start` along reference field `follow`,
-    across maps. `map`: a mounted map's name, or '*' for all maps; default this project's map.
+    With `follow` and `start`, return entries reachable from `start` along reference field `follow`
+    (a list's own field, or a relation named in an entry's `links`, such as `writes`), across maps. `map`: a mounted map's name, or '*' for all maps; default this project's map.
     Entries from mounted maps carry `_map` and `_trust: stated`."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
