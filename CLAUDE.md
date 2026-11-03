@@ -7,6 +7,12 @@ marketplace manifests), .github/workflows/judge.yml (CI judge).
 Read README.md first; it is the specification.
 
 ## Rules
+- Look it up before relying on it. When a tool, library, standard or project
+  is unfamiliar, or you are unsure of its current version, licence or API,
+  search for its documentation and read it before designing around it,
+  recommending it or saying you don't know it. Don't take a description on
+  trust, the user's included, and don't answer from memory when a search is
+  available. Say what you read and what you couldn't check.
 - The installed plugin is the judge; this repository is the candidate. Never
   edit the installed plugin's directory, and never weaken the judge to make a
   change pass.
