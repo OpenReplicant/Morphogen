@@ -182,6 +182,17 @@ def judge(target: str, candidate: str = "HEAD", base: str | None = None,
 
 @server.tool()
 @_safe
+def probe(target: str, candidate: str = "HEAD", base: str | None = None, cases: int = 5, rounds: int = 3) -> dict:
+    """Practice run on a candidate, for strategies that learn from failures: under the judge's rules,
+    returns the check's output, each generated case (with expected and actual output where they differ)
+    and a few paired timing rounds. Never a verdict and never mergeable; use judge for that."""
+    root, cfg = _ctx()
+    _, evidence = project.stores(root, cfg)
+    return judge_mod.probe(root, cfg, target, candidate, evidence, base, cases, rounds)
+
+
+@server.tool()
+@_safe
 def strategy(target: str) -> dict:
     """Which improvement strategy to follow for the next round on a target, why, and its card.
     'auto' in morphogen.yaml picks from evidence; a name there forces that strategy."""

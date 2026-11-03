@@ -339,10 +339,92 @@ def _check_spec(spec: dict) -> dict:
     return metrics
 
 
-def _trials_today(evidence) -> int:
+def _trials_today(evidence, kind: str = "verdict") -> int:
     today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
     return sum(1 for r in evidence.dump()
-               if r.get("by") == "judge" and r.get("kind") == "verdict" and str(r.get("at", "")).startswith(today))
+               if r.get("by") == "judge" and r.get("kind") == kind and str(r.get("at", "")).startswith(today))
+
+
+def _clip(text: str, n: int = 300) -> str:
+    text = text.strip()
+    return text if len(text) <= n else text[:n] + f"... ({len(text) - n} more characters)"
+
+
+def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: str | None = None,
+          cases: int = 5, rounds: int = 3) -> dict:
+    """A practice run for strategies: feedback on a candidate, never a verdict.
+
+    Same rules as the judge (the base's spec and harness laid over the candidate, the
+    forbidden-file check, fresh random inputs), but it reports what a strategy needs to
+    learn from: the check's output, each generated case with the base's output and the
+    candidate's where they differ, and medians of a few paired timing rounds. It shows
+    nothing a candidate could not already compute, since the generator and the base's code
+    are in the repository. Recorded as evidence of kind `probe`; it cannot be proposed for
+    merging, strategy selection ignores it, and it does not count against
+    budget.trials_per_day (budget.probes_per_day caps it instead).
+    """
+    limit = int((cfg.get("budget") or {}).get("probes_per_day", 0) or 0)
+    if limit and _trials_today(evidence, "probe") >= limit:
+        raise JudgeError(f"the probe budget for today ({limit}) is spent; the operator can raise "
+                         "budget.probes_per_day in morphogen.yaml")
+    repo = repo_root(root)
+    rel = (root / target).resolve().relative_to(repo)
+    base_sha = resolve(repo, base or cfg.get("trunk", "main"))
+    cand_sha = resolve(repo, candidate)
+    changed = _changed(repo, base_sha, cand_sha, rel)
+    out: dict = {"target": str(rel), "base": base_sha, "candidate": cand_sha, "binding": False}
+    with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
+        spec = load_spec(btree, rel)
+        metrics_spec = _check_spec(spec)
+        timeout = int(spec.get("timeout", 300))
+        out["forbidden"] = _forbidden(changed, rel, list(spec.get("harness", [])))
+        bdir, cdir = btree / rel, ctree / rel
+        if not cdir.exists():
+            raise JudgeError(f"{rel} does not exist on the candidate commit")
+        _overlay(spec, bdir, cdir)
+        if not out["forbidden"]:
+            if spec.get("check"):
+                r = run(spec["check"], cdir, cfg, timeout=timeout, private=True)
+                out["check"] = {"passed": r.rc == 0, "output": "" if r.rc == 0 else _clip(r.err or r.out, 1200)}
+            eq = spec.get("equivalence")
+            if eq:
+                results = []
+                for _ in range(max(0, min(int(cases), 50))):
+                    seed = secrets.randbelow(2**31)
+                    g = run(eq["gen"].format(seed=seed), bdir, cfg, timeout=timeout)
+                    ob = run(eq["run"], bdir, cfg, stdin=g.out, timeout=timeout, private=True)
+                    oc = run(eq["run"], cdir, cfg, stdin=g.out, timeout=timeout, private=True)
+                    case = {"seed": seed, "status": "failed" if oc.rc != 0 else
+                            ("ok" if oc.out.strip() == ob.out.strip() else "wrong")}
+                    if case["status"] != "ok":
+                        case.update({"input": _clip(g.out, 200), "expected": _clip(ob.out),
+                                     "got": _clip(oc.out if oc.rc == 0 else (oc.err or oc.out))})
+                    results.append(case)
+                out["cases"] = results
+            samples: list[dict[str, list[float]]] = [{}, {}]
+            outputs: list = []
+            for _ in range(max(0, min(int(rounds), 10))):
+                _one_round(spec, [bdir, cdir], cfg, secrets.randbelow(2**31), timeout, samples, bdir,
+                           outputs=outputs)
+            if outputs:
+                out["metrics"] = {
+                    m: {"base": statistics.median(samples[0][m]), "candidate": statistics.median(samples[1][m]),
+                        "gain": round(statistics.median(_gain(b, c, ms.get("direction", "lower") == "lower",
+                                                              ms.get("gain") == "absolute")
+                                                        for b, c in zip(samples[0][m], samples[1][m])), 4)}
+                    for m, ms in metrics_spec.items() if m in samples[0] and m in samples[1]}
+                out["timed_output_mismatches"] = sum(1 for b, c in outputs if b != c)
+    rec = evidence.append({
+        "claim": f"probe of {cand_sha[:12]} against {base_sha[:12]} (practice; not a verdict)",
+        "kind": "probe", "subject": {"system": _target_name(spec, rel), "path": str(rel)},
+        "refs": {"base": base_sha, "candidate": cand_sha},
+        "outcome": {k: v for k, v in out.items() if k in ("forbidden", "check", "metrics", "timed_output_mismatches")}
+        | {"cases": [{k: c[k] for k in ("seed", "status")} for c in out.get("cases", [])]},
+        "sandbox": sandbox_mode(cfg), "trust": "measured", "by": "judge",
+    })
+    out["evidence_seq"] = rec["seq"]
+    out["note"] = "practice only: only judge() can produce a verdict, and only a verdict can be proposed for merging"
+    return out
 
 
 def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:

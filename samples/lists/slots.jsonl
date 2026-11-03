@@ -18,4 +18,5 @@
 {"accepts": ["type/improvement-strategy"], "filled_by": "comp/strategy-auto", "id": "morphogen/improvement-strategy", "interface": "parent(archive) -> commit; candidates(gap, parent) -> approaches; after(results)", "notes": "proposes only; never changes the judge, budgets or adoption rule", "system": "morphogen"}
 {"accepts": ["type/judge"], "filled_by": "comp/morphogen-judge", "id": "morphogen/judge", "interface": "judge(target, base, candidate) -> verdict", "system": "morphogen"}
 {"accepts": ["type/list-store"], "filled_by": "comp/files-list-store", "id": "morphogen/list-store", "interface": "get, put, query, follow, dump, load", "system": "morphogen"}
+{"accepts": ["type/llm-gateway"], "id": "morphogen/model-gateway", "interface": "an OpenAI-compatible endpoint that targets call; reports tokens, cost and latency per run from outside the candidate", "notes": "optional, empty by default; recommended filler: Bifrost (see llm_gateways in catalogs.yaml)", "system": "morphogen"}
 {"accepts": ["type/sandbox"], "filled_by": "comp/docker-sandbox", "id": "morphogen/sandbox", "interface": "run(cmd) with no network and a read-only tree", "system": "morphogen"}

@@ -4,6 +4,20 @@ Releases are tagged `morphogen--v<version>`, the form Claude Code resolves
 plugin dependency ranges against. Before 1.0, a minor version can break the
 contract in `docs/distributions.md`; a patch version cannot.
 
+## Unreleased
+
+- `probe`: a practice run on a candidate under the judge's rules, returning
+  per-case results (expected and actual output where they differ) and quick
+  metrics. Recorded as evidence of kind `probe`, never a verdict; it does not
+  count as a trial (`budget.probes_per_day` caps it).
+- Strategy cards `reflect` (learn from failing cases; after GEPA, ProTeGi,
+  PromptWizard, meta-prompting) and `tune` (search a component's settings;
+  after random and Bayesian search). The methods, not their code.
+- An optional `morphogen/model-gateway` slot in the self-map, empty by
+  default, and an `llm_gateways` catalog section with Bifrost recommended
+  (#43).
+- `docs/related-work.md`: Future AGI.
+
 ## 0.2.0 (2026-11-03)
 
 The first release that distributions can depend on.

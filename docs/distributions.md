@@ -81,6 +81,7 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 | `catalog_search` | `query`, `limit` |
 | `measure` | `target`, `ref` |
 | `judge` | `target`, `candidate`, `base`, `labels` (`strategy`, `approach`, `family`, `parent`) |
+| `probe` | `target`, `candidate`, `base`, `cases`, `rounds` |
 | `strategy` | `target` |
 | `archive` | `target`, `limit` |
 | `journal_append` | `title`, `gap`, `options`, `choice`, `rung`, `gate`, `commit`, `why` |
@@ -105,7 +106,8 @@ the reference fields (`systems.slots`; `slots.system`, `accepts`,
 **Evidence records:** `seq`, `at`, `prev`, `hash`, `claim`, `kind`, `trust`
 (`measured`, `simulated`, `stated`, `inferred`), `by`; verdicts also carry
 `verdict`, `subject`, `refs` (`base`, `candidate`), `outcome`, `seeds`,
-`labels`, `interface`, `sandbox`, `runner`. A distribution reads evidence; it
+`labels`, `interface`, `sandbox`, `runner`; probes have `kind: probe` and are
+never verdicts. A distribution reads evidence; it
 writes only through `evidence_note`.
 
 **Config:** `morphogen.yaml` keys `trunk`, `autonomy`, `data_dir`,

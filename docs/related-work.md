@@ -21,6 +21,20 @@ all of Morphogen's pieces.
   evaluator-driven program evolution with archives and islands. Closer to
   candidates for Morphogen's strategy slot than competitors.
 - **pi-evolve:** mutate, evaluate, select, archive over skills and prompts.
+- **Future AGI** ([future-agi/future-agi](https://github.com/future-agi/future-agi),
+  "Apache 2.0 core" plus an enterprise edition; README read 2026-11-03, code
+  not read). A platform for shipping LLM and agent apps:
+  - simulation with personas and adversarial inputs;
+  - 50+ evaluation metrics, scored by "LLM-as-judge + heuristic + ML";
+  - guardrails, OpenTelemetry tracing, and a gateway for 100+ providers;
+  - six prompt optimisers (GEPA, PromptWizard, ProTeGi, Bayesian,
+    Meta-Prompt, Random) fed by production traces.
+
+  It is a heavy stack (Django, Go, Postgres, ClickHouse, Temporal). Well
+  thought out in its narrow scope (LLM apps); its README does not discuss
+  reward hacking or keeping optimisers away from the scores that judge them.
+  Morphogen absorbs the *strategies* behind its optimisers as strategy cards,
+  not its code. Its tracing matches Morphogen's OpenTelemetry observer path.
 - **agent-gate** (MCP server, MIT): a hash-chained receipt ledger, an
   independent "refute" review, and a fail-closed gate, built so agents don't
   grade their own work. Very close to Morphogen's evidence and judge design,
