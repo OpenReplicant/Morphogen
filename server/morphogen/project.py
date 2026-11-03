@@ -13,6 +13,7 @@ import yaml
 
 from .backend_files import FilesEvidenceLog, FilesListStore
 from .config import data_dir, evidence_path, load_config, plugin_root
+from .maps import mount
 from .runner import capabilities
 
 SAMPLES = plugin_root() / "samples"
@@ -23,7 +24,9 @@ def stores(root: Path, cfg: dict):
     if backend != "files":
         raise RuntimeError(f"backend {backend!r} is not available in this version; use 'files'")
     d = data_dir(root, cfg)
-    return FilesListStore(d / "lists"), FilesEvidenceLog(evidence_path(root, cfg))
+    # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
+    lists = mount(root, cfg, FilesListStore(d / "lists"), d / "maps")
+    return lists, FilesEvidenceLog(evidence_path(root, cfg))
 
 
 def init_project(root: Path) -> dict:
@@ -46,7 +49,8 @@ def init_project(root: Path) -> dict:
         done.append("wrote catalogs.yaml")
     gi = root / ".gitignore"
     d = cfg.get("data_dir", ".morphogen")
-    for line, what in ((f"{d}/traces.jsonl", "traces"), (f"{d}/admin/", "generated admin pages")):
+    for line, what in ((f"{d}/traces.jsonl", "traces"), (f"{d}/admin/", "generated admin pages"),
+                       (f"{d}/maps/", "clones of mounted maps")):
         existing = gi.read_text() if gi.exists() else ""
         if line not in existing.splitlines():
             gi.write_text(existing + ("" if existing.endswith("\n") or not existing else "\n") + line + "\n")
@@ -94,6 +98,8 @@ def doctor(root: Path) -> dict:
         report["capabilities"] = {"lists": lists.capabilities, "evidence": evidence.capabilities}
         report["evidence"] = {"records": len(evidence.dump()), "path": str(evidence.path),
                               "chain": "intact" if ok else f"broken at record {bad}"}
+        maps = lists.status()
+        report["maps"] = {"own": maps["own"], "mounted": maps["mounted"], "dangling_refs": len(maps["dangling"])}
     except Exception as e:  # report, do not crash
         report["backend"] = f"error: {e}"
     server_dir = Path(__file__).resolve().parent

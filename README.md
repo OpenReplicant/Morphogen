@@ -251,6 +251,29 @@ generic; mapping fills in this machine's actual values. Morphogen can then
 treat its own parts, and what it stands on, as things to improve. The lists
 are JSONL files: commit them with your code.
 
+### Several maps
+
+A project's lists are one map. `morphogen.yaml` can mount others, read-only,
+so maps kept elsewhere (your home lab, a team's processes, a distribution's
+catalog) can be referred to without copying them:
+
+```yaml
+maps:
+  homelab: {path: ../homelab, commit: 3f2a9c1}       # a git repository, read at a commit
+  games:   {git: https://github.com/you/games-map, commit: 3f2a9c1}
+  notes:   {path: ../notes/.morphogen/lists}           # a directory, read live (unpinned)
+```
+
+A reference into another map is a qualified id: a slot here can be filled by
+`homelab:comp/gpu-box`. Bare ids mean the map the entry lives in. A pinned map
+is read from git objects at its commit, so later commits or edits in its
+repository change nothing here. Entries from a mounted map come back with
+`_map` and `_trust: stated` (another map's claim, not checked here). A mounted
+map is changed only in its own project, through its own judge; writing to one
+from here is refused. The `maps` tool, `doctor` and the admin report list the
+mounted maps, whether each is pinned, and any reference, in any map, that does
+not resolve.
+
 Behind the lists and the evidence log are ports with a files backend today.
 Each backend declares its capabilities (for example whether append-only is
 enforced or only tamper-evident), and all must pass the same conformance
@@ -400,7 +423,8 @@ The MCP server's tools, which any MCP-capable harness can call:
 |---|---|
 | `doctor` | reports the project, backend, evidence chain, runner and its guarantees, telemetry |
 | `init_project`, `install_sample` | set a project up; copy a sample target in |
-| `lists_get`, `lists_put`, `lists_query` | read and write the lists; follow references |
+| `lists_get`, `lists_put`, `lists_query` | read and write the lists; follow references, across maps |
+| `maps` | mounted maps, whether each is pinned, references that do not resolve |
 | `evidence_query`, `evidence_note` | read evidence; add an inferred or stated note |
 | `catalog_search` | search `catalogs.yaml` and the lists before building |
 | `measure` | baseline a target at a commit |
