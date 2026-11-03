@@ -141,6 +141,25 @@ class PostgresConformanceTables(ConformanceCases, unittest.TestCase):
         self.assertTrue(s.capabilities["native_multi_hop"])
         self.assertEqual(s.capabilities["layout"], self.layout)
 
+    def test_pggraph_registration_names_real_tables_with_single_column_keys(self):
+        s = self.lists()
+        if self.layout != "tables":
+            with self.assertRaises(RuntimeError):
+                s.pggraph_sql()
+            return
+        stmts = s.pggraph_sql()
+        base = {r[0] for r in self.conn.run("SELECT table_name FROM information_schema.tables "
+                                            "WHERE table_schema = :s AND table_type = 'BASE TABLE'", s=s.s)}
+        import re
+        for stmt in stmts:
+            for table in re.findall(rf"'{s.s}\.([a-z_]+)'", stmt):
+                self.assertIn(table, base, f"{stmt} names something that is not a base table")
+        for kind in ("systems", "slots", "types", "sources", "components"):
+            key = self.conn.run("SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
+                                "AND a.attnum = ANY(i.indkey) WHERE i.indrelid = CAST(:t AS regclass) "
+                                "AND i.indisprimary", t=f"{s.s}.{kind}")
+            self.assertEqual(key, [["id"]])
+
     def test_a_schema_keeps_its_layout(self):
         name = self.schema("fixed")
         self.pg.PostgresListStore(self.conn, name, self.layout)

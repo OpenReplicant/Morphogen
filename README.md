@@ -300,9 +300,14 @@ The two layouts hold the same data. `tables` makes each list a table
 (`systems`, `slots`, ...) and adds a `nodes (label, id, data)` view over them;
 `labels` stores one `nodes` table with the list as its label and adds a view
 per list. Either way, an `edges (src_label, src_id, field, dst_id)` table holds
-every reference and is kept in step with each write, so graph tools that work
-over existing tables, or recursive SQL, can walk the map; `follow` is a
-recursive query. `catalogs.yaml` is mirrored into a `catalog` table (the file
+every reference and is kept in step with each write, so recursive SQL or a
+graph extension can walk the map; `follow` is a recursive query. For
+[pgGraph](https://github.com/evokoa/pggraph), which indexes existing tables
+as a graph, use the `tables` layout: it needs real tables with a
+single-column key. The backend's `pggraph_sql()` returns the statements that
+register the lists as node tables and `edges` as an edge table labelled by
+field (written against pgGraph 1.2's documented API, not yet run against the
+extension). `labels` suits tools that want one labelled node table. `catalogs.yaml` is mirrored into a `catalog` table (the file
 stays the source). The evidence log is a table whose rows a trigger refuses to
 update or delete, with the same hash chain, so append-only is enforced, not
 only evident. `doctor` reports the backend's capabilities, including

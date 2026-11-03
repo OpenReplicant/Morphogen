@@ -188,6 +188,29 @@ class PostgresListStore:
             for e in entries:
                 self.put(kind, e)
 
+    # --- graph extensions
+    def pggraph_sql(self, graph: str = "morphogen") -> list[str]:
+        """SQL that registers this map with pgGraph (the `graph` extension, evokoa/pggraph), per its API
+        reference: each list's table as a node table keyed by `id`, and `edges` as an edge table once per
+        target list, labelled by the reference field (rows whose target is in another list are left out).
+
+        Written against pgGraph 1.2's documented API and not run against the extension here. Only the
+        `tables` layout fits: pgGraph needs real tables with a single-column key, and `labels` has a
+        composite key. Run the statements, then build the graph and enable sync as its docs describe.
+        pgGraph resolves an edge-table row's source by a unique match across the registered node tables,
+        so ids must be unique across lists; Morphogen's id prefixes (`type/`, `comp/`, `src/`) keep them so,
+        but the list store does not enforce it.
+        """
+        if self.layout != "tables":
+            raise RuntimeError("pgGraph needs the tables layout (a real table per list with a single-column id)")
+        s = self.s
+        stmts = [f"SELECT graph.add_table('{s}.{k}', 'id')" for k in KINDS]
+        targets = sorted({t for t in KINDS for fields in REF_FIELDS.values() if fields})
+        for t in targets:
+            stmts.append(f"SELECT graph.add_edge('{s}.edges', 'src_id', '{s}.{t}', 'dst_id', 'ref', "
+                         f"true, NULL, 'field')")
+        return stmts
+
     # --- the catalog mirror
     def sync_catalog(self, catalog: dict) -> int:
         """Mirror catalogs.yaml into the catalog table when it changed. Returns rows written (0 if unchanged)."""

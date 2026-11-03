@@ -15,6 +15,8 @@ contract in `docs/distributions.md`; a patch version cannot.
   trigger refuses to change, so append-only is enforced. The conformance
   tests run against every backend, and the whole suite passes on Postgres
   (`MORPHOGEN_TEST_BACKEND=postgres`).
+- `pggraph_sql()` on the postgres backend: the statements that register the
+  map with pgGraph (`tables` layout), per its API reference.
 
 - `probe`: a practice run on a candidate under the judge's rules, returning
   per-case results (expected and actual output where they differ) and quick
