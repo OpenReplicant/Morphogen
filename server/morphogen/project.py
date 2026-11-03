@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -19,14 +20,28 @@ from .runner import capabilities
 SAMPLES = plugin_root() / "samples"
 
 
+_PG: dict[str, Any] = {}  # one connection per URL for the life of the server process
+
+
 def stores(root: Path, cfg: dict):
+    """The list store (this project's map plus mounted maps) and the evidence log, on the configured backend."""
     backend = (cfg.get("backends") or {}).get("default", "files")
-    if backend != "files":
-        raise RuntimeError(f"backend {backend!r} is not available in this version; use 'files'")
     d = data_dir(root, cfg)
+    if backend == "files":
+        own, evidence = FilesListStore(d / "lists"), FilesEvidenceLog(evidence_path(root, cfg))
+    elif backend == "postgres":
+        from . import backend_postgres as pg
+        st = pg.settings(cfg)
+        conn = _PG.get(st["url"]) or _PG.setdefault(st["url"], pg.connect(st["url"]))
+        own = pg.PostgresListStore(conn, st["schema"], st["layout"])
+        evidence = pg.PostgresEvidenceLog(conn, st["schema"])
+        cat = root / "catalogs.yaml"
+        if cat.exists():
+            own.sync_catalog(yaml.safe_load(cat.read_text()) or {})
+    else:
+        raise RuntimeError(f"backend {backend!r} is not available; use 'files' or 'postgres'")
     # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
-    lists = mount(root, cfg, FilesListStore(d / "lists"), d / "maps")
-    return lists, FilesEvidenceLog(evidence_path(root, cfg))
+    return mount(root, cfg, own, d / "maps"), evidence
 
 
 def init_project(root: Path) -> dict:

@@ -29,13 +29,11 @@ from pathlib import Path
 from typing import Any
 
 from .backend_files import FilesListStore, _matches
-from .ports import KINDS
+from .ports import KINDS, REF_FIELDS
 
 SEP = ":"
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
-# Fields that hold references, by list. A bare id resolves in the entry's own map.
-REF_FIELDS = {"systems": ("slots",), "slots": ("system", "accepts", "filled_by"),
-              "components": ("type", "source", "system"), "types": (), "sources": ()}
+# REF_FIELDS (ports.py): fields that hold references. A bare id resolves in the entry's own map.
 ALL_REF_FIELDS = {f for fields in REF_FIELDS.values() for f in fields}
 DEFAULT_LISTS = ".morphogen/lists"
 

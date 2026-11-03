@@ -9,7 +9,8 @@ strategy: auto           # auto (chosen from evidence) or a card name: hill-clim
 #   targets/slow-script: archive-search
 
 backends:
-  default: files         # files (this version); postgres is planned as the recommended backend
+  default: files         # files · postgres (uv sync --extra postgres; see README, Storage backends)
+  # postgres: {url: postgresql://morphogen@localhost:5432/morphogen, schema: morphogen, layout: tables}
 
 sandbox: auto            # auto (Docker, then Podman) · docker · podman · none (run trials directly)
 sandbox_image: python:3.12-slim
