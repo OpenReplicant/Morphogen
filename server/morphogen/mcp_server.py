@@ -139,9 +139,14 @@ def evidence_note(claim: str, source: str, trust: str = "inferred",
 
 @server.tool()
 @_safe
-def catalog_search(query: str, limit: int = 20) -> dict:
-    """Search catalogs.yaml and the sources, components and types lists before building anything new."""
+def catalog_search(query: str = "", limit: int = 20, slot: str | None = None) -> dict:
+    """Search catalogs.yaml and the sources, components and types lists before building anything new.
+    With `slot`, list what could fill that slot instead: components and catalog entries of an accepted
+    type, ranked by whether they provide every capability the slot `requires`, then by fewest missing,
+    then by fewest extra capabilities (overhead the design does not call for)."""
     root, cfg = _ctx()
+    if slot:
+        return project.candidates(root, cfg, slot, limit)
     return {"results": project.catalog_search(root, cfg, query, limit)}
 
 

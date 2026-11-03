@@ -6,6 +6,14 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+- Capabilities and patterns: slots can `require` capabilities and components
+  `provide` them; `catalog_search(slot=...)` ranks fillers by coverage, then
+  by fewest extra capabilities. Systems marked `pattern: true` are
+  architectures without fillers; `realizes` (a reference field) links a
+  system or slot to the pattern it implements, across maps. The self-map's
+  storage slots and both backends carry this data. The map skill records it,
+  and separates the general method from domain ontologies and integrations.
+
 - A `postgres` backend (optional extra; pg8000, BSD-3-Clause, pinned with its
   dependencies to releases at least four months old). Lists in either of two
   layouts, `tables` (a table per list, a `nodes` view) or `labels` (one

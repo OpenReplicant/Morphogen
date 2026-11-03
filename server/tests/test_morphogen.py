@@ -566,7 +566,7 @@ class DistributionContract(unittest.TestCase):
         "lists_query": ["kind", "where", "follow", "start", "hops", "map"],
         "evidence_query": ["contains", "by", "limit"],
         "evidence_note": ["claim", "source", "trust", "supports", "challenges"],
-        "catalog_search": ["query", "limit"], "measure": ["target", "ref"],
+        "catalog_search": ["query", "limit", "slot"], "measure": ["target", "ref"],
         "judge": ["target", "candidate", "base", "labels"], "strategy": ["target"],
         "probe": ["target", "candidate", "base", "cases", "rounds"],
         "archive": ["target", "limit"],
@@ -594,6 +594,81 @@ class DistributionContract(unittest.TestCase):
         self.assertLessEqual({"measured", "simulated", "stated", "inferred"}, set(TRUST))
         self.assertLessEqual({"direct", "simulated"}, set(judge_mod.INTERFACES))
         self.assertLessEqual({"wall_seconds", "cpu_seconds", "max_rss_kb"}, set(judge_mod.JUDGE_METRICS))
+
+
+class Capabilities(unittest.TestCase):
+    """Slots say what they require, components what they provide; patterns are maps without fillers."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        project.init_project(self.tmp)
+        self.cfg = project.load_config(self.tmp)
+        self.lists, _ = project.stores(self.tmp, self.cfg)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def ids(self, slot):
+        return [c["id"] for c in project.candidates(self.tmp, self.cfg, slot)["candidates"]]
+
+    def test_the_smallest_sufficient_filler_comes_first(self):
+        # The list store needs exact lookups only: flat files cover it with the least overhead.
+        r = project.candidates(self.tmp, self.cfg, "morphogen/list-store")
+        self.assertEqual(r["candidates"][0]["id"], "comp/files-list-store")
+        self.assertEqual(r["candidates"][0]["missing"], [])
+        pg = [c for c in r["candidates"] if c["id"] == "comp/postgres-list-store"][0]
+        self.assertIn("graph", pg["extra"])
+        # Require graph traversal too, and Postgres moves ahead; files now miss a capability.
+        slot = self.lists.get("slots", "morphogen/list-store")
+        self.lists.put("slots", {**slot, "requires": ["exact", "graph"]})
+        r = project.candidates(self.tmp, self.cfg, "morphogen/list-store")
+        self.assertEqual(r["candidates"][0]["id"], "comp/postgres-list-store")
+        files = [c for c in r["candidates"] if c["id"] == "comp/files-list-store"][0]
+        self.assertEqual(files["missing"], ["graph"])
+
+    def test_only_accepted_types_are_candidates_and_catalog_entries_count(self):
+        self.assertNotIn("comp/files-evidence-log", self.ids("morphogen/list-store"))
+        (self.tmp / "catalogs.yaml").write_text(
+            "stores:\n  - name: some-graph-db\n    type: type/list-store\n    provides: [exact, graph, temporal]\n")
+        r = project.candidates(self.tmp, self.cfg, "morphogen/list-store")
+        cat = [c for c in r["candidates"] if c["id"] == "some-graph-db"][0]
+        self.assertEqual(cat["from"], "catalogs.yaml/stores")
+        self.assertEqual(cat["extra"], ["graph", "temporal"])
+
+    def test_capability_flags_count_as_provided(self):
+        r = project.candidates(self.tmp, self.cfg, "morphogen/evidence-log")
+        files = [c for c in r["candidates"] if c["id"] == "comp/files-evidence-log"][0]
+        self.assertEqual(files["covers"], ["tamper-evident"])
+
+    def test_a_system_realizes_a_pattern_in_a_mounted_map(self):
+        pat = self.tmp.parent / (self.tmp.name + "-patterns")
+        lists_dir = pat / "lists"
+        lists_dir.mkdir(parents=True)
+        (lists_dir / "systems.jsonl").write_text(json.dumps(
+            {"id": "knowledge-memory", "pattern": True, "interface": "none",
+             "slots": ["knowledge-memory/store", "knowledge-memory/retrieve"]}) + "\n")
+        (lists_dir / "slots.jsonl").write_text(
+            json.dumps({"id": "knowledge-memory/store", "system": "knowledge-memory", "requires": ["exact"]}) + "\n"
+            + json.dumps({"id": "knowledge-memory/retrieve", "system": "knowledge-memory",
+                          "requires": ["semantic", "lexical"]}) + "\n")
+        try:
+            cfg = {**self.cfg, "maps": {"patterns": {"path": str(lists_dir)}}}
+            lists, _ = project.stores(self.tmp, cfg)
+            lists.put("systems", {"id": "notes", "interface": "direct", "realizes": "patterns:knowledge-memory",
+                                  "slots": ["notes/store"]})
+            lists.put("slots", {"id": "notes/store", "system": "notes", "realizes": "patterns:knowledge-memory/store",
+                                "requires": ["exact"]})
+            self.assertEqual(lists.follow("systems", "notes", "realizes")[0]["id"], "patterns:knowledge-memory")
+            self.assertTrue(lists.get("systems", "patterns:knowledge-memory")["pattern"])
+            self.assertEqual(lists.status()["dangling"], [])
+            lists.put("slots", {"id": "notes/index", "system": "notes", "realizes": "patterns:knowledge-memory/rank"})
+            self.assertIn("patterns:knowledge-memory/rank", [d["ref"] for d in lists.status()["dangling"]])
+        finally:
+            shutil.rmtree(pat)
+
+    def test_unknown_slot_is_an_error(self):
+        with self.assertRaises(ValueError):
+            project.candidates(self.tmp, self.cfg, "no/such-slot")
 
 
 class AdminPages(unittest.TestCase):
