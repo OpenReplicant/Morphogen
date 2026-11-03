@@ -25,30 +25,21 @@ _DB: dict[tuple, Any] = {}  # one Database per URL and schema for the life of th
 
 
 def database(root: Path, cfg: dict) -> store.Database:
-    """The configured database: SQLite (default) or Postgres (backends.default: postgres)."""
-    b = cfg.get("backends") or {}
-    backend = b.get("default", "sqlite")
-    if backend in ("sqlite", "files"):
+    """The configured database: `database.url` (or MORPHOGEN_DATABASE_URL), else SQLite in git's own
+    directory. A new SQLite database imports a 0.2 project's JSONL files once."""
+    d = cfg.get("database") or {}
+    url = os.environ.get("MORPHOGEN_DATABASE_URL") or d.get("url")
+    path = None
+    if not url:
         path = sqlite_path(root, cfg)
-        key, new = ("sqlite", str(path)), not path.exists()
-        if key not in _DB:
-            _DB[key] = store.Database(f"sqlite:///{path}")
-            if new:
-                _import_files(root, cfg, _DB[key])
-        return _DB[key]
-    if backend == "postgres":
-        pg = b.get("postgres") or {}
-        url = os.environ.get("MORPHOGEN_POSTGRES_URL") or pg.get("url")
-        if not url:
-            raise RuntimeError("the postgres backend needs backends.postgres.url or MORPHOGEN_POSTGRES_URL")
-        if pg.get("layout") not in (None, "tables"):
-            raise RuntimeError("backends.postgres.layout: only `tables` remains (0.3 dropped `labels`); "
-                               "remove the key")
-        key = (url, pg.get("schema") or "morphogen")
-        if key not in _DB:
-            _DB[key] = store.Database(url, key[1])
-        return _DB[key]
-    raise RuntimeError(f"backend {backend!r} is not available; use 'sqlite' or 'postgres'")
+        url = f"sqlite:///{path}"
+    key = (url, d.get("schema"))
+    if key not in _DB:
+        new = path is not None and not path.exists()
+        _DB[key] = store.Database(url, d.get("schema"), d.get("options"))
+        if new:
+            _import_files(root, cfg, _DB[key])
+    return _DB[key]
 
 
 def _import_files(root: Path, cfg: dict, db: store.Database) -> None:
@@ -187,10 +178,10 @@ def doctor(root: Path) -> dict:
                      if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") else "off (set OTEL_EXPORTER_OTLP_ENDPOINT)",
         "trials_per_day": budget or "no limit",
         "enforced_append_only": bool(report.get("capabilities", {}).get("evidence", {}).get("enforced_append_only")),
-        "note": "The logs are hash-chained and the database refuses changes to their rows, but whoever can "
-                "write the database file (SQLite) or own the schema (Postgres) can drop those triggers; the "
-                "chain then shows the edit. For the strong version, keep the database out of the agent's "
-                "reach: a container, or Postgres with a role that does not own the schema.",
+        "note": "The logs are hash-chained, and on SQLite triggers refuse changes to their rows; whoever can "
+                "write the database can still drop the triggers, and the chain then shows the edit. For the "
+                "strong version, keep the database out of the agent's reach (a container, or a database "
+                "server the agent's account cannot alter).",
     }
     return report
 

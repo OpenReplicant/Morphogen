@@ -48,9 +48,8 @@ def store_dir(root: Path, cfg: dict) -> Path:
 
 
 def sqlite_path(root: Path, cfg: dict) -> Path:
-    """backends.sqlite.path if set (relative to the project), else morphogen.db in store_dir."""
-    explicit = ((cfg.get("backends") or {}).get("sqlite") or {}).get("path")
-    p = (root / explicit) if explicit else store_dir(root, cfg) / "morphogen.db"
+    """The default database: morphogen.db in store_dir."""
+    p = store_dir(root, cfg) / "morphogen.db"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 

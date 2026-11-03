@@ -36,14 +36,12 @@ def canonical(obj):
 
 
 def database_file(cfg_text):
-    """Same rule as the server (config.sqlite_path): backends.sqlite.path, else git's common
-    directory, else the data directory. None on postgres."""
+    """Same rule as the server (config.sqlite_path): git's common
+    directory, else the data directory. None when morphogen.yaml names another database."""
     import subprocess
-    if re.search(r"^\s*default:\s*postgres\b", cfg_text, re.M):
+    named = "database:" in cfg_text and re.search(r"^\s*url:\s*\S", cfg_text.split("database:", 1)[1], re.M)
+    if named or os.environ.get("MORPHOGEN_DATABASE_URL"):
         return None
-    m = re.search(r"^\s*sqlite:\s*(?:\{\s*|\n\s+)path:\s*([^\s,}#]+)", cfg_text, re.M)
-    if m:
-        return ROOT / m.group(1)
     try:
         p = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, capture_output=True, text=True)
         if p.returncode == 0 and p.stdout.strip():
@@ -91,7 +89,7 @@ def session(cfg_text):
     lines = [
         f"Morphogen: autonomy {setting(cfg_text, 'autonomy', '2')}, trunk {setting(cfg_text, 'trunk', 'main')}, "
         f"targets {', '.join(targets) or 'none'}.",
-        f"Evidence: {n} records, chain {chain}." if db else "Evidence: on postgres (call doctor).",
+        f"Evidence: {n} records, chain {chain}." if db else "Evidence: in the configured database (call doctor).",
     ]
     if verdict:
         lines.append(f"Last verdict: {verdict.get('claim')} ({verdict.get('verdict')}).")

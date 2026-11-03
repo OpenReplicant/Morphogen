@@ -251,7 +251,7 @@ A dependency is a slot filled by a component that is itself a system
 (`"system": "claude-code"` on `comp/claude-code`). The host entries are
 generic; mapping fills in this machine's actual values. Morphogen can then
 treat its own parts, and what it stands on, as things to improve. Every write
-to the lists is recorded in the change log (see Storage backends), so the
+to the lists is recorded in the change log (see Storage), so the
 map's history does not depend on git; commit the lists with your code only if
 you want them reviewed alongside it.
 
@@ -264,8 +264,9 @@ capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
 accepted type, those that cover every requirement first, then those missing
 the fewest, then those bringing the fewest *extra* capabilities. What the
 design does not call for is overhead: the seeded `morphogen/list-store`
-requires only exact lookups, so flat files come first; require `graph` too
-and the Postgres store moves ahead.
+requires exact lookups and concurrent writers, so the store's lexical search
+and graph walks show up as overhead; require `semantic` too and the report
+shows a gap the current store cannot fill.
 
 A **pattern** is a system with `pattern: true` and slots that nothing fills:
 an architecture to realise, not a running thing, such as "knowledge memory"
@@ -310,7 +311,7 @@ from here is refused. The `maps` tool, `doctor` and the admin report list the
 mounted maps, whether each is pinned, and any reference, in any map, that does
 not resolve.
 
-### Storage backends
+### Storage
 
 Two kinds of files, kept apart. **Documents** are what people write and git
 versions, because you would roll them back: code, `target.yaml` and harnesses,
@@ -320,37 +321,31 @@ through one loader that checks each against its schema (`documents.py`).
 hash-chained logs, `evidence` (claims and verdicts), `changes` (every write to
 the lists: list, id, hashes before and after, the new entry, who wrote it and
 why) and `journal` (decisions: gap, options, choice, rung, result, commit).
-Records live in a database, through SQLAlchemy:
-
-- **SQLite**, the default: one file, `.git/morphogen/morphogen.db`, in git's
-  own directory, untracked, so candidate commits cannot touch it and every
-  worktree shares it. Python ships the driver.
-- **Postgres**, for distributions that want a server:
-  `uv sync --project server --extra postgres` (pg8000, pure Python).
+Records live in one database, through SQLAlchemy Core: by default SQLite,
+one file at `.git/morphogen/morphogen.db`, in git's own directory, untracked,
+so candidate commits cannot touch it and every worktree shares it. Python
+ships its driver. Any other database SQLAlchemy supports (Postgres, MySQL,
+...) takes a URL; install its driver into the server's environment. Only
+SQLite is tested here.
 
 ```yaml
-backends:
-  default: postgres          # sqlite (default) | postgres
-  # sqlite: {path: .morphogen/morphogen.db}
-  postgres:
-    url: postgresql://morphogen@localhost:5432/morphogen   # or MORPHOGEN_POSTGRES_URL
-    schema: morphogen
+database:
+  url: postgresql+psycopg://morphogen@db.local/morphogen   # or MORPHOGEN_DATABASE_URL, for passwords
+  schema: morphogen                                        # where the database has schemas
+  options: {pool_pre_ping: true, connect_args: {sslmode: require}}   # passed to create_engine
 ```
 
-The same tables on both: one per list (`systems`, `slots`, ...), each
-`(id, data)` with `data` as JSON (jsonb on Postgres), the table's name being
-the label; an `edges (src_label, src_id, field, dst_id)` table of every reference, kept in
-step with each write, so `follow` is a recursive query; a `catalog` mirror of
-`catalogs.yaml` (the file stays the source); and the three logs, whose rows
-triggers refuse to update or delete. A list write and its change record commit
-in one transaction, and appends take the database's write lock, so two
-sessions writing at once still get one chain. For
-[pgGraph](https://github.com/evokoa/pggraph), which indexes existing tables as
-a graph, `pggraph_sql()` returns the statements that register the lists and
-`edges` (written against pgGraph 1.2's documented API, not yet run against the
-extension). `doctor` reports capabilities, including `vector_search` when
-pgvector is installed. Any other database SQLAlchemy supports is a small
-change to `store.py`, but only these two are tested.
+The tables: one per list (`systems`, `slots`, ...), each `(id, data)` with
+`data` as JSON, the table's name being the label; `edges (src_label, src_id,
+field, dst_id)`, every reference, kept in step with each write, so `follow` is
+a recursive query; `catalog`, a mirror of `catalogs.yaml` (the file stays the
+source); and the three logs, `(seq, hash, prev, raw, record)`. A list write and
+its change record commit in one transaction, and `seq` is the key, so two
+writers cannot fork a chain. On SQLite, triggers also refuse updates and
+deletes to the logs; on other databases append-only is evident from the chain,
+not enforced, unless you add your own trigger. Graph or vector extensions
+(pgGraph, pgvector, sqlite-vec) work over these tables as they are; they are a
+distribution's choice, not the base's.
 
 To publish a map for other projects to mount, `lists_export` writes it as
 JSONL (`map/<list>.jsonl`, one entry per line, sorted); commit that, and
@@ -498,12 +493,11 @@ those repositories, not here. Releases are tagged `morphogen--v<version>`
 ```yaml
 trunk: main              # changes only by judged, approved merges
 autonomy: 2              # 1 assist · 2 propose · 3 merge free changes · 4 autonomous
-data_dir: .morphogen     # lists, traces, admin pages
+data_dir: .morphogen     # traces, admin pages, mounted-map cache
 strategy: auto           # or hill-climb, archive-search, simplify, or your own card
 # strategies:            # per-target overrides
 #   targets/slow-script: archive-search
-backends:
-  default: files
+# database: {url: ..., schema: ..., options: {}}   # default: SQLite in .git/morphogen/
 sandbox: auto            # auto (Docker, then Podman) · docker · podman · none
 sandbox_image: python:3.12-slim
 budget:
@@ -599,10 +593,11 @@ In CI this is the `containers` job, started by hand.
 - Containers have no network, so service targets that send telemetry run
   with `sandbox: none` for now.
 - The runner uses `sh`, so Windows needs WSL.
-- The database refuses edits to the logs, but whoever can write the SQLite
-  file or owns the Postgres schema can drop those triggers; the hash chain then
-  shows the edit. Keep the database out of the agent's reach (a container, or a
-  Postgres role that does not own the schema) for the strong version.
+- On SQLite the database refuses edits to the logs, but whoever can write the
+  file can drop those triggers; the hash chain then shows the edit. Keep the
+  database out of the agent's reach (a container, or a server the agent's
+  account cannot alter) for the strong version. Databases other than SQLite
+  are untested.
 - No model gateway yet: a target that calls an LLM needs `sandbox: none`, its
   token cost is not measured from outside, and `budget.trials_per_day` caps
   trials, not spending (#43).

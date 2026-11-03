@@ -32,21 +32,12 @@ class _Doc(BaseModel):
 
 # morphogen.yaml
 
-class Postgres(_Doc):
+class Database(_Doc):
+    """Where the lists and logs live. Unset: SQLite in git's own directory."""
     model_config = ConfigDict(extra="allow", populate_by_name=True)
-    url: str | None = None
+    url: str | None = None  # any SQLAlchemy URL; MORPHOGEN_DATABASE_URL overrides (keep passwords there)
     schema_: str | None = Field(None, alias="schema")  # `schema` would shadow a BaseModel method
-
-
-class Sqlite(_Doc):
-    path: str | None = None
-
-
-class Backends(_Doc):
-    # `files` is the name 0.2 used for the default; it now means sqlite.
-    default: Literal["sqlite", "postgres", "files"] = "sqlite"
-    sqlite: Sqlite | None = None
-    postgres: Postgres | None = None
+    options: dict[str, Any] = {}  # passed to sqlalchemy.create_engine (connect_args for driver flags)
 
 
 class Budget(_Doc):
@@ -61,7 +52,7 @@ class Config(_Doc):
     data_dir: str = ".morphogen"
     strategy: str | None = None
     strategies: Any = None
-    backends: Backends = Backends()
+    database: Database = Database()
     sandbox: Literal["auto", "docker", "podman", "none"] = "auto"
     sandbox_image: str = "python:3.12-slim"
     budget: Budget | None = None

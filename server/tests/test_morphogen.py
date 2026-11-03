@@ -142,7 +142,8 @@ class StoreCases(ConformanceCases):
         self.assertEqual(log.verify(), (True, None))
 
 
-class SqliteConformance(StoreCases, unittest.TestCase):
+class StoreConformance(StoreCases, unittest.TestCase):
+    """On SQLite, the default and the only database tested here."""
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.dbs = []
@@ -184,7 +185,7 @@ class SqliteConformance(StoreCases, unittest.TestCase):
                 "".join(store.canonical(r) + "\n" for r in ev.dump()))
             (tmp / ".morphogen" / "lists").mkdir(parents=True)
             (tmp / ".morphogen" / "lists" / "types.jsonl").write_text('{"id": "type/old"}\n')
-            (tmp / "morphogen.yaml").write_text("backends: {default: files}\n")
+            (tmp / "morphogen.yaml").write_text("backends: {default: files}\n")  # 0.2's config: ignored now
             cfg = project.load_config(tmp)
             lists, evidence = project.stores(tmp, cfg)
             self.assertEqual([r["claim"] for r in evidence.dump()], ["kept"])
@@ -192,91 +193,6 @@ class SqliteConformance(StoreCases, unittest.TestCase):
             self.assertEqual(lists.get("types", "type/old"), {"id": "type/old"})
             self.assertEqual(lists.history("types", "type/old")[0]["op"], "load")
         finally:
-            shutil.rmtree(tmp)
-
-
-POSTGRES_URL = os.environ.get("MORPHOGEN_TEST_POSTGRES")  # e.g. postgresql://postgres@127.0.0.1:5432/morphogen_test
-
-
-@unittest.skipUnless(POSTGRES_URL, "set MORPHOGEN_TEST_POSTGRES to a scratch database to test the postgres backend")
-class PostgresConformance(StoreCases, unittest.TestCase):
-    def setUp(self):
-        self.dbs = []
-        self.n = 0
-
-    def tearDown(self):
-        for db in self.dbs:
-            db.drop()
-
-    def database(self, name):
-        self.n += 1
-        db = store.Database(POSTGRES_URL, f"mg_test_{name}_{os.getpid()}_{self.n}")
-        self.dbs.append(db)
-        return db
-
-    def reopen(self, db):
-        return store.Database(db.url, db.schema)
-
-    def tamper(self, log):
-        s = log.db.schema
-        self.refused(log.db, f"UPDATE {s}.evidence SET raw = 'x' WHERE seq = 1")
-        self.refused(log.db, f"DELETE FROM {s}.evidence")
-        self.refused(log.db, f"TRUNCATE {s}.evidence")
-        from sqlalchemy import text
-        with log.db.engine.begin() as c:
-            c.execute(text(f"ALTER TABLE {s}.evidence DISABLE TRIGGER evidence_append_only"))
-            c.execute(text(f"UPDATE {s}.evidence SET raw = replace(raw, '\"claim\":\"a\"', "
-                           f"'\"claim\":\"rewritten\"') WHERE seq = 1"))
-            c.execute(text(f"ALTER TABLE {s}.evidence ENABLE TRIGGER evidence_append_only"))
-
-    def test_pggraph_registration_names_real_tables_with_single_column_keys(self):
-        s = self.lists()
-        stmts = s.pggraph_sql()
-        sch = s.db.schema
-        base = {r[0] for r in self.sql(s.db, "SELECT table_name FROM information_schema.tables "
-                                             "WHERE table_schema = :s AND table_type = 'BASE TABLE'", s=sch)}
-        import re
-        for stmt in stmts:
-            for table in re.findall(rf"'{sch}\.([a-z_]+)'", stmt):
-                self.assertIn(table, base, f"{stmt} names something that is not a base table")
-        for kind in ("systems", "slots", "types", "sources", "components"):
-            key = self.sql(s.db, "SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
-                                 "AND a.attnum = ANY(i.indkey) WHERE i.indrelid = CAST(:t AS regclass) "
-                                 "AND i.indisprimary", t=f"{sch}.{kind}")
-            self.assertEqual(key, [("id",)])
-
-    def test_a_schema_in_the_dropped_labels_layout_is_refused(self):
-        db = self.database("labels")
-        from sqlalchemy import text
-        name = f"mg_test_old_{os.getpid()}"
-        with db.engine.begin() as c:
-            c.execute(text(f"CREATE SCHEMA {name}"))
-            c.execute(text(f"CREATE TABLE {name}.nodes (label text, id text, data jsonb)"))
-        try:
-            with self.assertRaises(RuntimeError):
-                store.Database(POSTGRES_URL, name)
-        finally:
-            with db.engine.begin() as c:
-                c.execute(text(f"DROP SCHEMA {name} CASCADE"))
-
-    def test_catalog_mirror_and_backend_wiring(self):
-        tmp = Path(tempfile.mkdtemp())
-        schema = f"mg_test_proj_{os.getpid()}"
-        try:
-            (tmp / "morphogen.yaml").write_text(
-                f"backends:\n  default: postgres\n  postgres: {{url: '{POSTGRES_URL}', schema: {schema}}}\n")
-            (tmp / "catalogs.yaml").write_text("tools:\n  - name: ttyd\n    finds: a web terminal\n")
-            project.init_project(tmp)
-            cfg = project.load_config(tmp)
-            lists, evidence = project.stores(tmp, cfg)
-            self.assertIn("morphogen", {e["id"] for e in lists.query("systems")})  # the self-map is seeded
-            self.assertTrue(evidence.capabilities["enforced_append_only"])
-            self.assertEqual([r["name"] for r in lists.own.catalog_rows("tools")], ["ttyd"])
-            self.assertEqual(lists.own.sync_catalog({"tools": [{"name": "ttyd"}]}), 1)  # changed: rewritten
-            report = project.doctor(tmp)
-            self.assertEqual(report["evidence"]["chain"], "intact")
-        finally:
-            store.Database(POSTGRES_URL, schema).drop()
             shutil.rmtree(tmp)
 
 
@@ -300,10 +216,10 @@ class Documents(unittest.TestCase):
         (self.tmp / "morphogen.yaml").write_text("trunk: dev\nfuture_key: 1\n")
         cfg = project.load_config(self.tmp)
         self.assertEqual((cfg["trunk"], cfg["data_dir"], cfg["future_key"]), ("dev", ".morphogen", 1))
-        self.assertEqual(cfg["backends"]["default"], "sqlite")
+        self.assertEqual(cfg["database"]["options"], {})
 
     def test_a_bad_document_names_the_file_and_every_problem(self):
-        (self.tmp / "morphogen.yaml").write_text("sandbox: maybe\nbackends: {default: mongo}\n")
+        (self.tmp / "morphogen.yaml").write_text("sandbox: maybe\ndatabase: {options: none}\n")
         with self.assertRaises(documents.DocumentError) as e:
             project.load_config(self.tmp)
         self.assertIn("morphogen.yaml", str(e.exception))
@@ -358,9 +274,8 @@ class JudgeOnSample(unittest.TestCase):
         self.p.judge(self.p.branch("fast3", {"topwords.py": FAST}))
         self.p.branch("unrelated", {"notes.txt": "x\n"})  # commits with `git add -A`
         self.assertEqual(len(self.p.evidence.dump()), before + 1)
-        if not str(self.p.evidence.path).startswith("postgres:"):
-            # The files backend keeps evidence in git's own directory, out of reach of candidate commits.
-            self.assertIn("/.git/", str(self.p.evidence.path))
+        # The database lives in git's own directory, out of reach of candidate commits.
+        self.assertIn("/.git/", str(self.p.evidence.path))
 
     def test_measure_records_baseline(self):
         r = judge_mod.measure(self.p.repo, self.p.cfg, TARGET, "main", self.p.evidence)
@@ -744,22 +659,24 @@ class Capabilities(unittest.TestCase):
         return [c["id"] for c in project.candidates(self.tmp, self.cfg, slot)["candidates"]]
 
     def test_the_smallest_sufficient_filler_comes_first(self):
-        # The list store needs exact lookups only: flat files cover it with the least overhead.
-        r = project.candidates(self.tmp, self.cfg, "morphogen/list-store")
-        self.assertEqual(r["candidates"][0]["id"], "comp/files-list-store")
+        self.lists.put("components", {"id": "comp/flat", "type": "type/list-store", "provides": ["exact"]})
+        self.lists.put("components", {"id": "comp/graphy", "type": "type/list-store",
+                                      "provides": ["exact", "graph", "semantic"]})
+        self.lists.put("slots", {"id": "t/store", "system": "t", "accepts": ["type/list-store"], "requires": ["exact"]})
+        # Exact lookups only: the flat store covers it with the least overhead.
+        r = project.candidates(self.tmp, self.cfg, "t/store")
+        self.assertEqual(r["candidates"][0]["id"], "comp/flat")
         self.assertEqual(r["candidates"][0]["missing"], [])
-        pg = [c for c in r["candidates"] if c["id"] == "comp/postgres-list-store"][0]
-        self.assertIn("graph", pg["extra"])
-        # Require graph traversal too, and Postgres moves ahead; files now miss a capability.
-        slot = self.lists.get("slots", "morphogen/list-store")
-        self.lists.put("slots", {**slot, "requires": ["exact", "graph"]})
-        r = project.candidates(self.tmp, self.cfg, "morphogen/list-store")
-        self.assertEqual(r["candidates"][0]["id"], "comp/postgres-list-store")
-        files = [c for c in r["candidates"] if c["id"] == "comp/files-list-store"][0]
-        self.assertEqual(files["missing"], ["graph"])
+        self.assertIn("graph", [c for c in r["candidates"] if c["id"] == "comp/graphy"][0]["extra"])
+        # Require graph traversal too, and the graph store moves ahead; the flat one now misses it.
+        self.lists.put("slots", {"id": "t/store", "system": "t", "accepts": ["type/list-store"],
+                                 "requires": ["exact", "graph"]})
+        r = project.candidates(self.tmp, self.cfg, "t/store")
+        self.assertEqual(r["candidates"][0]["id"], "comp/graphy")
+        self.assertEqual([c for c in r["candidates"] if c["id"] == "comp/flat"][0]["missing"], ["graph"])
 
     def test_only_accepted_types_are_candidates_and_catalog_entries_count(self):
-        self.assertNotIn("comp/files-evidence-log", self.ids("morphogen/list-store"))
+        self.assertNotIn("comp/sql-logs", self.ids("morphogen/list-store"))
         (self.tmp / "catalogs.yaml").write_text(
             "stores:\n  - name: some-graph-db\n    type: type/list-store\n    provides: [exact, graph, temporal]\n")
         r = project.candidates(self.tmp, self.cfg, "morphogen/list-store")
@@ -768,9 +685,11 @@ class Capabilities(unittest.TestCase):
         self.assertEqual(cat["extra"], ["graph", "temporal"])
 
     def test_capability_flags_count_as_provided(self):
+        self.lists.put("components", {"id": "comp/flagged", "type": "type/evidence-log",
+                                      "capabilities": {"tamper-evident": True, "concurrent-writers": False}})
         r = project.candidates(self.tmp, self.cfg, "morphogen/evidence-log")
-        files = [c for c in r["candidates"] if c["id"] == "comp/files-evidence-log"][0]
-        self.assertEqual(files["covers"], ["tamper-evident"])
+        flagged = [c for c in r["candidates"] if c["id"] == "comp/flagged"][0]
+        self.assertEqual((flagged["covers"], flagged["missing"]), (["tamper-evident"], ["concurrent-writers"]))
 
     def test_a_system_realizes_a_pattern_in_a_mounted_map(self):
         pat = self.tmp.parent / (self.tmp.name + "-patterns")
@@ -802,21 +721,21 @@ class Capabilities(unittest.TestCase):
         report = self.lists.capability_report()
         self.assertEqual(report["gaps"], [])  # the seeded map meets its own requirements
         self.assertEqual(report["unexplained"], [])  # and says why it has each one
-        self.assertIn("morphogen/list-store", [o["slot"] for o in report["overhead"]])  # files also do lexical
+        self.assertIn("morphogen/list-store", [o["slot"] for o in report["overhead"]])  # it also does lexical, graph
         slot = self.lists.get("slots", "morphogen/list-store")
-        self.lists.put("slots", {**slot, "requires": ["exact", "graph"]}, reason="a design now walks the map")
+        self.lists.put("slots", {**slot, "requires": ["exact", "semantic"]}, reason="a design now searches by meaning")
         report = self.lists.capability_report()
         gap = [g for g in report["gaps"] if g["slot"] == "morphogen/list-store"][0]
-        self.assertEqual((gap["missing"], gap["why"]), (["graph"], "filler lacks it"))
-        self.assertIn("graph", [r for u in report["unexplained"] for r in u["requirements"]])
+        self.assertEqual((gap["missing"], gap["why"]), (["semantic"], "filler lacks it"))
+        self.assertIn("semantic", [r for u in report["unexplained"] for r in u["requirements"]])
         self.assertEqual(project.doctor(self.tmp)["maps"]["capability_gaps"][0]["slot"], "morphogen/list-store")
-        self.assertEqual(self.lists.history("slots", "morphogen/list-store")[0]["reason"], "a design now walks the map")
+        self.assertEqual(self.lists.history("slots", "morphogen/list-store")[0]["reason"], "a design now searches by meaning")
 
     def test_the_journal_is_a_log(self):
         r = project.journal_append(self.tmp, self.cfg, {"title": "swap the list store", "gap": "graph walks",
-                                                       "choice": "postgres", "rung": "reuse"})
+                                                       "choice": "a graph store", "rung": "reuse"})
         self.assertEqual(r["journal_seq"], 1)
-        self.assertEqual(project.journal(self.tmp, self.cfg)[0]["choice"], "postgres")
+        self.assertEqual(project.journal(self.tmp, self.cfg)[0]["choice"], "a graph store")
         self.assertEqual(project.doctor(self.tmp)["journal"]["chain"], "intact")
 
     def test_unknown_slot_is_an_error(self):
@@ -1012,10 +931,7 @@ class SessionHook(unittest.TestCase):
             r = subprocess.run(["python3", "-I", str(hook), "session"], input="{}", capture_output=True, text=True,
                                env={**os.environ, "CLAUDE_PROJECT_DIR": str(sp.repo)})
             self.assertEqual(r.returncode, 0, r.stderr)
-            if sp.schema:
-                self.assertIn("on postgres", r.stdout)
-            else:
-                self.assertIn("1 records, chain intact", r.stdout)
-                self.assertIn("Last journal entry: tried a hash map.", r.stdout)
+            self.assertIn("1 records, chain intact", r.stdout)
+            self.assertIn("Last journal entry: tried a hash map.", r.stdout)
         finally:
             sp.close()

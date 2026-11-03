@@ -118,10 +118,9 @@ never verdicts. Change records (`changes` log) carry `op`, `list`, `id`,
 writes only through `evidence_note`.
 
 **Config:** `morphogen.yaml` keys `trunk`, `autonomy`, `data_dir`,
-`strategy`, `strategies`, `backends`, `sandbox`,
-`sandbox_image`, `budget`, `targets`, `map_name`, `maps`; under `backends`,
-`default` (`sqlite` or `postgres`), `sqlite` (`path`) and `postgres` (`url`,
-`schema`). The table names and columns in `README.md` (Storage backends) are
+`strategy`, `strategies`, `database`, `sandbox`,
+`sandbox_image`, `budget`, `targets`, `map_name`, `maps`;
+and `database` (`url`, `schema`, `options`). The table names and columns in `README.md` (Storage) are
 part of the contract too, so distributions can query the database directly
 (read-only: the base writes it). Published maps are JSONL, one file per list.
 

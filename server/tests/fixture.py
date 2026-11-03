@@ -2,8 +2,7 @@
 
 Trials run with `sandbox: none` unless MORPHOGEN_TEST_SANDBOX names another
 runner (docker or podman), so the same suites can be run inside a container.
-Data lives in SQLite unless MORPHOGEN_TEST_BACKEND=postgres, which
-uses MORPHOGEN_TEST_POSTGRES (a scratch database) with a fresh schema per project.
+Data lives in the project's SQLite database.
 """
 
 import os
@@ -18,7 +17,6 @@ from morphogen.config import load_config
 
 TARGET = "targets/slow-script"
 SANDBOX = os.environ.get("MORPHOGEN_TEST_SANDBOX", "none")
-BACKEND = os.environ.get("MORPHOGEN_TEST_BACKEND", "sqlite")
 
 
 def git(cwd, *args):
@@ -38,14 +36,6 @@ class SampleProject:
         cfg_file = self.repo / "morphogen.yaml"
         cfg_file.write_text(cfg_file.read_text().replace("sandbox: auto", f"sandbox: {SANDBOX}")
                             .replace("trials_per_day: 20", f"trials_per_day: {trials_per_day}"))
-        self.schema = None
-        if BACKEND == "postgres":
-            import uuid
-            self.schema = f"mg_fixture_{uuid.uuid4().hex[:12]}"
-            text = cfg_file.read_text().replace("backends:\n", "backends_unused:\n", 1)
-            cfg_file.write_text(text + f"\nbackends:\n  default: postgres\n  postgres:\n"
-                                f"    url: {os.environ['MORPHOGEN_TEST_POSTGRES']}\n    schema: {self.schema}\n")
-            project.init_project(self.repo)  # seeds the lists in the new schema
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "base")
         self.cfg = load_config(self.repo)
@@ -75,8 +65,7 @@ class SampleProject:
         return self.path(rel).read_text()
 
     def close(self):
-        if self.schema:
-            project.database(self.repo, self.cfg).drop()
+        project.database(self.repo, self.cfg).engine.dispose()
         shutil.rmtree(self.tmp)
 
 
