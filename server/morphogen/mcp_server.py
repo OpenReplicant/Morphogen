@@ -81,23 +81,12 @@ def lists_get(kind: str, id: str) -> dict:
 
 @server.tool()
 @_safe
-def lists_put(kind: str, entry: dict[str, Any], reason: str | None = None) -> dict:
+def lists_put(kind: str, entry: dict[str, Any]) -> dict:
     """Add or replace an entry (needs an 'id') in this project's map. References to other entries are
-    their ids; `map:id` refers to an entry in a mounted map. Mounted maps are read-only.
-    Every write is recorded in the change log; `reason` (for example `evidence:42`) says why."""
+    their ids; `map:id` refers to an entry in a mounted map. Mounted maps are read-only."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
-    return lists.put(kind, entry, by="agent", reason=reason)
-
-
-@server.tool()
-@_safe
-def lists_history(kind: str | None = None, id: str | None = None, limit: int = 50) -> dict:
-    """Recorded writes to this project's map, newest first: what changed (hashes before and after, the new
-    entry), who wrote it and why. Filter by list (`kind`) and `id`."""
-    root, cfg = _ctx()
-    lists, _ = project.stores(root, cfg)
-    return {"changes": lists.history(kind, id, limit)}
+    return lists.put(kind, entry)
 
 
 @server.tool()

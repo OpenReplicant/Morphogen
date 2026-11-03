@@ -1,8 +1,7 @@
 """Ports: what each data feature needs, independent of the backend.
 
 Each port is the interface of a slot in the self-map: ListStore for
-`knowledge/lists`, Log for each of `knowledge/logs` (evidence, changes,
-journal). `knowledge/indices` has no port yet; its filler today is a scan
+`knowledge/lists`, Log for each of `knowledge/logs` (evidence, journal). `knowledge/indices` has no port yet; its filler today is a scan
 inside the queries. A filler implements the port
 and declares capability flags, so callers know which guarantees are real.
 store.py fills them all; every filler must pass the conformance tests
@@ -26,21 +25,20 @@ REF_FIELDS = {"systems": ("slots",), "slots": ("system", "accepts", "filled_by")
 
 @runtime_checkable
 class ListStore(Protocol):
-    """The lists slot: entries by id in the five lists. Every write is recorded in the changes log."""
+    """The lists slot: entries by id in the five lists."""
     capabilities: dict[str, bool]
 
     def get(self, kind: str, id: str) -> dict | None: ...
-    def put(self, kind: str, entry: dict, by: str = "agent", reason: str | None = None) -> dict: ...
+    def put(self, kind: str, entry: dict) -> dict: ...
     def query(self, kind: str, where: dict[str, Any] | None = None) -> list[dict]: ...
     def follow(self, kind: str, id: str, field: str, hops: int = 1) -> list[dict]: ...
     def dump(self) -> dict[str, list[dict]]: ...
-    def load(self, data: dict[str, list[dict]], by: str = "operator") -> None: ...
-    def history(self, kind: str | None = None, id: str | None = None, limit: int = 50) -> list[dict]: ...
+    def load(self, data: dict[str, list[dict]]) -> None: ...
 
 
 @runtime_checkable
 class Log(Protocol):
-    """One of the logs (evidence, changes, journal): append-only and hash-chained."""
+    """One of the logs (evidence, journal): append-only and hash-chained."""
     capabilities: dict[str, bool]
 
     def append(self, record: dict) -> dict: ...

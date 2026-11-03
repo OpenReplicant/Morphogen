@@ -17,7 +17,7 @@
 {"id": "comp/scan", "notes": "no index: queries read the lists and logs and match ids and words; enough while maps are small", "provides": ["exact", "lexical"], "source": "src/own", "status": "in use", "type": "type/index"}
 {"id": "comp/session-model", "notes": "whichever model the session runs; not fixed", "source": "src/anthropic", "status": "in use", "type": "type/llm"}
 {"id": "comp/sql-list-store", "notes": "store.py over SQLAlchemy; SQLite by default, any SQLAlchemy database by database.url (only SQLite tested)", "provides": ["exact", "concurrent-writers"], "source": "src/own", "status": "in use", "type": "type/list-store"}
-{"id": "comp/sql-logs", "notes": "the evidence, changes and journal tables; hash-chained; on SQLite, triggers refuse updates and deletes", "provides": ["tamper-evident", "enforced-append-only", "concurrent-writers"], "source": "src/own", "status": "in use", "type": "type/log"}
+{"id": "comp/sql-logs", "notes": "the evidence and journal tables; hash-chained; on SQLite, triggers refuse updates and deletes", "provides": ["tamper-evident", "enforced-append-only", "concurrent-writers"], "source": "src/own", "status": "in use", "type": "type/log"}
 {"after": "Darwin G\u00f6del Machine", "card": "strategies/archive-search.md", "id": "comp/strategy-archive-search", "source": "src/own", "status": "available", "type": "type/improvement-strategy"}
 {"id": "comp/strategy-auto", "notes": "selects among the cards below from evidence", "source": "src/own", "status": "in use", "type": "type/improvement-strategy"}
 {"card": "strategies/hill-climb.md", "id": "comp/strategy-hill-climb", "source": "src/own", "status": "available", "type": "type/improvement-strategy"}

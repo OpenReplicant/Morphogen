@@ -47,10 +47,8 @@ These steps never change, whatever the strategy.
 10. **Record** with `journal_append`: the gap, the strategy and why, options
     tried, the choice, the rung, the verdicts, the commit. Update the lists if
     a slot is now filled by a different component, with `lists_put` and a
-    `reason` citing the verdict (`evidence:<seq>`). If the round also changes
-    the map's design (adds or removes a slot, or changes what a slot
-    `requires`), have the `reviewer` check that change first, as in the map
-    skill.
+    `because` citing the verdict (`evidence:<seq>`) where a requirement
+    changed.
 
 ## Rules
 

@@ -75,7 +75,7 @@ from the clone itself, so the judge would be the candidate.
 
 ## Verified
 - 2026-11-02: plugin install from GitHub; the MCP server connects (15 tools
-  then, 20 now, as mcp__plugin_morphogen_morphogen__*); a server-level allow
+  then, 19 now, as mcp__plugin_morphogen_morphogen__*); a server-level allow
   rule grants them.
 - 2026-11-02: Docker and Podman runners: all suites pass with
   MORPHOGEN_TEST_SANDBOX set; ContainerGuarantees checks no network,

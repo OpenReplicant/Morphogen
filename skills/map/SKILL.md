@@ -42,9 +42,8 @@ what a system stands on.
 `temporal`, ...); on a component, `provides` lists what it offers. Then
 `catalog_search` with `slot:` can propose the smallest sufficient filler, and
 what a part offers beyond the need shows up as overhead. Give each requirement
-its reason in the slot's `because` (`{"graph": "evidence:42"}`), and pass a
-`reason` to `lists_put` when you change an entry: every write is logged, and
-`lists_history` shows why the map is the way it is.
+its reason in the slot's `because` (`{"graph": "evidence:42"}`), so it can be
+dropped when the reason goes away.
 
 **Say how Morphogen can reach each system** with `interface`:
 
@@ -110,14 +109,7 @@ when mapping a real machine, record what it actually has.
    a system worth its own map.
 4. **Evidence.** `measure` targets; `evidence_note` for what was stated or
    inferred, with its source.
-5. **Review changes to an existing map.** If you added or removed a slot, or
-   changed what a slot `requires`, in a map that already existed (the
-   self-map included), give the `reviewer` subagent only the entries before
-   and after (`lists_history`) and the evidence their reasons cite. Record
-   its findings with `evidence_note` (trust `inferred`), and fix or withdraw
-   what it objects to before reporting. A first map of a new system needs no
-   review.
-6. **Report**, in this order:
+5. **Report**, in this order:
    - what the system is for, and its slots;
    - how each important claim is known (measured, observed, stated,
      inferred), and the biggest gaps in that knowledge;

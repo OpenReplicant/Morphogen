@@ -1,4 +1,4 @@
-"""The store: the lists and the three logs in one SQL database, through SQLAlchemy Core.
+"""The store: the lists and the two logs in one SQL database, through SQLAlchemy Core.
 
 SQLite by default (one file, Python's own driver). Any database SQLAlchemy
 supports, by URL and engine options in morphogen.yaml (`database:`); only
@@ -6,11 +6,10 @@ SQLite is tested here. The tables:
 
 - one table per list (`systems`, `slots`, `types`, `sources`, `components`),
   each `(id, data)` with `data` as JSON;
-- three logs, `evidence`, `changes` and `journal`, each
-  `(seq, hash, prev, raw, record)`, hash-chained.
+- two logs, `evidence` and `journal`, each `(seq, hash, prev, raw, record)`,
+  hash-chained.
 
-A list write and its change record commit in one transaction. Two writers
-cannot fork a chain on any database: `seq` is the primary key, so the second
+Two writers cannot fork a chain on any database: `seq` is the primary key, so the second
 of two appends with the same number fails and is retried. On SQLite, writes
 also take the lock up front (BEGIN IMMEDIATE), and triggers refuse UPDATE and
 DELETE on the logs, so append-only is enforced there; elsewhere it is evident
@@ -34,7 +33,7 @@ from sqlalchemy.schema import CreateSchema
 
 from .ports import KINDS, TRUST
 
-LOGS = ("evidence", "changes", "journal")
+LOGS = ("evidence", "journal")
 GENESIS = "0" * 64
 JSONT = JSON()
 RETRIES = 8  # appends that lost a race for the next seq
@@ -78,12 +77,6 @@ def check_evidence(record: dict) -> None:
         raise ValueError("evidence needs 'claim' and 'by'")
 
 
-def change_record(kind: str, entry: dict, before: dict | None, op: str, by: str, reason: str | None) -> dict:
-    """What the change log records for one write to a list."""
-    return {"op": op, "list": kind, "id": entry["id"], "before": record_hash(before) if before else None,
-            "after": record_hash(entry), "entry": entry, "by": by, **({"reason": reason} if reason else {})}
-
-
 # --- the database
 
 def _engine(url: str, options: dict | None = None):
@@ -119,7 +112,7 @@ def retrying(fn):
 
 
 class Database:
-    """One database: the lists and the three logs.
+    """One database: the lists and the two logs.
 
     `url` is any SQLAlchemy URL; `options` go to `create_engine` (pool settings, `connect_args` for
     the driver's own flags); `schema` puts the tables in a schema on databases that have them."""
@@ -243,8 +236,8 @@ class Log:
 class Lists:
     """The list-store port (ports.ListStore) on the database."""
 
-    def __init__(self, db: Database, changes: Log | None = None):
-        self.db, self.changes = db, changes  # every write is recorded in `changes`, in the same transaction
+    def __init__(self, db: Database):
+        self.db = db
         self.capabilities = {"concurrent_writers": True, "database": db.dialect}
 
     def _table(self, kind: str) -> Table:
@@ -262,17 +255,12 @@ class Lists:
             rows = self._rows(c, kind, id)
         return rows[0] if rows else None
 
-    def put(self, kind: str, entry: dict, by: str = "agent", reason: str | None = None) -> dict:
+    def put(self, kind: str, entry: dict) -> dict:
         t = self._table(kind)
         if not isinstance(entry, dict) or not entry.get("id"):
             raise ValueError("an entry needs a non-empty 'id'")
-        def run():
-            with self.db.engine.begin() as c:
-                before = (self._rows(c, kind, str(entry["id"])) or [None])[0]
-                self._write(c, kind, t, entry)
-                if self.changes is not None and before != entry:
-                    self.changes.append_in(c, change_record(kind, entry, before, "put", by, reason))
-        retrying(run)
+        with self.db.engine.begin() as c:
+            self._write(c, kind, t, entry)
         return entry
 
     def _write(self, c, kind: str, t: Table, entry: dict) -> None:
@@ -306,26 +294,14 @@ class Lists:
         with self.db.engine.connect() as c:
             return {k: self._rows(c, k) for k in KINDS}
 
-    def load(self, data: dict[str, list[dict]], by: str = "operator") -> None:
-        """Replace whole lists, in one transaction; each changed entry is recorded as a `load`."""
-        def run():
-            with self.db.engine.begin() as c:
-                for kind, entries in data.items():
-                    t = self._table(kind)
-                    before = {e["id"]: e for e in self._rows(c, kind)}
-                    c.execute(delete(t))
-                    for e in entries:
-                        self._write(c, kind, t, e)
-                        if self.changes is not None and before.get(e["id"]) != e:
-                            self.changes.append_in(c, change_record(kind, e, before.get(e["id"]), "load", by, None))
-        retrying(run)
-
-    def history(self, kind: str | None = None, id: str | None = None, limit: int = 50) -> list[dict]:
-        """Recorded writes, newest first; empty when this store keeps no change log."""
-        if self.changes is None:
-            return []
-        where = {k: v for k, v in (("list", kind), ("id", id)) if v}
-        return self.changes.query(where=where, limit=limit)
+    def load(self, data: dict[str, list[dict]]) -> None:
+        """Replace whole lists, in one transaction."""
+        with self.db.engine.begin() as c:
+            for kind, entries in data.items():
+                t = self._table(kind)
+                c.execute(delete(t))
+                for e in entries:
+                    self._write(c, kind, t, e)
 
     def export_jsonl(self, directory: Path) -> dict[str, int]:
         """Write each list as `<kind>.jsonl`, one canonical entry per line, sorted by id: the format a

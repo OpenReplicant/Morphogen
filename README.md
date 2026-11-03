@@ -66,7 +66,7 @@ One loop, the same for every system:
 | **Trial** | build candidates on branches, in parallel, one subagent each |
 | **Judge** | score each candidate against the trunk by rules it cannot change |
 | **Swap** | propose the winner; you approve the merge |
-| **Record** | append the decision to the journal; verdicts and map changes are logged as they happen |
+| **Record** | append the decision to the journal; verdicts are logged as they happen |
 
 Three crafts guide the work (the `playbook` skill): the data scientist's
 (baseline first, several model families, beware leakage and lucky wins), the
@@ -83,14 +83,12 @@ write what:
 
 | Role | Filled by (Claude Code) | Does | Writes |
 |---|---|---|---|
-| orchestrator | the main session, following the skills | picks the gap and strategy, delegates, proposes | the map (`lists_put` with a reason), `stated` and `inferred` evidence, the journal |
+| orchestrator | the main session, following the skills | picks the gap and strategy, delegates, proposes | the map (`lists_put`), `stated` and `inferred` evidence, the journal |
 | explorer | `agents/explorer.md` (Haiku) | observes: reads code, logs and docs, profiles | nothing; it reports |
 | worker | `agents/worker.md` | acts: one candidate on its own branch and worktree | code, on that branch only |
-| reviewer | `agents/reviewer.md` (Sonnet) | checks without the author's reasoning: a candidate's diff after the judge passes it, and changes to slots and requirements before they are adopted | nothing; findings go in as `inferred` evidence via the orchestrator |
+| reviewer | `agents/reviewer.md` (Sonnet) | checks a candidate's diff after the judge passes it, without the author's reasoning | nothing; findings go in as `inferred` evidence via the orchestrator |
 | judge | the MCP server (code, not a model) | measures under rules no agent can edit | `measured` evidence, and only it does |
 | operator | you | sets intent, approves merges, adoptions and mounted maps | anything, through review |
-
-Every write to the map is recorded in the change log by the store itself.
 
 ## Targets
 
@@ -250,7 +248,7 @@ interface another filler can take over. Swap one slot (a vector index fills
 | Slot | Holds | Filled by |
 |---|---|---|
 | `knowledge/lists` | what exists and how it connects: the five lists below, typed, by id, with references | the store (`store.py`; port `ListStore`) |
-| `knowledge/logs` | what happened and how it is known: `evidence` (claims and verdicts, with trust), `changes` (every write to the lists), `journal` (decisions); append-only, hash-chained | the store (port `Log`) |
+| `knowledge/logs` | what happened and how it is known: `evidence` (claims and verdicts, with trust) and `journal` (decisions); append-only, hash-chained | the store (port `Log`) |
 | `knowledge/indices` | ways to find things, derived from the lists and logs and rebuildable, never the source of truth | a scan: queries read everything and match ids and words |
 
 Every claim carries how it is known, and only the judge writes `measured`.
@@ -286,9 +284,8 @@ starts from a worked example instead of a blank page:
 A dependency is a slot filled by a component that is itself a system
 (`"system": "claude-code"` on `comp/claude-code`). The host entries are
 generic; mapping fills in this machine's actual values. Morphogen can then
-treat its own parts, and what it stands on, as things to improve. Every write
-to the lists is recorded in the change log (see Storage), so the
-map's history does not depend on git. To publish a map, `lists_export` it.
+treat its own parts, and what it stands on, as things to improve. To publish
+a map, `lists_export` it.
 
 ### Capabilities
 
@@ -344,10 +341,9 @@ Two kinds of files, kept apart. **Documents** are what people write and git
 versions, because you would roll them back: code, `target.yaml` and harnesses,
 `morphogen.yaml`, `catalogs.yaml`, skills and strategy cards. They are read
 through one loader that checks each against its schema (`documents.py`).
-**Records** are what the tools write: the lists and three append-only,
-hash-chained logs, `evidence` (claims and verdicts), `changes` (every write to
-the lists: list, id, hashes before and after, the new entry, who wrote it and
-why) and `journal` (decisions: gap, options, choice, rung, result, commit).
+**Records** are what the tools write: the lists and two append-only,
+hash-chained logs, `evidence` (claims and verdicts) and `journal` (decisions:
+gap, options, choice, rung, result, commit).
 Records live in one database, through SQLAlchemy Core: by default SQLite,
 one file at `.git/morphogen/morphogen.db`, in git's own directory, untracked,
 so candidate commits cannot touch it and every worktree shares it. Python
@@ -544,8 +540,7 @@ The MCP server's tools, which any MCP-capable harness can call:
 |---|---|
 | `doctor` | reports the project, backend, evidence chain, runner and its guarantees, telemetry |
 | `init_project`, `install_sample` | set a project up; copy a sample target in |
-| `lists_get`, `lists_put`, `lists_query` | read and write the lists (a write can say its `reason`); follow references, across maps |
-| `lists_history` | recorded writes to the map: what changed, who wrote it, why |
+| `lists_get`, `lists_put`, `lists_query` | read and write the lists; follow references, across maps |
 | `lists_export` | publish this project's map as JSONL, for others to mount |
 | `maps` | mounted maps, whether each is pinned, references that do not resolve, capability gaps and overhead |
 | `evidence_query`, `evidence_note` | read evidence; add an inferred or stated note |

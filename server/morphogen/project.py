@@ -57,15 +57,14 @@ def _import_files(root: Path, cfg: dict, db: store.Database) -> None:
         if f.exists():
             data[k] = [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
     if data:
-        store.Lists(db, store.Log(db, "changes")).load(data, by="import from 0.2 files")
+        store.Lists(db).load(data)
 
 
 def logs(root: Path, cfg: dict) -> dict:
-    """The three append-only logs: evidence (claims and verdicts), changes (every write to the lists)
-    and journal (decisions). Tables in the database, hash-chained; triggers refuse changes to rows."""
+    """The append-only logs: evidence (claims and verdicts) and journal (decisions). Tables in the
+    database, hash-chained; on SQLite, triggers refuse changes to their rows."""
     db = database(root, cfg)
-    return {"evidence": store.evidence_log(db), "changes": store.Log(db, "changes"),
-            "journal": store.Log(db, "journal")}
+    return {"evidence": store.evidence_log(db), "journal": store.Log(db, "journal")}
 
 
 def catalogs(root: Path) -> dict[str, list[dict]]:
@@ -75,11 +74,10 @@ def catalogs(root: Path) -> dict[str, list[dict]]:
 
 
 def stores(root: Path, cfg: dict):
-    """The list store (this project's map plus mounted maps) and the evidence log.
-    Every write to the lists is recorded in the changes log, in the same transaction."""
+    """The list store (this project's map plus mounted maps) and the evidence log."""
     db = database(root, cfg)
     lg = logs(root, cfg)
-    own = store.Lists(db, lg["changes"])
+    own = store.Lists(db)
     # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
     return mount(root, cfg, own, data_dir(root, cfg) / "maps"), lg["evidence"]
 

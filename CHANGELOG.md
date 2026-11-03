@@ -10,10 +10,9 @@ Breaks the 0.2 contract, so it ships as 0.3.0.
 
 - One store through SQLAlchemy Core (2.0.51, MIT): SQLite by default, one file
   in git's own directory, and any SQLAlchemy database by `database.url` (with
-  `schema` and `options` for `create_engine`; only SQLite is tested). A list
-  write and its change record commit in one transaction, and a log's `seq` is
-  its key, so two sessions writing at once cannot fork a chain (the files
-  backend could). On SQLite, triggers refuse edits to the logs.
+  `schema` and `options` for `create_engine`; only SQLite is tested). Writes
+  are transactions, and a log's `seq` is its key, so two sessions writing at
+  once cannot lose writes or fork a chain (the files backend could). On SQLite, triggers refuse edits to the logs.
 - Removed: the files and postgres backends (a 0.2 project's JSONL lists and
   logs are imported once, keeping their hashes), the `labels` layout, the
   `nodes` view, `pggraph_sql()` (graph and vector extensions are a
@@ -25,13 +24,11 @@ Breaks the 0.2 contract, so it ships as 0.3.0.
 - What Morphogen knows is a system of the self-map, `knowledge`, filling
   `morphogen/knowledge`, with three slots: `knowledge/lists` (replacing
   `morphogen/list-store`), `knowledge/logs` (replacing `morphogen/evidence-log`;
-  evidence, changes, journal) and `knowledge/indices` (derived and rebuildable,
+  evidence, journal) and `knowledge/indices` (derived and rebuildable,
   filled by a scan). Each slot names its ingest, manage and retrieve ops. Swap
   one slot, or the whole system. The roles are slots of `morphogen` too:
   orchestrator, explorer, worker, reviewer, judge and operator, each saying
   what it may write. `ports.py` is brought up to date (`ListStore`, `Log`).
-- The reviewer also checks changes to a map's slots and requirements before
-  they are adopted (map skill step 5; evolve step 10).
 - Removed, as outside the base's scope: patterns (`pattern: true`, the
   `realizes` field; they belong in a pattern library mounted as a map), the
   `edges` table and SQL `follow` (the walk is in Python; maps are small), and
@@ -44,13 +41,8 @@ Breaks the 0.2 contract, so it ships as 0.3.0.
   being skipped; unknown keys are kept. Replaces seven separate loaders.
   `pydantic` is now a direct dependency (it already came with `mcp`), pinned to
   2.13.4.
-- One append-only, hash-chained log mechanism under three logs: `evidence`,
-  `changes` (new: every write to the lists, with hashes before and after, the
-  entry, who and why) and `journal` (now a log behind the port, not a
-  Markdown file). On Postgres, the logs are trigger-guarded tables, and a list
-  write commits together with its change record. `lists_put` takes a
-  `reason`; `lists_history` reads the change log. The map's history no longer
-  depends on git.
+- The journal is a log behind the store, beside the evidence log, instead of a
+  Markdown file written directly.
 - Requirements carry reasons (`because`), and `maps`/`doctor` report
   capability gaps, overhead and unexplained requirements. The evolve skill
   treats a gap as a located gap.

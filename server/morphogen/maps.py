@@ -176,8 +176,8 @@ class Atlas:
         e = self._store_get(m, kind, local)
         return self._present(m, e, kind) if e else None
 
-    def put(self, kind: str, entry: dict, **kw) -> dict:
-        """Write to this project's map. `by` and `reason` go to the change log when the store keeps one."""
+    def put(self, kind: str, entry: dict) -> dict:
+        """Write to this project's map."""
         if not isinstance(entry, dict) or not entry.get("id"):
             raise ValueError("an entry needs a non-empty 'id'")
         m, local = self.split(str(entry["id"]))
@@ -185,8 +185,7 @@ class Atlas:
             raise ValueError(f"{SEP!r} separates a map name from an id, and no map named {m!r} is mounted")
         if m != self.own_name:
             raise PermissionError(f"map {m!r} is read-only here; change it in its own project, through its own judge")
-        return self.own.put(kind, {k: v for k, v in entry.items() if k not in ("_map", "_trust")} | {"id": local},
-                            **kw)
+        return self.own.put(kind, {k: v for k, v in entry.items() if k not in ("_map", "_trust")} | {"id": local})
 
     def query(self, kind: str, where: dict[str, Any] | None = None, map: str | None = None) -> list[dict]:
         """`map`: None or the own map's name (default), a mounted map's name, or '*' for all."""
@@ -291,11 +290,6 @@ class Atlas:
                 if need - set(because):
                     unexplained.append({**where, "requirements": sorted(need - set(because))})
         return {"gaps": gaps, "overhead": overhead, "unexplained": unexplained}
-
-    def history(self, kind: str | None = None, id: str | None = None, limit: int = 50) -> list[dict]:
-        """Writes to this project's map, newest first (mounted maps keep their own history)."""
-        h = getattr(self.own, "history", None)
-        return h(kind, id, limit) if h else []
 
     def status(self) -> dict:
         return {"own": self.own_name, "mounted": [m.status() for _, m in sorted(self.mounts.items())],

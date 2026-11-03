@@ -82,8 +82,7 @@ can fill or extend them.
 | `doctor`, `init_project`, `maps`, `strategies_list`, `admin_pages` | none |
 | `install_sample` | `name`, `dest` |
 | `lists_get` | `kind`, `id` |
-| `lists_put` | `kind`, `entry`, `reason` |
-| `lists_history` | `kind`, `id`, `limit` |
+| `lists_put` | `kind`, `entry` |
 | `lists_export` | `dest` |
 | `lists_query` | `kind`, `where`, `follow`, `start`, `hops`, `map` |
 | `evidence_query` | `contains`, `by`, `limit` |
@@ -118,9 +117,7 @@ the reference fields (`systems.slots`; `slots.system`, `accepts`,
 (`measured`, `simulated`, `stated`, `inferred`), `by`; verdicts also carry
 `verdict`, `subject`, `refs` (`base`, `candidate`), `outcome`, `seeds`,
 `labels`, `interface`, `sandbox`, `runner`; probes have `kind: probe` and are
-never verdicts. Change records (`changes` log) carry `op`, `list`, `id`,
-`before`, `after`, `entry`, `by` and `reason`; journal records carry the
-`journal_append` fields. A distribution reads evidence; it
+never verdicts. Journal records carry the `journal_append` fields. A distribution reads evidence; it
 writes only through `evidence_note`.
 
 **Config:** `morphogen.yaml` keys `trunk`, `autonomy`, `data_dir`,

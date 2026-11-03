@@ -57,25 +57,6 @@ class ConformanceCases:
         with self.assertRaises(ValueError):
             s.put("types", {"name": "no id"})
 
-    def changes(self):
-        raise NotImplementedError
-
-    def test_every_write_is_recorded_in_the_change_log(self):
-        log = self.changes()
-        s = self.lists_with(log)
-        s.put("types", {"id": "type/x"}, by="agent", reason="evidence:1")
-        s.put("types", {"id": "type/x"})  # unchanged: nothing recorded
-        s.put("types", {"id": "type/x", "description": "a kind"}, by="operator")
-        h = s.history("types", "type/x")
-        self.assertEqual([c["op"] for c in h], ["put", "put"])
-        self.assertIsNone(h[1]["before"])
-        self.assertEqual(h[0]["before"], h[1]["after"])
-        self.assertEqual((h[1]["by"], h[1]["reason"]), ("agent", "evidence:1"))
-        self.assertEqual(h[0]["entry"]["description"], "a kind")
-        s.load({"types": [{"id": "type/y"}]})
-        self.assertEqual(s.history("types", "type/y")[0]["op"], "load")
-        self.assertEqual(log.verify(), (True, None))
-
     def test_evidence_append_only_and_tamper_evident(self):
         log = self.evidence()
         log.append({"claim": "a", "trust": "measured", "by": "judge", "outcome": {"x": 1e-9, "y": 0.1}})
@@ -102,11 +83,8 @@ class StoreCases(ConformanceCases):
     def evidence(self):
         return store.evidence_log(self.database("ev"))
 
-    def changes(self):
-        return store.Log(self.database("ch"), "changes")
-
-    def lists_with(self, changes):
-        return store.Lists(changes.db, changes)
+    def journal(self):
+        return store.Log(self.database("jn"), "journal")
 
     def refused(self, db, q):
         from sqlalchemy import text
@@ -117,7 +95,7 @@ class StoreCases(ConformanceCases):
     def test_the_store_fills_the_ports(self):
         from morphogen import ports
         self.assertIsInstance(self.lists(), ports.ListStore)
-        for log in (self.evidence(), self.changes()):
+        for log in (self.evidence(), self.journal()):
             self.assertIsInstance(log, ports.Log)
         s = self.lists()
         s.put("slots", {"id": "sys/a"})
@@ -125,8 +103,8 @@ class StoreCases(ConformanceCases):
 
     def test_concurrent_writers_get_one_chain(self):
         import threading
-        log = self.changes()
-        other = store.Log(self.reopen(log.db), "changes")
+        log = self.journal()
+        other = store.Log(self.reopen(log.db), "journal")
         errors = []
 
         def write(lg, tag):
@@ -194,7 +172,6 @@ class StoreConformance(StoreCases, unittest.TestCase):
             self.assertEqual([r["claim"] for r in evidence.dump()], ["kept"])
             self.assertEqual(evidence.verify(), (True, None))
             self.assertEqual(lists.get("types", "type/old"), {"id": "type/old"})
-            self.assertEqual(lists.history("types", "type/old")[0]["op"], "load")
         finally:
             shutil.rmtree(tmp)
 
@@ -620,12 +597,12 @@ class DistributionContract(unittest.TestCase):
 
     TOOLS = {
         "doctor": [], "init_project": [], "maps": [], "strategies_list": [], "admin_pages": [],
-        "install_sample": ["name", "dest"], "lists_get": ["kind", "id"], "lists_put": ["kind", "entry", "reason"],
+        "install_sample": ["name", "dest"], "lists_get": ["kind", "id"], "lists_put": ["kind", "entry"],
         "lists_query": ["kind", "where", "follow", "start", "hops", "map"],
         "evidence_query": ["contains", "by", "limit"],
         "evidence_note": ["claim", "source", "trust", "supports", "challenges"],
         "catalog_search": ["query", "limit", "slot"], "measure": ["target", "ref"],
-        "lists_history": ["kind", "id", "limit"], "lists_export": ["dest"],
+        "lists_export": ["dest"],
         "judge": ["target", "candidate", "base", "labels"], "strategy": ["target"],
         "probe": ["target", "candidate", "base", "cases", "rounds"],
         "archive": ["target", "limit"],
@@ -709,13 +686,12 @@ class Capabilities(unittest.TestCase):
         self.assertEqual(report["unexplained"], [])  # and says why it has each one
         self.assertIn("knowledge/logs", [o["slot"] for o in report["overhead"]])  # SQLite also enforces append-only
         slot = self.lists.get("slots", "knowledge/indices")
-        self.lists.put("slots", {**slot, "requires": ["exact", "lexical", "semantic"]}, reason="a design now searches by meaning")
+        self.lists.put("slots", {**slot, "requires": ["exact", "lexical", "semantic"]})
         report = self.lists.capability_report()
         gap = [g for g in report["gaps"] if g["slot"] == "knowledge/indices"][0]
         self.assertEqual((gap["missing"], gap["why"]), (["semantic"], "filler lacks it"))
         self.assertIn("semantic", [r for u in report["unexplained"] for r in u["requirements"]])
         self.assertEqual(project.doctor(self.tmp)["maps"]["capability_gaps"][0]["slot"], "knowledge/indices")
-        self.assertEqual(self.lists.history("slots", "knowledge/indices")[0]["reason"], "a design now searches by meaning")
 
     def test_the_journal_is_a_log(self):
         r = project.journal_append(self.tmp, self.cfg, {"title": "swap the list store", "gap": "graph walks",
