@@ -157,6 +157,6 @@ def catalog_search(root: Path, cfg: dict, query: str, limit: int = 20) -> list[d
         walk(yaml.safe_load(cat.read_text()), "catalogs.yaml")
     lists, _ = stores(root, cfg)
     for kind in ("sources", "components", "types"):
-        walk(lists.query(kind), f"lists/{kind}")
+        walk(lists.query(kind, map="*"), f"lists/{kind}")  # this map and every mounted one
     found.sort(key=lambda p: -p[0])
     return [item for _, item in found[:limit]]

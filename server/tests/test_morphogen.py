@@ -350,6 +350,12 @@ class Maps(unittest.TestCase):
         self.assertIn("pinned at " + self.commit[:10], html_)
         self.assertIn("homelab:comp/nope", html_)
 
+    def test_catalog_search_finds_entries_in_mounted_maps(self):
+        (self.proj / "morphogen.yaml").write_text(
+            f"maps:\n  homelab: {{path: ../homelab, commit: {self.commit}}}\n")
+        found = project.catalog_search(self.proj, project.load_config(self.proj), "vllm")
+        self.assertIn("homelab:comp/vllm", [f.get("id") for f in found])
+
     def test_a_colon_in_an_id_must_name_a_mounted_map(self):
         lists = self.atlas({})
         with self.assertRaises(ValueError):
@@ -360,6 +366,44 @@ class Maps(unittest.TestCase):
         for name in ("Bad Name", "local"):
             with self.assertRaises(MapError):
                 self.atlas({name: {"path": "../homelab"}})
+
+
+class DistributionContract(unittest.TestCase):
+    """What docs/distributions.md promises distributions. Adding is fine; removing or renaming breaks them."""
+
+    TOOLS = {
+        "doctor": [], "init_project": [], "maps": [], "strategies_list": [], "admin_pages": [],
+        "install_sample": ["name", "dest"], "lists_get": ["kind", "id"], "lists_put": ["kind", "entry"],
+        "lists_query": ["kind", "where", "follow", "start", "hops", "map"],
+        "evidence_query": ["contains", "by", "limit"],
+        "evidence_note": ["claim", "source", "trust", "supports", "challenges"],
+        "catalog_search": ["query", "limit"], "measure": ["target", "ref"],
+        "judge": ["target", "candidate", "base", "labels"], "strategy": ["target"],
+        "archive": ["target", "limit"],
+        "journal_append": ["title", "gap", "options", "choice", "rung", "gate", "commit", "why"],
+    }
+
+    def test_tools_and_parameters_are_still_there(self):
+        import inspect
+        from morphogen import mcp_server
+        for name, params in self.TOOLS.items():
+            fn = getattr(mcp_server, name, None)
+            self.assertTrue(callable(fn), f"tool {name} is gone")
+            have = list(inspect.signature(inspect.unwrap(fn)).parameters)
+            for p in params:
+                self.assertIn(p, have, f"tool {name} lost parameter {p}")
+
+    def test_list_kinds_reference_fields_and_interfaces(self):
+        from morphogen.maps import REF_FIELDS, SEP
+        from morphogen.ports import KINDS, TRUST
+        self.assertLessEqual({"systems", "slots", "types", "sources", "components"}, set(KINDS))
+        self.assertLessEqual({"slots"}, set(REF_FIELDS["systems"]))
+        self.assertLessEqual({"system", "accepts", "filled_by"}, set(REF_FIELDS["slots"]))
+        self.assertLessEqual({"type", "source", "system"}, set(REF_FIELDS["components"]))
+        self.assertEqual(SEP, ":")
+        self.assertLessEqual({"measured", "simulated", "stated", "inferred"}, set(TRUST))
+        self.assertLessEqual({"direct", "simulated"}, set(judge_mod.INTERFACES))
+        self.assertLessEqual({"wall_seconds", "cpu_seconds", "max_rss_kb"}, set(judge_mod.JUDGE_METRICS))
 
 
 class AdminPages(unittest.TestCase):

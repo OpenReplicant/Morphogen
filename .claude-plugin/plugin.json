@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "morphogen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Maps, measures and improves systems, itself included: skills for the loop, an MCP server with lists, evidence and a judge the agent cannot edit.",
   "author": {
     "name": "OpenReplicant"
