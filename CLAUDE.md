@@ -108,6 +108,9 @@ tag, then /plugin update morphogen@morphogen and start a new session.
   sonnet; grant Bash, Write and Edit for 01, 03 and 05; on Linux install
   bubblewrap and socat. In a container running as root the eval sandbox made
   .git read-only, which blocks 03.
+  Scaffolds that run Morphogen (`stalled`) start with an empty HOME and none
+  of your certificate settings, so behind a TLS-intercepting proxy uv cannot
+  download; run `uv sync` in the clean copy's `server/` first.
 - Open work is tracked in issues #43 to #49 (gateway slot, environment
   targets, learned-state reset, parameters, trust tiers, eval mapping, a
   flaky test).
