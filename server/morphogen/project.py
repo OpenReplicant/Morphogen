@@ -10,9 +10,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # only to rewrite morphogen.yaml in onboard()
 
 from .backend_files import FilesEvidenceLog, FilesListStore, FilesLog
+from . import documents
 from .config import data_dir, evidence_path, load_config, plugin_root
 from .maps import mount, provides as _provides
 from .runner import capabilities
@@ -42,6 +43,12 @@ def logs(root: Path, cfg: dict) -> dict:
     raise RuntimeError(f"backend {backend!r} is not available; use 'files' or 'postgres'")
 
 
+def catalogs(root: Path) -> dict[str, list[dict]]:
+    """catalogs.yaml, checked against its schema; empty if the project has none."""
+    f = root / "catalogs.yaml"
+    return documents.load("catalogs", f) if f.exists() else {}
+
+
 def stores(root: Path, cfg: dict):
     """The list store (this project's map plus mounted maps) and the evidence log, on the configured backend.
     Every write to the lists is recorded in the changes log."""
@@ -54,9 +61,7 @@ def stores(root: Path, cfg: dict):
         from . import backend_postgres as pg
         st = pg.settings(cfg)
         own = pg.PostgresListStore(_PG[st["url"]], st["schema"], st["layout"], lg["changes"])
-        cat = root / "catalogs.yaml"
-        if cat.exists():
-            own.sync_catalog(yaml.safe_load(cat.read_text()) or {})
+        own.sync_catalog(catalogs(root))
     # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
     return mount(root, cfg, own, d / "maps"), lg["evidence"]
 
@@ -192,12 +197,10 @@ def candidates(root: Path, cfg: dict, slot_id: str, limit: int = 20) -> dict:
     need = {str(c) for c in slot.get("requires") or []}
     accepts = set(slot.get("accepts") or [])
     pool = [("lists", e) for e in lists.query("components", map="*")]
-    cat = root / "catalogs.yaml"
-    if cat.exists():
-        for section, entries in (yaml.safe_load(cat.read_text()) or {}).items():
-            for e in entries if isinstance(entries, list) else []:
-                if isinstance(e, dict) and (e.get("provides") or e.get("type")):
-                    pool.append((f"catalogs.yaml/{section}", e))
+    for section, entries in catalogs(root).items():
+        for e in entries:
+            if e.get("provides") or e.get("type"):
+                pool.append((f"catalogs.yaml/{section}", e))
     out = []
     for where, e in pool:
         if accepts and e.get("type") not in accepts and not (where != "lists" and not e.get("type")):
@@ -228,9 +231,7 @@ def catalog_search(root: Path, cfg: dict, query: str, limit: int = 20) -> list[d
             for v in node:
                 walk(v, where)
 
-    cat = root / "catalogs.yaml"
-    if cat.exists():
-        walk(yaml.safe_load(cat.read_text()), "catalogs.yaml")
+    walk(catalogs(root), "catalogs.yaml")
     lists, _ = stores(root, cfg)
     for kind in ("sources", "components", "types"):
         walk(lists.query(kind, map="*"), f"lists/{kind}")  # this map and every mounted one

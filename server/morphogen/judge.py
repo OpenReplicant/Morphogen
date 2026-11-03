@@ -43,8 +43,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-import yaml
 
+from . import documents
 from .ports import INTERFACES
 from .runner import capabilities, run, sandbox_mode
 
@@ -109,7 +109,10 @@ def load_spec(tree: Path, rel: Path) -> dict:
     f = tree / rel / "target.yaml"
     if not f.exists():
         raise JudgeError(f"no target.yaml at {rel} on the base commit")
-    return yaml.safe_load(f.read_text()) or {}
+    try:
+        return documents.load("target", f)
+    except documents.DocumentError as e:
+        raise JudgeError(f"target.yaml on the base commit: {'; '.join(e.problems)}") from None
 
 
 def _target_name(spec: dict, rel: Path) -> str:

@@ -6,16 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
-import yaml
-
-DEFAULTS = {
-    "data_dir": ".morphogen",
-    "trunk": "main",
-    "backends": {"default": "files"},
-    "sandbox": "auto",  # auto | docker | none
-    "sandbox_image": "python:3.12-slim",
-    "targets": [],
-}
+from . import documents
 
 
 def project_root() -> Path:
@@ -25,18 +16,10 @@ def project_root() -> Path:
 
 
 def load_config(root: Path) -> dict:
-    cfg = {k: (v.copy() if isinstance(v, (dict, list)) else v) for k, v in DEFAULTS.items()}
+    """morphogen.yaml, checked against its schema (documents.Config), with defaults filled in."""
     f = root / "morphogen.yaml"
-    if f.exists():
-        loaded = yaml.safe_load(f.read_text()) or {}
-        for k, v in loaded.items():
-            if isinstance(v, dict) and isinstance(cfg.get(k), dict):
-                cfg[k] = {**cfg[k], **v}
-            else:
-                cfg[k] = v
-        cfg["_found"] = True
-    else:
-        cfg["_found"] = False
+    cfg = documents.load("config", f) if f.exists() else documents.validate("config", {})
+    cfg["_found"] = f.exists()
     return cfg
 
 

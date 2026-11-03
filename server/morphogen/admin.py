@@ -27,9 +27,9 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
-import yaml
 
 from . import strategies as strategies_mod
+from . import documents
 from .config import data_dir, load_config, project_root
 from .project import SAMPLES, stores
 
@@ -90,8 +90,8 @@ def _catalog(root: Path) -> dict:
     if not f.exists():
         f = SAMPLES / "catalogs.yaml"
     try:
-        return yaml.safe_load(f.read_text()) or {}
-    except (OSError, yaml.YAMLError):
+        return documents.load("catalogs", f)
+    except documents.DocumentError:
         return {}
 
 

@@ -6,6 +6,12 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+- Documents (`morphogen.yaml`, `target.yaml`, `catalogs.yaml`, strategy cards) are read
+  through one loader, `documents.py`, with a pydantic schema each. A bad document
+  is refused with the file and every problem named, instead of failing later or
+  being skipped; unknown keys are kept. Replaces seven separate loaders.
+  `pydantic` is now a direct dependency (it already came with `mcp`), pinned to
+  2.13.4.
 - One append-only, hash-chained log mechanism under three logs: `evidence`,
   `changes` (new: every write to the lists, with hashes before and after, the
   entry, who and why) and `journal` (now a log behind the port, not a

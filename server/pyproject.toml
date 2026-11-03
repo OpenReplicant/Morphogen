@@ -7,6 +7,9 @@ requires-python = ">=3.11"
 dependencies = [
   "mcp==2.3.0",
   "pyyaml==6.0.3",
+  # Document schemas (documents.py). Already required by mcp (>=2.12); pinned to a release
+  # out since May 2026 rather than the days-old 2.14.2 the lock had picked.
+  "pydantic==2.13.4",
   "opentelemetry-api==1.45.2",
   "opentelemetry-sdk==1.45.2",
   "opentelemetry-exporter-otlp-proto-http==1.45.2",

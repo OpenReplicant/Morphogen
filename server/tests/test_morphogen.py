@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from morphogen import documents
 from morphogen import judge as judge_mod
 from morphogen import project
 from morphogen.backend_files import FilesEvidenceLog, FilesListStore
@@ -222,6 +223,49 @@ class PostgresConformanceTables(ConformanceCases, unittest.TestCase):
 
 class PostgresConformanceLabels(PostgresConformanceTables):
     layout = "labels"
+
+
+class Documents(unittest.TestCase):
+    """Every document (morphogen.yaml, target.yaml, catalogs.yaml, strategy cards) is read
+    through one loader that checks it against its schema and names what is wrong."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_the_shipped_documents_load(self):
+        root = Path(__file__).resolve().parents[2]
+        documents.load("config", root / "samples" / "morphogen.example.yaml")
+        documents.load("catalogs", root / "samples" / "catalogs.yaml")
+        documents.load("target", root / "samples" / "targets" / "slow-script" / "target.yaml")
+        for card in (root / "strategies").glob("*.md"):
+            self.assertIn("when", documents.load("strategy", card))
+
+    def test_defaults_are_filled_and_unknown_keys_kept(self):
+        (self.tmp / "morphogen.yaml").write_text("trunk: dev\nfuture_key: 1\n")
+        cfg = project.load_config(self.tmp)
+        self.assertEqual((cfg["trunk"], cfg["data_dir"], cfg["future_key"]), ("dev", ".morphogen", 1))
+        self.assertEqual(cfg["backends"]["default"], "files")
+
+    def test_a_bad_document_names_the_file_and_every_problem(self):
+        (self.tmp / "morphogen.yaml").write_text("sandbox: maybe\nbackends: {default: mongo}\n")
+        with self.assertRaises(documents.DocumentError) as e:
+            project.load_config(self.tmp)
+        self.assertIn("morphogen.yaml", str(e.exception))
+        self.assertEqual(len(e.exception.problems), 2)
+        (self.tmp / "card.md").write_text("---\nname: x\n---\nbody")
+        with self.assertRaises(documents.DocumentError):
+            documents.load("strategy", self.tmp / "card.md")
+        (self.tmp / "bad.yaml").write_text("a: [")
+        with self.assertRaises(documents.DocumentError):
+            documents.load("catalogs", self.tmp / "bad.yaml")
+
+    def test_the_judge_refuses_a_malformed_target(self):
+        t = self.tmp / "t"
+        t.mkdir()
+        (t / "target.yaml").write_text("measure: {run: x, metrics: {wall_seconds: {gain: huge}}}\n")
+        with self.assertRaises(judge_mod.JudgeError):
+            judge_mod.load_spec(self.tmp, Path("t"))
 
 
 class JudgeOnSample(unittest.TestCase):
