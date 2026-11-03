@@ -95,9 +95,12 @@ can fill or extend them.
 | `archive` | `target`, `limit` |
 | `journal_append` | `title`, `gap`, `options`, `choice`, `rung`, `gate`, `commit`, `why` |
 
-**Lists:** the kinds `systems`, `slots`, `types`, `sources`, `components`;
-the reference fields (`systems.slots`; `slots.system`, `accepts`,
-`filled_by`; `components.type`, `source`, `system`);
+**Lists:** the kinds `systems`, `slots`, `types`, `sources`, `components`,
+`parameters`; the reference fields (`systems.slots`; `slots.system`,
+`accepts`, `filled_by`; `components.type`, `source`, `system`;
+`parameters.of`); `links` on any entry (relation name to id or ids);
+parameter fields `type`, `range`, `default`, `value`, `set_in`, `owner`
+(`agent`, `operator`, `judge`);
 `slots.requires`, `slots.because` (reason per requirement) and
 `components.provides` (capability names); qualified ids `map:id`; map interfaces `direct`, `simulated`, `observed`, `none`; the
 `_map` and `_trust` annotations on entries from mounted maps.

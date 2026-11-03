@@ -6,6 +6,14 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+- Relations and parameters are part of a map. Any entry can carry `links`
+  (relation name to ids: writes, reads, next, ...), checked for dangling ids,
+  walked by `follow` and qualified across maps like the reference fields. A
+  sixth list, `parameters`, records each setting of a slot or component with
+  its type, range, default, value, where it is set and its owner (`agent`,
+  `operator`, `judge`); `maps` and `doctor` report unset, unowned and orphaned
+  parameters and list the tunable ones. Morphogen's own map lists 16 of its
+  parameters, and its roles carry their relations (#46, first part).
 Breaks the 0.2 contract, so it ships as 0.3.0.
 
 - One store through SQLAlchemy Core (2.0.51, MIT): SQLite by default, one file

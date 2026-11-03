@@ -160,7 +160,9 @@ def doctor(root: Path) -> dict:
         caps = maps["capabilities"]
         report["maps"] = {"own": maps["own"], "mounted": maps["mounted"], "dangling_refs": len(maps["dangling"]),
                           "capability_gaps": caps["gaps"], "overhead": len(caps["overhead"]),
-                          "unexplained_requirements": len(caps["unexplained"])}
+                          "unexplained_requirements": len(caps["unexplained"]),
+                          "parameters": {k: (v if k == "unset" else len(v))
+                                         for k, v in maps["parameters"].items()}}
     except Exception as e:  # report, do not crash
         report["backend"] = f"error: {e}"
     server_dir = Path(__file__).resolve().parent

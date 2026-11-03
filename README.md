@@ -260,7 +260,7 @@ the scan; a vector, graph or search index, or a product such as Graphiti or
 Cognee, is a distribution's filler for `knowledge/indices` or for the whole
 system, described by what it provides and judged against what ships.
 
-Five lists describe systems:
+Six lists describe systems:
 
 | List | Entry | Refers to |
 |---|---|---|
@@ -269,6 +269,16 @@ Five lists describe systems:
 | types | a kind of component: hash map, regex, LLM call, simulator | |
 | sources | where parts come from: PyPI, the standard library, this project | |
 | components | a specific part, with version; can itself be a system | type, source |
+| parameters | a setting of a slot or component, with type, range, default, value, where it is set and its owner | `of` |
+
+Any entry can also carry **relations**, `links`: relation names (writes,
+reads, triggers, next, ...) mapped to ids. They are checked and walked like the
+fields above, across maps. A **parameter's owner** says who may change it:
+`agent` (a strategy may tune it), `operator` (by hand, with review) or `judge`
+(part of the rules candidates are scored by). `maps` and `doctor` report
+parameters that are unset, unowned or attached to nothing, and list the
+tunable ones. Morphogen's own map lists its parameters, from the judge's
+significance level to the explorer's model.
 
 `init_project` seeds them with a self-map of five systems, so Morphogen
 starts from a worked example instead of a blank page:
