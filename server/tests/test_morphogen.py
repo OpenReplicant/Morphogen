@@ -218,7 +218,8 @@ class SelfMap(unittest.TestCase):
                     for r in refs if isinstance(refs, list) else [refs]:
                         self.assertIn(r, ids, f"{kind} {e['id']}: {field} -> {r} does not exist")
         systems = {e["id"]: e for e in lists["systems"]}
-        self.assertEqual(set(systems), {"morphogen", "claude-code", "host"})
+        # The core systems must be there; more may be added (the map grows), as long as references resolve.
+        self.assertLessEqual({"morphogen", "claude-code", "host"}, set(systems))
         for slot in lists["slots"]:
             self.assertIn(slot["id"], systems[slot["system"]]["slots"], f"{slot['id']} is not listed by its system")
         for system in systems.values():
@@ -229,7 +230,7 @@ class SelfMap(unittest.TestCase):
         try:
             project.init_project(tmp)
             lists, _ = project.stores(tmp, project.load_config(tmp))
-            self.assertEqual({e["id"] for e in lists.query("systems")}, {"morphogen", "claude-code", "host"})
+            self.assertLessEqual({"morphogen", "claude-code", "host"}, {e["id"] for e in lists.query("systems")})
             # Morphogen -> its harness slot -> Claude Code, which runs on the host.
             harness = lists.get("slots", "morphogen/harness")
             self.assertEqual(lists.get("components", harness["filled_by"])["system"], "claude-code")
