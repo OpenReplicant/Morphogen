@@ -19,8 +19,10 @@ Skills, the server and samples are portable to other agent harnesses.
 - [Runners](#runners)
 - [Services and telemetry](#services-and-telemetry)
 - [Improving Morphogen itself](#improving-morphogen-itself)
+- [Building on Morphogen](#building-on-morphogen)
 - [Settings](#settings)
 - [Tools](#tools)
+- [Admin UI](#admin-ui)
 - [Testing and evals](#testing-and-evals)
 - [Limits](#limits)
 - [Layout](#layout)
@@ -391,6 +393,15 @@ Because the red-team suite is part of what the base uses to judge, a
 candidate that weakens the judge fails at least one known cheat. The judge
 can get stricter; it cannot quietly get looser.
 
+## Building on Morphogen
+
+Distributions are plugins that depend on Morphogen and add what one kind of
+work needs: skills, strategy cards, catalogs, maps, sample targets.
+`docs/distributions.md` lists the extension points and the contract the base
+keeps stable. Use-case work (assistants, games, business processes) lives in
+those repositories, not here. Releases are tagged `morphogen--v<version>`
+(see `CHANGELOG.md`).
+
 ## Settings
 
 `morphogen.yaml`, written by onboarding; you own it.
@@ -497,6 +508,15 @@ In CI this is the `containers` job, started by hand.
   with `sandbox: none` for now.
 - The runner uses `sh`, so Windows needs WSL.
 - Only the files backend exists so far; Postgres is planned.
+- No model gateway yet: a target that calls an LLM needs `sandbox: none`, its
+  token cost is not measured from outside, and `budget.trials_per_day` caps
+  trials, not spending (#43).
+- Between trials the judge resets inputs (a fresh seed every round) and, without
+  a container, temporary and home directories; it does not yet reset other
+  state a target keeps on purpose, such as an agent's memory (#45).
+- `morphogen-admin --serve` has no authentication; it binds to localhost and
+  serves read-only pages.
+- An unpinned mounted map is read live; pin maps you depend on.
 
 ## Layout
 
@@ -511,7 +531,7 @@ In CI this is the `containers` job, started by hand.
 | `hooks/` | session briefing, budget, traces | Claude Code |
 | `.claude-plugin/` | plugin and marketplace manifests | Claude Code |
 | `.github/workflows/judge.yml` | judges pull requests with main's tests | GitHub |
-| `docs/` | notes, including related work | yes |
+| `docs/` | building distributions, related work | yes |
 | `harness.yaml` | which parts are portable | |
 
 ## License

@@ -34,6 +34,9 @@ run from a clean copy, see evals/README.md):
 ```
 claude plugin eval . --case 06-strategy-after-stall --scaffold --mocks off --judge-model sonnet --allow-tools mcp__plugin_morphogen_morphogen --no-publish
 ```
+Cases that write or run commands (01, 03, 05) also need the operator's grant:
+`--allow-tools mcp__plugin_morphogen_morphogen "Bash(git:*)" "Bash(python:*)" "Bash(python3:*)" Write Edit`,
+and on Linux `bubblewrap` and `socat` for the sandbox.
 
 ## Install the judge from GitHub, not from this folder
 `/plugin marketplace add OpenReplicant/morphogen` installs a copy of main into
@@ -47,9 +50,13 @@ from the clone itself, so the judge would be the candidate.
   and ContainerGuarantees checks no network, read-only tree, memory limit and
   nothing kept between runs. CI: run the judge workflow by hand.
 
+- Evals 01, 02, 04, 05 and 06 pass with the plugin (2026-11-03, one run each;
+  results in evals/README.md).
+
 ## Not yet verified
-The eval suite beyond one run of 02-map-baseline (passed). Verify the rest,
-especially 03-evolve-one-round, before trusting self-improvement runs.
+03-evolve-one-round, the full loop: in this container the eval sandbox made
+.git read-only, so no candidate could be committed. Verify it on a non-root
+machine or CI runner before trusting self-improvement runs.
 
 ## Releases
 Bump version in .claude-plugin/plugin.json and in the marketplace entry,

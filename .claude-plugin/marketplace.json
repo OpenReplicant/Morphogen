@@ -11,7 +11,7 @@
       "name": "morphogen",
       "source": "./",
       "description": "Maps, measures and improves systems, itself included, with a judge the agent cannot edit.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }
