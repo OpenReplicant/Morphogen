@@ -35,8 +35,14 @@ uv copying instead of linking:
 
 ```
 git ls-files -z | tar --null -T - -cf - | (mkdir -p ../mg-eval && tar -xf - -C ../mg-eval)
+printf 'link-mode = "copy"\n' > ../mg-eval/server/uv.toml
 cd ../mg-eval && UV_LINK_MODE=copy claude plugin eval . ...
 ```
+
+The `uv.toml` matters: the eval starts the plugin's MCP server without your
+environment, so `UV_LINK_MODE` alone does not reach it, and the `.venv` it
+creates would block every case after the first. Select several cases with
+`--tag` (for example `--tag map negative`); `--case` takes simple globs only.
 
 One case:
 
@@ -59,3 +65,4 @@ git repository in the case workspace and nothing else.
 | Date | Case | Runs | Score with / without | Cost | Notes |
 |---|---|---|---|---|---|
 | 2026-11-02 | `02-map-baseline` | 1 | 1.0 / 0 (Sonnet grader); 0.67 / 0 (Haiku grader) | $0.32 total | explorer ran on Haiku; the main session re-read the files the explorer had read |
+| 2026-11-03 | `02-map-baseline`, `04-not-for-morphogen` | 1 each | 02: 1.0 / 0; 04: 1.0 / 1.0 | $0.40 total | after the map skill was rewritten to map anything; its broader description did not fire on an unrelated question |

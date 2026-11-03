@@ -1,3 +1,5 @@
+{"description": "A menu, launcher or web desktop that holds other tools", "id": "type/admin-shell"}
+{"description": "An operator's view of a system, made of viewers and tools", "id": "type/admin-ui"}
 {"description": "Runs the top-level LLM loop with tools and skills", "id": "type/agent-harness"}
 {"description": "Append-only record of claims and their support", "id": "type/evidence-log"}
 {"description": "Chooses where the next candidate starts and what to try", "id": "type/improvement-strategy"}
@@ -9,4 +11,8 @@
 {"description": "A bundle of skills, agents, hooks and MCP servers loaded by a harness", "id": "type/plugin"}
 {"description": "A Python interpreter with a package manager", "id": "type/python-runtime"}
 {"description": "Isolated place to run untrusted trials", "id": "type/sandbox"}
+{"description": "Shows and manages agent sessions", "id": "type/session-manager"}
 {"description": "Version control", "id": "type/vcs"}
+{"description": "A read-only view of lists or evidence", "id": "type/viewer"}
+{"description": "A code editor served to a browser", "id": "type/web-editor"}
+{"description": "A terminal served to a browser", "id": "type/web-terminal"}

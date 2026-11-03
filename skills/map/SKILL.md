@@ -1,57 +1,99 @@
 ---
 name: map
-description: Map a system into Morphogen's lists (systems, slots, types, sources, components) and measure its baseline. Use when the user asks what a system or target is made of, to map or inventory something, or before improving a target that has not been mapped.
+description: Understand a system by mapping it into Morphogen's lists - what it is for, its parts as slots, what fills each, how they connect, what is measured and what is only assumed. Works on anything (code, a service, a machine, a business process, a team, a field of research), Morphogen included. Use when the user asks what something is made of or how it works, asks to map, model or inventory something, or before improving a system that has not been mapped.
 allowed-tools: Read, Glob, Grep, Agent, Bash(git:*), Bash(python:*), Bash(python3:*), mcp__plugin_morphogen_morphogen
 ---
 
 # Map
 
-Describe a system as lists, then measure it. The lists are what Morphogen
-knows; keep them true and small.
+Mapping is how Morphogen understands a system. A map says what the system is
+for, which roles it is made of, what fills each role, how the parts connect,
+and how each of those things is known. Improving the system is one thing a
+map makes possible; explaining it, comparing it, finding its risks, or
+deciding that nothing should change are others. Map to understand first.
 
-## The six lists
+Anything with parts and a purpose can be mapped: a script, a service, a
+machine, a business process, a team, a supply chain, a research field,
+Morphogen itself. The method is the same.
+
+## What a map holds
 
 | List | Entry | Refers to |
 |---|---|---|
-| systems | a whole: a target, a service, Morphogen itself | its `slots` |
-| slots | a role in a system: "counting", "parser", "judge" | `system`, `accepts` (types), `filled_by` (component), `interface` |
-| types | a kind of component: "hash map", "regex", "LLM call" | — |
-| sources | where parts come from: PyPI, the standard library, this project | — |
-| components | a specific part, with version | `type`, `source`; may itself be a system |
-| evidence | claims with support (written through tools, never by hand) | anything above |
+| systems | a whole with a purpose: a target, a service, an order-to-cash process, a team | its `slots`; `description` says what it is for |
+| slots | a role that could be filled differently: "counting", "approval", "judge" | `system`, `accepts` (types), `filled_by` (component), `interface` |
+| types | a kind of part: "hash map", "LLM call", "approver", "CRM" | — |
+| sources | where parts come from: PyPI, a vendor, a staffing agency, this project | — |
+| components | a specific part, with version or identity; may itself be a system | `type`, `source`, `system` |
+| evidence | how each claim is known (written through tools, never by hand) | anything above |
 
-Record how Morphogen can act on each system: `interface: direct` when there is
-an API, a shell or code it can change; `interface: simulated` when it can only
-act on a model, with the model as a slot of its own (`<system>/simulator`) and
-`simulates:` saying what it stands for. People and teams are systems too, and
-roles are slots; a swap is an assignment made through whatever system holds
-it (an HR, ticketing or scheduling API), and only with the operator's approval.
+**Slots are the point.** A slot is a role, separate from whatever fills it
+today. "Counting" is a slot; a list scan is what fills it. "Credit check" is a
+slot; a person, a rule engine or a vendor API might fill it. Seeing roles
+apart from their fillers is what makes a system understandable and changeable.
+Record what could be filled differently, not every file or person.
+
+**A dependency is a slot filled by a component that is itself a system**
+(`"system": "claude-code"` on `comp/claude-code`). Follow those links to see
+what a system stands on.
+
+**Say how Morphogen can reach each system** with `interface`:
+
+- `direct`: Morphogen can act on it (code, a shell, an API it may call);
+- `simulated`: it can only act on a model of it; the model is a slot of its
+  own (`<system>/simulator`) and `simulates:` says what it stands for;
+- `observed`: it can read it (logs, telemetry, exports) but not change it;
+- `none`: it is known only from documents and interviews.
+
+People and teams are systems too, and roles are slots. A change to one is an
+assignment made through whatever system holds it (an HR, ticketing or
+scheduling API), and only with the operator's approval.
 
 Ids are short and stable: `targets/slow-script`, `slow-script/counting`,
 `type/hash-count`, `comp/collections-counter`. References are ids.
 
+## How to find out
+
+Use whichever sources the system has, and record which one each claim came
+from:
+
+- **Explore**: read code, configs, docs and logs. Use the `explorer` subagent
+  so the main context gets a summary, not the raw material.
+- **Interview**: ask the operator or the people who run the system. Their
+  answers are `stated` evidence; note who said it.
+- **Observe**: read telemetry, event logs or exports. Data collected outside
+  the system is stronger than what it reports about itself.
+- **Measure**: for a target with a `target.yaml`, call `measure` to record a
+  baseline as `measured` evidence.
+
+Conclusions you drew but did not check ("approval is the bottleneck") go in
+with `evidence_note`, trust `inferred`, citing what they rest on.
+
 ## Worked example: the self-map
 
-The lists start with three mapped systems: `morphogen`, `claude-code` (the
-harness it runs in) and `host` (the machine). Before mapping something new,
-read one with `lists_query` (the `morphogen` system, then `slots` where
-`system` is `morphogen`) and copy its shape. A dependency is a slot filled by
-a component that is itself a system: `morphogen/harness` is filled by
-`comp/claude-code`, whose `system` is `claude-code`. The `host` entries are
-generic; when mapping this machine, replace them with what it actually has.
+The lists start with Morphogen's map of itself: `morphogen`, `admin-ui`,
+`claude-code` (the harness it runs in) and `host` (the machine). It is an
+example of the shape, not the main use. Before mapping something new, read it
+with `lists_query` (the `morphogen` system, then `slots` where `system` is
+`morphogen`) and follow the same pattern. The `host` entries are generic;
+when mapping a real machine, record what it actually has.
 
 ## Steps
 
-1. Use the `explorer` subagent to inventory the system: entry points,
-   components, interfaces, and where time or cost goes. Keep only its summary.
-2. Read what is already known: `lists_query` for the system and its slots.
-   If the system is new, follow the shape of the self-map above.
-3. Write or update entries with `lists_put`: the system, one slot per role
-   that could be filled differently, the type and source of what fills each
-   slot. Do not record every file; record what could be swapped.
-4. If the system is a target with a `target.yaml`, call `measure` on the
-   trunk to record its baseline as measured evidence.
-5. Add `evidence_note` entries (trust `inferred`) for what you concluded but
-   did not measure, such as "counting is the bottleneck", citing the source.
-6. Report: the slots, which one limits the target and the evidence for it,
-   and the baseline numbers.
+1. **Purpose.** Write down what the system is for and who it serves, in one
+   sentence, before listing parts. If nobody can say, that is a finding.
+2. **What is already known.** `lists_query` for the system, its slots and
+   anything that points at it. Do not map twice.
+3. **Parts.** Explore, interview and observe. Write entries with `lists_put`:
+   the system, one slot per role, the type and source of what fills each slot,
+   the `interface`. Follow dependencies one level down; stop where a part is
+   a system worth its own map.
+4. **Evidence.** `measure` targets; `evidence_note` for what was stated or
+   inferred, with its source.
+5. **Report**, in this order:
+   - what the system is for, and its slots;
+   - how each important claim is known (measured, observed, stated,
+     inferred), and the biggest gaps in that knowledge;
+   - where it is limited or fragile, with the evidence;
+   - which slots could be changed, and through which interface. Propose;
+     changing anything is the `evolve` skill's job and the operator's call.

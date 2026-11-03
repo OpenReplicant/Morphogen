@@ -4,8 +4,11 @@
 {"id": "comp/files-list-store", "source": "src/own", "status": "in use", "type": "type/list-store"}
 {"id": "comp/git", "notes": "record version", "source": "src/host", "status": "in use", "type": "type/vcs"}
 {"id": "comp/host-os", "notes": "Linux or macOS; record name and version", "source": "src/host", "status": "in use", "type": "type/os"}
+{"id": "comp/morphogen-admin-menu", "name": "Menu", "notes": "admin_pages (MCP) or morphogen-admin writes it to <data_dir>/admin/", "source": "src/own", "status": "in use", "type": "type/admin-shell", "url": "index.html"}
+{"id": "comp/morphogen-admin-ui", "source": "src/own", "status": "in use", "system": "admin-ui", "type": "type/admin-ui"}
 {"id": "comp/morphogen-judge", "source": "src/own", "status": "in use", "type": "type/judge"}
 {"id": "comp/morphogen-plugin", "source": "src/own", "status": "in use", "system": "morphogen", "type": "type/plugin"}
+{"id": "comp/morphogen-report", "name": "Report", "source": "src/own", "status": "in use", "type": "type/viewer", "url": "report.html"}
 {"id": "comp/no-sandbox", "notes": "trials run directly on the machine: no network isolation, writable tree", "source": "src/own", "status": "in use when no container engine is available", "type": "type/sandbox"}
 {"id": "comp/podman-sandbox", "source": "src/docker-hub", "status": "in use when Podman is available and Docker is not", "type": "type/sandbox", "version": "python:3.12-slim"}
 {"id": "comp/postgres-backend", "notes": "recommended backend: concurrent writers, roles, insert-only evidence", "source": "src/own", "status": "planned", "type": "type/list-store"}
