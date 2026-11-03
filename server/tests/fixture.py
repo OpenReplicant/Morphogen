@@ -18,6 +18,43 @@ TARGET = "targets/slow-script"
 SANDBOX = os.environ.get("MORPHOGEN_TEST_SANDBOX", "none")
 
 
+def scratch_stores(root: Path):
+    """The lists and evidence log of a scratch project at `root`, through the public surface
+    (project.stores), so the tests do not depend on how a backend stores them."""
+    root.mkdir(parents=True, exist_ok=True)
+    return project.stores(root, load_config(root))
+
+
+def tamper_first_record(log):
+    """Rewrite the first record behind the log's back, as someone with access to its storage would.
+
+    The one place the tests know a storage format: a JSONL file (`log.path` is a file), or a SQLite
+    table (`log.path` is `sqlite:///<file>#<table>`, guarded by triggers an attacker would drop first).
+    """
+    import json
+    import sqlite3
+    where = str(log.path)
+    if where.startswith("sqlite:"):
+        file, table = where.split(":///", 1)[1].rsplit("#", 1)
+        con = sqlite3.connect(file)
+        try:
+            for (name,) in con.execute("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ?",
+                                       (table,)).fetchall():
+                con.execute(f'DROP TRIGGER "{name}"')
+            con.execute(f"UPDATE {table} SET raw = replace(raw, '\"claim\":\"a\"', '\"claim\":\"rewritten\"') "
+                        "WHERE seq = 1")
+            con.commit()
+        finally:
+            con.close()
+        return
+    path = Path(where)
+    lines = path.read_text().splitlines()
+    rec = json.loads(lines[0])
+    rec["claim"] = "rewritten"
+    lines[0] = json.dumps(rec)
+    path.write_text("\n".join(lines) + "\n")
+
+
 def git(cwd, *args):
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
