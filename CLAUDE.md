@@ -97,6 +97,9 @@ Bump version in .claude-plugin/plugin.json and in the marketplace entry,
 tag, then /plugin update morphogen@morphogen and start a new session.
 
 ## Working notes
+- Before merging a PR, check that GitHub shows the head you pushed (its
+  commit list or head SHA): #54 was merged at an older head because the PR
+  never picked up later pushes, and those commits needed a follow-up PR.
 - Stacked pull requests merge into their base branch, not main. Retarget each
   to main before merging it (#52 and #53 landed in branches and had to be
   carried to main by a later PR).
