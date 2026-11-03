@@ -22,8 +22,18 @@ Breaks the 0.2 contract, so it ships as 0.3.0.
   instead).
 - `lists_export` publishes a map as JSONL for others to mount; mounted maps
   default to the `map/` directory.
-- The self-map's store slots now require `concurrent-writers`, with the
-  reason, and are filled by the one store.
+- The self-map names Morphogen's knowledge base as a system, `knowledge`, with
+  five slots: structure, evidence, history, decisions and recall (replacing
+  `morphogen/list-store` and `morphogen/evidence-log`), and its roles as slots
+  of `morphogen`: orchestrator, explorer, worker, reviewer, judge and
+  operator, each saying what it may write. `ports.py` is brought up to date as
+  those slots' interfaces (`ListStore`, `Log`).
+- The reviewer also checks changes to a map's slots and requirements before
+  they are adopted (map skill step 5; evolve step 10).
+- Removed, as outside the base's scope: patterns (`pattern: true`, the
+  `realizes` field; they belong in a pattern library mounted as a map), the
+  `edges` table and SQL `follow` (the walk is in Python; maps are small), and
+  the `catalog` and `meta` tables (`catalogs.yaml` is the source).
 - The session hook reads the database read-only with the standard library
   instead of JSONL files, so it no longer misses the journal on another backend.
 - Documents (`morphogen.yaml`, `target.yaml`, `catalogs.yaml`, strategy cards) are read

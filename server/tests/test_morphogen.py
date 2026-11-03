@@ -16,7 +16,10 @@ from morphogen import store
 
 from tests.fixture import FAST, TARGET, SampleProject, observed_project
 
-WRONG = FAST.replace("(-p[1], p[0])", "(-p[1], len(p[0]))")  # breaks alphabetical tie order
+# Wrong on every input (one word short). A tie-order bug was used before, but it shows only on inputs with
+# ties of different lengths, so about one run in a few hundred passed the judge legitimately (#49).
+WRONG = FAST.replace(")[:k]", ")[:max(k - 1, 0)]")
+assert WRONG != FAST
 
 
 class ConformanceCases:
@@ -111,14 +114,14 @@ class StoreCases(ConformanceCases):
             with db.engine.begin() as c:
                 c.execute(text(q))
 
-    def test_the_lists_are_tables_with_edges(self):
+    def test_the_store_fills_the_ports(self):
+        from morphogen import ports
+        self.assertIsInstance(self.lists(), ports.ListStore)
+        for log in (self.evidence(), self.changes()):
+            self.assertIsInstance(log, ports.Log)
         s = self.lists()
-        s.put("slots", {"id": "sys/a", "system": "sys", "accepts": ["type/x", "type/y"], "filled_by": "comp/c"})
-        q = s.db.q
-        self.assertEqual(self.sql(s.db, f"SELECT id FROM {q('slots')}"), [("sys/a",)])
-        self.assertEqual(sorted(self.sql(s.db, f"SELECT field, dst_id FROM {q('edges')}")),
-                         [("accepts", "type/x"), ("accepts", "type/y"), ("filled_by", "comp/c"), ("system", "sys")])
-        self.assertTrue(s.capabilities["native_multi_hop"])
+        s.put("slots", {"id": "sys/a"})
+        self.assertEqual(self.sql(s.db, "SELECT id FROM slots"), [("sys/a",)])  # a table per list
 
     def test_concurrent_writers_get_one_chain(self):
         import threading
@@ -254,7 +257,7 @@ class JudgeOnSample(unittest.TestCase):
         self.assertGreater(r["metrics"]["wall_seconds"]["gain"], 0.5)
         self.assertGreater(r["metrics"]["wall_seconds"]["ci95"][0], 0)
 
-    def test_wrong_tie_order_fails(self):
+    def test_wrong_output_fails(self):
         r = self.p.judge(self.p.branch("wrong", {"topwords.py": WRONG}))
         self.assertEqual(r["verdict"], "fail", r)
 
@@ -316,6 +319,15 @@ class Probe(unittest.TestCase):
         self.assertTrue(wrong)
         self.assertTrue(wrong[0]["expected"] and wrong[0]["got"] and wrong[0]["input"])
         self.assertNotEqual(wrong[0]["expected"], wrong[0]["got"])
+
+    def test_a_difference_past_the_preview_still_shows(self):
+        # Seen as a flaky failure: a tie-order difference late in the output was clipped away (#49).
+        a = "x" * 1000 + "AB" + "y" * 50
+        b = "x" * 1000 + "BA" + "y" * 50
+        exp, got = judge_mod._clip_pair(a, b)
+        self.assertNotEqual(exp, got)
+        self.assertIn("AB", exp)
+        self.assertEqual(judge_mod._clip_pair("same", "same"), ("same", "same"))
 
     def test_forbidden_files_are_refused_before_anything_runs(self):
         r = self.probe(self.p.branch("gen-pkg-probe", {"gen/__init__.py": "def text(seed, n):\n    return 'a'\n"}))
@@ -442,7 +454,7 @@ class SelfMap(unittest.TestCase):
     """The map init_project seeds: Morphogen, its admin UI, Claude Code and the host. Also the example for other maps."""
 
     REFS = {"systems": ["slots"], "slots": ["system", "accepts", "filled_by"], "components": ["type", "source", "system"]}
-    CORE = {"morphogen", "admin-ui", "claude-code", "host"}
+    CORE = {"morphogen", "knowledge", "admin-ui", "claude-code", "host"}
     MAP_INTERFACES = ("direct", "simulated", "observed", "none")  # see skills/map/SKILL.md
 
     def test_references_resolve_and_slots_point_back(self):
@@ -644,7 +656,7 @@ class DistributionContract(unittest.TestCase):
 
 
 class Capabilities(unittest.TestCase):
-    """Slots say what they require, components what they provide; patterns are maps without fillers."""
+    """Slots say what they require (and why), components what they provide."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -676,60 +688,34 @@ class Capabilities(unittest.TestCase):
         self.assertEqual([c for c in r["candidates"] if c["id"] == "comp/flat"][0]["missing"], ["graph"])
 
     def test_only_accepted_types_are_candidates_and_catalog_entries_count(self):
-        self.assertNotIn("comp/sql-logs", self.ids("morphogen/list-store"))
+        self.assertNotIn("comp/sql-logs", self.ids("knowledge/structure"))
         (self.tmp / "catalogs.yaml").write_text(
             "stores:\n  - name: some-graph-db\n    type: type/list-store\n    provides: [exact, graph, temporal]\n")
-        r = project.candidates(self.tmp, self.cfg, "morphogen/list-store")
+        r = project.candidates(self.tmp, self.cfg, "knowledge/structure")
         cat = [c for c in r["candidates"] if c["id"] == "some-graph-db"][0]
         self.assertEqual(cat["from"], "catalogs.yaml/stores")
         self.assertEqual(cat["extra"], ["graph", "temporal"])
 
     def test_capability_flags_count_as_provided(self):
-        self.lists.put("components", {"id": "comp/flagged", "type": "type/evidence-log",
+        self.lists.put("components", {"id": "comp/flagged", "type": "type/log",
                                       "capabilities": {"tamper-evident": True, "concurrent-writers": False}})
-        r = project.candidates(self.tmp, self.cfg, "morphogen/evidence-log")
+        r = project.candidates(self.tmp, self.cfg, "knowledge/evidence")
         flagged = [c for c in r["candidates"] if c["id"] == "comp/flagged"][0]
         self.assertEqual((flagged["covers"], flagged["missing"]), (["tamper-evident"], ["concurrent-writers"]))
-
-    def test_a_system_realizes_a_pattern_in_a_mounted_map(self):
-        pat = self.tmp.parent / (self.tmp.name + "-patterns")
-        lists_dir = pat / "lists"
-        lists_dir.mkdir(parents=True)
-        (lists_dir / "systems.jsonl").write_text(json.dumps(
-            {"id": "knowledge-memory", "pattern": True, "interface": "none",
-             "slots": ["knowledge-memory/store", "knowledge-memory/retrieve"]}) + "\n")
-        (lists_dir / "slots.jsonl").write_text(
-            json.dumps({"id": "knowledge-memory/store", "system": "knowledge-memory", "requires": ["exact"]}) + "\n"
-            + json.dumps({"id": "knowledge-memory/retrieve", "system": "knowledge-memory",
-                          "requires": ["semantic", "lexical"]}) + "\n")
-        try:
-            cfg = {**self.cfg, "maps": {"patterns": {"path": str(lists_dir)}}}
-            lists, _ = project.stores(self.tmp, cfg)
-            lists.put("systems", {"id": "notes", "interface": "direct", "realizes": "patterns:knowledge-memory",
-                                  "slots": ["notes/store"]})
-            lists.put("slots", {"id": "notes/store", "system": "notes", "realizes": "patterns:knowledge-memory/store",
-                                "requires": ["exact"]})
-            self.assertEqual(lists.follow("systems", "notes", "realizes")[0]["id"], "patterns:knowledge-memory")
-            self.assertTrue(lists.get("systems", "patterns:knowledge-memory")["pattern"])
-            self.assertEqual(lists.status()["dangling"], [])
-            lists.put("slots", {"id": "notes/index", "system": "notes", "realizes": "patterns:knowledge-memory/rank"})
-            self.assertIn("patterns:knowledge-memory/rank", [d["ref"] for d in lists.status()["dangling"]])
-        finally:
-            shutil.rmtree(pat)
 
     def test_the_report_finds_gaps_overhead_and_unexplained_requirements(self):
         report = self.lists.capability_report()
         self.assertEqual(report["gaps"], [])  # the seeded map meets its own requirements
         self.assertEqual(report["unexplained"], [])  # and says why it has each one
-        self.assertIn("morphogen/list-store", [o["slot"] for o in report["overhead"]])  # it also does lexical, graph
-        slot = self.lists.get("slots", "morphogen/list-store")
+        self.assertIn("knowledge/structure", [o["slot"] for o in report["overhead"]])  # it also does lexical
+        slot = self.lists.get("slots", "knowledge/structure")
         self.lists.put("slots", {**slot, "requires": ["exact", "semantic"]}, reason="a design now searches by meaning")
         report = self.lists.capability_report()
-        gap = [g for g in report["gaps"] if g["slot"] == "morphogen/list-store"][0]
+        gap = [g for g in report["gaps"] if g["slot"] == "knowledge/structure"][0]
         self.assertEqual((gap["missing"], gap["why"]), (["semantic"], "filler lacks it"))
         self.assertIn("semantic", [r for u in report["unexplained"] for r in u["requirements"]])
-        self.assertEqual(project.doctor(self.tmp)["maps"]["capability_gaps"][0]["slot"], "morphogen/list-store")
-        self.assertEqual(self.lists.history("slots", "morphogen/list-store")[0]["reason"], "a design now searches by meaning")
+        self.assertEqual(project.doctor(self.tmp)["maps"]["capability_gaps"][0]["slot"], "knowledge/structure")
+        self.assertEqual(self.lists.history("slots", "knowledge/structure")[0]["reason"], "a design now searches by meaning")
 
     def test_the_journal_is_a_log(self):
         r = project.journal_append(self.tmp, self.cfg, {"title": "swap the list store", "gap": "graph walks",

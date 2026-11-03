@@ -353,6 +353,20 @@ def _clip(text: str, n: int = 300) -> str:
     return text if len(text) <= n else text[:n] + f"... ({len(text) - n} more characters)"
 
 
+def _clip_pair(expected: str, got: str, n: int = 300) -> tuple[str, str]:
+    """Both outputs clipped to the same window, starting just before their first difference, so a
+    difference past the first `n` characters still shows (a plain clip made them look identical)."""
+    a, b = expected.strip(), got.strip()
+    i = next((k for k, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    start = max(0, i - 60)
+
+    def window(t: str) -> str:
+        part = t[start:start + n]
+        return ((f"({start} characters before) ..." if start else "") + part +
+                (f"... ({len(t) - start - n} more characters)" if len(t) > start + n else ""))
+    return window(a), window(b)
+
+
 def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: str | None = None,
           cases: int = 5, rounds: int = 3) -> dict:
     """A practice run for strategies: feedback on a candidate, never a verdict.
@@ -400,8 +414,11 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
                     case = {"seed": seed, "status": "failed" if oc.rc != 0 else
                             ("ok" if oc.out.strip() == ob.out.strip() else "wrong")}
                     if case["status"] != "ok":
-                        case.update({"input": _clip(g.out, 200), "expected": _clip(ob.out),
-                                     "got": _clip(oc.out if oc.rc == 0 else (oc.err or oc.out))})
+                        if oc.rc == 0:
+                            exp, got = _clip_pair(ob.out, oc.out)
+                        else:
+                            exp, got = _clip(ob.out), _clip(oc.err or oc.out)
+                        case.update({"input": _clip(g.out, 200), "expected": exp, "got": got})
                     results.append(case)
                 out["cases"] = results
             samples: list[dict[str, list[float]]] = [{}, {}]

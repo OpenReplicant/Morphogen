@@ -80,7 +80,6 @@ def stores(root: Path, cfg: dict):
     db = database(root, cfg)
     lg = logs(root, cfg)
     own = store.Lists(db, lg["changes"])
-    own.sync_catalog(catalogs(root))
     # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
     return mount(root, cfg, own, data_dir(root, cfg) / "maps"), lg["evidence"]
 

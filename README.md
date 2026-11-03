@@ -73,9 +73,24 @@ Three crafts guide the work (the `playbook` skill): the data scientist's
 systems engineer's (decompose by interfaces, contracts before contents, reuse
 before build) and DevOps' (sandbox, small reversible changes, budgets).
 
-Subagents are used for what a separate context gives, not as an org chart:
-`explorer` (read-only investigation), `worker` (one candidate per branch and
-worktree), `reviewer` (reviews a diff without the author's reasoning).
+### Roles
+
+Morphogen is a few roles around a knowledge base, with a judge outside their
+reach. Each role is a slot in the self-map (`morphogen/<role>`), so another
+harness fills it its own way; one without subagents fills explorer, worker
+and reviewer with its main session, working inline. The table is also who may
+write what:
+
+| Role | Filled by (Claude Code) | Does | Writes |
+|---|---|---|---|
+| orchestrator | the main session, following the skills | picks the gap and strategy, delegates, proposes | the map (`lists_put` with a reason), `stated` and `inferred` evidence, the journal |
+| explorer | `agents/explorer.md` (Haiku) | observes: reads code, logs and docs, profiles | nothing; it reports |
+| worker | `agents/worker.md` | acts: one candidate on its own branch and worktree | code, on that branch only |
+| reviewer | `agents/reviewer.md` (Sonnet) | checks without the author's reasoning: a candidate's diff after the judge passes it, and changes to slots and requirements before they are adopted | nothing; findings go in as `inferred` evidence via the orchestrator |
+| judge | the MCP server (code, not a model) | measures under rules no agent can edit | `measured` evidence, and only it does |
+| operator | you | sets intent, approves merges, adoptions and mounted maps | anything, through review |
+
+Every write to the map is recorded in the change log by the store itself.
 
 ## Targets
 
@@ -226,8 +241,24 @@ and can cite the records they support or challenge.
 
 ## What Morphogen knows: the lists
 
-Five lists in `.morphogen/lists/` describe systems, with evidence as the
-sixth:
+Morphogen's knowledge base is evidence-based: every claim carries how it is
+known (its trust and source), and only the judge writes `measured`. It is the
+`knowledge` system in the self-map, five slots each with an interface (a port
+in `server/morphogen/ports.py`) that another filler can take over:
+
+| Slot | Holds | Filled by |
+|---|---|---|
+| structure | the five lists below, by id, with references | the store (`store.py`) |
+| evidence | claims and verdicts, with trust and source | the store's `evidence` log |
+| history | every write to the map: before, after, who, why | the store's `changes` log |
+| decisions | gap, options, choice, why, result, commit | the store's `journal` log |
+| recall | what is relevant to a question | word and id matching (`lists_query`, `evidence_query`, `catalog_search`) |
+
+There is no ingestion pipeline: entries come from the roles above, through
+the tools. A semantic or graph recall, or a knowledge-memory product, is a
+distribution's filler for a slot, judged against the one that ships.
+
+Five lists describe systems:
 
 | List | Entry | Refers to |
 |---|---|---|
@@ -237,12 +268,13 @@ sixth:
 | sources | where parts come from: PyPI, the standard library, this project | |
 | components | a specific part, with version; can itself be a system | type, source |
 
-`init_project` seeds them with a self-map of four systems, so Morphogen
+`init_project` seeds them with a self-map of five systems, so Morphogen
 starts from a worked example instead of a blank page:
 
 | System | Slots | Depends on |
 |---|---|---|
-| `morphogen` | judge, evidence log, list store, improvement strategy, sandbox, harness, host, admin UI | `claude-code` (harness), `host` (sandbox, Python, git), `admin-ui` |
+| `morphogen` | orchestrator, explorer, worker, reviewer, operator, judge, knowledge, improvement strategy, sandbox, model gateway, harness, host, admin UI | `knowledge`, `claude-code` (harness), `host` (sandbox, Python, git), `admin-ui` |
+| `knowledge` | structure, evidence, history, decisions, recall | |
 | `admin-ui` | shell, map viewer, evidence viewer, sessions, terminal, editor | |
 | `claude-code` | model, plugins, host | `host`; hosts `morphogen` as a plugin |
 | `host` | OS, container engine, Python, git | |
@@ -252,10 +284,9 @@ A dependency is a slot filled by a component that is itself a system
 generic; mapping fills in this machine's actual values. Morphogen can then
 treat its own parts, and what it stands on, as things to improve. Every write
 to the lists is recorded in the change log (see Storage), so the
-map's history does not depend on git; commit the lists with your code only if
-you want them reviewed alongside it.
+map's history does not depend on git. To publish a map, `lists_export` it.
 
-### Capabilities and patterns
+### Capabilities
 
 A slot can say what it `requires` and a component what it `provides`, as
 capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
@@ -263,18 +294,10 @@ capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
 `slot:` lists what could fill that slot: components and catalog entries of an
 accepted type, those that cover every requirement first, then those missing
 the fewest, then those bringing the fewest *extra* capabilities. What the
-design does not call for is overhead: the seeded `morphogen/list-store`
+design does not call for is overhead: the seeded `knowledge/structure`
 requires exact lookups and concurrent writers, so the store's lexical search
-and graph walks show up as overhead; require `semantic` too and the report
+shows up as overhead; require `semantic` too and the report
 shows a gap the current store cannot fill.
-
-A **pattern** is a system with `pattern: true` and slots that nothing fills:
-an architecture to realise, not a running thing, such as "knowledge memory"
-(ingest, extract, resolve, invalidate, index, retrieve, store). A concrete
-system says `realizes: <pattern>` and each of its slots the pattern slot it
-plays, so two products that realise the same pattern can be compared slot by
-slot. Patterns belong in a library of their own, mounted as a map
-(`patterns:knowledge-memory`), not in each project.
 
 Each requirement should carry its reason, in the slot's `because`
 (`{"graph": "evidence:42"}`), so it can be dropped when the reason goes away.
@@ -336,16 +359,16 @@ database:
 ```
 
 The tables: one per list (`systems`, `slots`, ...), each `(id, data)` with
-`data` as JSON, the table's name being the label; `edges (src_label, src_id,
-field, dst_id)`, every reference, kept in step with each write, so `follow` is
-a recursive query; `catalog`, a mirror of `catalogs.yaml` (the file stays the
-source); and the three logs, `(seq, hash, prev, raw, record)`. A list write and
+`data` as JSON, the table's name being the label; and the three logs,
+`(seq, hash, prev, raw, record)`. That is all: references are ids inside
+`data`, and `follow` walks them in Python, since maps are small. A list write and
 its change record commit in one transaction, and `seq` is the key, so two
 writers cannot fork a chain. On SQLite, triggers also refuse updates and
 deletes to the logs; on other databases append-only is evident from the chain,
 not enforced, unless you add your own trigger. Graph or vector extensions
-(pgGraph, pgvector, sqlite-vec) work over these tables as they are; they are a
-distribution's choice, not the base's.
+(pgGraph, pgvector, sqlite-vec) can be added over these tables; they are a
+distribution's choice, a filler for the structure or recall slot, not the
+base's.
 
 To publish a map for other projects to mount, `lists_export` writes it as
 JSONL (`map/<list>.jsonl`, one entry per line, sorted); commit that, and

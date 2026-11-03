@@ -67,6 +67,12 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 `^0.2.0` accepts 0.2.x only, and a breaking change ships as 0.3.0.
 `DistributionContract` in `server/tests/test_morphogen.py` checks this list.
 
+**Knowledge-base ports** (`server/morphogen/ports.py`): `ListStore` (the
+structure slot) and `Log` (evidence, history, decisions), with the methods
+listed there. The self-map's `knowledge` system and `morphogen` role slots
+(orchestrator, explorer, worker, reviewer, judge, operator) are part of the
+contract by id, so a distribution can fill or extend them.
+
 **MCP tools** (names and parameters):
 
 | Tool | Parameters |
@@ -89,12 +95,10 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 | `journal_append` | `title`, `gap`, `options`, `choice`, `rung`, `gate`, `commit`, `why` |
 
 **Lists:** the kinds `systems`, `slots`, `types`, `sources`, `components`;
-the reference fields (`systems.slots`, `realizes`; `slots.system`,
-`accepts`, `filled_by`, `realizes`; `components.type`, `source`, `system`);
+the reference fields (`systems.slots`; `slots.system`, `accepts`,
+`filled_by`; `components.type`, `source`, `system`);
 `slots.requires`, `slots.because` (reason per requirement) and
-`components.provides` (capability names); `pattern: true` on abstract
-systems; qualified ids
-`map:id`; map interfaces `direct`, `simulated`, `observed`, `none`; the
+`components.provides` (capability names); qualified ids `map:id`; map interfaces `direct`, `simulated`, `observed`, `none`; the
 `_map` and `_trust` annotations on entries from mounted maps.
 
 **`target.yaml`:** `name`, `description`, `interface` (`direct` or

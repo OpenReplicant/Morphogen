@@ -46,13 +46,6 @@ its reason in the slot's `because` (`{"graph": "evidence:42"}`), and pass a
 `reason` to `lists_put` when you change an entry: every write is logged, and
 `lists_history` shows why the map is the way it is.
 
-**Patterns.** If the system follows a known architecture, look for it in a
-mounted pattern library (`lists_query` on `systems` with `map: "*"` and
-`pattern: true`) and record `realizes` on the system and on each slot that
-plays a pattern slot. Mapping a product someone else built (interface
-`observed`) is how new patterns are found: two products that realise the same
-pattern differ slot by slot, and that difference is the finding.
-
 **Say how Morphogen can reach each system** with `interface`:
 
 - `direct`: Morphogen can act on it (code, a shell, an API it may call);
@@ -95,7 +88,8 @@ with `evidence_note`, trust `inferred`, citing what they rest on.
 
 ## Worked example: the self-map
 
-The lists start with Morphogen's map of itself: `morphogen`, `admin-ui`,
+The lists start with Morphogen's map of itself: `morphogen` (its roles,
+judge and other parts), `knowledge` (its knowledge base), `admin-ui`,
 `claude-code` (the harness it runs in) and `host` (the machine). It is an
 example of the shape, not the main use. Before mapping something new, read it
 with `lists_query` (the `morphogen` system, then `slots` where `system` is
@@ -116,7 +110,14 @@ when mapping a real machine, record what it actually has.
    a system worth its own map.
 4. **Evidence.** `measure` targets; `evidence_note` for what was stated or
    inferred, with its source.
-5. **Report**, in this order:
+5. **Review changes to an existing map.** If you added or removed a slot, or
+   changed what a slot `requires`, in a map that already existed (the
+   self-map included), give the `reviewer` subagent only the entries before
+   and after (`lists_history`) and the evidence their reasons cite. Record
+   its findings with `evidence_note` (trust `inferred`), and fix or withdraw
+   what it objects to before reporting. A first map of a new system needs no
+   review.
+6. **Report**, in this order:
    - what the system is for, and its slots;
    - how each important claim is known (measured, observed, stated,
      inferred), and the biggest gaps in that knowledge;

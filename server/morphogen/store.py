@@ -6,10 +6,6 @@ SQLite is tested here. The tables:
 
 - one table per list (`systems`, `slots`, `types`, `sources`, `components`),
   each `(id, data)` with `data` as JSON;
-- `edges (src_label, src_id, field, dst_id)`: every reference field
-  (ports.REF_FIELDS), rewritten in the same transaction as each write;
-- `catalog (section, name, data)`, a mirror of catalogs.yaml (the file stays
-  the source), and `meta (key, value)`;
 - three logs, `evidence`, `changes` and `journal`, each
   `(seq, hash, prev, raw, record)`, hash-chained.
 
@@ -32,12 +28,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import (JSON, BigInteger, Column, Index, Integer, MetaData, Table, Text, column, create_engine,
-                        delete, event, select, text)
+from sqlalchemy import (JSON, BigInteger, Column, MetaData, Table, Text, create_engine, delete, event, select)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.schema import CreateSchema
 
-from .ports import KINDS, REF_FIELDS, TRUST
+from .ports import KINDS, TRUST
 
 LOGS = ("evidence", "changes", "journal")
 GENESIS = "0" * 64
@@ -124,7 +119,7 @@ def retrying(fn):
 
 
 class Database:
-    """One database: the lists, the edges, the catalog mirror and the three logs.
+    """One database: the lists and the three logs.
 
     `url` is any SQLAlchemy URL; `options` go to `create_engine` (pool settings, `connect_args` for
     the driver's own flags); `schema` puts the tables in a schema on databases that have them."""
@@ -137,12 +132,6 @@ class Database:
         md = MetaData(schema=self.schema)
         self.lists = {k: Table(k, md, Column("id", Text, primary_key=True), Column("data", JSONT, nullable=False))
                       for k in KINDS}
-        self.edges = Table("edges", md, Column("src_label", Text, primary_key=True),
-                           Column("src_id", Text, primary_key=True), Column("field", Text, primary_key=True),
-                           Column("dst_id", Text, primary_key=True), Index("edges_dst", "dst_id"))
-        self.catalog = Table("catalog", md, Column("section", Text, primary_key=True),
-                             Column("name", Text, primary_key=True), Column("data", JSONT, nullable=False))
-        self.meta = Table("meta", md, Column("key", Text, primary_key=True), Column("value", Text, nullable=False))
         self.logs = {n: Table(n, md, Column("seq", BigInteger, primary_key=True, autoincrement=False),
                               Column("hash", Text, nullable=False), Column("prev", Text, nullable=False),
                               Column("raw", Text, nullable=False), Column("record", JSONT, nullable=False))
@@ -256,7 +245,7 @@ class Lists:
 
     def __init__(self, db: Database, changes: Log | None = None):
         self.db, self.changes = db, changes  # every write is recorded in `changes`, in the same transaction
-        self.capabilities = {"concurrent_writers": True, "native_multi_hop": True, "database": db.dialect}
+        self.capabilities = {"concurrent_writers": True, "database": db.dialect}
 
     def _table(self, kind: str) -> Table:
         if kind not in KINDS:
@@ -289,34 +278,29 @@ class Lists:
     def _write(self, c, kind: str, t: Table, entry: dict) -> None:
         id = str(entry["id"])
         self.db.replace(c, t, {"id": id, "data": entry}, ["id"])
-        e = self.db.edges
-        c.execute(delete(e).where(e.c.src_label == kind, e.c.src_id == id))
-        for field in REF_FIELDS.get(kind, ()):
-            v = entry.get(field)
-            for dst in sorted({str(d) for d in (v if isinstance(v, list) else [v] if v else [])}):
-                c.execute(e.insert().values(src_label=kind, src_id=id, field=field, dst_id=dst))
 
     def query(self, kind: str, where: dict[str, Any] | None = None) -> list[dict]:
         with self.db.engine.connect() as c:
             return [e for e in self._rows(c, kind) if matches(e, where or {})]
 
     def follow(self, kind: str, id: str, field: str, hops: int = 1) -> list[dict]:
-        """Entries reachable from `id` along `field`, nearest first, each once (a recursive query over edges)."""
-        edges = self.db.q("edges")
-        nodes = "(" + " UNION ALL ".join(f"SELECT CAST('{k}' AS TEXT) AS label, id, data FROM {self.db.q(k)}"
-                                         for k in KINDS) + ")"
-        with self.db.engine.connect() as c:
-            if not c.execute(text(f"SELECT 1 FROM {nodes} n WHERE n.id = :id"), {"id": id}).first():
-                return []
-            q = text(f"""WITH RECURSIVE walk(id, depth) AS (
-                    SELECT CAST(:start AS TEXT), 0
-                    UNION
-                    SELECT e.dst_id, w.depth + 1 FROM {edges} e JOIN walk w ON e.src_id = w.id
-                    WHERE e.field = :f AND w.depth < :hops)
-                SELECT n.data AS data, min(w.depth) AS d FROM walk w JOIN {nodes} n ON n.id = w.id
-                WHERE w.depth > 0 AND w.id <> :start GROUP BY n.label, n.id, n.data ORDER BY d, n.id"""
-                     ).columns(column("data", JSONT), column("d", Integer))
-            return list(c.execute(q, {"start": id, "f": field, "hops": max(int(hops), 0)}).scalars())
+        """Entries reachable from `id` along reference `field`, nearest first, each once. References are
+        ids in any list; the walk is in Python, since maps are small."""
+        index = {e["id"]: e for rows in self.dump().values() for e in rows}
+        if id not in index:
+            return []
+        seen, frontier, out = {id}, [index[id]], []
+        for _ in range(max(int(hops), 0)):
+            nxt = []
+            for e in frontier:
+                refs = e.get(field) or []
+                for r in refs if isinstance(refs, list) else [refs]:
+                    if r in index and r not in seen:
+                        seen.add(r)
+                        out.append(index[r])
+                        nxt.append(index[r])
+            frontier = nxt
+        return out
 
     def dump(self) -> dict[str, list[dict]]:
         with self.db.engine.connect() as c:
@@ -330,7 +314,6 @@ class Lists:
                     t = self._table(kind)
                     before = {e["id"]: e for e in self._rows(c, kind)}
                     c.execute(delete(t))
-                    c.execute(delete(self.db.edges).where(self.db.edges.c.src_label == kind))
                     for e in entries:
                         self._write(c, kind, t, e)
                         if self.changes is not None and before.get(e["id"]) != e:
@@ -354,31 +337,6 @@ class Lists:
             (d / f"{kind}.jsonl").write_text("".join(canonical(r) + "\n" for r in rows))
             out[kind] = len(rows)
         return out
-
-    # --- the catalog mirror
-    def sync_catalog(self, catalog: dict) -> int:
-        """Mirror catalogs.yaml into the catalog table when it changed. Returns rows written (0 if unchanged)."""
-        digest = hashlib.sha256(canonical(catalog).encode()).hexdigest()
-        m, cat = self.db.meta, self.db.catalog
-        with self.db.engine.begin() as c:
-            if c.execute(select(m.c.value).where(m.c.key == "catalog")).scalar() == digest:
-                return 0
-            c.execute(delete(cat))
-            seen, n = set(), 0
-            for section, entries in (catalog or {}).items():
-                for e in entries if isinstance(entries, list) else []:
-                    if isinstance(e, dict) and e.get("name") and (section, e["name"]) not in seen:
-                        seen.add((section, e["name"]))
-                        c.execute(cat.insert().values(section=str(section), name=str(e["name"]), data=e))
-                        n += 1
-            self.db.replace(c, m, {"key": "catalog", "value": digest}, ["key"])
-        return n
-
-    def catalog_rows(self, section: str | None = None) -> list[dict]:
-        cat = self.db.catalog
-        q = select(cat.c.data).order_by(cat.c.section, cat.c.name)
-        with self.db.engine.connect() as c:
-            return list(c.execute(q.where(cat.c.section == section) if section else q).scalars())
 
 
 def evidence_log(db: Database) -> Log:
