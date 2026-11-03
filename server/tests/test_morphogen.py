@@ -11,9 +11,8 @@ from pathlib import Path
 
 from morphogen import judge as judge_mod
 from morphogen import project
-from morphogen.backend_files import FilesEvidenceLog, FilesListStore
 
-from tests.fixture import FAST, TARGET, SampleProject, observed_project
+from tests.fixture import FAST, TARGET, SampleProject, observed_project, scratch_stores, tamper_first_record
 
 WRONG = FAST.replace("(-p[1], p[0])", "(-p[1], len(p[0]))")  # breaks alphabetical tie order
 
@@ -84,7 +83,9 @@ class ConformanceCases:
         self.assertEqual(log.verify(), (False, 1))
 
 
-class FilesConformance(ConformanceCases, unittest.TestCase):
+class ProjectConformance(ConformanceCases, unittest.TestCase):
+    """The configured backend, through the public surface (project.stores, project.logs)."""
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
 
@@ -92,24 +93,21 @@ class FilesConformance(ConformanceCases, unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def lists(self, name="lists"):
-        return FilesListStore(self.tmp / name)
+        return scratch_stores(self.tmp / name)[0]
 
     def evidence(self):
-        return FilesEvidenceLog(self.tmp / "evidence.jsonl")
+        return scratch_stores(self.tmp / "ev")[1]
 
     def changes(self):
-        from morphogen.backend_files import FilesLog
-        return FilesLog(self.tmp / "changes.jsonl")
+        root = self.tmp / "logged"
+        root.mkdir(parents=True, exist_ok=True)
+        return project.logs(root, project.load_config(root))["changes"]
 
     def lists_with(self, changes):
-        return FilesListStore(self.tmp / "logged", changes)
+        return scratch_stores(self.tmp / "logged")[0]
 
     def tamper(self, log):
-        lines = log.path.read_text().splitlines()
-        rec = json.loads(lines[0])
-        rec["claim"] = "rewritten"
-        lines[0] = json.dumps(rec)
-        log.path.write_text("\n".join(lines) + "\n")
+        tamper_first_record(log)
 
 
 POSTGRES_URL = os.environ.get("MORPHOGEN_TEST_POSTGRES")  # e.g. postgresql://postgres@127.0.0.1:5432/morphogen_test
