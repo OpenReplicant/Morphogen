@@ -67,11 +67,13 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 `^0.2.0` accepts 0.2.x only, and a breaking change ships as 0.3.0.
 `DistributionContract` in `server/tests/test_morphogen.py` checks this list.
 
-**Knowledge-base ports** (`server/morphogen/ports.py`): `ListStore` (the
-structure slot) and `Log` (evidence, history, decisions), with the methods
-listed there. The self-map's `knowledge` system and `morphogen` role slots
-(orchestrator, explorer, worker, reviewer, judge, operator) are part of the
-contract by id, so a distribution can fill or extend them.
+**Ports** (`server/morphogen/ports.py`): `ListStore` (the lists slot) and
+`Log` (each of the three logs), with the methods
+listed there. The self-map's `morphogen/knowledge` slot, the `knowledge`
+system's slots (`knowledge/lists`, `knowledge/logs`, `knowledge/indices`) and
+the role slots (orchestrator, explorer, worker,
+reviewer, judge, operator) are part of the contract by id, so a distribution
+can fill or extend them.
 
 **MCP tools** (names and parameters):
 

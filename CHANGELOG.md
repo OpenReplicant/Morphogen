@@ -22,12 +22,14 @@ Breaks the 0.2 contract, so it ships as 0.3.0.
   instead).
 - `lists_export` publishes a map as JSONL for others to mount; mounted maps
   default to the `map/` directory.
-- The self-map names Morphogen's knowledge base as a system, `knowledge`, with
-  five slots: structure, evidence, history, decisions and recall (replacing
-  `morphogen/list-store` and `morphogen/evidence-log`), and its roles as slots
-  of `morphogen`: orchestrator, explorer, worker, reviewer, judge and
-  operator, each saying what it may write. `ports.py` is brought up to date as
-  those slots' interfaces (`ListStore`, `Log`).
+- What Morphogen knows is a system of the self-map, `knowledge`, filling
+  `morphogen/knowledge`, with three slots: `knowledge/lists` (replacing
+  `morphogen/list-store`), `knowledge/logs` (replacing `morphogen/evidence-log`;
+  evidence, changes, journal) and `knowledge/indices` (derived and rebuildable,
+  filled by a scan). Each slot names its ingest, manage and retrieve ops. Swap
+  one slot, or the whole system. The roles are slots of `morphogen` too:
+  orchestrator, explorer, worker, reviewer, judge and operator, each saying
+  what it may write. `ports.py` is brought up to date (`ListStore`, `Log`).
 - The reviewer also checks changes to a map's slots and requirements before
   they are adopted (map skill step 5; evolve step 10).
 - Removed, as outside the base's scope: patterns (`pattern: true`, the

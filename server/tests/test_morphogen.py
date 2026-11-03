@@ -688,10 +688,10 @@ class Capabilities(unittest.TestCase):
         self.assertEqual([c for c in r["candidates"] if c["id"] == "comp/flat"][0]["missing"], ["graph"])
 
     def test_only_accepted_types_are_candidates_and_catalog_entries_count(self):
-        self.assertNotIn("comp/sql-logs", self.ids("knowledge/structure"))
+        self.assertNotIn("comp/sql-logs", self.ids("knowledge/lists"))
         (self.tmp / "catalogs.yaml").write_text(
             "stores:\n  - name: some-graph-db\n    type: type/list-store\n    provides: [exact, graph, temporal]\n")
-        r = project.candidates(self.tmp, self.cfg, "knowledge/structure")
+        r = project.candidates(self.tmp, self.cfg, "knowledge/lists")
         cat = [c for c in r["candidates"] if c["id"] == "some-graph-db"][0]
         self.assertEqual(cat["from"], "catalogs.yaml/stores")
         self.assertEqual(cat["extra"], ["graph", "temporal"])
@@ -699,7 +699,7 @@ class Capabilities(unittest.TestCase):
     def test_capability_flags_count_as_provided(self):
         self.lists.put("components", {"id": "comp/flagged", "type": "type/log",
                                       "capabilities": {"tamper-evident": True, "concurrent-writers": False}})
-        r = project.candidates(self.tmp, self.cfg, "knowledge/evidence")
+        r = project.candidates(self.tmp, self.cfg, "knowledge/logs")
         flagged = [c for c in r["candidates"] if c["id"] == "comp/flagged"][0]
         self.assertEqual((flagged["covers"], flagged["missing"]), (["tamper-evident"], ["concurrent-writers"]))
 
@@ -707,15 +707,15 @@ class Capabilities(unittest.TestCase):
         report = self.lists.capability_report()
         self.assertEqual(report["gaps"], [])  # the seeded map meets its own requirements
         self.assertEqual(report["unexplained"], [])  # and says why it has each one
-        self.assertIn("knowledge/structure", [o["slot"] for o in report["overhead"]])  # it also does lexical
-        slot = self.lists.get("slots", "knowledge/structure")
-        self.lists.put("slots", {**slot, "requires": ["exact", "semantic"]}, reason="a design now searches by meaning")
+        self.assertIn("knowledge/logs", [o["slot"] for o in report["overhead"]])  # SQLite also enforces append-only
+        slot = self.lists.get("slots", "knowledge/indices")
+        self.lists.put("slots", {**slot, "requires": ["exact", "lexical", "semantic"]}, reason="a design now searches by meaning")
         report = self.lists.capability_report()
-        gap = [g for g in report["gaps"] if g["slot"] == "knowledge/structure"][0]
+        gap = [g for g in report["gaps"] if g["slot"] == "knowledge/indices"][0]
         self.assertEqual((gap["missing"], gap["why"]), (["semantic"], "filler lacks it"))
         self.assertIn("semantic", [r for u in report["unexplained"] for r in u["requirements"]])
-        self.assertEqual(project.doctor(self.tmp)["maps"]["capability_gaps"][0]["slot"], "knowledge/structure")
-        self.assertEqual(self.lists.history("slots", "knowledge/structure")[0]["reason"], "a design now searches by meaning")
+        self.assertEqual(project.doctor(self.tmp)["maps"]["capability_gaps"][0]["slot"], "knowledge/indices")
+        self.assertEqual(self.lists.history("slots", "knowledge/indices")[0]["reason"], "a design now searches by meaning")
 
     def test_the_journal_is_a_log(self):
         r = project.journal_append(self.tmp, self.cfg, {"title": "swap the list store", "gap": "graph walks",

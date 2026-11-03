@@ -1,7 +1,9 @@
 """Ports: what each data feature needs, independent of the backend.
 
-Each port is the interface of a slot in Morphogen's knowledge base (structure,
-evidence, history, decisions; see the self-map). A filler implements the port
+Each port is the interface of a slot in the self-map: ListStore for
+`knowledge/lists`, Log for each of `knowledge/logs` (evidence, changes,
+journal). `knowledge/indices` has no port yet; its filler today is a scan
+inside the queries. A filler implements the port
 and declares capability flags, so callers know which guarantees are real.
 store.py fills them all; every filler must pass the conformance tests
 (ConformanceCases in tests/test_morphogen.py).
@@ -24,7 +26,7 @@ REF_FIELDS = {"systems": ("slots",), "slots": ("system", "accepts", "filled_by")
 
 @runtime_checkable
 class ListStore(Protocol):
-    """The structure slot: entries by id in the five lists. Every write is recorded in the changes log."""
+    """The lists slot: entries by id in the five lists. Every write is recorded in the changes log."""
     capabilities: dict[str, bool]
 
     def get(self, kind: str, id: str) -> dict | None: ...
@@ -38,7 +40,7 @@ class ListStore(Protocol):
 
 @runtime_checkable
 class Log(Protocol):
-    """The evidence, history and decisions slots: append-only and hash-chained."""
+    """One of the logs (evidence, changes, journal): append-only and hash-chained."""
     capabilities: dict[str, bool]
 
     def append(self, record: dict) -> dict: ...

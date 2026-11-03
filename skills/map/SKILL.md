@@ -89,7 +89,7 @@ with `evidence_note`, trust `inferred`, citing what they rest on.
 ## Worked example: the self-map
 
 The lists start with Morphogen's map of itself: `morphogen` (its roles,
-judge and other parts), `knowledge` (its knowledge base), `admin-ui`,
+judge and other parts), `knowledge` (lists, logs, indices), `admin-ui`,
 `claude-code` (the harness it runs in) and `host` (the machine). It is an
 example of the shape, not the main use. Before mapping something new, read it
 with `lists_query` (the `morphogen` system, then `slots` where `system` is

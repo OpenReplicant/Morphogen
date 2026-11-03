@@ -75,8 +75,8 @@ before build) and DevOps' (sandbox, small reversible changes, budgets).
 
 ### Roles
 
-Morphogen is a few roles around a knowledge base, with a judge outside their
-reach. Each role is a slot in the self-map (`morphogen/<role>`), so another
+Morphogen is a few roles around a knowledge system (lists, logs, indices),
+with a judge outside their reach. Each role is a slot in the self-map (`morphogen/<role>`), so another
 harness fills it its own way; one without subagents fills explorer, worker
 and reviewer with its main session, working inline. The table is also who may
 write what:
@@ -241,22 +241,26 @@ and can cite the records they support or challenge.
 
 ## What Morphogen knows: the lists
 
-Morphogen's knowledge base is evidence-based: every claim carries how it is
-known (its trust and source), and only the judge writes `measured`. It is the
-`knowledge` system in the self-map, five slots each with an interface (a port
-in `server/morphogen/ports.py`) that another filler can take over:
+What Morphogen knows is held by its knowledge system, `knowledge` in the
+self-map: three slots, each with ingest, manage and retrieve operations and an
+interface another filler can take over. Swap one slot (a vector index fills
+`knowledge/indices`), or the whole system: a bespoke or ready-made one fills
+`morphogen/knowledge` and provides the same three.
 
 | Slot | Holds | Filled by |
 |---|---|---|
-| structure | the five lists below, by id, with references | the store (`store.py`) |
-| evidence | claims and verdicts, with trust and source | the store's `evidence` log |
-| history | every write to the map: before, after, who, why | the store's `changes` log |
-| decisions | gap, options, choice, why, result, commit | the store's `journal` log |
-| recall | what is relevant to a question | word and id matching (`lists_query`, `evidence_query`, `catalog_search`) |
+| `knowledge/lists` | what exists and how it connects: the five lists below, typed, by id, with references | the store (`store.py`; port `ListStore`) |
+| `knowledge/logs` | what happened and how it is known: `evidence` (claims and verdicts, with trust), `changes` (every write to the lists), `journal` (decisions); append-only, hash-chained | the store (port `Log`) |
+| `knowledge/indices` | ways to find things, derived from the lists and logs and rebuildable, never the source of truth | a scan: queries read everything and match ids and words |
 
-There is no ingestion pipeline: entries come from the roles above, through
-the tools. A semantic or graph recall, or a knowledge-memory product, is a
-distribution's filler for a slot, judged against the one that ships.
+Every claim carries how it is known, and only the judge writes `measured`.
+An index's operations are ingest (build or update it from the lists, logs and
+documents), manage (rebuild, drop) and retrieve (a query of the kinds it
+provides). The kinds are capability names: `exact`, `lexical`, `semantic`,
+`graph`, `temporal`. The base ships no ingestion pipeline and no index beyond
+the scan; a vector, graph or search index, or a product such as Graphiti or
+Cognee, is a distribution's filler for `knowledge/indices` or for the whole
+system, described by what it provides and judged against what ships.
 
 Five lists describe systems:
 
@@ -274,7 +278,7 @@ starts from a worked example instead of a blank page:
 | System | Slots | Depends on |
 |---|---|---|
 | `morphogen` | orchestrator, explorer, worker, reviewer, operator, judge, knowledge, improvement strategy, sandbox, model gateway, harness, host, admin UI | `knowledge`, `claude-code` (harness), `host` (sandbox, Python, git), `admin-ui` |
-| `knowledge` | structure, evidence, history, decisions, recall | |
+| `knowledge` | lists, logs, indices | |
 | `admin-ui` | shell, map viewer, evidence viewer, sessions, terminal, editor | |
 | `claude-code` | model, plugins, host | `host`; hosts `morphogen` as a plugin |
 | `host` | OS, container engine, Python, git | |
@@ -294,10 +298,10 @@ capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
 `slot:` lists what could fill that slot: components and catalog entries of an
 accepted type, those that cover every requirement first, then those missing
 the fewest, then those bringing the fewest *extra* capabilities. What the
-design does not call for is overhead: the seeded `knowledge/structure`
-requires exact lookups and concurrent writers, so the store's lexical search
-shows up as overhead; require `semantic` too and the report
-shows a gap the current store cannot fill.
+design does not call for is overhead: the seeded `knowledge/logs` requires
+tamper-evident and concurrent writers, so SQLite's enforced append-only shows
+up as overhead; require `semantic` of `knowledge/indices` and the report shows
+a gap the scan cannot fill.
 
 Each requirement should carry its reason, in the slot's `because`
 (`{"graph": "evidence:42"}`), so it can be dropped when the reason goes away.
@@ -321,7 +325,7 @@ catalog) can be referred to without copying them:
 maps:
   homelab: {path: ../homelab, commit: 3f2a9c1}       # a git repository, read at a commit
   games:   {git: https://github.com/you/games-map, commit: 3f2a9c1}
-  notes:   {path: ../notes/.morphogen/lists}           # a directory, read live (unpinned)
+  notes:   {path: ../notes/.knowledge/lists}           # a directory, read live (unpinned)
 ```
 
 A reference into another map is a qualified id: a slot here can be filled by
