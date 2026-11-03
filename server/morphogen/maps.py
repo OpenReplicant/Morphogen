@@ -5,9 +5,9 @@ A project's own lists are one map. `morphogen.yaml` can mount others, read-only:
     maps:
       homelab: {path: ../homelab, commit: 3f2a9c1}        # a git repository, read at a commit
       games:   {git: https://github.com/you/games-map, commit: 3f2a9c1}
-      notes:   {path: ../notes/map}            # a directory, read as it is now (unpinned)
+      notes:   {path: ../notes/.morphogen/lists}            # a directory, read as it is now (unpinned)
 
-`lists` names the lists directory inside a repository (default `map`, where `lists_export` writes).
+`lists` names the lists directory inside a repository (default `.morphogen/lists`, where `lists_export` writes).
 A pinned map is read from git objects at its commit, so later commits or edits
 to its files change nothing here. An unpinned map is read live and reported as
 such.
@@ -35,7 +35,7 @@ SEP = ":"
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 # REF_FIELDS (ports.py): fields that hold references. A bare id resolves in the entry's own map.
 ALL_REF_FIELDS = {f for fields in REF_FIELDS.values() for f in fields}
-DEFAULT_LISTS = "map"  # where lists_export writes
+DEFAULT_LISTS = ".morphogen/lists"  # where lists_export writes
 
 
 class MapError(Exception):

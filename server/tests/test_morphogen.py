@@ -485,7 +485,7 @@ class Maps(unittest.TestCase):
         self.git = git
         self.tmp = Path(tempfile.mkdtemp())
         self.other = self.tmp / "homelab"
-        lists = self.other / "map"
+        lists = self.other / ".morphogen" / "lists"
         lists.mkdir(parents=True)
         for kind, rows in self.HOMELAB.items():
             (lists / f"{kind}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
@@ -534,7 +534,7 @@ class Maps(unittest.TestCase):
         self.assertNotIn("status", lists.get("components", "homelab:comp/vllm"))
 
     def test_a_pinned_map_ignores_later_commits_and_edits(self):
-        lists_dir = self.other / "map"
+        lists_dir = self.other / ".morphogen" / "lists"
         (lists_dir / "components.jsonl").write_text(json.dumps({"id": "comp/vllm", "type": "type/x",
                                                                  "status": "changed"}) + "\n")
         self.git(self.other, "commit", "-qam", "later")
@@ -552,7 +552,7 @@ class Maps(unittest.TestCase):
         self.assertIn("needs a commit", lists.status()["mounted"][0]["error"])
 
     def test_unpinned_maps_say_so_and_broken_references_are_reported(self):
-        lists = self.atlas({"notes": {"path": "../homelab/map"},
+        lists = self.atlas({"notes": {"path": "../homelab/.morphogen/lists"},
                             "gone": {"path": "../homelab", "commit": "0" * 40}})
         st = lists.status()
         by_name = {m["name"]: m for m in st["mounted"]}

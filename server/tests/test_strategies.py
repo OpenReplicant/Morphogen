@@ -7,9 +7,8 @@ import unittest
 from pathlib import Path
 
 from morphogen import strategies as S
-from morphogen import store
 
-from tests.fixture import FAST, TARGET, SampleProject
+from tests.fixture import FAST, TARGET, SampleProject, scratch_stores
 
 T = "targets/x"
 
@@ -30,7 +29,7 @@ class Selection(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.tmp, check=True)
         (self.tmp / T).mkdir(parents=True)
-        self.log = store.evidence_log(store.Database(f"sqlite:///{self.tmp / 'evidence.db'}"))
+        _, self.log = scratch_stores(self.tmp)
         self.cfg = {"strategy": "auto", "trunk": "main"}
 
     def tearDown(self):

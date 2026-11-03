@@ -91,7 +91,7 @@ def lists_put(kind: str, entry: dict[str, Any]) -> dict:
 
 @server.tool()
 @_safe
-def lists_export(dest: str = "map") -> dict:
+def lists_export(dest: str = ".morphogen/lists") -> dict:
     """Publish this project's map: write each list as `<kind>.jsonl` (one entry per line, sorted by id)
     into `dest`, a directory inside the project. Commit it, and other projects can mount it by path or
     git URL, pinned to that commit. The database stays the working copy."""

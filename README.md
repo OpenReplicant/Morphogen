@@ -371,7 +371,7 @@ distribution's choice, a filler for the structure or recall slot, not the
 base's.
 
 To publish a map for other projects to mount, `lists_export` writes it as
-JSONL (`map/<list>.jsonl`, one entry per line, sorted); commit that, and
+JSONL (`.morphogen/lists/<list>.jsonl`, one entry per line, sorted); commit that, and
 mounts pin it to the commit. A project from 0.2, whose lists and logs were
 JSONL files, is imported once when its database is first created; the old
 files are left in place.

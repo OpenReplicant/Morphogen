@@ -19,8 +19,8 @@ Breaks the 0.2 contract, so it ships as 0.3.0.
   distribution's choice), the `postgres` extra and pg8000, the Postgres tests
   and CI job, and the `backends` and `evidence_path` config keys (`database`
   instead).
-- `lists_export` publishes a map as JSONL for others to mount; mounted maps
-  default to the `map/` directory.
+- `lists_export` publishes a map as JSONL for others to mount, to
+  `.morphogen/lists` by default, where mounts look (as in 0.2).
 - What Morphogen knows is a system of the self-map, `knowledge`, filling
   `morphogen/knowledge`, with three slots: `knowledge/lists` (replacing
   `morphogen/list-store`), `knowledge/logs` (replacing `morphogen/evidence-log`;
@@ -33,6 +33,11 @@ Breaks the 0.2 contract, so it ships as 0.3.0.
   `realizes` field; they belong in a pattern library mounted as a map), the
   `edges` table and SQL `follow` (the walk is in Python; maps are small), and
   the `catalog` and `meta` tables (`catalogs.yaml` is the source).
+- `eval-loop`, a hand-started CI job that runs eval 03 (one full round of the
+  loop) on a non-root runner.
+- The tests use the public surface (`project.stores`) instead of a backend's
+  classes, so they judge the contract rather than the file layout; one fixture
+  knows the storage formats, to tamper with a log as an attacker would.
 - The session hook reads the database read-only with the standard library
   instead of JSONL files, so it no longer misses the journal on another backend.
 - Documents (`morphogen.yaml`, `target.yaml`, `catalogs.yaml`, strategy cards) are read
