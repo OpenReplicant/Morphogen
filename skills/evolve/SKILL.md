@@ -24,7 +24,10 @@ These steps never change, whatever the strategy.
 
 **Change**
 4. **Locate** the one slot that limits the target, with evidence (a profile, a
-   measurement). If you cannot, have the `explorer` subagent profile it.
+   measurement). If you cannot, have the `explorer` subagent profile it. A
+   capability gap reported by `maps` or `doctor` (a slot whose filler lacks a
+   capability it requires) is a located gap too: source a filler that covers
+   it with `catalog_search(slot=...)`.
 5. **Source** in this order: reuse (`catalog_search`, the standard library,
    existing components), configure, compose, generate. Say why you used a
    later rung.
@@ -43,7 +46,8 @@ These steps never change, whatever the strategy.
    candidate that has not passed against the trunk.
 10. **Record** with `journal_append`: the gap, the strategy and why, options
     tried, the choice, the rung, the verdicts, the commit. Update the lists if
-    a slot is now filled by a different component.
+    a slot is now filled by a different component, with `lists_put` and a
+    `reason` citing the verdict (`evidence:<seq>`).
 
 ## Rules
 

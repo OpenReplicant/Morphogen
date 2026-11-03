@@ -6,6 +6,19 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+- One append-only, hash-chained log mechanism under three logs: `evidence`,
+  `changes` (new: every write to the lists, with hashes before and after, the
+  entry, who and why) and `journal` (now a log behind the port, not a
+  Markdown file). On Postgres, the logs are trigger-guarded tables, and a list
+  write commits together with its change record. `lists_put` takes a
+  `reason`; `lists_history` reads the change log. The map's history no longer
+  depends on git.
+- Requirements carry reasons (`because`), and `maps`/`doctor` report
+  capability gaps, overhead and unexplained requirements. The evolve skill
+  treats a gap as a located gap.
+- The core storage requirements are stated so files can always meet them;
+  anything more is an optional capability with a flag.
+
 - Capabilities and patterns: slots can `require` capabilities and components
   `provide` them; `catalog_search(slot=...)` ranks fillers by coverage, then
   by fewest extra capabilities. Systems marked `pattern: true` are

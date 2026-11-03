@@ -41,7 +41,10 @@ what a system stands on.
 `requires` lists the capabilities the role needs (`exact`, `semantic`,
 `temporal`, ...); on a component, `provides` lists what it offers. Then
 `catalog_search` with `slot:` can propose the smallest sufficient filler, and
-what a part offers beyond the need shows up as overhead.
+what a part offers beyond the need shows up as overhead. Give each requirement
+its reason in the slot's `because` (`{"graph": "evidence:42"}`), and pass a
+`reason` to `lists_put` when you change an entry: every write is logged, and
+`lists_history` shows why the map is the way it is.
 
 **Patterns.** If the system follows a known architecture, look for it in a
 mounted pattern library (`lists_query` on `systems` with `map: "*"` and

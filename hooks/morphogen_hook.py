@@ -83,11 +83,14 @@ def session(cfg_text):
     ]
     if verdict:
         lines.append(f"Last verdict: {verdict.get('claim')} ({verdict.get('verdict')}).")
-    journal = data / "journal.md"
+    journal = evidence_file(cfg_text).parent / "journal.jsonl"  # beside the evidence log (files backend)
     if journal.exists():
-        heads = [l[3:] for l in journal.read_text().splitlines() if l.startswith("## ")]
-        if heads:
-            lines.append(f"Last journal entry: {heads[-1]}.")
+        last = [l for l in journal.read_text().splitlines() if l.strip()][-1:]
+        if last:
+            try:
+                lines.append(f"Last journal entry: {json.loads(last[0]).get('title')}.")
+            except ValueError:
+                pass
     lines.append("Skills: /morphogen:map, /morphogen:evolve, /morphogen:playbook. The judge is the morphogen MCP server.")
     print("\n".join(lines))
 

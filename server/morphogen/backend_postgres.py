@@ -41,7 +41,7 @@ import time
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from .backend_files import FilesEvidenceLog, _matches, canonical
+from .backend_files import FilesLog, _matches, canonical, change_record, check_evidence
 from .ports import KINDS, REF_FIELDS, TRUST
 
 LAYOUTS = ("tables", "labels")
@@ -75,10 +75,11 @@ def settings(cfg: dict) -> dict:
 
 
 class PostgresListStore:
-    def __init__(self, conn, schema: str = "morphogen", layout: str = "tables"):
+    def __init__(self, conn, schema: str = "morphogen", layout: str = "tables", changes: "PostgresLog | None" = None):
         if layout not in LAYOUTS or not _IDENT.match(schema):
             raise ValueError("bad schema or layout")
         self.db, self.s, self.layout = conn, schema, layout
+        self.changes = changes  # every write is recorded here, in the same transaction, when given
         self._create()
         vector = bool(self.db.run("SELECT 1 FROM pg_extension WHERE extname = 'vector'"))
         self.capabilities = {"concurrent_writers": True, "native_multi_hop": True, "vector_search": vector,
@@ -131,13 +132,19 @@ class PostgresListStore:
         rows = self._rows(kind, id)
         return rows[0] if rows else None
 
-    def put(self, kind: str, entry: dict) -> dict:
+    def put(self, kind: str, entry: dict, by: str = "agent", reason: str | None = None) -> dict:
+        return self._put(kind, entry, by, reason, "put")
+
+    def _put(self, kind: str, entry: dict, by: str, reason: str | None, op: str,
+             before: dict | None = None, known_before: bool = False) -> dict:
         self._check(kind)
         if not isinstance(entry, dict) or not entry.get("id"):
             raise ValueError("an entry needs a non-empty 'id'")
         id, data = str(entry["id"]), json.dumps(entry)
         self.db.run("START TRANSACTION")
         try:
+            if not known_before:
+                before = self.get(kind, id)
             if self.layout == "tables":
                 self.db.run(f"INSERT INTO {self.s}.{kind} (id, data) VALUES (:id, CAST(:d AS jsonb)) "
                             "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data", id=id, d=data)
@@ -150,6 +157,8 @@ class PostgresListStore:
                 for dst in (v if isinstance(v, list) else [v] if v else []):
                     self.db.run(f"INSERT INTO {self.s}.edges VALUES (:k, :id, :f, :d) ON CONFLICT DO NOTHING",
                                 k=kind, id=id, f=field, d=str(dst))
+            if self.changes is not None and before != entry:
+                self.changes.append_in_transaction(change_record(kind, entry, before, op, by, reason))
             self.db.run("COMMIT")
         except Exception:
             self.db.run("ROLLBACK")
@@ -177,16 +186,24 @@ class PostgresListStore:
     def dump(self) -> dict[str, list[dict]]:
         return {k: self._rows(k) for k in KINDS}
 
-    def load(self, data: dict[str, list[dict]]) -> None:
+    def load(self, data: dict[str, list[dict]], by: str = "operator") -> None:
         for kind, entries in data.items():
             self._check(kind)
+            before = {e["id"]: e for e in self._rows(kind)}
             if self.layout == "tables":
                 self.db.run(f"DELETE FROM {self.s}.{kind}")
             else:
                 self.db.run(f"DELETE FROM {self.s}.nodes WHERE label = :k", k=kind)
             self.db.run(f"DELETE FROM {self.s}.edges WHERE src_label = :k", k=kind)
             for e in entries:
-                self.put(kind, e)
+                self._put(kind, e, by, None, "load", before.get(e["id"]), known_before=True)
+
+    def history(self, kind: str | None = None, id: str | None = None, limit: int = 50) -> list[dict]:
+        """Recorded writes, newest first; empty when this store keeps no change log."""
+        if self.changes is None:
+            return []
+        where = {k: v for k, v in (("list", kind), ("id", id)) if v}
+        return self.changes.query(where=where, limit=limit)
 
     # --- graph extensions
     def pggraph_sql(self, graph: str = "morphogen") -> list[str]:
@@ -242,76 +259,74 @@ class PostgresListStore:
         return [r[0] for r in self.db.run(f"SELECT data FROM {self.s}.catalog ORDER BY section, name")]
 
 
-class PostgresEvidenceLog:
-    """Append-only table; a trigger refuses UPDATE and DELETE. Same hash chain as the files backend."""
+class PostgresLog:
+    """An append-only table, with the files backend's hash chain. A trigger refuses UPDATE, DELETE and
+    TRUNCATE, so append-only is enforced. The mechanism under every log (evidence, changes, journal)."""
 
     capabilities = {"enforced_append_only": True, "tamper_evident": True, "concurrent_writers": True}
-    GENESIS = FilesEvidenceLog.GENESIS
-    _hash = staticmethod(FilesEvidenceLog._hash)
+    GENESIS = FilesLog.GENESIS
+    _hash = staticmethod(FilesLog._hash)
+    _check = FilesLog._check
 
-    def __init__(self, conn, schema: str = "morphogen"):
-        if not _IDENT.match(schema):
-            raise ValueError("bad schema")
-        self.db, self.s = conn, schema
-        self.path = f"postgres:{schema}.evidence"
-        s = schema
+    def __init__(self, conn, schema: str = "morphogen", table: str = "log"):
+        if not _IDENT.match(schema) or not _IDENT.match(table):
+            raise ValueError("bad schema or table")
+        self.db, self.s, self.t = conn, schema, table
+        self.path = f"postgres:{schema}.{table}"
+        s, t = schema, table
         self.db.run(f"CREATE SCHEMA IF NOT EXISTS {s}")
         # `raw` is the canonical text the hash was computed over, so verification never depends on
         # how jsonb normalises numbers; `record` is the same record as jsonb, for queries.
-        self.db.run(f"CREATE TABLE IF NOT EXISTS {s}.evidence (seq bigint PRIMARY KEY, hash text NOT NULL, "
+        self.db.run(f"CREATE TABLE IF NOT EXISTS {s}.{t} (seq bigint PRIMARY KEY, hash text NOT NULL, "
                     f"prev text NOT NULL, raw text NOT NULL, record jsonb NOT NULL)")
-        self.db.run(f"""CREATE OR REPLACE FUNCTION {s}.evidence_append_only() RETURNS trigger AS $$
-                        BEGIN RAISE EXCEPTION 'evidence is append-only'; END $$ LANGUAGE plpgsql""")
-        self.db.run(f"DROP TRIGGER IF EXISTS evidence_append_only ON {s}.evidence")
-        self.db.run(f"CREATE TRIGGER evidence_append_only BEFORE UPDATE OR DELETE OR TRUNCATE ON {s}.evidence "
-                    f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.evidence_append_only()")
+        self.db.run(f"""CREATE OR REPLACE FUNCTION {s}.{t}_append_only() RETURNS trigger AS $$
+                        BEGIN RAISE EXCEPTION '{t} is append-only'; END $$ LANGUAGE plpgsql""")
+        self.db.run(f"DROP TRIGGER IF EXISTS {t}_append_only ON {s}.{t}")
+        self.db.run(f"CREATE TRIGGER {t}_append_only BEFORE UPDATE OR DELETE OR TRUNCATE ON {s}.{t} "
+                    f"FOR EACH STATEMENT EXECUTE FUNCTION {s}.{t}_append_only()")
 
     def _records(self) -> list[dict]:
-        return [json.loads(r[0]) for r in self.db.run(f"SELECT raw FROM {self.s}.evidence ORDER BY seq")]
+        return [json.loads(r[0]) for r in self.db.run(f"SELECT raw FROM {self.s}.{self.t} ORDER BY seq")]
+
+    def append_in_transaction(self, record: dict) -> dict:
+        """Append inside a transaction the caller has opened (so a list write and its change record commit
+        together)."""
+        self._check(record)
+        self.db.run(f"LOCK TABLE {self.s}.{self.t} IN EXCLUSIVE MODE")
+        last = self.db.run(f"SELECT seq, hash FROM {self.s}.{self.t} ORDER BY seq DESC LIMIT 1")
+        rec = dict(record)
+        rec["seq"] = (last[0][0] + 1) if last else 1
+        rec["at"] = rec.get("at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        rec["prev"] = last[0][1] if last else self.GENESIS
+        rec.pop("hash", None)
+        rec["hash"] = self._hash(rec)
+        raw = canonical(rec)
+        self.db.run(f"INSERT INTO {self.s}.{self.t} VALUES (:q, :h, :p, :raw, CAST(:js AS jsonb))",
+                    q=rec["seq"], h=rec["hash"], p=rec["prev"], raw=raw, js=raw)
+        return rec
 
     def append(self, record: dict) -> dict:
-        if record.get("trust") not in TRUST:
-            raise ValueError(f"trust must be one of {', '.join(TRUST)}")
-        if not record.get("claim") or not record.get("by"):
-            raise ValueError("evidence needs 'claim' and 'by'")
         self.db.run("START TRANSACTION")
         try:
-            self.db.run(f"LOCK TABLE {self.s}.evidence IN EXCLUSIVE MODE")
-            last = self.db.run(f"SELECT seq, hash FROM {self.s}.evidence ORDER BY seq DESC LIMIT 1")
-            rec = dict(record)
-            rec["seq"] = (last[0][0] + 1) if last else 1
-            rec["at"] = rec.get("at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            rec["prev"] = last[0][1] if last else self.GENESIS
-            rec.pop("hash", None)
-            rec["hash"] = self._hash(rec)
-            raw = canonical(rec)
-            self.db.run(f"INSERT INTO {self.s}.evidence VALUES (:q, :h, :p, :raw, CAST(:js AS jsonb))",
-                        q=rec["seq"], h=rec["hash"], p=rec["prev"], raw=raw, js=raw)
+            rec = self.append_in_transaction(record)
             self.db.run("COMMIT")
         except Exception:
             self.db.run("ROLLBACK")
             raise
         return rec
 
-    def verify(self) -> tuple[bool, int | None]:
-        prev = self.GENESIS
-        for i, rec in enumerate(self._records(), start=1):
-            if rec.get("prev") != prev or rec.get("seq") != i or self._hash(rec) != rec.get("hash"):
-                return False, i
-            prev = rec["hash"]
-        return True, None
-
-    def query(self, contains: str | None = None, by: str | None = None, limit: int = 20) -> list[dict]:
-        out = []
-        for rec in reversed(self._records()):
-            if by and rec.get("by") != by:
-                continue
-            if contains and contains.lower() not in canonical(rec).lower():
-                continue
-            out.append(rec)
-            if len(out) >= limit:
-                break
-        return out
+    verify = FilesLog.verify
+    query = FilesLog.query
 
     def dump(self) -> list[dict]:
         return self._records()
+
+
+class PostgresEvidenceLog(PostgresLog):
+    """Claims with their support, in the `evidence` table."""
+
+    def _check(self, record: dict) -> None:
+        check_evidence(record)
+
+    def __init__(self, conn, schema: str = "morphogen"):
+        super().__init__(conn, schema, "evidence")

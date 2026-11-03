@@ -12,9 +12,9 @@ from typing import Any
 
 import yaml
 
-from .backend_files import FilesEvidenceLog, FilesListStore
+from .backend_files import FilesEvidenceLog, FilesListStore, FilesLog
 from .config import data_dir, evidence_path, load_config, plugin_root
-from .maps import mount
+from .maps import mount, provides as _provides
 from .runner import capabilities
 
 SAMPLES = plugin_root() / "samples"
@@ -23,25 +23,42 @@ SAMPLES = plugin_root() / "samples"
 _PG: dict[str, Any] = {}  # one connection per URL for the life of the server process
 
 
-def stores(root: Path, cfg: dict):
-    """The list store (this project's map plus mounted maps) and the evidence log, on the configured backend."""
+def logs(root: Path, cfg: dict) -> dict:
+    """The three append-only logs: evidence (claims and verdicts), changes (every write to the lists)
+    and journal (decisions). Files: JSONL beside each other in git's own directory, untracked, so
+    candidate commits cannot touch them. Postgres: tables guarded by a trigger."""
     backend = (cfg.get("backends") or {}).get("default", "files")
-    d = data_dir(root, cfg)
     if backend == "files":
-        own, evidence = FilesListStore(d / "lists"), FilesEvidenceLog(evidence_path(root, cfg))
-    elif backend == "postgres":
+        ev = evidence_path(root, cfg)
+        return {"evidence": FilesEvidenceLog(ev), "changes": FilesLog(ev.parent / "changes.jsonl"),
+                "journal": FilesLog(ev.parent / "journal.jsonl")}
+    if backend == "postgres":
         from . import backend_postgres as pg
         st = pg.settings(cfg)
         conn = _PG.get(st["url"]) or _PG.setdefault(st["url"], pg.connect(st["url"]))
-        own = pg.PostgresListStore(conn, st["schema"], st["layout"])
-        evidence = pg.PostgresEvidenceLog(conn, st["schema"])
+        return {"evidence": pg.PostgresEvidenceLog(conn, st["schema"]),
+                "changes": pg.PostgresLog(conn, st["schema"], "changes"),
+                "journal": pg.PostgresLog(conn, st["schema"], "journal")}
+    raise RuntimeError(f"backend {backend!r} is not available; use 'files' or 'postgres'")
+
+
+def stores(root: Path, cfg: dict):
+    """The list store (this project's map plus mounted maps) and the evidence log, on the configured backend.
+    Every write to the lists is recorded in the changes log."""
+    backend = (cfg.get("backends") or {}).get("default", "files")
+    d = data_dir(root, cfg)
+    lg = logs(root, cfg)
+    if backend == "files":
+        own = FilesListStore(d / "lists", lg["changes"])
+    else:
+        from . import backend_postgres as pg
+        st = pg.settings(cfg)
+        own = pg.PostgresListStore(_PG[st["url"]], st["schema"], st["layout"], lg["changes"])
         cat = root / "catalogs.yaml"
         if cat.exists():
             own.sync_catalog(yaml.safe_load(cat.read_text()) or {})
-    else:
-        raise RuntimeError(f"backend {backend!r} is not available; use 'files' or 'postgres'")
     # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
-    return mount(root, cfg, own, d / "maps"), evidence
+    return mount(root, cfg, own, d / "maps"), lg["evidence"]
 
 
 def init_project(root: Path) -> dict:
@@ -113,8 +130,16 @@ def doctor(root: Path) -> dict:
         report["capabilities"] = {"lists": lists.capabilities, "evidence": evidence.capabilities}
         report["evidence"] = {"records": len(evidence.dump()), "path": str(evidence.path),
                               "chain": "intact" if ok else f"broken at record {bad}"}
+        for name, log in logs(root, cfg).items():
+            if name != "evidence":
+                ok, bad = log.verify()
+                report[name] = {"records": len(log.dump()), "path": str(log.path),
+                                "chain": "intact" if ok else f"broken at record {bad}"}
         maps = lists.status()
-        report["maps"] = {"own": maps["own"], "mounted": maps["mounted"], "dangling_refs": len(maps["dangling"])}
+        caps = maps["capabilities"]
+        report["maps"] = {"own": maps["own"], "mounted": maps["mounted"], "dangling_refs": len(maps["dangling"]),
+                          "capability_gaps": caps["gaps"], "overhead": len(caps["overhead"]),
+                          "unexplained_requirements": len(caps["unexplained"])}
     except Exception as e:  # report, do not crash
         report["backend"] = f"error: {e}"
     server_dir = Path(__file__).resolve().parent
@@ -128,35 +153,29 @@ def doctor(root: Path) -> dict:
         "telemetry": "spans to " + os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"]
                      if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") else "off (set OTEL_EXPORTER_OTLP_ENDPOINT)",
         "trials_per_day": budget or "no limit",
-        "enforced_append_only": False,
-        "note": "On the files backend the evidence log is tamper-evident (hash chain), not tamper-proof. "
-                "An agent with shell access can still reach files you can; run in a container for "
-                "the strong version.",
+        "enforced_append_only": bool(report.get("capabilities", {}).get("evidence", {}).get("enforced_append_only")),
+        "note": "On the files backend the logs are tamper-evident (hash chains), not tamper-proof. "
+                "An agent with shell access can still reach files you can; run in a container, or use the "
+                "postgres backend, for the strong version.",
     }
     return report
 
 
+JOURNAL_FIELDS = ("title", "gap", "options", "choice", "why", "rung", "gate", "commit")
+
+
 def journal_append(root: Path, cfg: dict, entry: dict) -> dict:
-    f = data_dir(root, cfg) / "journal.md"
-    if not f.exists():
-        f.write_text("# Journal\n\nAppend-only. One entry per change.\n")
-    date = time.strftime("%Y-%m-%d", time.gmtime())
-    lines = [f"\n## {date}: {entry.get('title', 'untitled')}\n"]
-    for key in ("gap", "options", "choice", "why", "rung", "gate", "commit"):
-        if entry.get(key):
-            lines.append(f"- **{key.capitalize()}:** {entry[key]}")
-    with f.open("a") as fh:
-        fh.write("\n".join(lines) + "\n")
-    return {"journal": str(f.relative_to(root)), "title": entry.get("title")}
+    """Append a decision to the journal log: the gap, options, choice and why, the sourcing rung,
+    the judge's result and the commit."""
+    rec = {k: str(entry[k]) for k in JOURNAL_FIELDS if entry.get(k)}
+    rec.setdefault("title", "untitled")
+    rec["by"] = "agent"
+    out = logs(root, cfg)["journal"].append(rec)
+    return {"journal_seq": out["seq"], "title": rec["title"]}
 
 
-def _provides(entry: dict) -> set[str]:
-    """What an entry offers: `provides`, plus any true flag in a `capabilities` mapping."""
-    out = {str(c) for c in entry.get("provides") or []}
-    caps = entry.get("capabilities")
-    if isinstance(caps, dict):
-        out |= {k.replace("_", "-") for k, v in caps.items() if v is True}
-    return out
+def journal(root: Path, cfg: dict, limit: int = 20) -> list[dict]:
+    return logs(root, cfg)["journal"].query(limit=limit)
 
 
 def candidates(root: Path, cfg: dict, slot_id: str, limit: int = 20) -> dict:

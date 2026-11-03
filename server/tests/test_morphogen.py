@@ -53,6 +53,25 @@ class ConformanceCases:
         with self.assertRaises(ValueError):
             s.put("types", {"name": "no id"})
 
+    def changes(self):
+        raise NotImplementedError
+
+    def test_every_write_is_recorded_in_the_change_log(self):
+        log = self.changes()
+        s = self.lists_with(log)
+        s.put("types", {"id": "type/x"}, by="agent", reason="evidence:1")
+        s.put("types", {"id": "type/x"})  # unchanged: nothing recorded
+        s.put("types", {"id": "type/x", "description": "a kind"}, by="operator")
+        h = s.history("types", "type/x")
+        self.assertEqual([c["op"] for c in h], ["put", "put"])
+        self.assertIsNone(h[1]["before"])
+        self.assertEqual(h[0]["before"], h[1]["after"])
+        self.assertEqual((h[1]["by"], h[1]["reason"]), ("agent", "evidence:1"))
+        self.assertEqual(h[0]["entry"]["description"], "a kind")
+        s.load({"types": [{"id": "type/y"}]})
+        self.assertEqual(s.history("types", "type/y")[0]["op"], "load")
+        self.assertEqual(log.verify(), (True, None))
+
     def test_evidence_append_only_and_tamper_evident(self):
         log = self.evidence()
         log.append({"claim": "a", "trust": "measured", "by": "judge", "outcome": {"x": 1e-9, "y": 0.1}})
@@ -77,6 +96,13 @@ class FilesConformance(ConformanceCases, unittest.TestCase):
 
     def evidence(self):
         return FilesEvidenceLog(self.tmp / "evidence.jsonl")
+
+    def changes(self):
+        from morphogen.backend_files import FilesLog
+        return FilesLog(self.tmp / "changes.jsonl")
+
+    def lists_with(self, changes):
+        return FilesListStore(self.tmp / "logged", changes)
 
     def tamper(self, log):
         lines = log.path.read_text().splitlines()
@@ -114,6 +140,12 @@ class PostgresConformanceTables(ConformanceCases, unittest.TestCase):
 
     def evidence(self):
         return self.pg.PostgresEvidenceLog(self.conn, self.schema("ev"))
+
+    def changes(self):
+        return self.pg.PostgresLog(self.conn, self.schema("ch"), "changes")
+
+    def lists_with(self, changes):
+        return self.pg.PostgresListStore(self.conn, changes.s, self.layout, changes)
 
     def tamper(self, log):
         # The trigger refuses the edit, so an attacker would have to disable it first.
@@ -562,11 +594,12 @@ class DistributionContract(unittest.TestCase):
 
     TOOLS = {
         "doctor": [], "init_project": [], "maps": [], "strategies_list": [], "admin_pages": [],
-        "install_sample": ["name", "dest"], "lists_get": ["kind", "id"], "lists_put": ["kind", "entry"],
+        "install_sample": ["name", "dest"], "lists_get": ["kind", "id"], "lists_put": ["kind", "entry", "reason"],
         "lists_query": ["kind", "where", "follow", "start", "hops", "map"],
         "evidence_query": ["contains", "by", "limit"],
         "evidence_note": ["claim", "source", "trust", "supports", "challenges"],
         "catalog_search": ["query", "limit", "slot"], "measure": ["target", "ref"],
+        "lists_history": ["kind", "id", "limit"],
         "judge": ["target", "candidate", "base", "labels"], "strategy": ["target"],
         "probe": ["target", "candidate", "base", "cases", "rounds"],
         "archive": ["target", "limit"],
@@ -665,6 +698,27 @@ class Capabilities(unittest.TestCase):
             self.assertIn("patterns:knowledge-memory/rank", [d["ref"] for d in lists.status()["dangling"]])
         finally:
             shutil.rmtree(pat)
+
+    def test_the_report_finds_gaps_overhead_and_unexplained_requirements(self):
+        report = self.lists.capability_report()
+        self.assertEqual(report["gaps"], [])  # the seeded map meets its own requirements
+        self.assertEqual(report["unexplained"], [])  # and says why it has each one
+        self.assertIn("morphogen/list-store", [o["slot"] for o in report["overhead"]])  # files also do lexical
+        slot = self.lists.get("slots", "morphogen/list-store")
+        self.lists.put("slots", {**slot, "requires": ["exact", "graph"]}, reason="a design now walks the map")
+        report = self.lists.capability_report()
+        gap = [g for g in report["gaps"] if g["slot"] == "morphogen/list-store"][0]
+        self.assertEqual((gap["missing"], gap["why"]), (["graph"], "filler lacks it"))
+        self.assertIn("graph", [r for u in report["unexplained"] for r in u["requirements"]])
+        self.assertEqual(project.doctor(self.tmp)["maps"]["capability_gaps"][0]["slot"], "morphogen/list-store")
+        self.assertEqual(self.lists.history("slots", "morphogen/list-store")[0]["reason"], "a design now walks the map")
+
+    def test_the_journal_is_a_log(self):
+        r = project.journal_append(self.tmp, self.cfg, {"title": "swap the list store", "gap": "graph walks",
+                                                       "choice": "postgres", "rung": "reuse"})
+        self.assertEqual(r["journal_seq"], 1)
+        self.assertEqual(project.journal(self.tmp, self.cfg)[0]["choice"], "postgres")
+        self.assertEqual(project.doctor(self.tmp)["journal"]["chain"], "intact")
 
     def test_unknown_slot_is_an_error(self):
         with self.assertRaises(ValueError):

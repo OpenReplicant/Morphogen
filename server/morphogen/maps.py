@@ -42,6 +42,17 @@ class MapError(Exception):
     pass
 
 
+def provides(entry: dict | None) -> set[str]:
+    """What an entry offers: `provides`, plus any true flag in a `capabilities` mapping."""
+    if not entry:
+        return set()
+    out = {str(c) for c in entry.get("provides") or []}
+    caps = entry.get("capabilities")
+    if isinstance(caps, dict):
+        out |= {k.replace("_", "-") for k, v in caps.items() if v is True}
+    return out
+
+
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
 
@@ -165,7 +176,8 @@ class Atlas:
         e = self._store_get(m, kind, local)
         return self._present(m, e, kind) if e else None
 
-    def put(self, kind: str, entry: dict) -> dict:
+    def put(self, kind: str, entry: dict, **kw) -> dict:
+        """Write to this project's map. `by` and `reason` go to the change log when the store keeps one."""
         if not isinstance(entry, dict) or not entry.get("id"):
             raise ValueError("an entry needs a non-empty 'id'")
         m, local = self.split(str(entry["id"]))
@@ -173,7 +185,8 @@ class Atlas:
             raise ValueError(f"{SEP!r} separates a map name from an id, and no map named {m!r} is mounted")
         if m != self.own_name:
             raise PermissionError(f"map {m!r} is read-only here; change it in its own project, through its own judge")
-        return self.own.put(kind, {k: v for k, v in entry.items() if k not in ("_map", "_trust")} | {"id": local})
+        return self.own.put(kind, {k: v for k, v in entry.items() if k not in ("_map", "_trust")} | {"id": local},
+                            **kw)
 
     def query(self, kind: str, where: dict[str, Any] | None = None, map: str | None = None) -> list[dict]:
         """`map`: None or the own map's name (default), a mounted map's name, or '*' for all."""
@@ -248,9 +261,45 @@ class Atlas:
                                              "ref": r, "why": why})
         return problems
 
+    def capability_report(self) -> dict:
+        """For every slot that says what it requires, in this map and mounted ones:
+
+        - gaps: what fills it does not provide everything it requires (a changed requirement, or a
+          changed filler; the place to start improving);
+        - overhead: what fills it provides beyond the requirements (a candidate for something smaller);
+        - unexplained: requirements with no reason in the slot's `because` (keep reasons, so a
+          requirement can be dropped when its reason goes away).
+        """
+        gaps, overhead, unexplained = [], [], []
+        for name in [self.own_name, *sorted(self.mounts)]:
+            rows = (self.own.query("slots") if name == self.own_name else
+                    [self._present(name, e, "slots") for e in self.mounts[name].entries.get("slots", {}).values()])
+            for slot in rows:
+                need = {str(c) for c in slot.get("requires") or []}
+                if not need:
+                    continue
+                because = slot.get("because") or {}
+                filler = self.get("components", slot["filled_by"]) if slot.get("filled_by") else None
+                has = provides(filler)
+                where = {"map": name, "slot": slot["id"], "filled_by": slot.get("filled_by")}
+                if need - has:
+                    gaps.append({**where, "missing": sorted(need - has),
+                                 "why": "empty" if not slot.get("filled_by") else
+                                        ("filler not found" if filler is None else "filler lacks it")})
+                if filler is not None and has - need:
+                    overhead.append({**where, "extra": sorted(has - need)})
+                if need - set(because):
+                    unexplained.append({**where, "requirements": sorted(need - set(because))})
+        return {"gaps": gaps, "overhead": overhead, "unexplained": unexplained}
+
+    def history(self, kind: str | None = None, id: str | None = None, limit: int = 50) -> list[dict]:
+        """Writes to this project's map, newest first (mounted maps keep their own history)."""
+        h = getattr(self.own, "history", None)
+        return h(kind, id, limit) if h else []
+
     def status(self) -> dict:
         return {"own": self.own_name, "mounted": [m.status() for _, m in sorted(self.mounts.items())],
-                "dangling": self.dangling()}
+                "dangling": self.dangling(), "capabilities": self.capability_report()}
 
 
 def mount(root: Path, cfg: dict, own: FilesListStore, cache: Path) -> Atlas:
