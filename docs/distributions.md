@@ -78,7 +78,7 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 | `lists_query` | `kind`, `where`, `follow`, `start`, `hops`, `map` |
 | `evidence_query` | `contains`, `by`, `limit` |
 | `evidence_note` | `claim`, `source`, `trust` (`inferred` or `stated`), `supports`, `challenges` |
-| `catalog_search` | `query`, `limit` |
+| `catalog_search` | `query`, `limit`, `slot` |
 | `measure` | `target`, `ref` |
 | `judge` | `target`, `candidate`, `base`, `labels` (`strategy`, `approach`, `family`, `parent`) |
 | `probe` | `target`, `candidate`, `base`, `cases`, `rounds` |
@@ -87,8 +87,10 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 | `journal_append` | `title`, `gap`, `options`, `choice`, `rung`, `gate`, `commit`, `why` |
 
 **Lists:** the kinds `systems`, `slots`, `types`, `sources`, `components`;
-the reference fields (`systems.slots`; `slots.system`, `accepts`,
-`filled_by`; `components.type`, `source`, `system`); qualified ids
+the reference fields (`systems.slots`, `realizes`; `slots.system`,
+`accepts`, `filled_by`, `realizes`; `components.type`, `source`, `system`);
+`slots.requires` and `components.provides` (capability names); `pattern: true`
+on abstract systems; qualified ids
 `map:id`; map interfaces `direct`, `simulated`, `observed`, `none`; the
 `_map` and `_trust` annotations on entries from mounted maps.
 

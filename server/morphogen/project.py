@@ -150,6 +150,48 @@ def journal_append(root: Path, cfg: dict, entry: dict) -> dict:
     return {"journal": str(f.relative_to(root)), "title": entry.get("title")}
 
 
+def _provides(entry: dict) -> set[str]:
+    """What an entry offers: `provides`, plus any true flag in a `capabilities` mapping."""
+    out = {str(c) for c in entry.get("provides") or []}
+    caps = entry.get("capabilities")
+    if isinstance(caps, dict):
+        out |= {k.replace("_", "-") for k, v in caps.items() if v is True}
+    return out
+
+
+def candidates(root: Path, cfg: dict, slot_id: str, limit: int = 20) -> dict:
+    """Components and catalog entries that could fill a slot, best first.
+
+    A candidate must be of a type the slot accepts (when the slot says). It is ranked by whether it
+    provides every capability the slot `requires`, then by how few it is missing, then by how few
+    *extra* capabilities it brings: what the design does not call for is overhead.
+    """
+    lists, _ = stores(root, cfg)
+    slot = lists.get("slots", slot_id)
+    if not slot:
+        raise ValueError(f"no slot {slot_id!r}")
+    need = {str(c) for c in slot.get("requires") or []}
+    accepts = set(slot.get("accepts") or [])
+    pool = [("lists", e) for e in lists.query("components", map="*")]
+    cat = root / "catalogs.yaml"
+    if cat.exists():
+        for section, entries in (yaml.safe_load(cat.read_text()) or {}).items():
+            for e in entries if isinstance(entries, list) else []:
+                if isinstance(e, dict) and (e.get("provides") or e.get("type")):
+                    pool.append((f"catalogs.yaml/{section}", e))
+    out = []
+    for where, e in pool:
+        if accepts and e.get("type") not in accepts and not (where != "lists" and not e.get("type")):
+            continue
+        has = _provides(e)
+        out.append({"id": e.get("id") or e.get("name"), "from": where, "type": e.get("type"),
+                    "covers": sorted(need & has), "missing": sorted(need - has), "extra": sorted(has - need),
+                    "status": e.get("status"), **({"_map": e["_map"]} if "_map" in e else {})})
+    out.sort(key=lambda c: (bool(c["missing"]), len(c["missing"]), len(c["extra"]), str(c["id"])))
+    return {"slot": slot_id, "requires": sorted(need), "accepts": sorted(accepts),
+            "filled_by": slot.get("filled_by"), "candidates": out[:limit]}
+
+
 def catalog_search(root: Path, cfg: dict, query: str, limit: int = 20) -> list[dict]:
     words = [w for w in query.lower().split() if w]
     found: list[tuple[int, dict]] = []

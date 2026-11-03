@@ -253,6 +253,26 @@ generic; mapping fills in this machine's actual values. Morphogen can then
 treat its own parts, and what it stands on, as things to improve. The lists
 are JSONL files: commit them with your code.
 
+### Capabilities and patterns
+
+A slot can say what it `requires` and a component what it `provides`, as
+capability names (`exact`, `lexical`, `semantic`, `graph`, `temporal`,
+`concurrent-writers`, `enforced-append-only`, ...). `catalog_search` with
+`slot:` lists what could fill that slot: components and catalog entries of an
+accepted type, those that cover every requirement first, then those missing
+the fewest, then those bringing the fewest *extra* capabilities. What the
+design does not call for is overhead: the seeded `morphogen/list-store`
+requires only exact lookups, so flat files come first; require `graph` too
+and the Postgres store moves ahead.
+
+A **pattern** is a system with `pattern: true` and slots that nothing fills:
+an architecture to realise, not a running thing, such as "knowledge memory"
+(ingest, extract, resolve, invalidate, index, retrieve, store). A concrete
+system says `realizes: <pattern>` and each of its slots the pattern slot it
+plays, so two products that realise the same pattern can be compared slot by
+slot. Patterns belong in a library of their own, mounted as a map
+(`patterns:knowledge-memory`), not in each project.
+
 ### Several maps
 
 A project's lists are one map. `morphogen.yaml` can mount others, read-only,
