@@ -66,3 +66,4 @@ git repository in the case workspace and nothing else.
 |---|---|---|---|---|---|
 | 2026-11-02 | `02-map-baseline` | 1 | 1.0 / 0 (Sonnet grader); 0.67 / 0 (Haiku grader) | $0.32 total | explorer ran on Haiku; the main session re-read the files the explorer had read |
 | 2026-11-03 | `02-map-baseline`, `04-not-for-morphogen` | 1 each | 02: 1.0 / 0; 04: 1.0 / 1.0 | $0.40 total | after the map skill was rewritten to map anything; its broader description did not fire on an unrelated question |
+| 2026-11-03 | `02-map-baseline` | 1 | 1.0 / 0 | $0.21 | after the map skill learned about mounted maps |

@@ -83,7 +83,9 @@ when mapping a real machine, record what it actually has.
 1. **Purpose.** Write down what the system is for and who it serves, in one
    sentence, before listing parts. If nobody can say, that is a finding.
 2. **What is already known.** `lists_query` for the system, its slots and
-   anything that points at it. Do not map twice.
+   anything that points at it, in this map and in mounted ones (`map: "*"`;
+   the `maps` tool lists them). Do not map twice: refer to an entry in another
+   map by its qualified id (`homelab:comp/gpu-box`) instead of copying it.
 3. **Parts.** Explore, interview and observe. Write entries with `lists_put`:
    the system, one slot per role, the type and source of what fills each slot,
    the `interface`. Follow dependencies one level down; stop where a part is

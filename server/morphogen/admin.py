@@ -188,6 +188,22 @@ def report_html(lists, evidence, generated: str, recent: int = 30) -> str:
                      "<div class=\"wrap\"><table><tr><th>Slot</th><th>Accepts</th><th>Filled by</th>"
                      f"<th>Interface</th></tr>{''.join(rows)}</table></div>")
 
+    st = lists.status() if hasattr(lists, "status") else {"mounted": [], "dangling": []}
+    if st["mounted"] or st["dangling"]:
+        rows = "".join(
+            f"<tr><td><code>{_e(m['name'])}</code></td><td>{_e(m['source'])}</td>"
+            f"<td>{_e(('pinned at ' + str(m['commit'])[:10]) if m['pinned'] else 'unpinned (read live)')}</td>"
+            f"<td>{_e(m['entries'])}</td><td>{_e(m['error'] or '')}</td></tr>" for m in st["mounted"])
+        parts.append("<h2>Mounted maps</h2><p class=\"muted\">Read-only here. Their entries are another map's "
+                     "claims (trust: stated).</p><div class=\"wrap\"><table><tr><th>Map</th><th>Source</th>"
+                     f"<th>Version</th><th>Entries</th><th>Error</th></tr>{rows}</table></div>")
+        if st["dangling"]:
+            rows = "".join(f"<tr><td><code>{_e(d['map'])}</code></td><td><code>{_e(d['id'])}</code></td>"
+                           f"<td>{_e(d['field'])} → <code>{_e(d['ref'])}</code></td><td>{_e(d['why'])}</td></tr>"
+                           for d in st["dangling"])
+            parts.append("<h3>References that do not resolve</h3><div class=\"wrap\"><table><tr><th>Map</th>"
+                         f"<th>Entry</th><th>Reference</th><th>Why</th></tr>{rows}</table></div>")
+
     targets = sorted({(r.get("subject") or {}).get("path") for r in records
                       if r.get("by") == "judge" and r.get("kind") == "verdict"} - {None})
     parts.append("<h2>Archive</h2>")

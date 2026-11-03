@@ -72,7 +72,8 @@ def install_sample(name: str = "slow-script", dest: str | None = None) -> dict:
 @server.tool()
 @_safe
 def lists_get(kind: str, id: str) -> dict:
-    """Get one entry. kind: systems | slots | types | sources | components."""
+    """Get one entry. kind: systems | slots | types | sources | components. An id like
+    `homelab:comp/gpu-box` reads from a mounted map (see the maps tool)."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
     return lists.get(kind, id) or {"error": f"no {kind} entry {id!r}"}
@@ -81,7 +82,8 @@ def lists_get(kind: str, id: str) -> dict:
 @server.tool()
 @_safe
 def lists_put(kind: str, entry: dict[str, Any]) -> dict:
-    """Add or replace an entry (needs an 'id'). References to other entries are their ids."""
+    """Add or replace an entry (needs an 'id') in this project's map. References to other entries are
+    their ids; `map:id` refers to an entry in a mounted map. Mounted maps are read-only."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
     return lists.put(kind, entry)
@@ -90,14 +92,26 @@ def lists_put(kind: str, entry: dict[str, Any]) -> dict:
 @server.tool()
 @_safe
 def lists_query(kind: str, where: dict[str, Any] | None = None, follow: str | None = None,
-                start: str | None = None, hops: int = 1) -> dict:
+                start: str | None = None, hops: int = 1, map: str | None = None) -> dict:
     """Query a list. `where` matches fields exactly, or by substring with a leading '~'.
-    With `follow` and `start`, return entries reachable from `start` along reference field `follow`."""
+    With `follow` and `start`, return entries reachable from `start` along reference field `follow`,
+    across maps. `map`: a mounted map's name, or '*' for all maps; default this project's map.
+    Entries from mounted maps carry `_map` and `_trust: stated`."""
     root, cfg = _ctx()
     lists, _ = project.stores(root, cfg)
     if follow and start:
         return {"results": lists.follow(kind, start, follow, hops)}
-    return {"results": lists.query(kind, where)}
+    return {"results": lists.query(kind, where, map=map)}
+
+
+@server.tool()
+@_safe
+def maps() -> dict:
+    """This project's map and the maps mounted from morphogen.yaml: source, whether each is pinned to a
+    commit, entry counts, errors, and references (in any map) that do not resolve."""
+    root, cfg = _ctx()
+    lists, _ = project.stores(root, cfg)
+    return lists.status()
 
 
 @server.tool()

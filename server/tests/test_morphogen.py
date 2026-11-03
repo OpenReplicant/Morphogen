@@ -3,6 +3,7 @@
 import json
 import random
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -240,6 +241,125 @@ class SelfMap(unittest.TestCase):
             self.assertEqual(lists.get("components", host["filled_by"])["system"], "host")
         finally:
             shutil.rmtree(tmp)
+
+
+class Maps(unittest.TestCase):
+    """Several maps in one project: mounted read-only, pinned to commits, referenced by qualified ids."""
+
+    HOMELAB = {
+        "systems": [{"id": "gpu-box", "interface": "direct", "slots": ["gpu-box/model-server"]}],
+        "slots": [{"id": "gpu-box/model-server", "system": "gpu-box", "accepts": ["type/llm-server"],
+                   "filled_by": "comp/vllm"}],
+        "components": [{"id": "comp/vllm", "type": "type/llm-server", "source": "src/pypi", "system": "gpu-box"},
+                       {"id": "comp/gpu-box", "type": "type/machine", "system": "gpu-box"}],
+        "types": [{"id": "type/llm-server"}, {"id": "type/machine"}],
+        "sources": [{"id": "src/pypi"}],
+    }
+
+    def setUp(self):
+        from tests.fixture import git
+        self.git = git
+        self.tmp = Path(tempfile.mkdtemp())
+        self.other = self.tmp / "homelab"
+        lists = self.other / ".morphogen" / "lists"
+        lists.mkdir(parents=True)
+        for kind, rows in self.HOMELAB.items():
+            (lists / f"{kind}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        git(self.other, "init", "-q", "-b", "main")
+        git(self.other, "config", "user.email", "t@example.com")
+        git(self.other, "config", "user.name", "test")
+        git(self.other, "add", "-A")
+        git(self.other, "commit", "-q", "-m", "homelab map")
+        self.commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.other, capture_output=True,
+                                     text=True).stdout.strip()
+        self.proj = self.tmp / "proj"
+        self.proj.mkdir()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def atlas(self, maps):
+        cfg = {"data_dir": ".morphogen", "maps": maps}
+        lists, _ = project.stores(self.proj, cfg)
+        return lists
+
+    def test_qualified_ids_read_another_map_and_its_references_stay_there(self):
+        lists = self.atlas({"homelab": {"path": "../homelab", "commit": self.commit}})
+        e = lists.get("slots", "homelab:gpu-box/model-server")
+        self.assertEqual(e["_map"], "homelab")
+        self.assertEqual(e["_trust"], "stated")
+        self.assertEqual(e["filled_by"], "homelab:comp/vllm")  # qualified, so it resolves in homelab
+        self.assertEqual(lists.get("components", e["filled_by"])["system"], "homelab:gpu-box")
+        self.assertIsNone(lists.get("components", "comp/vllm"))  # bare ids mean this project's map
+
+    def test_follow_crosses_from_this_map_into_a_mounted_one(self):
+        lists = self.atlas({"homelab": {"path": "../homelab", "commit": self.commit}})
+        lists.put("systems", {"id": "assistant", "interface": "direct", "slots": ["assistant/model"]})
+        lists.put("slots", {"id": "assistant/model", "system": "assistant", "accepts": ["type/llm"],
+                            "filled_by": "homelab:comp/vllm"})
+        reached = lists.follow("slots", "assistant/model", "filled_by")
+        self.assertEqual([r["id"] for r in reached], ["homelab:comp/vllm"])
+        self.assertEqual(lists.follow("components", "homelab:comp/vllm", "system")[0]["id"], "homelab:gpu-box")
+        self.assertEqual([e["id"] for e in lists.query("systems", map="homelab")], ["homelab:gpu-box"])
+        self.assertEqual({e["id"] for e in lists.query("systems", map="*")}, {"assistant", "homelab:gpu-box"})
+
+    def test_mounted_maps_are_read_only(self):
+        lists = self.atlas({"homelab": {"path": "../homelab", "commit": self.commit}})
+        with self.assertRaises(PermissionError):
+            lists.put("components", {"id": "homelab:comp/vllm", "type": "type/llm-server", "status": "evil"})
+        self.assertNotIn("status", lists.get("components", "homelab:comp/vllm"))
+
+    def test_a_pinned_map_ignores_later_commits_and_edits(self):
+        lists_dir = self.other / ".morphogen" / "lists"
+        (lists_dir / "components.jsonl").write_text(json.dumps({"id": "comp/vllm", "type": "type/x",
+                                                                 "status": "changed"}) + "\n")
+        self.git(self.other, "commit", "-qam", "later")
+        (lists_dir / "systems.jsonl").write_text("")  # and an uncommitted edit
+        lists = self.atlas({"homelab": {"path": "../homelab", "commit": self.commit}})
+        self.assertNotIn("status", lists.get("components", "homelab:comp/vllm"))
+        self.assertIsNotNone(lists.get("systems", "homelab:gpu-box"))
+        self.assertTrue(lists.status()["mounted"][0]["pinned"])
+
+    def test_a_git_url_map_is_cloned_and_pinned(self):
+        lists = self.atlas({"homelab": {"git": self.other.as_uri(), "commit": self.commit}})
+        self.assertIsNotNone(lists.get("systems", "homelab:gpu-box"))
+        self.assertIsNone(lists.status()["mounted"][0]["error"])
+        lists = self.atlas({"homelab": {"git": self.other.as_uri()}})  # no commit: refused
+        self.assertIn("needs a commit", lists.status()["mounted"][0]["error"])
+
+    def test_unpinned_maps_say_so_and_broken_references_are_reported(self):
+        lists = self.atlas({"notes": {"path": "../homelab/.morphogen/lists"},
+                            "gone": {"path": "../homelab", "commit": "0" * 40}})
+        st = lists.status()
+        by_name = {m["name"]: m for m in st["mounted"]}
+        self.assertFalse(by_name["notes"]["pinned"])
+        self.assertIn("not found", by_name["gone"]["error"])
+        lists.put("slots", {"id": "a/b", "system": "a", "filled_by": "nowhere:comp/x"})
+        lists.put("slots", {"id": "a/c", "system": "a", "filled_by": "notes:comp/missing"})
+        refs = {(d["ref"], d["why"]) for d in lists.status()["dangling"]}
+        self.assertIn(("nowhere:comp/x", "map 'nowhere' is not mounted"), refs)
+        self.assertIn(("notes:comp/missing", "no such entry"), refs)
+
+    def test_report_shows_mounted_maps_and_broken_references(self):
+        from morphogen import admin
+        cfg = {"data_dir": ".morphogen", "maps": {"homelab": {"path": "../homelab", "commit": self.commit}}}
+        lists, evidence = project.stores(self.proj, cfg)
+        lists.put("slots", {"id": "a/b", "system": "a", "filled_by": "homelab:comp/nope"})
+        html_ = admin.report_html(lists, evidence, "now")
+        self.assertIn("Mounted maps", html_)
+        self.assertIn("pinned at " + self.commit[:10], html_)
+        self.assertIn("homelab:comp/nope", html_)
+
+    def test_a_colon_in_an_id_must_name_a_mounted_map(self):
+        lists = self.atlas({})
+        with self.assertRaises(ValueError):
+            lists.put("slots", {"id": "typo:x", "system": "a"})
+
+    def test_bad_map_names_are_refused(self):
+        from morphogen.maps import MapError
+        for name in ("Bad Name", "local"):
+            with self.assertRaises(MapError):
+                self.atlas({name: {"path": "../homelab"}})
 
 
 class AdminPages(unittest.TestCase):
