@@ -95,6 +95,16 @@ class SampleProject:
         git(self.repo, "checkout", "-q", "main")
         return name
 
+    def on_main(self, files):
+        """Commit `files` (target-relative paths to new text) on main itself, so they become the base."""
+        git(self.repo, "checkout", "-q", "main")
+        for rel, text in files.items():
+            p = self.path(rel)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "base: " + ", ".join(sorted(files)))
+
     def judge(self, candidate):
         return judge_mod.judge(self.repo, self.cfg, TARGET, "main", candidate, self.evidence)
 
@@ -149,4 +159,29 @@ def observed_project(collected, primary=True):
     spec.write_text(text)
     git(p.repo, "add", "-A")
     git(p.repo, "commit", "-q", "-m", "observe latency")
+    return p
+
+
+# Settings for the parameter tests: an operator-owned limit and an agent-owned chunk size, declared in the
+# base's target.yaml. The code reads neither; they stand in for real settings.
+SETTINGS = "\n# Settings the judge reads (see target.yaml parameters).\nCHUNK = 64\nLIMIT = 1000\n"
+PARAMETERS_YAML = """
+parameters:
+  chunk:
+    file: topwords.py
+    name: CHUNK
+    owner: agent
+    range: [16, 256]
+  limit:
+    file: topwords.py
+    name: LIMIT
+    owner: operator
+"""
+
+
+def parameter_project() -> "SampleProject":
+    """The sample with SETTINGS in topwords.py and PARAMETERS_YAML in target.yaml, committed on main."""
+    p = SampleProject()
+    p.on_main({"topwords.py": p.original("topwords.py") + SETTINGS,
+               "target.yaml": p.original("target.yaml") + PARAMETERS_YAML})
     return p

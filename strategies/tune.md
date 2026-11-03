@@ -9,14 +9,16 @@ weak_when: The gap needs a different design, not different numbers; or no settin
 
 **Parent:** the tip of the trunk.
 
-**Settings:** only those the operator has named as the agent's to change (in
-`intent.md`, or as agent-owned parameters once the map has them). A change
-inside a component's interface is a setting; a change to its structure or
-contract is a new component and belongs to another strategy.
+**Settings:** only the agent-owned parameters in the target's `target.yaml`,
+within their `range` or `choices`. The judge refuses a candidate that changes
+any other parameter or leaves a range, so ask the operator to declare a
+setting there before tuning it. A change inside a component's interface is a
+setting; a change to its structure or contract is a new component and belongs
+to another strategy.
 
 **Candidates:**
-1. Pick each setting's range from the code and its docs. Draw five to eight
-   random combinations (a baseline that any smarter search must beat).
+1. Take each setting's range from `target.yaml`. Draw five to eight random
+   combinations (a baseline that any smarter search must beat).
 2. `probe` each with few rounds. Narrow the ranges around the best two or
    three and draw again, halving the count each time.
 3. Commit the best one or two combinations as candidates, labelled with the
@@ -25,7 +27,8 @@ contract is a new component and belongs to another strategy.
 **Judging:** `judge` each against the trunk. Probes only rank; the verdict
 decides.
 
-**After:** propose the best passing candidate with its values. Record the
+**After:** propose the best passing candidate with its values; the verdict
+records them (`parameters` in the evidence). Record the
 probed combinations and their metrics with `evidence_note` (trust
 `inferred`), so the next tune starts where this one ended.
 

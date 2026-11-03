@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, model_validator
 
 
 class DocumentError(ValueError):
@@ -93,6 +93,25 @@ class Equivalence(_Doc):
     cases: int | None = None
 
 
+class TargetParameter(_Doc):
+    """A setting in the target's files that the judge reads in base and candidate. The owner decides
+    who may change it: agent (within range or choices), operator or judge (never, in a candidate)."""
+    file: str                      # relative to the target directory
+    name: str | None = None        # a module-level constant in a Python file
+    key: str | None = None         # a dotted key in a YAML, JSON or TOML file
+    owner: Literal["agent", "operator", "judge"]
+    range: tuple[float, float] | None = None
+    choices: list[Any] | None = None
+
+    @model_validator(mode="after")
+    def _one_location(self):
+        if bool(self.name) == bool(self.key):
+            raise ValueError("give exactly one of name (a Python constant) or key (a dotted key)")
+        if self.range and self.range[0] > self.range[1]:
+            raise ValueError("range must be [low, high]")
+        return self
+
+
 class Target(_Doc):
     name: str | None = None
     description: str | None = None
@@ -103,6 +122,7 @@ class Target(_Doc):
     equivalence: Equivalence | None = None
     measure: Measure | None = None
     timeout: int | None = None
+    parameters: dict[str, TargetParameter] = {}
 
 
 # catalogs.yaml: named sections, each a list of entries

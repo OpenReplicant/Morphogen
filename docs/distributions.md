@@ -110,7 +110,8 @@ parameter fields `type`, `range`, `default`, `value`, `set_in`, `owner`
 `run`, `cases`), `measure` (`run`, `warmup`, `repeats`, `max_repeats`,
 `same_output`, `observer` with `run` and `collected`, and `metrics` with
 `direction`, `primary`, `min_improvement`, `max_regression`, `gain`,
-`aggregate`), `timeout`. Primary metrics are judge metrics (`wall_seconds`,
+`aggregate`), `timeout`, `parameters` (each with `file`, `name` or `key`,
+`owner` and optionally `range` or `choices`). Primary metrics are judge metrics (`wall_seconds`,
 `cpu_seconds`, `max_rss_kb`) or `observed.*` collected outside.
 
 **Strategy cards:** Markdown with front matter `name`, `description`, `when`
@@ -119,7 +120,8 @@ parameter fields `type`, `range`, `default`, `value`, `set_in`, `owner`
 **Evidence records:** `seq`, `at`, `prev`, `hash`, `claim`, `kind`, `trust`
 (`measured`, `simulated`, `stated`, `inferred`), `by`; verdicts also carry
 `verdict`, `subject`, `refs` (`base`, `candidate`), `outcome`, `seeds`,
-`labels`, `interface`, `sandbox`, `runner`; probes have `kind: probe` and are
+`labels`, `parameters` (owner, base and candidate value), `interface`,
+`sandbox`, `runner`; probes have `kind: probe` and are
 never verdicts. Journal records carry the `journal_append` fields. A distribution reads evidence; it
 writes only through `evidence_note`.
 
