@@ -206,6 +206,8 @@ class SelfMap(unittest.TestCase):
     """The map init_project seeds: Morphogen, its admin UI, Claude Code and the host. Also the example for other maps."""
 
     REFS = {"systems": ["slots"], "slots": ["system", "accepts", "filled_by"], "components": ["type", "source", "system"]}
+    CORE = {"morphogen", "admin-ui", "claude-code", "host"}
+    MAP_INTERFACES = ("direct", "simulated", "observed", "none")  # see skills/map/SKILL.md
 
     def test_references_resolve_and_slots_point_back(self):
         lists = {f.stem: [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
@@ -218,18 +220,19 @@ class SelfMap(unittest.TestCase):
                     for r in refs if isinstance(refs, list) else [refs]:
                         self.assertIn(r, ids, f"{kind} {e['id']}: {field} -> {r} does not exist")
         systems = {e["id"]: e for e in lists["systems"]}
-        self.assertEqual(set(systems), {"morphogen", "claude-code", "host", "admin-ui"})
+        # The core systems must be there; more may be added (the map grows), as long as references resolve.
+        self.assertLessEqual(self.CORE, set(systems))
         for slot in lists["slots"]:
             self.assertIn(slot["id"], systems[slot["system"]]["slots"], f"{slot['id']} is not listed by its system")
         for system in systems.values():
-            self.assertIn(system.get("interface"), ("direct", "simulated"), system["id"])
+            self.assertIn(system.get("interface"), self.MAP_INTERFACES, system["id"])
 
     def test_init_project_seeds_it(self):
         tmp = Path(tempfile.mkdtemp())
         try:
             project.init_project(tmp)
             lists, _ = project.stores(tmp, project.load_config(tmp))
-            self.assertEqual({e["id"] for e in lists.query("systems")}, {"morphogen", "claude-code", "host", "admin-ui"})
+            self.assertLessEqual(self.CORE, {e["id"] for e in lists.query("systems")})
             # Morphogen -> its harness slot -> Claude Code, which runs on the host.
             harness = lists.get("slots", "morphogen/harness")
             self.assertEqual(lists.get("components", harness["filled_by"])["system"], "claude-code")
