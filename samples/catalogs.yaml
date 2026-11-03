@@ -145,6 +145,14 @@ admin_ui:
     licence: MIT; recent versions reportedly bundle a Copilot component with other terms
     interface: separate process, HTTP
     trust: open
+  - name: OpenRoom
+    url: https://github.com/MiniMax-AI/OpenRoom
+    slot: admin-ui/shell
+    finds: a browser desktop whose apps expose structured actions an agent operates; new apps generated with a Claude Code workflow
+    licence: MIT
+    interface: browser only (IndexedDB, no backend); the open-source build mocks its iframe SDK
+    trust: open
+    notes: no releases yet (checked 2026-11-03)
   - name: Puter
     url: https://github.com/heyputer/puter
     slot: admin-ui/shell
