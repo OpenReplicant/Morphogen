@@ -6,6 +6,7 @@
 {"description": "Scores a candidate against a base by rules the candidate cannot change", "id": "type/judge"}
 {"description": "Stores the six lists by id with references", "id": "type/list-store"}
 {"description": "A language model the harness calls", "id": "type/llm"}
+{"description": "A proxy between callers and model providers: routing, budgets, caching, usage records", "id": "type/llm-gateway"}
 {"description": "A computer, VM or container that runs other systems", "id": "type/machine"}
 {"description": "An operating system", "id": "type/os"}
 {"description": "A bundle of skills, agents, hooks and MCP servers loaded by a harness", "id": "type/plugin"}

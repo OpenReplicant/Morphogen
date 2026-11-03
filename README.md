@@ -291,17 +291,29 @@ and what to try. Strategies are cards in `strategies/`:
 | `hill-climb` | the trunk; best of two or three different approaches | one clear bottleneck; the first rounds |
 | `archive-search` | promising and under-explored variants from the archive, failures included (after the Darwin Gödel Machine) | hill-climbing has stalled |
 | `simplify` | a large pass; smaller versions of it from the trunk (delta debugging) | a pass changes more than it needs to |
+| `reflect` | the trunk or the best variant; edits aimed at the causes its probe shows (after GEPA, ProTeGi, PromptWizard) | failures that can be read and explained, such as prompts, rules or parsers |
+| `tune` | the trunk; settings searched by probe, random first, then narrowing (after random and Bayesian search) | the design is right but its settings may not be |
 
 `strategy: auto` (the default) chooses from the evidence: hill-climb first;
 simplify when a pass that is not merged changes more than 20 lines;
 archive-search after four trials in a row without a pass; the strategy with
 the best gain per trial once two have a record; stop and report when all have
-stalled. Setting a card's name forces it, for the project or per target.
+stalled. Setting a card's name forces it, for the project or per target;
+`reflect` and `tune` are used that way, or when the `evolve` skill picks them
+from `strategies_list`.
+
+Strategies that learn from failures use `probe`: a practice run under the
+judge's rules (the base's spec and harness, the forbidden-file check, fresh
+inputs) that returns the check's output, each generated case with expected
+and actual output where they differ, and a few paired timing rounds. A probe
+is recorded as evidence of kind `probe`, never a verdict: it cannot be
+proposed for merging, strategy selection ignores it, and it does not count
+against `budget.trials_per_day` (`budget.probes_per_day` caps it).
 
 Add your own strategy by writing a card in your project's `strategies/`
 directory: Markdown with `name`, `description` and `when` front matter, and
 Parent, Candidates, After and Stop sections. `catalogs.yaml` lists more to
-write (beam search, islands, reflective evolution, annealing, bandits).
+write (beam search, islands, annealing, bandits).
 
 Strategies only propose. None can change the judge, the budgets, or the rule
 that a candidate is merged only after it passes against the trunk and you
@@ -440,6 +452,7 @@ The MCP server's tools, which any MCP-capable harness can call:
 | `catalog_search` | search `catalogs.yaml` and the lists before building |
 | `measure` | baseline a target at a commit |
 | `judge` | score a candidate against a base; records the verdict |
+| `probe` | a practice run on a candidate: per-case results and quick metrics; never a verdict |
 | `strategy`, `archive`, `strategies_list` | the next strategy and why; judged variants with lineage and payoff; the catalog |
 | `journal_append` | append a journal entry |
 | `admin_pages` | write the admin menu and the read-only report |

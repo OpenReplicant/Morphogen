@@ -47,9 +47,11 @@ strategies:
   - name: islands and MAP-Elites
     url: https://github.com/codelion/openevolve
     finds: best variant per approach family; diversity when one family keeps winning
-  - name: reflective evolution (GEPA)
+  - name: reflective evolution (GEPA), ProTeGi, PromptWizard, meta-prompting
     url: https://arxiv.org/abs/2507.19457
-    finds: propose from the reasons failed verdicts gave; many near misses
+    finds: propose from critiques of failing cases; keep a Pareto set (shipped as reflect)
+  - name: random and Bayesian search
+    finds: search a component's settings, random first, then narrowing (shipped as tune)
   - name: simulated annealing
     finds: accept small regressions on side branches as stepping stones
   - name: multi-armed bandits
@@ -159,4 +161,50 @@ admin_ui:
     finds: a self-hostable web desktop that could hold the other tools
     licence: AGPL-3.0 (puter.js SDK also Apache-2.0)
     interface: separate process, HTTP; self-hosted build is alpha per its maintainers
+    trust: open
+
+# Fillers for the optional morphogen/model-gateway slot: a proxy that targets
+# call for models, which reports tokens, cost and latency per run from outside
+# the candidate (an observer with collected: outside). Found by search on
+# 2026-11-03; only Bifrost's licence was read from its own repository. Pin a
+# version and check the licence before adopting one.
+llm_gateways:
+  - name: Bifrost
+    url: https://github.com/maximhq/bifrost
+    recommended: true
+    finds: OpenAI-compatible gateway in Go; failover, load balancing, semantic caching, budgets per virtual key, Prometheus metrics and tracing
+    licence: Apache-2.0
+    interface: separate process, HTTP; npx or Docker; Helm and Terraform available
+    trust: open
+    notes: about 20+ providers; latency figures are the vendor's own
+  - name: LiteLLM proxy
+    url: https://github.com/BerriAI/litellm
+    finds: OpenAI-compatible proxy with the widest provider coverage (100+), budgets and logging
+    licence: MIT (reported, not confirmed from the project)
+    interface: separate process, HTTP; Python
+    trust: open
+    notes: reported slower under heavy load than Go gateways
+  - name: Portkey gateway
+    url: https://github.com/Portkey-AI/gateway
+    finds: gateway with fallbacks, retries and guardrails in the open-source core
+    licence: MIT (reported, not confirmed from the project)
+    interface: separate process, HTTP
+    trust: open
+  - name: Envoy AI Gateway
+    url: https://github.com/envoyproxy/ai-gateway
+    finds: AI gateway on Envoy, for teams already running Kubernetes
+    licence: Apache-2.0 (reported, not confirmed from the project)
+    interface: Kubernetes
+    trust: open
+  - name: Helicone
+    url: https://github.com/Helicone/helicone
+    finds: observability-first platform with a gateway
+    licence: unknown
+    interface: separate process, HTTP
+    trust: open
+  - name: Kong AI Gateway
+    url: https://github.com/Kong/kong
+    finds: AI plugins on the Kong API gateway
+    licence: open core; some AI features may need an enterprise licence
+    interface: separate process, HTTP
     trust: open

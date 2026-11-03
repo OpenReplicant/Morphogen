@@ -108,6 +108,62 @@ class JudgeOnSample(unittest.TestCase):
         self.assertIn("timing", d["guarantees"])
 
 
+class Probe(unittest.TestCase):
+    """Practice runs: feedback for strategies under the judge's rules, never a verdict."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = SampleProject(trials_per_day=1)
+        cls.slow = cls.p.original("topwords.py")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def probe(self, branch, **kw):
+        return judge_mod.probe(self.p.repo, self.p.cfg, TARGET, branch, self.p.evidence, **kw)
+
+    def test_a_right_candidate_gets_clean_cases_and_a_gain_estimate(self):
+        r = self.probe(self.p.branch("fast-probe", {"topwords.py": FAST}))
+        self.assertFalse(r["binding"])
+        self.assertTrue(r["check"]["passed"])
+        self.assertTrue(r["cases"] and all(c["status"] == "ok" for c in r["cases"]))
+        self.assertGreater(r["metrics"]["wall_seconds"]["gain"], 0.3)
+        self.assertEqual(r["timed_output_mismatches"], 0)
+
+    def test_a_wrong_candidate_sees_which_cases_failed_and_how(self):
+        r = self.probe(self.p.branch("wrong-probe", {"topwords.py": WRONG}), rounds=0)
+        wrong = [c for c in r["cases"] if c["status"] == "wrong"]
+        self.assertTrue(wrong)
+        self.assertTrue(wrong[0]["expected"] and wrong[0]["got"] and wrong[0]["input"])
+        self.assertNotEqual(wrong[0]["expected"], wrong[0]["got"])
+
+    def test_forbidden_files_are_refused_before_anything_runs(self):
+        r = self.probe(self.p.branch("gen-pkg-probe", {"gen/__init__.py": "def text(seed, n):\n    return 'a'\n"}))
+        self.assertTrue(r["forbidden"])
+        self.assertNotIn("cases", r)
+        self.assertNotIn("metrics", r)
+
+    def test_probes_are_not_verdicts_trials_or_archive_entries(self):
+        from morphogen import strategies as S
+        self.probe(self.p.branch("fast-probe-2", {"topwords.py": FAST}), cases=1, rounds=1)
+        kinds = {r.get("kind") for r in self.p.evidence.dump() if r.get("by") == "judge"}
+        self.assertIn("probe", kinds)
+        self.assertEqual(S.archive(self.p.evidence, TARGET), [])
+        # trials_per_day is 1 here and no judge call has run, so a verdict is still allowed.
+        r = self.p.judge(self.p.branch("fast-judged", {"topwords.py": FAST}))
+        self.assertIn(r["verdict"], ("pass", "fail"))
+
+    def test_probes_have_their_own_budget(self):
+        cfg = {**self.p.cfg, "budget": {"probes_per_day": 1}}
+        n = sum(1 for r in self.p.evidence.dump() if r.get("kind") == "probe")
+        if n < 1:
+            judge_mod.probe(self.p.repo, cfg, TARGET, self.p.branch("one-probe", {"topwords.py": FAST}),
+                            self.p.evidence, cases=1, rounds=0)
+        with self.assertRaises(judge_mod.JudgeError):
+            judge_mod.probe(self.p.repo, cfg, TARGET, "main", self.p.evidence, cases=1, rounds=0)
+
+
 class TrialBudget(unittest.TestCase):
     def test_budget_stops_judging(self):
         p = SampleProject(trials_per_day=1)
@@ -379,6 +435,7 @@ class DistributionContract(unittest.TestCase):
         "evidence_note": ["claim", "source", "trust", "supports", "challenges"],
         "catalog_search": ["query", "limit"], "measure": ["target", "ref"],
         "judge": ["target", "candidate", "base", "labels"], "strategy": ["target"],
+        "probe": ["target", "candidate", "base", "cases", "rounds"],
         "archive": ["target", "limit"],
         "journal_append": ["title", "gap", "options", "choice", "rung", "gate", "commit", "why"],
     }
