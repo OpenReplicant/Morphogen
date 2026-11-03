@@ -203,7 +203,7 @@ class Statistics(unittest.TestCase):
 
 
 class SelfMap(unittest.TestCase):
-    """The map init_project seeds: Morphogen, Claude Code and the host. Also the example for other maps."""
+    """The map init_project seeds: Morphogen, its admin UI, Claude Code and the host. Also the example for other maps."""
 
     REFS = {"systems": ["slots"], "slots": ["system", "accepts", "filled_by"], "components": ["type", "source", "system"]}
 
@@ -218,7 +218,7 @@ class SelfMap(unittest.TestCase):
                     for r in refs if isinstance(refs, list) else [refs]:
                         self.assertIn(r, ids, f"{kind} {e['id']}: {field} -> {r} does not exist")
         systems = {e["id"]: e for e in lists["systems"]}
-        self.assertEqual(set(systems), {"morphogen", "claude-code", "host"})
+        self.assertEqual(set(systems), {"morphogen", "claude-code", "host", "admin-ui"})
         for slot in lists["slots"]:
             self.assertIn(slot["id"], systems[slot["system"]]["slots"], f"{slot['id']} is not listed by its system")
         for system in systems.values():
@@ -229,7 +229,7 @@ class SelfMap(unittest.TestCase):
         try:
             project.init_project(tmp)
             lists, _ = project.stores(tmp, project.load_config(tmp))
-            self.assertEqual({e["id"] for e in lists.query("systems")}, {"morphogen", "claude-code", "host"})
+            self.assertEqual({e["id"] for e in lists.query("systems")}, {"morphogen", "claude-code", "host", "admin-ui"})
             # Morphogen -> its harness slot -> Claude Code, which runs on the host.
             harness = lists.get("slots", "morphogen/harness")
             self.assertEqual(lists.get("components", harness["filled_by"])["system"], "claude-code")
@@ -237,6 +237,88 @@ class SelfMap(unittest.TestCase):
             self.assertEqual(lists.get("components", host["filled_by"])["system"], "host")
         finally:
             shutil.rmtree(tmp)
+
+
+class AdminPages(unittest.TestCase):
+    """The menu and the report: static, read-only, and safe against what the agent writes."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        project.init_project(self.tmp)
+        self.cfg = project.load_config(self.tmp)
+        self.lists, self.evidence = project.stores(self.tmp, self.cfg)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def pages(self):
+        from morphogen import admin
+        paths = admin.write(self.tmp, self.cfg)
+        return Path(paths["menu"]).read_text(), Path(paths["report"]).read_text()
+
+    def test_menu_lists_slots_and_links_installed_tools_in_new_tabs(self):
+        menu, _ = self.pages()
+        self.assertIn('href="report.html" target="_blank" rel="noopener noreferrer"', menu)
+        self.assertIn("<code>sessions</code>", menu)
+        self.assertIn("empty", menu)
+        self.assertIn("ttyd", menu)  # from the catalog, listed as available
+        self.assertIn(".morphogen/admin/", (self.tmp / ".gitignore").read_text())
+
+    def test_an_installed_side_car_appears_as_a_link(self):
+        self.lists.put("components", {"id": "comp/ttyd", "name": "ttyd", "type": "type/web-terminal",
+                                      "status": "in use", "url": "http://127.0.0.1:7681"})
+        slot = self.lists.get("slots", "admin-ui/terminal")
+        self.lists.put("slots", {**slot, "filled_by": "comp/ttyd"})
+        menu, _ = self.pages()
+        self.assertIn('href="http://127.0.0.1:7681"', menu)
+
+    def test_entries_written_by_the_agent_cannot_inject_markup_or_script_links(self):
+        self.lists.put("components", {"id": "comp/evil", "name": "<script>alert(1)</script>",
+                                      "status": "in use", "url": "javascript:alert(1)"})
+        slot = self.lists.get("slots", "admin-ui/editor")
+        self.lists.put("slots", {**slot, "filled_by": "comp/evil", "interface": "<img src=x onerror=alert(1)>"})
+        self.evidence.append({"claim": "<script>steal()</script>", "trust": "inferred", "by": "agent"})
+        menu, report = self.pages()
+        for page in (menu, report):
+            self.assertNotIn("<script>", page)
+            self.assertNotIn("<img", page)
+            self.assertNotIn("javascript:", page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", menu)
+
+    def test_report_shows_the_chain_and_the_lineage(self):
+        for seq, (base, cand, verdict) in enumerate([("a" * 40, "b" * 40, "fail"), ("a" * 40, "c" * 40, "pass"),
+                                                     ("c" * 40, "d" * 40, "pass")]):
+            self.evidence.append({"claim": f"verdict {seq}", "kind": "verdict", "verdict": verdict, "by": "judge",
+                                  "trust": "measured", "subject": {"system": "t", "path": "targets/t"},
+                                  "refs": {"base": base, "candidate": cand},
+                                  "outcome": {"metrics": {"wall_seconds": {"primary": True, "gain": 0.2}}},
+                                  "labels": {"strategy": "hill-climb"}})
+        _, report = self.pages()
+        self.assertIn('chain <span class="pass">intact</span>', report)
+        self.assertIn("<code>targets/t</code>", report)
+        # d was built on c, which was built on a: nested two levels deep.
+        self.assertRegex(report, r"cccccccccc.*<ul class=\"tree\"><li>.*dddddddddd")
+        self.assertIn("admin-ui", report)
+
+    def test_serve_is_read_only_and_local(self):
+        import threading
+        import urllib.error
+        import urllib.request
+        from morphogen import admin
+        out = Path(admin.write(self.tmp, self.cfg)["menu"]).parent
+        httpd = admin.make_server(out, 0)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            self.assertEqual(httpd.server_address[0], "127.0.0.1")
+            url = f"http://127.0.0.1:{httpd.server_address[1]}/"
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            self.assertEqual(opener.open(url + "index.html").status, 200)
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                opener.open(urllib.request.Request(url + "index.html", data=b"x", method="POST"))
+            self.assertEqual(e.exception.code, 501)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
 
 
 class Observer(unittest.TestCase):
