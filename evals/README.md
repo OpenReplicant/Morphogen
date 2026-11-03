@@ -85,3 +85,4 @@ of what it adds.
 | 2026-11-03 | `02-map-baseline`, `04-not-for-morphogen` | 1 each | 02: 1.0 / 0; 04: 1.0 / 1.0 | $0.28 | after the map skill learned capabilities, patterns and the line between method and domain |
 | 2026-11-03 | `02-map-baseline`, `06-strategy-after-stall` | 1 each | 02: 1.0 / 0; 06: 1.0 / 0.5 | $0.39 | after the map and evolve skills learned requirement reasons, the change log and capability gaps |
 | 2026-11-03 | `02-map-baseline` | 3 | 0.78 / 0 (runs 0.33, 1.0, 1.0) | $0.67 | after the knowledge base and roles entered the self-map, patterns left the map skill, and map changes go to the reviewer. The 0.33 run recorded a slot but never called `measure` (trace not kept) |
+| 2026-11-03 | `02-map-baseline` | 3 | 1.0 / 0 (runs 1.0, 1.0, 1.0) | $0.65 | after the map skill learned relations (`links`) and the `parameters` list, and lost the map-change review |
