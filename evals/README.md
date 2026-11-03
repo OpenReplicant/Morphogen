@@ -82,3 +82,5 @@ of what it adds.
 | 2026-11-03 | `02-map-baseline` | 1 | 1.0 / 0 | $0.21 | after the map skill learned about mounted maps |
 | 2026-11-03 | all six, MCP tools only | 1 each | 01: 0.8 / 0; 02: 1.0 / 0; 03: 0.4 / 0.2; 04: 1.0 / 1.0; 05: 1.0 / 1.0; 06: 1.0 / 1.0 | $0.88 | 01 and 03 failed for lack of Bash, Write and Edit grants (the command above was missing them) |
 | 2026-11-03 | 01, 03, 05, 06 with tools granted | 1 each | 01: 1.0 / 0; 03: 0.4 / 0.2; 05: 1.0 / 1.0; 06: 1.0 / 0.5 | $0.69 | 03 found the bottleneck and planned two candidates, then stopped: the run's sandbox made `.git` read-only, so no branch could be committed. Seen in a container running as root; verify 03 on a non-root machine or CI runner |
+| 2026-11-03 | `02-map-baseline`, `04-not-for-morphogen` | 1 each | 02: 1.0 / 0; 04: 1.0 / 1.0 | $0.28 | after the map skill learned capabilities, patterns and the line between method and domain |
+| 2026-11-03 | `02-map-baseline`, `06-strategy-after-stall` | 1 each | 02: 1.0 / 0; 06: 1.0 / 0.5 | $0.39 | after the map and evolve skills learned requirement reasons, the change log and capability gaps |

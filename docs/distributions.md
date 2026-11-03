@@ -74,11 +74,12 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 | `doctor`, `init_project`, `maps`, `strategies_list`, `admin_pages` | none |
 | `install_sample` | `name`, `dest` |
 | `lists_get` | `kind`, `id` |
-| `lists_put` | `kind`, `entry` |
+| `lists_put` | `kind`, `entry`, `reason` |
+| `lists_history` | `kind`, `id`, `limit` |
 | `lists_query` | `kind`, `where`, `follow`, `start`, `hops`, `map` |
 | `evidence_query` | `contains`, `by`, `limit` |
 | `evidence_note` | `claim`, `source`, `trust` (`inferred` or `stated`), `supports`, `challenges` |
-| `catalog_search` | `query`, `limit` |
+| `catalog_search` | `query`, `limit`, `slot` |
 | `measure` | `target`, `ref` |
 | `judge` | `target`, `candidate`, `base`, `labels` (`strategy`, `approach`, `family`, `parent`) |
 | `probe` | `target`, `candidate`, `base`, `cases`, `rounds` |
@@ -87,8 +88,11 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 | `journal_append` | `title`, `gap`, `options`, `choice`, `rung`, `gate`, `commit`, `why` |
 
 **Lists:** the kinds `systems`, `slots`, `types`, `sources`, `components`;
-the reference fields (`systems.slots`; `slots.system`, `accepts`,
-`filled_by`; `components.type`, `source`, `system`); qualified ids
+the reference fields (`systems.slots`, `realizes`; `slots.system`,
+`accepts`, `filled_by`, `realizes`; `components.type`, `source`, `system`);
+`slots.requires`, `slots.because` (reason per requirement) and
+`components.provides` (capability names); `pattern: true` on abstract
+systems; qualified ids
 `map:id`; map interfaces `direct`, `simulated`, `observed`, `none`; the
 `_map` and `_trust` annotations on entries from mounted maps.
 
@@ -107,12 +111,17 @@ the reference fields (`systems.slots`; `slots.system`, `accepts`,
 (`measured`, `simulated`, `stated`, `inferred`), `by`; verdicts also carry
 `verdict`, `subject`, `refs` (`base`, `candidate`), `outcome`, `seeds`,
 `labels`, `interface`, `sandbox`, `runner`; probes have `kind: probe` and are
-never verdicts. A distribution reads evidence; it
+never verdicts. Change records (`changes` log) carry `op`, `list`, `id`,
+`before`, `after`, `entry`, `by` and `reason`; journal records carry the
+`journal_append` fields. A distribution reads evidence; it
 writes only through `evidence_note`.
 
 **Config:** `morphogen.yaml` keys `trunk`, `autonomy`, `data_dir`,
 `evidence_path`, `strategy`, `strategies`, `backends`, `sandbox`,
-`sandbox_image`, `budget`, `targets`, `map_name`, `maps`.
+`sandbox_image`, `budget`, `targets`, `map_name`, `maps`; under `backends`,
+`default` (`files` or `postgres`) and `postgres` (`url`, `schema`, `layout`).
+On postgres, the table and view names in `README.md` (Storage backends) are
+part of the contract too, so distributions can query them directly.
 
 Anything not listed here (internal modules, file layouts under
 `.morphogen/`, the admin pages' markup) may change in any release.

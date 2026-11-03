@@ -12,6 +12,10 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-http==1.45.2",
 ]
 
+[project.optional-dependencies]
+# The postgres backend (backends.default: postgres). pg8000: pure Python, BSD-3-Clause.
+postgres = ["pg8000==1.31.5"]
+
 [project.scripts]
 morphogen-mcp = "morphogen.mcp_server:main"
 morphogen-admin = "morphogen.admin:main"
@@ -19,6 +23,11 @@ morphogen-admin = "morphogen.admin:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# Keep pg8000's dependencies on releases that have been out for a while (checked 2026-11-03):
+# python-dateutil 4.0.0 and scramp 1.5.0 were days old.
+constraint-dependencies = ["python-dateutil==2.9.0.post0", "scramp==1.4.9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["morphogen"]
