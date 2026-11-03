@@ -13,8 +13,11 @@ KINDS = ("systems", "slots", "types", "sources", "components")
 TRUST = ("measured", "simulated", "stated", "inferred", "asserted")
 INTERFACES = ("direct", "simulated")
 # Fields that hold references to other entries, by list. A backend may index them as graph edges.
-REF_FIELDS = {"systems": ("slots",), "slots": ("system", "accepts", "filled_by"),
+REF_FIELDS = {"systems": ("slots", "realizes"), "slots": ("system", "accepts", "filled_by", "realizes"),
               "components": ("type", "source", "system"), "types": (), "sources": ()}
+# Capability names are plain strings, compared exactly: a slot's `requires`, a component's `provides`.
+# Suggested vocabulary (extend freely): exact, lexical, semantic, graph, temporal, concurrent-writers,
+# enforced-append-only, tamper-evident.
 
 
 class ListStore(Protocol):
