@@ -5,9 +5,9 @@ A project's own lists are one map. `morphogen.yaml` can mount others, read-only:
     maps:
       homelab: {path: ../homelab, commit: 3f2a9c1}        # a git repository, read at a commit
       games:   {git: https://github.com/you/games-map, commit: 3f2a9c1}
-      notes:   {path: ../notes/.morphogen/lists}            # a directory, read as it is now (unpinned)
+      notes:   {path: ../notes/map}            # a directory, read as it is now (unpinned)
 
-`lists` names the lists directory inside a repository (default `.morphogen/lists`).
+`lists` names the lists directory inside a repository (default `map`, where `lists_export` writes).
 A pinned map is read from git objects at its commit, so later commits or edits
 to its files change nothing here. An unpinned map is read live and reported as
 such.
@@ -28,14 +28,14 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .backend_files import FilesListStore, _matches
+from .store import Lists, matches as _matches
 from .ports import KINDS, REF_FIELDS
 
 SEP = ":"
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 # REF_FIELDS (ports.py): fields that hold references. A bare id resolves in the entry's own map.
 ALL_REF_FIELDS = {f for fields in REF_FIELDS.values() for f in fields}
-DEFAULT_LISTS = ".morphogen/lists"
+DEFAULT_LISTS = "map"  # where lists_export writes
 
 
 class MapError(Exception):
@@ -134,7 +134,7 @@ class Atlas:
     Reads resolve qualified ids; writes go to the own map only.
     """
 
-    def __init__(self, own: FilesListStore, mounts: dict[str, MountedMap] | None = None, own_name: str = "local"):
+    def __init__(self, own: Lists, mounts: dict[str, MountedMap] | None = None, own_name: str = "local"):
         self.own, self.own_name = own, own_name
         self.mounts = mounts or {}
         self.capabilities = {**own.capabilities, "maps": sorted(self.mounts)}
@@ -302,7 +302,7 @@ class Atlas:
                 "dangling": self.dangling(), "capabilities": self.capability_report()}
 
 
-def mount(root: Path, cfg: dict, own: FilesListStore, cache: Path) -> Atlas:
+def mount(root: Path, cfg: dict, own: Lists, cache: Path) -> Atlas:
     own_name = str(cfg.get("map_name", "local"))
     if not NAME.match(own_name):
         raise MapError(f"map_name {own_name!r}: use lowercase letters, digits and hyphens")

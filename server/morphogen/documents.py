@@ -36,11 +36,16 @@ class Postgres(_Doc):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
     url: str | None = None
     schema_: str | None = Field(None, alias="schema")  # `schema` would shadow a BaseModel method
-    layout: Literal["tables", "labels"] | None = None
+
+
+class Sqlite(_Doc):
+    path: str | None = None
 
 
 class Backends(_Doc):
-    default: Literal["files", "postgres"] = "files"
+    # `files` is the name 0.2 used for the default; it now means sqlite.
+    default: Literal["sqlite", "postgres", "files"] = "sqlite"
+    sqlite: Sqlite | None = None
     postgres: Postgres | None = None
 
 
@@ -54,7 +59,6 @@ class Config(_Doc):
     trunk: str = "main"
     autonomy: int | None = None
     data_dir: str = ".morphogen"
-    evidence_path: str | None = None
     strategy: str | None = None
     strategies: Any = None
     backends: Backends = Backends()

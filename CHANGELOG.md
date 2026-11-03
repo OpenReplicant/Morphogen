@@ -6,6 +6,22 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+Breaks the 0.2 contract, so it ships as 0.3.0.
+
+- One store through SQLAlchemy Core (2.0.51, MIT): SQLite by default (one file
+  in git's own directory) and Postgres by URL, with the same tables. Replaces the
+  files backend and most of the postgres backend. A list write and its change
+  record commit in one transaction, and appends take the write lock, so two
+  sessions writing at once get one chain (the files backend could fork it).
+  The logs' rows are refused updates and deletes by triggers on both.
+- Removed: the `files` backend (`default: files` now means sqlite, and a 0.2
+  project's JSONL lists and logs are imported once, keeping their hashes), the
+  `labels` layout and the `nodes` view (a table's name is its label), and the
+  `evidence_path` config key (`backends.sqlite.path` instead).
+- `lists_export` publishes a map as JSONL for others to mount; mounted maps
+  default to the `map/` directory.
+- The session hook reads the database read-only with the standard library
+  instead of JSONL files, so it no longer misses the journal on another backend.
 - Documents (`morphogen.yaml`, `target.yaml`, `catalogs.yaml`, strategy cards) are read
   through one loader, `documents.py`, with a pydantic schema each. A bad document
   is refused with the file and every problem named, instead of failing later or

@@ -12,7 +12,7 @@ from pathlib import Path
 from morphogen import documents
 from morphogen import judge as judge_mod
 from morphogen import project
-from morphogen.backend_files import FilesEvidenceLog, FilesListStore
+from morphogen import store
 
 from tests.fixture import FAST, TARGET, SampleProject, observed_project
 
@@ -20,7 +20,7 @@ WRONG = FAST.replace("(-p[1], p[0])", "(-p[1], len(p[0]))")  # breaks alphabetic
 
 
 class ConformanceCases:
-    """What every backend must do. Mixed into one test class per backend (and layout)."""
+    """What every database must do. Mixed into one test class per database."""
 
     def lists(self, name="lists"):
         raise NotImplementedError
@@ -85,128 +85,186 @@ class ConformanceCases:
         self.assertEqual(log.verify(), (False, 1))
 
 
-class FilesConformance(ConformanceCases, unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
+class StoreCases(ConformanceCases):
+    """Checks on the shared SQL layout, run on each database."""
 
-    def tearDown(self):
-        shutil.rmtree(self.tmp)
+    def sql(self, db, q, **p):
+        from sqlalchemy import text
+        with db.engine.connect() as c:
+            return [tuple(r) for r in c.execute(text(q), p)]
 
     def lists(self, name="lists"):
-        return FilesListStore(self.tmp / name)
+        return store.Lists(self.database(name))
 
     def evidence(self):
-        return FilesEvidenceLog(self.tmp / "evidence.jsonl")
+        return store.evidence_log(self.database("ev"))
 
     def changes(self):
-        from morphogen.backend_files import FilesLog
-        return FilesLog(self.tmp / "changes.jsonl")
+        return store.Log(self.database("ch"), "changes")
 
     def lists_with(self, changes):
-        return FilesListStore(self.tmp / "logged", changes)
+        return store.Lists(changes.db, changes)
+
+    def refused(self, db, q):
+        from sqlalchemy import text
+        with self.assertRaises(Exception):
+            with db.engine.begin() as c:
+                c.execute(text(q))
+
+    def test_the_lists_are_tables_with_edges(self):
+        s = self.lists()
+        s.put("slots", {"id": "sys/a", "system": "sys", "accepts": ["type/x", "type/y"], "filled_by": "comp/c"})
+        q = s.db.q
+        self.assertEqual(self.sql(s.db, f"SELECT id FROM {q('slots')}"), [("sys/a",)])
+        self.assertEqual(sorted(self.sql(s.db, f"SELECT field, dst_id FROM {q('edges')}")),
+                         [("accepts", "type/x"), ("accepts", "type/y"), ("filled_by", "comp/c"), ("system", "sys")])
+        self.assertTrue(s.capabilities["native_multi_hop"])
+
+    def test_concurrent_writers_get_one_chain(self):
+        import threading
+        log = self.changes()
+        other = store.Log(self.reopen(log.db), "changes")
+        errors = []
+
+        def write(lg, tag):
+            try:
+                for i in range(15):
+                    lg.append({"op": "put", "list": "types", "id": f"{tag}{i}", "by": tag})
+            except Exception as e:  # pragma: no cover - reported below
+                errors.append(e)
+        threads = [threading.Thread(target=write, args=(lg, t)) for lg, t in ((log, "a"), (other, "b"))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(len(log.dump()), 30)
+        self.assertEqual(log.verify(), (True, None))
+
+
+class SqliteConformance(StoreCases, unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.dbs = []
+
+    def tearDown(self):
+        for db in self.dbs:
+            db.engine.dispose()
+        shutil.rmtree(self.tmp)
+
+    def database(self, name):
+        db = store.Database(f"sqlite:///{self.tmp / name}.db")
+        self.dbs.append(db)
+        return db
+
+    def reopen(self, db):
+        again = store.Database(db.url)
+        self.dbs.append(again)
+        return again
 
     def tamper(self, log):
-        lines = log.path.read_text().splitlines()
-        rec = json.loads(lines[0])
-        rec["claim"] = "rewritten"
-        lines[0] = json.dumps(rec)
-        log.path.write_text("\n".join(lines) + "\n")
+        # The triggers refuse the edit, so an attacker with the file would have to drop them first.
+        self.refused(log.db, "UPDATE evidence SET raw = 'x' WHERE seq = 1")
+        self.refused(log.db, "DELETE FROM evidence")
+        from sqlalchemy import text
+        with log.db.engine.begin() as c:
+            c.execute(text("DROP TRIGGER evidence_no_update"))
+            c.execute(text("UPDATE evidence SET raw = replace(raw, '\"claim\":\"a\"', '\"claim\":\"rewritten\"') "
+                           "WHERE seq = 1"))
+
+    def test_a_project_from_0_2_files_is_imported_once(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            subprocess.run(["git", "init", "-q", str(tmp)], check=True)
+            old = store.Database(f"sqlite:///{tmp / 'scratch.db'}")
+            ev = store.evidence_log(old)
+            ev.append({"claim": "kept", "trust": "inferred", "by": "agent"})
+            (tmp / ".git" / "morphogen").mkdir()
+            (tmp / ".git" / "morphogen" / "evidence.jsonl").write_text(
+                "".join(store.canonical(r) + "\n" for r in ev.dump()))
+            (tmp / ".morphogen" / "lists").mkdir(parents=True)
+            (tmp / ".morphogen" / "lists" / "types.jsonl").write_text('{"id": "type/old"}\n')
+            (tmp / "morphogen.yaml").write_text("backends: {default: files}\n")
+            cfg = project.load_config(tmp)
+            lists, evidence = project.stores(tmp, cfg)
+            self.assertEqual([r["claim"] for r in evidence.dump()], ["kept"])
+            self.assertEqual(evidence.verify(), (True, None))
+            self.assertEqual(lists.get("types", "type/old"), {"id": "type/old"})
+            self.assertEqual(lists.history("types", "type/old")[0]["op"], "load")
+        finally:
+            shutil.rmtree(tmp)
 
 
 POSTGRES_URL = os.environ.get("MORPHOGEN_TEST_POSTGRES")  # e.g. postgresql://postgres@127.0.0.1:5432/morphogen_test
 
 
 @unittest.skipUnless(POSTGRES_URL, "set MORPHOGEN_TEST_POSTGRES to a scratch database to test the postgres backend")
-class PostgresConformanceTables(ConformanceCases, unittest.TestCase):
-    layout = "tables"
-
+class PostgresConformance(StoreCases, unittest.TestCase):
     def setUp(self):
-        from morphogen import backend_postgres as pg
-        self.pg = pg
-        self.conn = pg.connect(POSTGRES_URL)
-        self.schemas = []
+        self.dbs = []
+        self.n = 0
 
     def tearDown(self):
-        for s in self.schemas:
-            self.conn.run(f"DROP SCHEMA IF EXISTS {s} CASCADE")
-        self.conn.close()
+        for db in self.dbs:
+            db.drop()
 
-    def schema(self, name):
-        s = f"mg_test_{self.layout}_{name}_{os.getpid()}"
-        self.schemas.append(s)
-        return s
+    def database(self, name):
+        self.n += 1
+        db = store.Database(POSTGRES_URL, f"mg_test_{name}_{os.getpid()}_{self.n}")
+        self.dbs.append(db)
+        return db
 
-    def lists(self, name="lists"):
-        return self.pg.PostgresListStore(self.conn, self.schema(name), self.layout)
-
-    def evidence(self):
-        return self.pg.PostgresEvidenceLog(self.conn, self.schema("ev"))
-
-    def changes(self):
-        return self.pg.PostgresLog(self.conn, self.schema("ch"), "changes")
-
-    def lists_with(self, changes):
-        return self.pg.PostgresListStore(self.conn, changes.s, self.layout, changes)
+    def reopen(self, db):
+        return store.Database(db.url, db.schema)
 
     def tamper(self, log):
-        # The trigger refuses the edit, so an attacker would have to disable it first.
-        with self.assertRaises(Exception):
-            log.db.run(f"UPDATE {log.s}.evidence SET raw = replace(raw, '\"a\"', '\"rewritten\"') WHERE seq = 1")
-        with self.assertRaises(Exception):
-            log.db.run(f"DELETE FROM {log.s}.evidence")
-        log.db.run(f"ALTER TABLE {log.s}.evidence DISABLE TRIGGER evidence_append_only")
-        log.db.run(f"UPDATE {log.s}.evidence SET raw = replace(raw, '\"claim\":\"a\"', "
-                   f"'\"claim\":\"rewritten\"') WHERE seq = 1")
-        log.db.run(f"ALTER TABLE {log.s}.evidence ENABLE TRIGGER evidence_append_only")
-
-    def test_both_shapes_are_there_and_edges_follow_references(self):
-        s = self.lists()
-        s.put("slots", {"id": "sys/a", "system": "sys", "accepts": ["type/x", "type/y"], "filled_by": "comp/c"})
-        tables = sorted(r[0] for r in self.conn.run(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = :s", s=s.s))
-        self.assertLessEqual({"systems", "slots", "types", "sources", "components", "nodes", "edges", "catalog"},
-                             set(tables))
-        self.assertEqual(self.conn.run(f"SELECT label, id FROM {s.s}.nodes"), [["slots", "sys/a"]])
-        self.assertEqual(self.conn.run(f"SELECT id FROM {s.s}.slots"), [["sys/a"]])
-        edges = sorted(tuple(r) for r in self.conn.run(f"SELECT field, dst_id FROM {s.s}.edges"))
-        self.assertEqual(edges, [("accepts", "type/x"), ("accepts", "type/y"), ("filled_by", "comp/c"),
-                                 ("system", "sys")])
-        self.assertTrue(s.capabilities["native_multi_hop"])
-        self.assertEqual(s.capabilities["layout"], self.layout)
+        s = log.db.schema
+        self.refused(log.db, f"UPDATE {s}.evidence SET raw = 'x' WHERE seq = 1")
+        self.refused(log.db, f"DELETE FROM {s}.evidence")
+        self.refused(log.db, f"TRUNCATE {s}.evidence")
+        from sqlalchemy import text
+        with log.db.engine.begin() as c:
+            c.execute(text(f"ALTER TABLE {s}.evidence DISABLE TRIGGER evidence_append_only"))
+            c.execute(text(f"UPDATE {s}.evidence SET raw = replace(raw, '\"claim\":\"a\"', "
+                           f"'\"claim\":\"rewritten\"') WHERE seq = 1"))
+            c.execute(text(f"ALTER TABLE {s}.evidence ENABLE TRIGGER evidence_append_only"))
 
     def test_pggraph_registration_names_real_tables_with_single_column_keys(self):
         s = self.lists()
-        if self.layout != "tables":
-            with self.assertRaises(RuntimeError):
-                s.pggraph_sql()
-            return
         stmts = s.pggraph_sql()
-        base = {r[0] for r in self.conn.run("SELECT table_name FROM information_schema.tables "
-                                            "WHERE table_schema = :s AND table_type = 'BASE TABLE'", s=s.s)}
+        sch = s.db.schema
+        base = {r[0] for r in self.sql(s.db, "SELECT table_name FROM information_schema.tables "
+                                             "WHERE table_schema = :s AND table_type = 'BASE TABLE'", s=sch)}
         import re
         for stmt in stmts:
-            for table in re.findall(rf"'{s.s}\.([a-z_]+)'", stmt):
+            for table in re.findall(rf"'{sch}\.([a-z_]+)'", stmt):
                 self.assertIn(table, base, f"{stmt} names something that is not a base table")
         for kind in ("systems", "slots", "types", "sources", "components"):
-            key = self.conn.run("SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
-                                "AND a.attnum = ANY(i.indkey) WHERE i.indrelid = CAST(:t AS regclass) "
-                                "AND i.indisprimary", t=f"{s.s}.{kind}")
-            self.assertEqual(key, [["id"]])
+            key = self.sql(s.db, "SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
+                                 "AND a.attnum = ANY(i.indkey) WHERE i.indrelid = CAST(:t AS regclass) "
+                                 "AND i.indisprimary", t=f"{sch}.{kind}")
+            self.assertEqual(key, [("id",)])
 
-    def test_a_schema_keeps_its_layout(self):
-        name = self.schema("fixed")
-        self.pg.PostgresListStore(self.conn, name, self.layout)
-        other = "labels" if self.layout == "tables" else "tables"
-        with self.assertRaises(RuntimeError):
-            self.pg.PostgresListStore(self.conn, name, other)
+    def test_a_schema_in_the_dropped_labels_layout_is_refused(self):
+        db = self.database("labels")
+        from sqlalchemy import text
+        name = f"mg_test_old_{os.getpid()}"
+        with db.engine.begin() as c:
+            c.execute(text(f"CREATE SCHEMA {name}"))
+            c.execute(text(f"CREATE TABLE {name}.nodes (label text, id text, data jsonb)"))
+        try:
+            with self.assertRaises(RuntimeError):
+                store.Database(POSTGRES_URL, name)
+        finally:
+            with db.engine.begin() as c:
+                c.execute(text(f"DROP SCHEMA {name} CASCADE"))
 
     def test_catalog_mirror_and_backend_wiring(self):
         tmp = Path(tempfile.mkdtemp())
+        schema = f"mg_test_proj_{os.getpid()}"
         try:
-            schema = self.schema("proj")
             (tmp / "morphogen.yaml").write_text(
-                f"backends:\n  default: postgres\n  postgres: {{url: '{POSTGRES_URL}', schema: {schema}, "
-                f"layout: {self.layout}}}\n")
+                f"backends:\n  default: postgres\n  postgres: {{url: '{POSTGRES_URL}', schema: {schema}}}\n")
             (tmp / "catalogs.yaml").write_text("tools:\n  - name: ttyd\n    finds: a web terminal\n")
             project.init_project(tmp)
             cfg = project.load_config(tmp)
@@ -218,11 +276,8 @@ class PostgresConformanceTables(ConformanceCases, unittest.TestCase):
             report = project.doctor(tmp)
             self.assertEqual(report["evidence"]["chain"], "intact")
         finally:
+            store.Database(POSTGRES_URL, schema).drop()
             shutil.rmtree(tmp)
-
-
-class PostgresConformanceLabels(PostgresConformanceTables):
-    layout = "labels"
 
 
 class Documents(unittest.TestCase):
@@ -245,7 +300,7 @@ class Documents(unittest.TestCase):
         (self.tmp / "morphogen.yaml").write_text("trunk: dev\nfuture_key: 1\n")
         cfg = project.load_config(self.tmp)
         self.assertEqual((cfg["trunk"], cfg["data_dir"], cfg["future_key"]), ("dev", ".morphogen", 1))
-        self.assertEqual(cfg["backends"]["default"], "files")
+        self.assertEqual(cfg["backends"]["default"], "sqlite")
 
     def test_a_bad_document_names_the_file_and_every_problem(self):
         (self.tmp / "morphogen.yaml").write_text("sandbox: maybe\nbackends: {default: mongo}\n")
@@ -526,7 +581,7 @@ class Maps(unittest.TestCase):
         self.git = git
         self.tmp = Path(tempfile.mkdtemp())
         self.other = self.tmp / "homelab"
-        lists = self.other / ".morphogen" / "lists"
+        lists = self.other / "map"
         lists.mkdir(parents=True)
         for kind, rows in self.HOMELAB.items():
             (lists / f"{kind}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
@@ -575,7 +630,7 @@ class Maps(unittest.TestCase):
         self.assertNotIn("status", lists.get("components", "homelab:comp/vllm"))
 
     def test_a_pinned_map_ignores_later_commits_and_edits(self):
-        lists_dir = self.other / ".morphogen" / "lists"
+        lists_dir = self.other / "map"
         (lists_dir / "components.jsonl").write_text(json.dumps({"id": "comp/vllm", "type": "type/x",
                                                                  "status": "changed"}) + "\n")
         self.git(self.other, "commit", "-qam", "later")
@@ -593,7 +648,7 @@ class Maps(unittest.TestCase):
         self.assertIn("needs a commit", lists.status()["mounted"][0]["error"])
 
     def test_unpinned_maps_say_so_and_broken_references_are_reported(self):
-        lists = self.atlas({"notes": {"path": "../homelab/.morphogen/lists"},
+        lists = self.atlas({"notes": {"path": "../homelab/map"},
                             "gone": {"path": "../homelab", "commit": "0" * 40}})
         st = lists.status()
         by_name = {m["name"]: m for m in st["mounted"]}
@@ -643,7 +698,7 @@ class DistributionContract(unittest.TestCase):
         "evidence_query": ["contains", "by", "limit"],
         "evidence_note": ["claim", "source", "trust", "supports", "challenges"],
         "catalog_search": ["query", "limit", "slot"], "measure": ["target", "ref"],
-        "lists_history": ["kind", "id", "limit"],
+        "lists_history": ["kind", "id", "limit"], "lists_export": ["dest"],
         "judge": ["target", "candidate", "base", "labels"], "strategy": ["target"],
         "probe": ["target", "candidate", "base", "cases", "rounds"],
         "archive": ["target", "limit"],
@@ -942,3 +997,25 @@ class ContainerGuarantees(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionHook(unittest.TestCase):
+    """The session hook reads the database read-only, with the standard library alone."""
+
+    def test_the_briefing_reads_evidence_and_the_journal(self):
+        sp = SampleProject()
+        try:
+            sp.evidence.append({"claim": "noted", "trust": "inferred", "by": "agent"})
+            project.journal_append(sp.repo, sp.cfg, {"title": "tried a hash map", "gap": "g", "options": "o",
+                                                     "choice": "c", "rung": "r"})
+            hook = Path(__file__).resolve().parents[2] / "hooks" / "morphogen_hook.py"
+            r = subprocess.run(["python3", "-I", str(hook), "session"], input="{}", capture_output=True, text=True,
+                               env={**os.environ, "CLAUDE_PROJECT_DIR": str(sp.repo)})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            if sp.schema:
+                self.assertIn("on postgres", r.stdout)
+            else:
+                self.assertIn("1 records, chain intact", r.stdout)
+                self.assertIn("Last journal entry: tried a hash map.", r.stdout)
+        finally:
+            sp.close()

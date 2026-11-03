@@ -37,7 +37,7 @@ jobs:
         working-directory: server
         run: uv run --project . python -m unittest -v tests.test_morphogen tests.test_redteam tests.test_strategies
 
-  # The storage conformance tests against a real Postgres, both layouts. Seconds, not minutes.
+  # The store conformance tests against a real Postgres. Seconds, not minutes.
   postgres:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

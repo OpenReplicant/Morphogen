@@ -37,10 +37,15 @@ Read README.md first; it is the specification.
   business processes, pattern libraries) live in their own repositories as
   distributions (docs/distributions.md). Private work never goes in this
   public repository, not even on a branch. No demos or domain samples here.
-- Files first. Core requirements must be ones the files backend can meet: the
-  lists (get, put, query, follow, dump, load) and three append-only logs
-  (evidence, changes, journal). Anything more is an optional capability a
-  backend reports and a slot must `require`, with a reason in `because`.
+- Minimal core. The store's requirements are the lists (get, put, query,
+  follow, dump, load) and three append-only logs (evidence, changes, journal),
+  in one database through SQLAlchemy: SQLite by default, Postgres by URL.
+  Anything more is an optional capability a backend reports and a slot must
+  `require`, with a reason in `because`. Don't add a third backend or a
+  database feature without a slot that requires it.
+- Documents (what people write and git versions) are read only through
+  `documents.load`, with a schema each; records (what tools write) only
+  through the store. JSONL is for published maps and seed lists.
 - Git versions what you would roll back (code, target.yaml and harnesses,
   config, skills, strategy cards). The logs keep the history of everything
   else.
@@ -69,7 +74,7 @@ from the clone itself, so the judge would be the candidate.
 
 ## Verified
 - 2026-11-02: plugin install from GitHub; the MCP server connects (15 tools
-  then, 19 now, as mcp__plugin_morphogen_morphogen__*); a server-level allow
+  then, 20 now, as mcp__plugin_morphogen_morphogen__*); a server-level allow
   rule grants them.
 - 2026-11-02: Docker and Podman runners: all suites pass with
   MORPHOGEN_TEST_SANDBOX set; ContainerGuarantees checks no network,
@@ -77,8 +82,8 @@ from the clone itself, so the judge would be the candidate.
   judge workflow by hand.
 - 2026-11-03: evals 01, 02, 04, 05 and 06 pass with the plugin (one run each;
   results in evals/README.md).
-- 2026-11-03: the whole suite passes on the postgres backend
-  (MORPHOGEN_TEST_BACKEND=postgres, PostgreSQL 16).
+- 2026-11-03: the whole suite passes on SQLite (default) and on Postgres
+  (MORPHOGEN_TEST_BACKEND=postgres, PostgreSQL 16), through SQLAlchemy 2.0.
 
 ## Not yet verified
 03-evolve-one-round, the full loop: in this container the eval sandbox made

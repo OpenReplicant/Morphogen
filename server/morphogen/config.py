@@ -29,24 +29,30 @@ def data_dir(root: Path, cfg: dict) -> Path:
     return d
 
 
-def evidence_path(root: Path, cfg: dict) -> Path:
-    """The evidence log lives in git's own directory, not the working tree.
+def store_dir(root: Path, cfg: dict) -> Path:
+    """Where the SQLite database (lists and logs) lives: in git's own directory, not the working tree.
 
-    There it is untracked, so candidate commits cannot sweep it up, it
-    survives branch switches, and every worktree of the repository shares it.
-    Outside a git repository it falls back to the data directory.
+    There it is untracked, so candidate commits cannot sweep it up, it survives
+    branch switches, and every worktree of the repository shares it. Outside a
+    git repository it falls back to the data directory.
     """
-    if cfg.get("evidence_path"):
-        return root / cfg["evidence_path"]
     try:
         p = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=root, capture_output=True, text=True)
         if p.returncode == 0 and p.stdout.strip():
             common = Path(p.stdout.strip())
             common = common if common.is_absolute() else (root / common)
-            return common.resolve() / "morphogen" / "evidence.jsonl"
+            return common.resolve() / "morphogen"
     except OSError:
         pass
-    return data_dir(root, cfg) / "evidence.jsonl"
+    return data_dir(root, cfg)
+
+
+def sqlite_path(root: Path, cfg: dict) -> Path:
+    """backends.sqlite.path if set (relative to the project), else morphogen.db in store_dir."""
+    explicit = ((cfg.get("backends") or {}).get("sqlite") or {}).get("path")
+    p = (root / explicit) if explicit else store_dir(root, cfg) / "morphogen.db"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def plugin_root() -> Path:

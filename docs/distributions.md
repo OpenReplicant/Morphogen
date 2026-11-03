@@ -38,7 +38,7 @@ claude --plugin-dir path/to/morphogen --plugin-dir path/to/your-distribution
 | To add | Do this | How the base finds it |
 |---|---|---|
 | Skills, subagents, hooks | put them in the distribution's own plugin; they are namespaced (`your-dist:skill`) | Claude Code loads them; skills call the base's tools as `mcp__plugin_morphogen_morphogen__<tool>`, allowed by `mcp__plugin_morphogen_morphogen` in `allowed-tools` |
-| A map of known systems, types, sources and components | ship JSONL lists in the distribution's repository; the operator mounts them under `maps:` in `morphogen.yaml`, pinned to a commit | read-only, by qualified id (`yourdist:type/nas`); `catalog_search` searches mounted maps |
+| A map of known systems, types, sources and components | ship JSONL lists in the distribution's repository (`lists_export` writes them); the operator mounts them under `maps:` in `morphogen.yaml`, pinned to a commit | read-only, by qualified id (`yourdist:type/nas`); `catalog_search` searches mounted maps |
 | Strategy cards | copy them into the project's `strategies/` (a skill can do it from `${CLAUDE_PLUGIN_ROOT}`) | `strategies_list` reads the base's cards and the project's; the project's win on a name clash |
 | Catalog sections | add entries to a mounted map, or sections to the project's `catalogs.yaml` | `catalog_search` reads every section of `catalogs.yaml` |
 | Sample targets | copy a target directory with its `target.yaml` into the project | `measure` and `judge` take any target path |
@@ -76,6 +76,7 @@ version; adding to it is not. Before 1.0, the minor version plays that role:
 | `lists_get` | `kind`, `id` |
 | `lists_put` | `kind`, `entry`, `reason` |
 | `lists_history` | `kind`, `id`, `limit` |
+| `lists_export` | `dest` |
 | `lists_query` | `kind`, `where`, `follow`, `start`, `hops`, `map` |
 | `evidence_query` | `contains`, `by`, `limit` |
 | `evidence_note` | `claim`, `source`, `trust` (`inferred` or `stated`), `supports`, `challenges` |
@@ -117,11 +118,12 @@ never verdicts. Change records (`changes` log) carry `op`, `list`, `id`,
 writes only through `evidence_note`.
 
 **Config:** `morphogen.yaml` keys `trunk`, `autonomy`, `data_dir`,
-`evidence_path`, `strategy`, `strategies`, `backends`, `sandbox`,
+`strategy`, `strategies`, `backends`, `sandbox`,
 `sandbox_image`, `budget`, `targets`, `map_name`, `maps`; under `backends`,
-`default` (`files` or `postgres`) and `postgres` (`url`, `schema`, `layout`).
-On postgres, the table and view names in `README.md` (Storage backends) are
-part of the contract too, so distributions can query them directly.
+`default` (`sqlite` or `postgres`), `sqlite` (`path`) and `postgres` (`url`,
+`schema`). The table names and columns in `README.md` (Storage backends) are
+part of the contract too, so distributions can query the database directly
+(read-only: the base writes it). Published maps are JSONL, one file per list.
 
 Anything not listed here (internal modules, file layouts under
 `.morphogen/`, the admin pages' markup) may change in any release.

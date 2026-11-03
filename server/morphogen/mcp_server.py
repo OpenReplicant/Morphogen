@@ -102,6 +102,20 @@ def lists_history(kind: str | None = None, id: str | None = None, limit: int = 5
 
 @server.tool()
 @_safe
+def lists_export(dest: str = "map") -> dict:
+    """Publish this project's map: write each list as `<kind>.jsonl` (one entry per line, sorted by id)
+    into `dest`, a directory inside the project. Commit it, and other projects can mount it by path or
+    git URL, pinned to that commit. The database stays the working copy."""
+    root, cfg = _ctx()
+    d = (root / dest).resolve()
+    if root.resolve() not in d.parents and d != root.resolve():
+        return {"error": "dest must be inside the project"}
+    lists, _ = project.stores(root, cfg)
+    return {"wrote": str(d), "entries": lists.own.export_jsonl(d)}
+
+
+@server.tool()
+@_safe
 def lists_query(kind: str, where: dict[str, Any] | None = None, follow: str | None = None,
                 start: str | None = None, hops: int = 1, map: str | None = None) -> dict:
     """Query a list. `where` matches fields exactly, or by substring with a leading '~'.

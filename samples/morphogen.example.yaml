@@ -9,8 +9,9 @@ strategy: auto           # auto (chosen from evidence) or a card name: hill-clim
 #   targets/slow-script: archive-search
 
 backends:
-  default: files         # files · postgres (uv sync --extra postgres; see README, Storage backends)
-  # postgres: {url: postgresql://morphogen@localhost:5432/morphogen, schema: morphogen, layout: tables}
+  default: sqlite        # sqlite (one file in .git/morphogen/) · postgres (uv sync --extra postgres; README, Storage)
+  # sqlite: {path: .morphogen/morphogen.db}
+  # postgres: {url: postgresql://morphogen@localhost:5432/morphogen, schema: morphogen}
 
 sandbox: auto            # auto (Docker, then Podman) · docker · podman · none (run trials directly)
 sandbox_image: python:3.12-slim

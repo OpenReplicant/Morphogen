@@ -10,6 +10,9 @@ dependencies = [
   # Document schemas (documents.py). Already required by mcp (>=2.12); pinned to a release
   # out since May 2026 rather than the days-old 2.14.2 the lock had picked.
   "pydantic==2.13.4",
+  # The store (store.py): SQLite by default, Postgres by URL. MIT; needs only typing-extensions.
+  # 2.0.51 (June 2026): the 2.1 series is only weeks old.
+  "SQLAlchemy==2.0.51",
   "opentelemetry-api==1.45.2",
   "opentelemetry-sdk==1.45.2",
   "opentelemetry-exporter-otlp-proto-http==1.45.2",
@@ -29,8 +32,9 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 # Keep pg8000's dependencies on releases that have been out for a while (checked 2026-11-03):
-# python-dateutil 4.0.0 and scramp 1.5.0 were days old.
-constraint-dependencies = ["python-dateutil==2.9.0.post0", "scramp==1.4.9"]
+# python-dateutil 4.0.0 and scramp 1.5.0 were days old. greenlet (from SQLAlchemy, used only by its
+# asyncio support, which Morphogen does not use): a June 2026 release.
+constraint-dependencies = ["python-dateutil==2.9.0.post0", "scramp==1.4.9", "greenlet==3.5.2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["morphogen"]

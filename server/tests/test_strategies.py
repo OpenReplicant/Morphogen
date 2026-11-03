@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from morphogen import strategies as S
-from morphogen.backend_files import FilesEvidenceLog
+from morphogen import store
 
 from tests.fixture import FAST, TARGET, SampleProject
 
@@ -30,7 +30,7 @@ class Selection(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.tmp, check=True)
         (self.tmp / T).mkdir(parents=True)
-        self.log = FilesEvidenceLog(self.tmp / "evidence.jsonl")
+        self.log = store.evidence_log(store.Database(f"sqlite:///{self.tmp / 'evidence.db'}"))
         self.cfg = {"strategy": "auto", "trunk": "main"}
 
     def tearDown(self):

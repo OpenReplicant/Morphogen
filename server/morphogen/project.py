@@ -12,35 +12,69 @@ from typing import Any
 
 import yaml  # only to rewrite morphogen.yaml in onboard()
 
-from .backend_files import FilesEvidenceLog, FilesListStore, FilesLog
-from . import documents
-from .config import data_dir, evidence_path, load_config, plugin_root
+from . import documents, store
+from .config import data_dir, load_config, plugin_root, sqlite_path, store_dir
+from .ports import KINDS
 from .maps import mount, provides as _provides
 from .runner import capabilities
 
 SAMPLES = plugin_root() / "samples"
 
 
-_PG: dict[str, Any] = {}  # one connection per URL for the life of the server process
+_DB: dict[tuple, Any] = {}  # one Database per URL and schema for the life of the server process
+
+
+def database(root: Path, cfg: dict) -> store.Database:
+    """The configured database: SQLite (default) or Postgres (backends.default: postgres)."""
+    b = cfg.get("backends") or {}
+    backend = b.get("default", "sqlite")
+    if backend in ("sqlite", "files"):
+        path = sqlite_path(root, cfg)
+        key, new = ("sqlite", str(path)), not path.exists()
+        if key not in _DB:
+            _DB[key] = store.Database(f"sqlite:///{path}")
+            if new:
+                _import_files(root, cfg, _DB[key])
+        return _DB[key]
+    if backend == "postgres":
+        pg = b.get("postgres") or {}
+        url = os.environ.get("MORPHOGEN_POSTGRES_URL") or pg.get("url")
+        if not url:
+            raise RuntimeError("the postgres backend needs backends.postgres.url or MORPHOGEN_POSTGRES_URL")
+        if pg.get("layout") not in (None, "tables"):
+            raise RuntimeError("backends.postgres.layout: only `tables` remains (0.3 dropped `labels`); "
+                               "remove the key")
+        key = (url, pg.get("schema") or "morphogen")
+        if key not in _DB:
+            _DB[key] = store.Database(url, key[1])
+        return _DB[key]
+    raise RuntimeError(f"backend {backend!r} is not available; use 'sqlite' or 'postgres'")
+
+
+def _import_files(root: Path, cfg: dict, db: store.Database) -> None:
+    """A project from 0.2 kept JSONL files: copy its logs in as they are and load its lists, once,
+    when the database is first created. The old files are left where they were."""
+    old = store_dir(root, cfg)
+    for name in store.LOGS:
+        f = old / f"{name}.jsonl"
+        if f.exists():
+            store.Log(db, name).import_jsonl(f)
+    lists_dir = data_dir(root, cfg) / "lists"
+    data = {}
+    for k in KINDS:
+        f = lists_dir / f"{k}.jsonl"
+        if f.exists():
+            data[k] = [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    if data:
+        store.Lists(db, store.Log(db, "changes")).load(data, by="import from 0.2 files")
 
 
 def logs(root: Path, cfg: dict) -> dict:
     """The three append-only logs: evidence (claims and verdicts), changes (every write to the lists)
-    and journal (decisions). Files: JSONL beside each other in git's own directory, untracked, so
-    candidate commits cannot touch them. Postgres: tables guarded by a trigger."""
-    backend = (cfg.get("backends") or {}).get("default", "files")
-    if backend == "files":
-        ev = evidence_path(root, cfg)
-        return {"evidence": FilesEvidenceLog(ev), "changes": FilesLog(ev.parent / "changes.jsonl"),
-                "journal": FilesLog(ev.parent / "journal.jsonl")}
-    if backend == "postgres":
-        from . import backend_postgres as pg
-        st = pg.settings(cfg)
-        conn = _PG.get(st["url"]) or _PG.setdefault(st["url"], pg.connect(st["url"]))
-        return {"evidence": pg.PostgresEvidenceLog(conn, st["schema"]),
-                "changes": pg.PostgresLog(conn, st["schema"], "changes"),
-                "journal": pg.PostgresLog(conn, st["schema"], "journal")}
-    raise RuntimeError(f"backend {backend!r} is not available; use 'files' or 'postgres'")
+    and journal (decisions). Tables in the database, hash-chained; triggers refuse changes to rows."""
+    db = database(root, cfg)
+    return {"evidence": store.evidence_log(db), "changes": store.Log(db, "changes"),
+            "journal": store.Log(db, "journal")}
 
 
 def catalogs(root: Path) -> dict[str, list[dict]]:
@@ -50,20 +84,14 @@ def catalogs(root: Path) -> dict[str, list[dict]]:
 
 
 def stores(root: Path, cfg: dict):
-    """The list store (this project's map plus mounted maps) and the evidence log, on the configured backend.
-    Every write to the lists is recorded in the changes log."""
-    backend = (cfg.get("backends") or {}).get("default", "files")
-    d = data_dir(root, cfg)
+    """The list store (this project's map plus mounted maps) and the evidence log.
+    Every write to the lists is recorded in the changes log, in the same transaction."""
+    db = database(root, cfg)
     lg = logs(root, cfg)
-    if backend == "files":
-        own = FilesListStore(d / "lists", lg["changes"])
-    else:
-        from . import backend_postgres as pg
-        st = pg.settings(cfg)
-        own = pg.PostgresListStore(_PG[st["url"]], st["schema"], st["layout"], lg["changes"])
-        own.sync_catalog(catalogs(root))
+    own = store.Lists(db, lg["changes"])
+    own.sync_catalog(catalogs(root))
     # The own map, plus any maps mounted read-only from morphogen.yaml (see maps.py).
-    return mount(root, cfg, own, d / "maps"), lg["evidence"]
+    return mount(root, cfg, own, data_dir(root, cfg) / "maps"), lg["evidence"]
 
 
 def init_project(root: Path) -> dict:
@@ -131,7 +159,7 @@ def doctor(root: Path) -> dict:
     try:
         lists, evidence = stores(root, cfg)
         ok, bad = evidence.verify()
-        report["backend"] = (cfg.get("backends") or {}).get("default", "files")
+        report["backend"] = lists.own.db.dialect
         report["capabilities"] = {"lists": lists.capabilities, "evidence": evidence.capabilities}
         report["evidence"] = {"records": len(evidence.dump()), "path": str(evidence.path),
                               "chain": "intact" if ok else f"broken at record {bad}"}
@@ -159,9 +187,10 @@ def doctor(root: Path) -> dict:
                      if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") else "off (set OTEL_EXPORTER_OTLP_ENDPOINT)",
         "trials_per_day": budget or "no limit",
         "enforced_append_only": bool(report.get("capabilities", {}).get("evidence", {}).get("enforced_append_only")),
-        "note": "On the files backend the logs are tamper-evident (hash chains), not tamper-proof. "
-                "An agent with shell access can still reach files you can; run in a container, or use the "
-                "postgres backend, for the strong version.",
+        "note": "The logs are hash-chained and the database refuses changes to their rows, but whoever can "
+                "write the database file (SQLite) or own the schema (Postgres) can drop those triggers; the "
+                "chain then shows the edit. For the strong version, keep the database out of the agent's "
+                "reach: a container, or Postgres with a role that does not own the schema.",
     }
     return report
 

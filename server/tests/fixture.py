@@ -2,7 +2,7 @@
 
 Trials run with `sandbox: none` unless MORPHOGEN_TEST_SANDBOX names another
 runner (docker or podman), so the same suites can be run inside a container.
-Data lives in the files backend unless MORPHOGEN_TEST_BACKEND=postgres, which
+Data lives in SQLite unless MORPHOGEN_TEST_BACKEND=postgres, which
 uses MORPHOGEN_TEST_POSTGRES (a scratch database) with a fresh schema per project.
 """
 
@@ -18,7 +18,7 @@ from morphogen.config import load_config
 
 TARGET = "targets/slow-script"
 SANDBOX = os.environ.get("MORPHOGEN_TEST_SANDBOX", "none")
-BACKEND = os.environ.get("MORPHOGEN_TEST_BACKEND", "files")
+BACKEND = os.environ.get("MORPHOGEN_TEST_BACKEND", "sqlite")
 
 
 def git(cwd, *args):
@@ -76,7 +76,7 @@ class SampleProject:
 
     def close(self):
         if self.schema:
-            project._PG[os.environ["MORPHOGEN_TEST_POSTGRES"]].run(f"DROP SCHEMA IF EXISTS {self.schema} CASCADE")
+            project.database(self.repo, self.cfg).drop()
         shutil.rmtree(self.tmp)
 
 

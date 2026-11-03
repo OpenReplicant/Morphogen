@@ -207,10 +207,10 @@ judge bug: add it there first, then fix the judge.
 
 ## Evidence and trust
 
-Everything Morphogen claims is evidence: an append-only log in
-`.git/morphogen/evidence.jsonl`. It lives in git's own directory so candidate
-commits cannot sweep it up and branch switches cannot lose it; every worktree
-shares it. Each record carries the hash of the previous one, so an edit shows
+Everything Morphogen claims is evidence: an append-only log in the
+database (by default `.git/morphogen/morphogen.db`). It lives in git's own
+directory so candidate commits cannot sweep it up and branch switches cannot
+lose it; every worktree shares it. Each record carries the hash of the previous one, so an edit shows
 up in `doctor` and in the session briefing.
 
 | Trust | Written by | Means |
@@ -312,55 +312,51 @@ not resolve.
 
 ### Storage backends
 
-Morphogen treats the filesystem like a database: everything goes through
-ports, and every backend passes the same conformance tests, so callers do not
-change when the backend does. The core asks only for what files can do:
+Two kinds of files, kept apart. **Documents** are what people write and git
+versions, because you would roll them back: code, `target.yaml` and harnesses,
+`morphogen.yaml`, `catalogs.yaml`, skills and strategy cards. They are read
+through one loader that checks each against its schema (`documents.py`).
+**Records** are what the tools write: the lists and three append-only,
+hash-chained logs, `evidence` (claims and verdicts), `changes` (every write to
+the lists: list, id, hashes before and after, the new entry, who wrote it and
+why) and `journal` (decisions: gap, options, choice, rung, result, commit).
+Records live in a database, through SQLAlchemy:
 
-- **the lists**: get, put, query, follow, dump, load;
-- **three append-only, hash-chained logs**: `evidence` (claims and
-  verdicts), `changes` (every write to the lists: list, id, hashes before and
-  after, the new entry, who wrote it and why) and `journal` (decisions:
-  gap, options, choice, rung, result, commit).
-
-Anything beyond that is an optional capability that a backend reports and a
-slot must require, with a reason. Git versions what you would roll back
-(code, targets and harnesses, config, skills, strategy cards); the logs keep
-the history of everything else. Two backends exist:
-
-- `files` (the default): one JSONL file per list; the three logs as JSONL in
-  git's own directory, untracked, so candidate commits cannot touch them.
-  Tamper-evident (hash chains), not enforced.
-- `postgres`: for distributions that need a database. Install the driver with
+- **SQLite**, the default: one file, `.git/morphogen/morphogen.db`, in git's
+  own directory, untracked, so candidate commits cannot touch it and every
+  worktree shares it. Python ships the driver.
+- **Postgres**, for distributions that want a server:
   `uv sync --project server --extra postgres` (pg8000, pure Python).
 
 ```yaml
 backends:
-  default: postgres
+  default: postgres          # sqlite (default) | postgres
+  # sqlite: {path: .morphogen/morphogen.db}
   postgres:
     url: postgresql://morphogen@localhost:5432/morphogen   # or MORPHOGEN_POSTGRES_URL
     schema: morphogen
-    layout: tables          # tables | labels
 ```
 
-The two layouts hold the same data. `tables` makes each list a table
-(`systems`, `slots`, ...) and adds a `nodes (label, id, data)` view over them;
-`labels` stores one `nodes` table with the list as its label and adds a view
-per list. Either way, an `edges (src_label, src_id, field, dst_id)` table holds
-every reference and is kept in step with each write, so recursive SQL or a
-graph extension can walk the map; `follow` is a recursive query. For
-[pgGraph](https://github.com/evokoa/pggraph), which indexes existing tables
-as a graph, use the `tables` layout: it needs real tables with a
-single-column key. The backend's `pggraph_sql()` returns the statements that
-register the lists as node tables and `edges` as an edge table labelled by
-field (written against pgGraph 1.2's documented API, not yet run against the
-extension). `labels` suits tools that want one labelled node table. `catalogs.yaml` is mirrored into a `catalog` table (the file
-stays the source). The three logs are tables whose rows a trigger refuses to
-update or delete, with the same hash chains, so append-only is enforced, not
-only evident; a list write and its change record commit together. `doctor` reports the backend's capabilities, including
-`vector_search` when the pgvector extension is installed.
+The same tables on both: one per list (`systems`, `slots`, ...), each
+`(id, data)` with `data` as JSON (jsonb on Postgres), the table's name being
+the label; an `edges (src_label, src_id, field, dst_id)` table of every reference, kept in
+step with each write, so `follow` is a recursive query; a `catalog` mirror of
+`catalogs.yaml` (the file stays the source); and the three logs, whose rows
+triggers refuse to update or delete. A list write and its change record commit
+in one transaction, and appends take the database's write lock, so two
+sessions writing at once still get one chain. For
+[pgGraph](https://github.com/evokoa/pggraph), which indexes existing tables as
+a graph, `pggraph_sql()` returns the statements that register the lists and
+`edges` (written against pgGraph 1.2's documented API, not yet run against the
+extension). `doctor` reports capabilities, including `vector_search` when
+pgvector is installed. Any other database SQLAlchemy supports is a small
+change to `store.py`, but only these two are tested.
 
-Config, targets and catalogs stay as files in the repository, reviewed with
-the code. To move between backends, `dump` from one and `load` into the other.
+To publish a map for other projects to mount, `lists_export` writes it as
+JSONL (`map/<list>.jsonl`, one entry per line, sorted); commit that, and
+mounts pin it to the commit. A project from 0.2, whose lists and logs were
+JSONL files, is imported once when its database is first created; the old
+files are left in place.
 
 ## Improvement strategies
 
@@ -529,6 +525,7 @@ The MCP server's tools, which any MCP-capable harness can call:
 | `init_project`, `install_sample` | set a project up; copy a sample target in |
 | `lists_get`, `lists_put`, `lists_query` | read and write the lists (a write can say its `reason`); follow references, across maps |
 | `lists_history` | recorded writes to the map: what changed, who wrote it, why |
+| `lists_export` | publish this project's map as JSONL, for others to mount |
 | `maps` | mounted maps, whether each is pinned, references that do not resolve, capability gaps and overhead |
 | `evidence_query`, `evidence_note` | read evidence; add an inferred or stated note |
 | `catalog_search` | search `catalogs.yaml` and the lists before building |
@@ -602,8 +599,10 @@ In CI this is the `containers` job, started by hand.
 - Containers have no network, so service targets that send telemetry run
   with `sandbox: none` for now.
 - The runner uses `sh`, so Windows needs WSL.
-- On the files backend, append-only is tamper-evident, not enforced; the
-  postgres backend enforces it.
+- The database refuses edits to the logs, but whoever can write the SQLite
+  file or owns the Postgres schema can drop those triggers; the hash chain then
+  shows the edit. Keep the database out of the agent's reach (a container, or a
+  Postgres role that does not own the schema) for the strong version.
 - No model gateway yet: a target that calls an LLM needs `sandbox: none`, its
   token cost is not measured from outside, and `budget.trials_per_day` caps
   trials, not spending (#43).
