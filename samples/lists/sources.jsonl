@@ -1,8 +1,0 @@
-{"finds": "portable SKILL.md skills", "id": "src/agent-skills", "name": "Agent Skills", "url": "https://agentskills.io"}
-{"finds": "Claude Code and Claude models", "id": "src/anthropic", "name": "Anthropic", "url": "https://code.claude.com"}
-{"finds": "container images", "id": "src/docker-hub", "name": "Docker Hub", "url": "https://hub.docker.com"}
-{"finds": "source repositories", "id": "src/github", "name": "GitHub", "url": "https://github.com"}
-{"finds": "what is installed here: OS, interpreters, tools", "id": "src/host", "name": "This machine"}
-{"finds": "MCP servers", "id": "src/mcp-registry", "name": "MCP Registry", "url": "https://registry.modelcontextprotocol.io"}
-{"finds": "components already built here", "id": "src/own", "name": "This project"}
-{"finds": "Python packages", "id": "src/pypi", "name": "PyPI", "url": "https://pypi.org"}

@@ -1,7 +1,9 @@
 # Restart brief: Morphogen as the local morphological drive
 
-Written 2026-11-04, when this repository was frozen. It is the starting point for a new
-project, not a plan for this one. Read [LESSONS.md](LESSONS.md) alongside it.
+Written 2026-11-04, when the previous build moved to the
+[`rebuild-6`](https://github.com/OpenReplicant/Morphogen/tree/rebuild-6) branch. That branch holds
+the code this brief carries over, and [LESSONS.md](https://github.com/OpenReplicant/Morphogen/blob/rebuild-6/docs/restart/LESSONS.md), what it taught. Issue and PR numbers
+(#43, #45, #58) refer to this repository's history.
 
 ## What it is
 
@@ -119,7 +121,7 @@ Rules that follow:
 ## Measurement rule
 
 Telemetry a program emits from its own SDK is written by the candidate: it can inform a decision,
-never make one (the `reported.*` rule in this repo). Telemetry observed from outside the process
+never make one (the `reported.*` rule in rebuild 6). Telemetry observed from outside the process
 can decide: the judge's own wrapper offline; OBI live, which captures traces, request rate,
 errors, duration and service relationships from the executable and network without code changes
 (Linux, kernel 5.8 or later).
@@ -163,7 +165,7 @@ A mapper writes it, or a person does by hand. Morphogen reads it and nothing els
 | marked code blocks | OpenEvolve 0.4.1 | Apache-2.0 | evaluator file imported into OpenEvolve's own process; timeouts and retries, no sandbox |
 | workflow graphs | AFlow | not checked | Monte Carlo tree search over workflows as code; evaluator not read |
 | numeric settings | Optuna | not checked | not yet read |
-| anything, by an agent | Claude Code workers with strategy cards | ours | what this repo does today |
+| anything, by an agent | Claude Code workers with strategy cards | ours | what rebuild 6 does |
 
 ## First milestone
 
@@ -189,6 +191,8 @@ could run as an operator with a `Point` resource. Checked against code.claude.co
 2026-11-04.
 
 ## Carry over, drop
+
+From the `rebuild-6` branch:
 
 | Carry over | Drop (or hand to the mapper) |
 |---|---|
