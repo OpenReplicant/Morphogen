@@ -1,4 +1,0 @@
-server/.venv/
-__pycache__/
-*.egg-info/
-evals/results/
