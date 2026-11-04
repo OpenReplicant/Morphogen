@@ -6,6 +6,14 @@ contract in `docs/distributions.md`; a patch version cannot.
 
 ## Unreleased
 
+- Parameters the judge enforces (#46). `target.yaml` can declare `parameters`
+  (a Python constant or a dotted key in a YAML, JSON or TOML file, with an
+  owner and optionally a range or choices). Read from the base commit, like the
+  harness. The judge refuses, before anything runs, a candidate that changes a
+  judge- or operator-owned parameter, sets an agent-owned one outside its range,
+  or makes one unreadable; every verdict and probe records each parameter's
+  base and candidate values. Five new red-team cheats. The `tune` card searches
+  agent-owned parameters only.
 - Relations and parameters are part of a map. Any entry can carry `links`
   (relation name to ids: writes, reads, next, ...), checked for dangling ids,
   walked by `follow` and qualified across maps like the reference fields. A

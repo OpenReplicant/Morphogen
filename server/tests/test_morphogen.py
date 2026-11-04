@@ -14,7 +14,8 @@ from morphogen import judge as judge_mod
 from morphogen import project
 from morphogen import store
 
-from tests.fixture import FAST, TARGET, SampleProject, observed_project, scratch_stores
+from tests.fixture import (FAST, SETTINGS, TARGET, SampleProject, observed_project, parameter_project,
+                           scratch_stores)
 
 # Wrong on every input (one word short). A tie-order bug was used before, but it shows only on inputs with
 # ties of different lengths, so about one run in a few hundred passed the judge legitimately (#49).
@@ -330,6 +331,58 @@ class Probe(unittest.TestCase):
                             self.p.evidence, cases=1, rounds=0)
         with self.assertRaises(judge_mod.JudgeError):
             judge_mod.probe(self.p.repo, cfg, TARGET, "main", self.p.evidence, cases=1, rounds=0)
+
+
+class Parameters(unittest.TestCase):
+    """Parameters declared in target.yaml: an agent may tune its own within range; every verdict
+    records base and candidate values. (Changes it may not make are in the red team.)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = parameter_project()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def test_a_tune_run_records_the_values_in_its_verdict(self):
+        tuned = FAST + SETTINGS.replace("CHUNK = 64", "CHUNK = 128")
+        r = judge_mod.judge(self.p.repo, self.p.cfg, TARGET, "main", self.p.branch("tune-chunk", {"topwords.py": tuned}),
+                            self.p.evidence, {"strategy": "tune", "family": "tune", "approach": "CHUNK=128"})
+        self.assertEqual(r["verdict"], "pass", r)
+        self.assertEqual(r["parameters"]["chunk"], {"owner": "agent", "base": 64, "candidate": 128})
+        self.assertEqual(r["parameters"]["limit"], {"owner": "operator", "base": 1000, "candidate": 1000})
+        rec = self.p.evidence.query(by="judge", limit=1)[0]
+        self.assertEqual(rec["parameters"]["chunk"]["candidate"], 128)
+        self.assertEqual(rec["labels"]["family"], "tune")
+
+    def test_probe_reports_values_and_refusals(self):
+        r = judge_mod.probe(self.p.repo, self.p.cfg, TARGET, self.p.branch("probe-limit", {"topwords.py": FAST + SETTINGS.replace(
+            "LIMIT = 1000", "LIMIT = 1")}), self.p.evidence, cases=1, rounds=0)
+        self.assertEqual(r["parameters"]["limit"]["candidate"], 1)
+        self.assertTrue(r["parameter_violations"])
+        self.assertNotIn("cases", r)
+
+    def test_a_declaration_needs_exactly_one_location(self):
+        from morphogen import documents
+        with self.assertRaises(documents.DocumentError):
+            documents.validate("target", {"parameters": {"x": {"file": "a.py", "owner": "agent"}}})
+        with self.assertRaises(documents.DocumentError):
+            documents.validate("target", {"parameters": {"x": {"file": "a.py", "name": "X", "key": "x",
+                                                                "owner": "agent"}}})
+        with self.assertRaises(documents.DocumentError):
+            documents.validate("target", {"parameters": {"x": {"file": "a.py", "name": "X", "owner": "everyone"}}})
+
+    def test_keys_in_yaml_files(self):
+        from morphogen.judge import _read_parameter
+        d = Path(tempfile.mkdtemp())
+        try:
+            (d / "conf.yaml").write_text("model:\n  temperature: 0.2\n")
+            self.assertEqual(_read_parameter(d, {"file": "conf.yaml", "key": "model.temperature"}), 0.2)
+            with self.assertRaises(LookupError):
+                _read_parameter(d, {"file": "conf.yaml", "key": "model.top_p"})
+        finally:
+            shutil.rmtree(d)
 
 
 class TrialBudget(unittest.TestCase):

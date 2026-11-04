@@ -119,6 +119,10 @@ measure:
     max_rss_kb:   {direction: lower, max_regression: 0.50}
 
 timeout: 120
+
+parameters:                       # optional: settings in the target's files
+  chunk_size: {file: topwords.py, name: CHUNK, owner: agent, range: [16, 256]}
+  model:      {file: config.yaml, key: llm.model, owner: operator}
 ```
 
 - **harness**: the benchmark, tests and input generator. The judge takes them,
@@ -133,6 +137,18 @@ timeout: 120
   [Services and telemetry](#services-and-telemetry)). Numbers the workload
   prints are kept as `reported.*` and can be constraints, never the primary
   metric.
+- **parameters**: optional; settings the judge reads in base and candidate,
+  either a module-level constant in a Python file (`name`) or a dotted key in
+  a YAML, JSON or TOML file (`key`). The owner decides who may change one:
+  `agent`, within its `range` or `choices` (what the `tune` strategy
+  searches); `operator` or `judge`, never in a candidate. The judge refuses a
+  candidate that changes a parameter it may not, sets one out of range, or
+  makes one unreadable (a value hidden behind an expression, for example),
+  before anything runs; every verdict and probe records each parameter's base
+  and candidate values. Values are read statically, so code that changes a
+  setting at run time is the reviewer's to catch. The map's `parameters` list
+  describes settings; this section is what the judge enforces, because it is
+  read from the base commit, where a candidate cannot change it.
 
 To make your own code a target, copy the sample's layout: move the code
 under improvement next to a benchmark script, a test file and an input

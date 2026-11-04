@@ -53,7 +53,9 @@ slots and fillers plus these relations.
 review) or `judge` (part of the rules candidates are scored by). A parameter
 the source leaves unset gets no value and no default; `maps` reports it as
 unset, which is a finding, not a gap to fill by guessing. A slot's parameters
-stay when its filler changes; a component's leave with it.
+stay when its filler changes; a component's leave with it. The map describes
+parameters; for a target, the ones the judge enforces are declared in its
+`target.yaml` (`parameters:`), which the operator owns.
 
 **Say what each slot needs and what each part offers.** On a slot,
 `requires` lists the capabilities the role needs (`exact`, `semantic`,

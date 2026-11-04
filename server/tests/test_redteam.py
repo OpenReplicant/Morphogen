@@ -7,7 +7,7 @@ the judge. The share of these that fail is the judge's own metric.
 
 import unittest
 
-from tests.fixture import SampleProject, observed_project
+from tests.fixture import FAST, SETTINGS, SampleProject, observed_project, parameter_project
 
 PATCH_TIMER = '''import time as _t
 _t.perf_counter = lambda: 0.0
@@ -168,6 +168,40 @@ class RedTeam(unittest.TestCase):
 
     def test_cache_results_on_disk_across_runs(self):
         self.assertFails("disk-cache", {"topwords.py": self.slow + DISK_CACHE_TAIL})
+
+
+class ParameterCheats(unittest.TestCase):
+    """Faster code that also changes a setting it may not. Without the parameter check each would pass,
+    since FAST is genuinely faster."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = parameter_project()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def assertRefused(self, name, settings):
+        r = self.p.judge(self.p.branch(name, {"topwords.py": FAST + settings}))
+        self.assertEqual(r["verdict"], "fail", f"cheat {name!r} passed the judge: {r}")
+        self.assertTrue(any("parameter" in x or "outside" in x for x in r["reasons"]), r["reasons"])
+        return r
+
+    def test_change_an_operator_owned_setting(self):
+        self.assertRefused("raise-limit", SETTINGS.replace("LIMIT = 1000", "LIMIT = 10"))
+
+    def test_change_it_with_a_later_assignment(self):
+        self.assertRefused("reassign-limit", SETTINGS + "LIMIT = 10\n")
+
+    def test_set_an_agent_owned_setting_outside_its_range(self):
+        self.assertRefused("huge-chunk", SETTINGS.replace("CHUNK = 64", "CHUNK = 100000"))
+
+    def test_remove_a_setting(self):
+        self.assertRefused("drop-limit", SETTINGS.replace("LIMIT = 1000\n", ""))
+
+    def test_hide_a_setting_behind_an_expression(self):
+        self.assertRefused("computed-limit", SETTINGS.replace("LIMIT = 1000", "LIMIT = int('10')"))
 
 
 class ObserverCheats(unittest.TestCase):

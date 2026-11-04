@@ -28,6 +28,7 @@ What makes it hard to fool:
 
 from __future__ import annotations
 
+import ast
 import datetime
 import json
 import math
@@ -40,8 +41,11 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from contextlib import contextmanager
 from pathlib import Path
+
+import yaml
 
 
 from . import documents
@@ -135,6 +139,66 @@ def _interface(spec: dict) -> tuple[str, str]:
 
 SIMULATED_NOTE = ("this verdict is about a simulator ({what}), not reality; applying the change to the real "
                   "system needs a direct trial or the operator's explicit approval")
+
+
+def _read_parameter(tree_dir: Path, p: dict):
+    """A parameter's value in one tree, read statically: a module-level constant in a Python file (the
+    last assignment wins), or a dotted key in a YAML, JSON or TOML file. LookupError if it is not there."""
+    f = tree_dir / p["file"]
+    if not f.is_file():
+        raise LookupError(f"{p['file']} is missing")
+    text = f.read_text()
+    if p.get("name"):
+        value, found = None, False
+        for node in ast.parse(text).body:
+            if isinstance(node, ast.Assign):
+                targets, v = node.targets, node.value
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                targets, v = [node.target], node.value
+            else:
+                continue
+            if any(isinstance(t, ast.Name) and t.id == p["name"] for t in targets):
+                try:
+                    value, found = ast.literal_eval(v), True
+                except ValueError:
+                    raise LookupError(f"{p['name']} in {p['file']} is not a literal") from None
+        if not found:
+            raise LookupError(f"no module-level {p['name']} in {p['file']}")
+        return json.loads(json.dumps(value, default=str))
+    data = tomllib.loads(text) if f.suffix == ".toml" else yaml.safe_load(text)
+    for part in p["key"].split("."):
+        if not isinstance(data, dict) or part not in data:
+            raise LookupError(f"no key {p['key']} in {p['file']}")
+        data = data[part]
+    return data
+
+
+def _parameters(spec: dict, bdir: Path, cdir: Path) -> tuple[dict, list[str]]:
+    """The target's declared parameters, read in the base and the candidate (after the overlay), and the
+    changes the candidate may not make: to a judge- or operator-owned parameter, an agent-owned one outside
+    its range or choices, or one that can no longer be read."""
+    values, violations = {}, []
+    for name, p in (spec.get("parameters") or {}).items():
+        try:
+            b = _read_parameter(bdir, p)
+        except (LookupError, SyntaxError) as e:
+            raise JudgeError(f"parameter {name} cannot be read on the base: {e}") from None
+        try:
+            c = _read_parameter(cdir, p)
+        except (LookupError, SyntaxError) as e:
+            values[name] = {"owner": p["owner"], "base": b, "candidate": None}
+            violations.append(f"the parameter {name} can no longer be read ({e})")
+            continue
+        values[name] = {"owner": p["owner"], "base": b, "candidate": c}
+        if c == b:
+            continue
+        if p["owner"] != "agent":
+            violations.append(f"changes the {p['owner']}-owned parameter {name} ({b!r} -> {c!r})")
+        elif p.get("range") and not (isinstance(c, (int, float)) and p["range"][0] <= c <= p["range"][1]):
+            violations.append(f"sets {name} to {c!r}, outside its range {p['range']}")
+        elif p.get("choices") and c not in p["choices"]:
+            violations.append(f"sets {name} to {c!r}, not one of {p['choices']}")
+    return values, violations
 
 
 def _overlay(spec: dict, base_dir: Path, cand_dir: Path) -> None:
@@ -399,7 +463,8 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         if not cdir.exists():
             raise JudgeError(f"{rel} does not exist on the candidate commit")
         _overlay(spec, bdir, cdir)
-        if not out["forbidden"]:
+        out["parameters"], out["parameter_violations"] = _parameters(spec, bdir, cdir)
+        if not out["forbidden"] and not out["parameter_violations"]:
             if spec.get("check"):
                 r = run(spec["check"], cdir, cfg, timeout=timeout, private=True)
                 out["check"] = {"passed": r.rc == 0, "output": "" if r.rc == 0 else _clip(r.err or r.out, 1200)}
@@ -437,8 +502,9 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
     rec = evidence.append({
         "claim": f"probe of {cand_sha[:12]} against {base_sha[:12]} (practice; not a verdict)",
         "kind": "probe", "subject": {"system": _target_name(spec, rel), "path": str(rel)},
-        "refs": {"base": base_sha, "candidate": cand_sha},
-        "outcome": {k: v for k, v in out.items() if k in ("forbidden", "check", "metrics", "timed_output_mismatches")}
+        "refs": {"base": base_sha, "candidate": cand_sha}, "parameters": out["parameters"],
+        "outcome": {k: v for k, v in out.items() if k in ("forbidden", "parameter_violations", "check", "metrics",
+                                                          "timed_output_mismatches")}
         | {"cases": [{k: c[k] for k in ("seed", "status")} for c in out.get("cases", [])]},
         "sandbox": sandbox_mode(cfg), "trust": "measured", "by": "judge",
     })
@@ -512,16 +578,18 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         if not cdir.exists():
             raise JudgeError(f"{rel} does not exist on the candidate commit")
         _overlay(spec, bdir, cdir)
+        parameters, param_violations = _parameters(spec, bdir, cdir)
+        refused = bool(forbidden or param_violations)  # refused before anything runs
 
         check_ok, check_detail = True, "no check defined"
-        if spec.get("check") and not forbidden:
+        if spec.get("check") and not refused:
             r = run(spec["check"], cdir, cfg, timeout=timeout, private=True)
             check_ok = r.rc == 0
             check_detail = "passed" if check_ok else (r.err or r.out).strip()[-600:]
 
         eq = spec.get("equivalence")
         eq_seeds, mismatches, failures = [], 0, 0
-        if eq and not forbidden:
+        if eq and not refused:
             for _ in range(int(eq.get("cases", 5))):
                 seed = secrets.randbelow(2**31)
                 eq_seeds.append(seed)
@@ -539,7 +607,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         equivalent = mismatches == 0 and failures == 0
 
         comparisons, perf_ok, bench_seeds, outputs, timed_mismatches = {}, False, [], [], 0
-        if check_ok and equivalent and not forbidden:
+        if check_ok and equivalent and not refused:
             m = spec["measure"]
             # A fresh seed every round: base and candidate share it within a round (a fair pair),
             # but no two rounds see the same input, so nothing learned in one round helps the next.
@@ -566,11 +634,12 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                 timed_mismatches = sum(1 for b, c in outputs if b != c)
             perf_ok = not timed_mismatches and all(c["ok"] for c in comparisons.values())
 
-    passed = not forbidden and check_ok and equivalent and perf_ok
+    passed = not refused and check_ok and equivalent and perf_ok
     reasons = []
     if forbidden:
         reasons.append(f"changes files that shadow standard or harness modules, or customise Python: "
                        f"{', '.join(forbidden)}")
+    reasons += param_violations
     if not check_ok:
         reasons.append("the base's tests fail on the candidate")
     if not equivalent:
@@ -592,13 +661,16 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "kind": "verdict",
         "verdict": verdict,
         "subject": {"system": name, "path": str(rel)},
-        "method": "base's spec and harness; forbidden-file check; base's tests; output equivalence on fresh "
+        "method": "base's spec and harness; forbidden-file check; declared parameters; base's tests; "
+                  "output equivalence on fresh "
                   "random inputs; paired ABBA runs timed outside the process, each checked for the base's "
                   "output; sign test",
-        "outcome": {"forbidden": forbidden, "check": check_ok, "generated_inputs": len(eq_seeds),
+        "outcome": {"forbidden": forbidden, "parameter_violations": param_violations,
+                    "check": check_ok, "generated_inputs": len(eq_seeds),
                     "wrong": mismatches, "failed": failures, "timed_output_mismatches": timed_mismatches,
                     "metrics": comparisons},
         "refs": {"base": base_sha, "candidate": cand_sha},
+        "parameters": parameters,
         "seeds": {"equivalence": eq_seeds, "bench": bench_seeds},
         "labels": {str(k): str(v) for k, v in (labels or {}).items()},
         "interface": interface,
@@ -613,6 +685,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "target": name,
         "base": base_sha,
         "candidate": cand_sha,
+        "parameters": parameters,
         "check": check_detail if not check_ok else "passed",
         "generated_inputs": {"cases": len(eq_seeds), "wrong": mismatches, "failed": failures},
         "metrics": comparisons,
