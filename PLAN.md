@@ -58,7 +58,7 @@ interfaces:
 
 **Done when** both are on main.
 
-### 1. The loader and default deny
+### 1. The loader and default deny (done on the branch, 2026-11-05)
 - Red team first, against today's judge and then the new one:
   - edit a file outside `change`;
   - add a new file outside it (`conftest.py`, `sitecustomize.py`, a module shadowing a
@@ -146,6 +146,9 @@ skill.
   facts plus a template that adds a cell.
 - The online stage: canary after apply; learner cells judged by replay.
 - The UI/UX quorum as a scorer demo.
+- Re-judging past verdicts when the judge gains a rule (as anti-doping retests stored samples): the
+  evidence log holds each verdict's commits, so a new red-team rule can flag earlier passes that
+  only passed through the hole it closes.
 - Domain modules around a shared knowledge base, joined by the resolver.
 
 ## Decisions (operator, 2026-11-05)

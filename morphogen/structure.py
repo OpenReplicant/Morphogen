@@ -131,6 +131,12 @@ class Structure:
             raise StructureError(str(path), [f"cannot read: {e.strerror or e}"]) from None
         except yaml.YAMLError as e:
             raise StructureError(str(path), [f"not valid YAML: {e}"]) from None
+        if path.name == "morphogen.yaml" and isinstance(data, dict) and "cells" in data:
+            from .project import Project, ProjectError   # the cell format compiles to a structure
+            try:
+                return Project.from_dict(data, str(path)).structure()
+            except ProjectError as e:
+                raise StructureError(str(path), [str(e)]) from None
         return cls.from_dict(data, str(path))
 
     # containment

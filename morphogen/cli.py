@@ -24,6 +24,7 @@ from .documents import DocumentError, load_config
 from .evidence import Evidence
 from .optimize import CATALOG, catalog, make, prior_from_evidence, tune
 from .render import mermaid
+from .project import ProjectError
 from .structure import Structure, StructureError, compare
 from .targets import resolve
 
@@ -119,6 +120,23 @@ def cmd_evidence(a) -> int:
     return 0
 
 
+def cmd_migrate(a) -> int:
+    from .migrate import dump, migrate
+    root = _root()
+    doc, local = migrate(root, load_config(root), a.targets)
+    if not a.write:
+        print("# morphogen.yaml\n" + dump(doc) + ("\n# morphogen.local.yaml (do not commit)\n" + dump(local)
+                                                 if local else ""), end="")
+        return 0
+    (root / "morphogen.yaml").write_text(dump(doc))
+    if local:
+        (root / "morphogen.local.yaml").write_text(dump(local))
+    print("wrote morphogen.yaml" + (" and morphogen.local.yaml (add it to .gitignore)" if local else "")
+          + ". The old target.yaml and structure files are no longer read; remove them when the new file "
+          "is committed, and narrow each cell's `change` to what it should be allowed to change.")
+    return 0
+
+
 def cmd_ui(a) -> int:
     from .ui import serve
     httpd = serve(_root(), a.host, a.port)
@@ -175,6 +193,11 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--by")
     ev.set_defaults(fn=cmd_evidence)
 
+    mi = sub.add_parser("migrate", help="write morphogen.yaml in the cell format from target.yaml and cells.yaml")
+    mi.add_argument("targets", nargs="*", help="target directories not named as a cell's measure")
+    mi.add_argument("--write", action="store_true", help="write the files (default: print them)")
+    mi.set_defaults(fn=cmd_migrate)
+
     ui = sub.add_parser("ui", help="serve the read-only web UI on localhost")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8765)
@@ -183,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         return a.fn(a)
-    except (StructureError, DocumentError, judge_mod.JudgeError, KeyError, LookupError) as e:
+    except (StructureError, DocumentError, ProjectError, judge_mod.JudgeError, KeyError, LookupError) as e:
         print(f"morphogen: {e}", file=sys.stderr)
         return 2
 

@@ -395,12 +395,11 @@ def space_of(spec: dict, tree_dir: Path, tree: Path | None = None, cfg: dict | N
     if not cell and tree is not None:
         cell = judge_mod.cell_of(cfg or {}, tree, tree_dir.relative_to(tree))
     if cell and tree is not None:
-        from .structure import Structure
-        rel = Path((cfg or {}).get("structure", "cells.yaml"))
-        s = Structure.load(tree / rel)
-        if cell not in s.cells:
+        found = judge_mod.structure_of(cfg or {}, tree)
+        if found is None or cell not in found[0].cells:
             raise judge_mod.JudgeError(f"no cell {cell!r} in the base's structure")
-        items += [(f"{c}.{n}", p.model_dump(exclude_none=True), (tree / rel).parent)
+        s, _, sdir = found
+        items += [(f"{c}.{n}", p.model_dump(exclude_none=True), sdir)
                   for c in sorted(s.scope(cell)) for n, p in s.cells[c].parameters.items()]
     out, seen = {}, set()
     for n, p, d in items:
@@ -417,7 +416,6 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
          rounds: int = 2, max_trials: int = 50, cell: str | None = None) -> dict:
     """Search the target's agent-owned parameters with `optimizer`; probe every proposal; judge the best."""
     repo = judge_mod.repo_root(root)
-    rel = (Path(root) / target).resolve().relative_to(repo)
     base_sha = judge_mod.resolve(repo, base)
     trials: list[Trial] = []
     seen: set[str] = set()
@@ -425,10 +423,11 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
         work = Path(tmp) / "w"
         _git(repo, "worktree", "add", "--detach", "--quiet", str(work), base_sha)
         try:
-            spec = judge_mod.load_spec(work, rel)
+            spec, rel, cell, proj, subject = judge_mod._target(root, repo, cfg, target, work, cell)
+            label = cell if proj is not None else rel.name
             space = space_of(spec, work / rel, work, cfg, cell)
             if not space:
-                raise judge_mod.JudgeError("no agent-owned parameters with a range or choices in target.yaml")
+                raise judge_mod.JudgeError("no agent-owned settings with a range or choices to search")
             metrics = judge_mod._check_spec(spec)
             primary = next(k for k, v in metrics.items() if v.get("primary"))
             attempts = 0
@@ -451,11 +450,11 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
                 _git(work, "checkout", "--quiet", "--detach", base_sha)
                 for k, v in values.items():
                     write_parameter(space[k]["_dir"], space[k], v)
-                branch = f"morphogen/tune/{rel.name}/{optimizer.name}-{len(trials) + 1}"
+                branch = f"morphogen/tune/{label}/{optimizer.name}-{len(trials) + 1}"
                 _git(work, "checkout", "--quiet", "-B", branch)
-                _git(work, "commit", "--quiet", "-am", f"tune {rel.name} ({who}): " +
+                _git(work, "commit", "--quiet", "-am", f"tune {label} ({who}): " +
                      ", ".join(f"{k}={v!r}" for k, v in values.items()))
-                pr = judge_mod.probe(repo, cfg, str(rel), branch, evidence, base=base_sha, cases=1, rounds=rounds,
+                pr = judge_mod.probe(repo, cfg, subject, branch, evidence, base=base_sha, cases=1, rounds=rounds,
                                      cell=cell)
                 gain = None if pr.get("forbidden") or pr.get("parameter_violations") or \
                     not (pr.get("check") or {"passed": True}).get("passed", True) or \
@@ -469,7 +468,7 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
             subprocess.run(["git", "worktree", "remove", "--force", str(work)], cwd=repo, capture_output=True)
     scored = [t for t in trials if t.gain is not None]
     best = max(scored, key=lambda t: t.gain, default=None)
-    out = {"target": str(rel), "optimizer": optimizer.name, "primary": primary,
+    out = {"target": subject, "optimizer": optimizer.name, "primary": primary,
            "trials": [{"values": t.values, "branch": t.branch, "probe_gain": t.gain, "optimizer": t.optimizer}
                       for t in trials]}
     if best is None or best.gain <= 0:
@@ -479,7 +478,7 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
     labels = {"optimizer": optimizer.name, "values": json.dumps(best.values, sort_keys=True)}
     if best.optimizer and best.optimizer != optimizer.name:
         labels["member"] = best.optimizer
-    v = judge_mod.judge(repo, cfg, str(rel), base_sha, best.branch, evidence, labels, cell=cell)
+    v = judge_mod.judge(repo, cfg, subject, base_sha, best.branch, evidence, labels, cell=cell)
     out.update({"best": {"values": best.values, "branch": best.branch, "probe_gain": best.gain,
                          "optimizer": best.optimizer}, "verdict": v["verdict"], "judge": v})
     return out
