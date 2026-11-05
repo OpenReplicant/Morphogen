@@ -86,7 +86,7 @@ class StructureError(ValueError):
 @dataclass(frozen=True)
 class Finding:
     severity: Literal["error", "warning"]
-    kind: str            # cycle | unknown-parent | unknown-interface | gap | unused | unattached | untested
+    kind: str            # cycle | unknown-parent | unknown-interface | gap | conflict | unused | unattached | untested
     subject: str
     message: str
 
@@ -99,6 +99,10 @@ class Structure:
     doc: Document
     source: str = "<data>"
     _children: dict[str, list[str]] = field(default_factory=dict, repr=False)
+    # Where each cell and interface came from (morphogen.yaml, a Backstage catalog file, or both), and
+    # where those sources disagree: set when the structure is compiled from the cell format.
+    origins: dict[str, str] = field(default_factory=dict)
+    conflicts: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         self._children = {c: [] for c in self.doc.cells}
@@ -129,10 +133,10 @@ class Structure:
         except yaml.YAMLError as e:
             raise StructureError(str(path), [f"not valid YAML: {e}"]) from None
         from .project import Project, ProjectError   # files are in the cell format; it compiles to this
-        if not isinstance(data, dict) or "cells" not in data:
+        if not isinstance(data, dict) or not ("cells" in data or data.get("backstage")):
             raise StructureError(str(path), ["no cells: a structure file is in the cell format (morphogen.yaml)"])
         try:
-            return Project.from_dict(data, str(path)).structure()
+            return Project.from_dict(data, str(path), root=path.parent).structure()
         except ProjectError as e:
             raise StructureError(str(path), [str(e)]) from None
 
@@ -214,7 +218,7 @@ class Structure:
     # checks
 
     def check(self) -> list[Finding]:
-        f: list[Finding] = []
+        f: list[Finding] = [Finding("error", "conflict", c.split(":", 1)[0], c) for c in self.conflicts]
         for cid, cell in self.cells.items():
             if cell.parent is not None and cell.parent not in self.cells:
                 f.append(Finding("error", "unknown-parent", cid, f"parent {cell.parent!r} is not a cell"))

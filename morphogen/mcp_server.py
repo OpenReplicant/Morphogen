@@ -71,7 +71,8 @@ def structure_check(file: str | None = None) -> dict:
     """Check the system structure (default: morphogen.yaml): cycles, unknown
     parents or interfaces, gaps, unused or untested interfaces; and intent coverage."""
     s = _structure(file)
-    return {"findings": [f.__dict__ for f in s.check()], "coverage": s.coverage(), "roots": s.roots()}
+    return {"findings": [f.__dict__ for f in s.check()], "coverage": s.coverage(), "roots": s.roots(),
+            "sources": s.origins}
 
 
 @server.tool()

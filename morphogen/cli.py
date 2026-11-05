@@ -56,7 +56,7 @@ def cmd_structure(a) -> int:
     s = Structure.load(a.file)
     if a.action == "check":
         findings = s.check()
-        _print({"findings": [f.__dict__ for f in findings], "coverage": s.coverage()})
+        _print({"findings": [f.__dict__ for f in findings], "coverage": s.coverage(), "sources": s.origins})
         return 1 if any(f.severity == "error" for f in findings) else 0
     if a.action == "scope":
         if not a.cell:

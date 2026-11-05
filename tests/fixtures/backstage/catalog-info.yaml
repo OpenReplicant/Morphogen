@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: example
+  description: The example entities used by the tests (see NOTICE)
+spec:
+  targets:
+    - ./domains.yaml
+    - ./artist-engagement-portal-system.yaml
+    - ./artists-db-resource.yaml
+    - ./components/artist-lookup-component.yaml
+    - ./components/www-artist-component.yaml
+    - ./components/wayback.yaml
+    - ./wayback-archive-api.yaml

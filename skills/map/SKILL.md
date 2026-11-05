@@ -76,7 +76,7 @@ asking to be believed.
 
    | Found | Becomes |
    |---|---|
-   | Backstage `catalog-info.yaml`: Component, System, `subcomponentOf`, `providesApis`, `consumesApis` | cells, `in`, `provides`, `consumes` |
+   | Backstage `catalog-info.yaml`: Component, System, `subcomponentOf`, `providesApis`, `consumesApis` | do not translate: name it in `backstage:` and Morphogen reads it (cells named `component:default/x`); add only what it lacks |
    | OpenAPI, protobuf, GraphQL schemas | interfaces; the schema's examples are the first tests |
    | compose files, Kubernetes manifests, Helm values | containment; env and config keys as settings |
    | CycloneDX or package manifests | external `provides` interfaces (libraries, models, services) |

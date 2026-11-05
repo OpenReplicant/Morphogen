@@ -97,7 +97,8 @@ class InterfaceDoc(_Strict):
 
 class ProjectDoc(BaseModel):
     model_config = ConfigDict(extra="allow")   # trunk, sandbox, budget: morphogen.yaml's settings
-    cells: dict[str, CellDoc]
+    backstage: str | list[str] = []
+    cells: dict[str, CellDoc] = {}
     interfaces: dict[str, str | list[str] | InterfaceDoc] = {}
 
 
@@ -249,9 +250,55 @@ def only_settings_differ(base: Path, cand: Path, names: set[str], keys: set[str]
 
 # --- the project
 
+def _merge(bcells: dict, bifaces: dict, origin: dict, cells: dict, ifaces: dict) -> tuple[dict, dict, dict, list]:
+    """The catalog's cells and interfaces with morphogen.yaml's laid over them: (cells, interfaces,
+    where each came from, conflicts). A name that is a Backstage ref (component:x, api:ns/y) is
+    normalised; provides and consumes are joined; any other field both give must agree."""
+    from . import backstage as bs
+    norm = (lambda k, kind="component": bs.parse_ref(k, kind) if bs.is_ref(k) else k)
+    sources = {n: f"backstage ({origin[n]})" for n in list(bcells) + list(bifaces)}
+    conflicts: list[str] = []
+    out = {n: dict(c) for n, c in bcells.items()}
+    for raw, c in cells.items():
+        name = norm(raw)
+        c = dict(c or {})
+        if isinstance(c.get("in"), str):
+            c["in"] = norm(c["in"])
+        mine = out.setdefault(name, {})
+        sources[name] = f"{sources[name]} and {FILE}" if name in sources else FILE
+        for k, v in c.items():
+            if k in ("provides", "consumes"):
+                v = [norm(x, "api") for x in _listed(v)]
+                mine[k] = list(dict.fromkeys(_listed(mine.get(k)) + v))
+            elif k in mine and mine[k] != v:
+                conflicts.append(f"cell {name}: {k} is {mine[k]!r} in the catalog and {v!r} in {FILE}")
+            else:
+                mine[k] = v
+        for k in ("provides", "consumes"):
+            if k in mine:
+                mine[k] = [norm(x, "api") for x in _listed(mine[k])]
+    outi = {n: dict(i) for n, i in bifaces.items()}
+    for raw, i in ifaces.items():
+        name = norm(raw, "api")
+        i = {"tests": i} if isinstance(i, (str, list)) else dict(i or {})
+        mine = outi.setdefault(name, {})
+        sources[name] = f"{sources[name]} and {FILE}" if name in sources else FILE
+        for k, v in i.items():
+            if k in mine and _listed(mine[k]) != _listed(v):
+                conflicts.append(f"interface {name}: {k} is {mine[k]!r} in the catalog and {v!r} in {FILE}")
+            else:
+                mine[k] = v
+    return out, outi, sources, conflicts
+
+
 class Project:
-    def __init__(self, doc: ProjectDoc, source: str = FILE):
+    def __init__(self, doc: ProjectDoc, source: str = FILE, rule_files: list[str] = (),
+                 sources: dict | None = None, conflicts: list[str] = ()):
         self.doc, self.source = doc, source
+        # Files the rules are read from besides morphogen.yaml (catalog files): never changeable.
+        self.rule_files = list(rule_files)
+        self.sources = sources or {}
+        self.conflicts = list(conflicts)
         self.changes = {n: [parse_change(x) for x in _listed(c.change)] for n, c in doc.cells.items()}
         self.keeps = {n: [parse_change(x) for x in _listed(c.keep)] for n, c in doc.cells.items()}
         for n, ks in self.keeps.items():
@@ -263,9 +310,26 @@ class Project:
         self._structure = self._compile_structure()
 
     @classmethod
-    def from_dict(cls, data: Any, source: str = FILE) -> Project:
+    def from_dict(cls, data: Any, source: str = FILE, root: Path | None = None) -> Project:
+        """`root` is the project's directory, where `backstage` files are read from."""
+        extra: dict = {}
+        if isinstance(data, dict) and data.get("backstage"):
+            from . import backstage as bs
+            if root is None:
+                raise ProjectError(f"{source}: reading `backstage` needs the project's directory")
+            try:
+                entities, files = bs.read(Path(root), _listed(data["backstage"]))
+                bcells, bifaces, origin = bs.to_cells(entities)
+            except bs.CatalogError as e:
+                raise ProjectError(f"{source}: backstage: {e}") from None
+            cells, ifaces, sources, conflicts = _merge(bcells, bifaces, origin, data.get("cells") or {},
+                                                       data.get("interfaces") or {})
+            data = {**data, "cells": cells, "interfaces": ifaces}
+            extra = {"rule_files": files, "sources": sources, "conflicts": conflicts}
+        elif isinstance(data, dict):
+            extra = {"sources": {n: FILE for n in list(data.get("cells") or {}) + list(data.get("interfaces") or {})}}
         try:
-            return cls(ProjectDoc.model_validate(data), source)
+            return cls(ProjectDoc.model_validate(data), source, **extra)
         except ValidationError as e:
             raise ProjectError(f"{source}: " + "; ".join(
                 f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())) from None
@@ -277,9 +341,9 @@ class Project:
         if not f.exists():
             return None
         data = yaml.safe_load(f.read_text()) or {}
-        if not isinstance(data, dict) or "cells" not in data:
+        if not isinstance(data, dict) or not ("cells" in data or data.get("backstage")):
             return None
-        return cls.from_dict(data, str(f))
+        return cls.from_dict(data, str(f), root=Path(tree))
 
     # what the judge reads
 
@@ -306,17 +370,32 @@ class Project:
                 interfaces[n] = {"tests": _listed(i)}
         try:
             s = Structure.from_dict({"cells": cells, "interfaces": interfaces}, self.source)
+            s.origins, s.conflicts = dict(self.sources), list(self.conflicts)
         except StructureError as e:
             raise ProjectError(str(e)) from None
         return s   # structural errors (gaps, cycles) are findings: `structure check` reports them
 
     def errors(self) -> list[str]:
-        return [f"{f.subject}: {f.message}" for f in self._structure.check() if f.severity == "error"]
+        return [f.message if f.kind == "conflict" else f"{f.subject}: {f.message}"
+                for f in self._structure.check() if f.severity == "error"]
+
+    def resolve(self, name: str) -> str:
+        """A cell's name as written: its key, or a Backstage ref in any spelling (classify,
+        component:classify, component:default/classify)."""
+        if name in self.doc.cells:
+            return name
+        from . import backstage as bs
+        try:
+            ref = bs.parse_ref(name, "component")
+        except bs.CatalogError:
+            return name
+        return ref if ref in self.doc.cells else name
 
     def structure(self) -> Structure:
         return self._structure
 
     def cell(self, name: str) -> CellDoc:
+        name = self.resolve(name)
         if name not in self.doc.cells:
             raise ProjectError(f"no cell {name!r} in {FILE}")
         return self.doc.cells[name]
@@ -326,6 +405,7 @@ class Project:
 
     def spec(self, name: str, local: dict | None = None) -> dict:
         """The cell as a target spec (documents.Target), with held-out paths from `local`."""
+        name = self.resolve(name)
         c, local = self.cell(name), local or {}
         if not c.run:
             raise ProjectError(f"cell {name!r} has no run: nothing to measure")
@@ -370,7 +450,7 @@ class Project:
         return [e for c in cells for e in self.changes.get(c, [])]
 
     def allows(self, cells, path: str) -> bool:
-        if path in (FILE, LOCAL):
+        if path in (FILE, LOCAL) or path in self.rule_files:   # the rules themselves never change
             return False
         return any(_glob_re(e["path"]).match(path) for e in self._entries(cells))
 

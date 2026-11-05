@@ -75,7 +75,7 @@ interfaces:
 
 **Done when** both formats judge the fixtures identically, and every cheat, old and new, fails.
 
-### 2. Move everything onto it (done on the branch, 2026-11-05)
+### 2. Move everything onto it (done, #67)
 - Test fixtures and the fixture projects (`fixture_scored`, `fixture_system`, `fixture_agent`):
   new format; the red team runs against the new format only.
 - `demos/entity-resolution`: its draft structure in the new format. Its F1 scorer and contract
@@ -90,7 +90,7 @@ interfaces:
 
 **Done when** no file in the repository uses `harness`, `check`, `equivalence` or `target.yaml`.
 
-### 3. Sources above: Backstage, level 1
+### 3. Sources above: Backstage, level 1 (done on the branch, 2026-11-05)
 - Read `catalog-info.yaml` directly, with no Backstage running:
 
   | Backstage | Becomes |
@@ -109,6 +109,12 @@ interfaces:
 
 **Done when** the entity-resolution demo can be described half in `catalog-info.yaml`, half in the
 cell file, and judges the same as before.
+
+Done: the demo is split that way and compiles to the same structure as before (a test). It cannot be
+judged until phase 6 makes its data reachable, so "judges the same" is shown on the structured
+classifier instead: described half in a catalog, it reaches the same verdicts as in morphogen.yaml
+alone. Red team: a candidate that weakens the catalog (drops an API) for later judgments is refused,
+even when `change` is `**`; it passed the judge before catalog files were made the judge's.
 
 ### 4. The optimizer contract, and GEPA
 - Name the contract in `optimize.py`: `space` (from `change`: numbers, choices, text),

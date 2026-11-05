@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: artist-lookup
+  description: Artist Lookup
+  annotations:
+    backstage.io/source-template: template:default/springboot-template
+spec:
+  type: service
+  lifecycle: experimental
+  owner: team-a
+  system: artist-engagement-portal
+  dependsOn: ['resource:artists-db']
+  apiConsumedBy: ['component:www-artist']

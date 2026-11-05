@@ -389,13 +389,15 @@ def _target(root: Path, repo: Path, cfg: dict, target: str, tree: Path,
     proj = structure_of(tree)
     name = target[len("cell:"):] if target.startswith("cell:") else None
     if name is None:
-        if target in proj.doc.cells:
+        if proj.resolve(target) in proj.doc.cells:
             name = target
         else:
             name = cell or cell_of(tree, _rel(root, repo, target))
             if name is None:
                 raise JudgeError(f"no cell with a run in {target}; name it as cell:NAME")
-    local = ((cfg.get("local") or {}).get("cells") or {}).get(name)
+    name = proj.resolve(name)
+    # morphogen.local.yaml may name a cell as written or by its ref
+    local = next((v for k, v in ((cfg.get("local") or {}).get("cells") or {}).items() if proj.resolve(k) == name), None)
     try:
         spec = proj.spec(name, local)
     except ProjectError as e:

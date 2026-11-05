@@ -1,0 +1,17 @@
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: audio
+  description: Everything related to audio
+spec:
+  owner: acme-corp
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: artists
+  description: Everything related to artists
+spec:
+  owner: team-a
+  subdomainOf: audio
+  type: product-group
