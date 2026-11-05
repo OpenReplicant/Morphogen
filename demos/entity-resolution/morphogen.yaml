@@ -1,25 +1,21 @@
-# The demo's intended structure, in the cell format. Not judgeable yet: the benchmark data is not
+# The demo's cells: the structure (components, APIs, nesting) comes from catalog-info.yaml; this file
+# adds what each cell may change and how it is judged. Not judgeable yet: the benchmark data is not
 # committed (its licence names no version), so a checkout of a commit has no inputs, and bench.py
 # computes F1 itself. To judge it: bench.py prints predicted pairs, a score.py from the base computes
 # F1 against held-out gold pairs kept outside the repository (morphogen.local.yaml), and the inputs
 # reach the run from a read-only location. See README.md, "Known gaps".
+backstage: catalog-info.yaml
+
 cells:
-  er:                                    # the resolver as a whole
-    provides: resolver
-    consumes: [candidates, pair-score]   # Base.resolve and Base.add use both
+  component:er:
     tests: python -m unittest discover -s tests
 
-  blocking:                              # which pairs are compared at all (er/base.py, Base.candidates)
-    in: er
-    provides: candidates
+  component:blocking:
     change:
       - er/settings.py#BLOCK_MAX_DF in 0.01..0.5
       - er/settings.py#BLOCK_LIMIT in 5..200
 
-  matcher:                               # scores a pair (er/base.py, Base.pair)
-    in: er
-    provides: pair-score
-    consumes: similarity
+  component:matcher:
     change:
       - er/settings.py#THRESHOLD in 0.5..0.99
       - er/settings.py#MODEL_MISMATCH in 0..1
@@ -27,17 +23,8 @@ cells:
       - er/settings.py#TYPO_RATIO in 0.6..1
     keep: [er/settings.py#ALIASES, er/settings.py#STOPWORDS]
 
-  backend:                               # the whole similarity implementation, chosen from er/backends/
-    in: er
-    provides: similarity
+  component:backend:
     change: er/settings.py#BACKEND in [overlap, tfidf]
 
-  clustering:                            # intended, not built: entities are grouped in er/base.py
-    in: er
-    consumes: pair-score
-
 interfaces:
-  resolver: {external: consumes, tests: python -m unittest discover -s tests}   # the Resolver protocol
-  candidates: []                         # no contract tests yet: an intent-coverage gap
-  pair-score: []
-  similarity: []
+  api:resolver: {external: consumes}     # used by whatever needs resolution; its test is in the catalog

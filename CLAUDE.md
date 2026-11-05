@@ -8,6 +8,7 @@ docs/restart/LESSONS.md.
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
   judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
   `otel`), `project.py` (the cell format: morphogen.yaml's cells and interfaces, default deny),
+  `backstage.py` (catalog-info.yaml files as a source of cells),
   `documents.py` (morphogen.yaml's settings, and the target spec a cell compiles to), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
   `morphogen` (improve a cell) and `map` (draft morphogen.yaml's cells).
@@ -40,8 +41,8 @@ local clone added as a marketplace runs the plugin from the clone, so the judge 
 candidate. Never edit the installed plugin's directory.
 
 ## State (2026-11-05)
-- On main through phase 1 of PLAN.md (#65, #66). Phase 2, the cell format only (morphogen.yaml;
-  target.yaml and cells.yaml no longer read), is on the branch.
+- On main through phase 2 of PLAN.md (#65-#67): the cell format only. Phase 3, Backstage's
+  catalog-info.yaml read as a source, is on the branch.
 - Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
   judge or runner changes. A/A: 0 of 12 in the cell format.
 - CI is advisory: `judge` runs the candidate's tests (required on main); `base-tests` runs main's

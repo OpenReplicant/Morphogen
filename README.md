@@ -118,6 +118,28 @@ interfaces:
 Name a cell to judge as `cell:classify`, `classify`, or its `dir`. A project with nothing yet starts
 with one cell; the `map` skill drafts it with you.
 
+### Backstage above it
+
+A project that already keeps Backstage's `catalog-info.yaml` files need not restate its structure.
+`backstage: catalog-info.yaml` (or a list) in `morphogen.yaml` reads them directly, with no
+Backstage server, following `Location` targets inside the project:
+
+| Backstage | Becomes |
+|---|---|
+| `Component`, `System`, `Domain` | a cell, named by its ref: `component:default/classify` |
+| `subcomponentOf`, `system`, `domain`, `subdomainOf` | `in` |
+| `API` | an interface, named by its ref; its tests from the annotation `morphogen.dev/tests` |
+| `providesApis`, `consumesApis` | `provides`, `consumes` |
+| `dependsOn` | consumes it: provided by that cell, or external (a `Resource`) |
+| annotations `morphogen.dev/change`, `keep`, `run`, `better`, `tests`, `score`, `dir`, `observe` | the cell's fields (one entry per line for lists) |
+
+`morphogen.yaml` then adds what the catalog does not hold, under the same names (`component:classify`
+is enough), and may add cells below Backstage's grain with `in: component:classify`. Where the two
+disagree on a field, the structure has an error and the judge refuses it; `structure check` reports
+where each cell and interface came from. The catalog files are the judge's, like `morphogen.yaml`:
+a candidate that changes one is refused, whatever `change` says. `demos/entity-resolution` is
+described this way.
+
 ## In Claude Code
 
 ```
@@ -149,7 +171,7 @@ MIT, pinned in `uv.lock`); Optuna 5.0.0 as an optional extra (`uv sync --extra o
 
 | Part | Module | Does |
 |---|---|---|
-| Cell format | `project.py` | parses `morphogen.yaml`; compiles it to a structure and, per cell, the spec the judge runs; default deny |
+| Cell format | `project.py`, `backstage.py` | parses `morphogen.yaml` and any Backstage catalog files it names; compiles them to a structure and, per cell, the spec the judge runs; default deny |
 | Structure | `structure.py`, `render.py` | cells in a containment tree, interfaces as hyperedges with their tests; checks, scopes, computed boundaries, intent coverage, intended against observed, a Mermaid diagram |
 | Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules; `probe` gives practice feedback; `measure` records a baseline |
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
@@ -233,7 +255,7 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
 | **AFlow, ADAS, Darwin Gödel Machine** | search over agent workflows, or rewrite whole agents, against benchmarks | research systems with the same aim at the whole-agent scope | the Darwin Gödel Machine reports objective hacking; Morphogen's red team and outside measurement exist for exactly that |
 | **Kayenta, Argo Rollouts** | judge a canary against a baseline on metrics collected outside the code, after deploy | precedents for the judge, one stage later | judging before merge, on candidates from an agent that may cheat, with held-out cases and bounded settings |
 | **Kubernetes Horizontal Pod Autoscaler** | changes one setting within operator-owned bounds from live metrics | the precedent for a local drive with owned bounds | any cell and modality, structural change, and a judge instead of a fixed rule |
-| **Backstage, ArchiMate** | describe software (Backstage's catalog) or the business above it (ArchiMate) | the layers above; Morphogen reads them (planned: `catalog-info.yaml` first) | the cell grain below them: what may change, how it is judged |
+| **Backstage, ArchiMate** | describe software (Backstage's catalog) or the business above it (ArchiMate) | the layers above: Morphogen reads `catalog-info.yaml` directly (built); ArchiMate is planned | the cell grain below them: what may change, how it is judged |
 | **Claude Code, or any coding agent** | builds and changes code | the builder, and the agent that drives Morphogen through its MCP tools | a referee it cannot edit, so its changes are accepted on evidence, not on its own say-so |
 
 ## Limits
@@ -252,8 +274,11 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
   and Mermaid 12.2.0 (both MIT) from cdn.jsdelivr.net, so the diagram needs network access.
 - **The evidence log** refuses edits through SQLite triggers; whoever can write the file can drop
   them, and the hash chain then shows the edit.
-- **Not built yet:** reading Backstage, the GEPA adapter, a `status` command for fresh starts, the
-  observed structure from traces, and the online stage ([PLAN.md](PLAN.md)).
+- **Backstage is read from files only:** `$text`, `$json` and `$yaml` substitutions, URL targets and
+  the catalog's REST API are not read; relations Morphogen has no use for (owners, lifecycles) are
+  ignored.
+- **Not built yet:** the GEPA adapter, a `status` command for fresh starts, the observed structure
+  from traces, and the online stage ([PLAN.md](PLAN.md)).
 
 ## Layout
 

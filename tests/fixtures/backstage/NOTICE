@@ -1,0 +1,6 @@
+These entities are condensed from Backstage's example catalog
+(https://github.com/backstage/backstage/tree/master/packages/catalog-model/examples),
+Copyright 2020 The Backstage Authors, licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). Changes: links, tags and the API definition removed;
+the two domains, and the three wayback components, share a file each (YAML documents separated
+by ---); a Location gathers them.

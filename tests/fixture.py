@@ -53,7 +53,8 @@ class Project:
 
     def __init__(self, files: dict[str, str] | None = None, sample: str | None = "slow-script",
                  trials_per_day: int = 0, cells: dict | None = None, interfaces: dict | None = None,
-                 local: dict | None = None, root_files: dict[str, str] | None = None):
+                 local: dict | None = None, root_files: dict[str, str] | None = None,
+                 settings: dict | None = None):
         self.tmp = Path(tempfile.mkdtemp())
         self.repo = self.tmp / "proj"
         self.repo.mkdir()
@@ -68,7 +69,8 @@ class Project:
             self._write(self.repo / rel, text)
         if cells is None:
             cells = {self.cell: copy.deepcopy(SLOW_CELL)}
-        self.doc_ = {"sandbox": SANDBOX, "budget": {"trials_per_day": trials_per_day}, "cells": cells}
+        self.doc_ = {"sandbox": SANDBOX, "budget": {"trials_per_day": trials_per_day}, **(settings or {}),
+                     "cells": cells}
         if interfaces:
             self.doc_["interfaces"] = interfaces
         self._write(self.repo / "morphogen.yaml", yaml.safe_dump(self.doc_, sort_keys=False))

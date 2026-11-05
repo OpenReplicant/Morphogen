@@ -1,0 +1,93 @@
+# The resolver as Backstage sees it: the components and the APIs between them. What Morphogen adds
+# (what each cell may change, and how it is judged) is in morphogen.yaml, which reads this file.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: er
+  description: Entity resolution, the resolver as a whole
+spec:
+  type: library
+  lifecycle: experimental
+  owner: operator
+  providesApis: [resolver]
+  consumesApis: [candidates, pair-score]   # Base.resolve and Base.add use both
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: blocking
+  description: Which pairs are compared at all (er/base.py, Base.candidates)
+spec:
+  type: library
+  lifecycle: experimental
+  owner: operator
+  subcomponentOf: er
+  providesApis: [candidates]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: matcher
+  description: Scores a pair (er/base.py, Base.pair)
+spec:
+  type: library
+  lifecycle: experimental
+  owner: operator
+  subcomponentOf: er
+  providesApis: [pair-score]
+  consumesApis: [similarity]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backend
+  description: The whole similarity implementation, chosen from er/backends/
+spec:
+  type: library
+  lifecycle: experimental
+  owner: operator
+  subcomponentOf: er
+  providesApis: [similarity]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: clustering
+  description: Intended, not built; entities are grouped in er/base.py
+spec:
+  type: library
+  lifecycle: experimental
+  owner: operator
+  subcomponentOf: er
+  consumesApis: [pair-score]
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: resolver
+  description: The Resolver protocol (er/base.py)
+  annotations:
+    morphogen.dev/tests: python -m unittest discover -s tests
+spec:
+  type: python
+  lifecycle: experimental
+  owner: operator
+  definition: see er/base.py
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: candidates
+spec: {type: python, lifecycle: experimental, owner: operator, definition: Base.candidates}
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: pair-score
+spec: {type: python, lifecycle: experimental, owner: operator, definition: Base.pair}
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: similarity
+spec: {type: python, lifecycle: experimental, owner: operator, definition: er.backends}

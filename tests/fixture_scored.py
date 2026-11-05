@@ -75,7 +75,8 @@ class ScoredProject(Project):
     home = "targets/classify"
     cell = "classify"
 
-    def __init__(self, private_inside=False, search=False, cells=None, interfaces=None, root_files=None):
+    def __init__(self, private_inside=False, search=False, cells=None, interfaces=None, root_files=None,
+                 settings=None):
         self.private_dir = Path(tempfile.mkdtemp(prefix="morphogen-private-"))
         (self.private_dir / "gold.json").write_text(json.dumps(GOLD))
         self.search_dir = None
@@ -89,7 +90,8 @@ class ScoredProject(Project):
         if private_inside:
             files["held-out/gold.json"] = json.dumps(GOLD)
         super().__init__(files, sample=None, cells=cells or {"classify": copy.deepcopy(CLASSIFY_CELL)},
-                         interfaces=interfaces, local={"cells": {"classify": local}}, root_files=root_files)
+                         interfaces=interfaces, local={"cells": {"classify": local}}, root_files=root_files,
+                         settings=settings)
         if private_inside:
             self.private_dir = self.path("held-out")
 
