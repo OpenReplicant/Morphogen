@@ -1,0 +1,5 @@
+{"finds": "buffer, activation, utility and chunking equations", "id": "src/act-r", "name": "ACT-R and Soar literature"}
+{"finds": "Claude Code and Claude models", "id": "src/anthropic", "name": "Anthropic", "url": "https://code.claude.com"}
+{"finds": "components built for this design", "id": "src/cmc-plugin", "name": "The cmc plugin"}
+{"finds": "review and approval", "id": "src/operator", "name": "The operator"}
+{"finds": "the embedded database", "id": "src/sqlite", "name": "SQLite", "url": "https://sqlite.org"}

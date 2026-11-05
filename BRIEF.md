@@ -104,6 +104,102 @@ Rules that follow:
 4. **Tests are the drift check.** Intent changes turn tests red (the builder's work); code drift
    shows as divergence in the observed map (the mapper's question).
 
+## Mapping: optional, and what it adds
+
+Morphogen needs points, not a map. A mapper helps when there are many points, when structural
+changes need neighbours, or when intent is missing from the code. Without one, start by
+measuring:
+
+1. **One point by hand.** Name a location, its existing tests and a measure (rebuild 6 ran this
+   way: a `target.yaml` and nothing else).
+2. **Or profile first.** Run the system under its tests or workload with outside observation (a
+   profiler offline, OBI live). The hot spots, by time, cost or errors, become candidate points.
+   An agent drafts each point from what is already there (location, modality, tests it finds);
+   the operator confirms owners and bounds.
+3. **The map grows from points that earned attention.** Measure first, map what matters.
+
+Morphogen's own vocabulary is four words: **point** (a changeable place, at any grain),
+**parameter** (with an owner and bounds), **interface** (as tests), **neighbour**. Existing
+formats are address spaces a point's location can refer into, not the ontology:
+
+| Grain | Format |
+|---|---|
+| organisation: systems, services, owners, APIs | Backstage (`catalog-info.yaml`) |
+| artifacts: CycloneDX 1.6 component types `application`, `library`, `framework`, `container`, `platform`, `file`, `data`, `machine-learning-model`, `firmware`, ...; services with `endpoints` and a `trustZone` | CycloneDX (`bom-ref`) |
+| symbols: functions, classes, references | SCIP, or an indexer |
+| anything else | a file path, `path#symbol` or `path:key` |
+
+None has points: a prompt, a config key, a skill, a hook, an MCP tool or a model choice is below
+Backstage's grain, and none of these formats has parameters with owners, interfaces as behaviour
+tests, requirements with reasons, an observed side, provenance or intent coverage. So the mapper
+adds computations, not a representation:
+
+- binding intent to what is observed;
+- the comparison: convergences, divergences, absences;
+- intent coverage: which intent claims have a test;
+- promoting a claim from stated to test-backed;
+- parameter ownership.
+
+Any store can hold the graph. Sources of claims, by trust:
+
+| Source | Produces | Trust | Tool |
+|---|---|---|---|
+| code, config, the running system | the observed map | derived | an indexer; OBI's service graph |
+| documents, interviews, specs | candidate intent | stated | graphiti or cognee, off the shelf, once there is a corpus |
+| an agent while it works | attestations and corrections, each with a reason | inferred | a log entry (rebuild 6's evidence notes) |
+| the operator, or a passing test | confirmed intent | asserted, or test-backed | the intent's tests |
+
+Start with agent attestation and the checks; add an ingestor only for a corpus worth mining, and
+keep its output at `stated` until a test or the operator confirms it. graphiti keeps each fact
+traced to the episode it came from and closes superseded facts instead of deleting them, which
+suits intent that changes; cognee aligns extraction to an existing OWL ontology. Neither makes
+anything executable: tests do. The mapper may be a skill plus these checks, not a product, until
+they prove useful on a real system (the CMC spec is a ready corpus).
+
+A **generalist mapper**, one that builds ontology as a domain needs it, is a separate project.
+The nearest precedent is Palantir Foundry's Ontology: object and link types bound to data
+sources (the semantic part), and action types with typed parameters and submission criteria
+that validate an edit before it is written (the kinetic part). Foundry stages edits as
+proposals for review and develops ontology changes on branches. I found no source saying its
+agents create new types on their own. Points with owned parameters are Foundry's action types
+applied to a system's own parts, with the judge as the submission criteria.
+
+## Catalogs and supply-chain risk
+
+Alternatives come from catalogs: package registries, MCP servers, skills, model hubs, internal
+components. An external alternative is untrusted code, and an agent choosing one is a known
+attack path. "Slopsquatting": a USENIX Security 2025 study of 16 code models found hallucinated
+package names in about a fifth of samples, and 43% of them reappeared on every rerun, so
+attackers can predict and register them. Agentic tools remove the human who would have checked.
+One reported case, `react-codeshift`, spread through AI-generated agent skills (figures from
+secondary reports; read the paper before quoting them).
+
+Strategy:
+
+1. **Allowed alternatives are a parameter's `choices`.** No new concept: an agent-owned
+   parameter whose `choices` are set in `target.yaml` at the base commit, where no candidate can
+   change them. Adding a choice is an operator change, with its evidence attached:
+
+   ```yaml
+   parameters:
+     http_client: {file: pyproject.toml, key: project.dependencies.http, owner: agent,
+                   choices: ["httpx==0.28.1", "requests==2.32.5"]}
+   ```
+2. **Each entry carries evidence from existing tools:** the name exists in the registry, with its
+   age and maintainers (catches hallucinated and typosquatted names); vulnerabilities from OSV;
+   project practices from OpenSSF Scorecard (0-10, a flag for review, not an automatic reject);
+   deps.dev; build provenance (SLSA) and signatures (Sigstore); the licence. I found no
+   authoritative policy combining these signals; the operator's policy does.
+3. **A new or changed dependency is part of the candidate.** Pinned with hashes in a lockfile;
+   installed inside the sandbox, with no network except a pinned mirror (install scripts run
+   code); listed in the verdict; risk can be a constraint, never the primary metric.
+4. **Red team first:** a candidate that adds a hallucinated or typosquatted package, one whose
+   install script reads files outside its tree, and one that swaps a pinned version for an
+   unpinned one must all be refused.
+
+Rebuild 6 already followed the human version of this: pin exact versions and check licences
+before adding a dependency.
+
 ## Parts
 
 | Part | Job | Written or integrated |
@@ -114,7 +210,8 @@ Rules that follow:
 | **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each point's harness | integrated |
 | **Gate** | offline at each point: protected test setup, held-out cases, owners enforced, neighbour tests, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
 | **Apply and observe adapters** | turn a promoted change into a branch, PR or deploy; read status back | integrated (git, Argo, Terraform, ...) |
-| **Map adapters** | read points from Backstage, an indexer, or a hand-written spec | integrated |
+| **Map adapters** | suggest points from a profile, an indexer, Backstage's `catalog-info.yaml` files (no Backstage server needed), or a hand-written spec | integrated |
+| **Supply-chain evidence** | evidence for each allowed alternative: registry existence and age, OSV, Scorecard, deps.dev, SLSA, Sigstore, licence | integrated |
 | **Evidence ledger** | every trial, verdict and observation as claims with trust classes | written, or a store |
 | **Loop** | observe → pick a point → optimize → gate → propose → (operator) → apply → observe | written: small |
 
@@ -181,6 +278,14 @@ Then: a numeric point with Optuna; a structural change gated by a neighbour's co
 then the three-arm comparison above, on a system with at least two points, before building more
 of the selector. One live point gated by a canary on OBI telemetry comes after that.
 
+## Demos
+
+[demos/](demos/README.md) holds projects a fresh Morphogen can start building and then
+drive, each starting as a brief: entity resolution (the first system for the three-arm
+comparison), a catalog on top of it, and the cognitive model that uses the catalog as
+declarative memory's store. The core never imports from `demos/`; a demo with working code
+graduates to its own repository.
+
 ## Packaging
 
 The core is a controller: a library and a CLI, with an MCP server so agents can drive it. A
@@ -229,5 +334,14 @@ From the `rebuild-6` branch:
   instructions not to).
 - Judging and measuring: Kayenta and Spinnaker's canary judge docs; Google and Waze on canary
   baselines; Argo Rollouts analysis (tutorials); OpenTelemetry eBPF Instrumentation docs.
+- Knowledge graphs: graphiti (episodes as provenance, time-bounded facts, Pydantic entity types,
+  needs a graph database) and cognee (swappable pipeline steps, OWL ontology alignment), from
+  their docs.
+- Supply chain: the slopsquatting study (USENIX Security 2025) through secondary reports (CSA,
+  Infosecurity Magazine); OpenSSF Scorecard, OSV, deps.dev, SLSA and Sigstore through secondary
+  descriptions, not their own docs.
+- Palantir Foundry Ontology: its core-concepts docs and secondary write-ups (action types,
+  submission criteria, proposals, branching); dates for its 2026 features came from third-party
+  sites only.
 - Parameter ownership: no standard found. flagd has free-form `metadata` only; Atlas has
   ownership rules for database schema objects.
