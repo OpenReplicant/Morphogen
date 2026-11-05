@@ -22,7 +22,7 @@ mapping found, and [rebuild-6-map/](rebuild-6-map/) the map itself, in rebuild 6
 Declarative memory's store is the [catalog](../catalog/BRIEF.md): entities, resolved, classified,
 with claims and trust.
 
-## Points
+## Cells
 
 Agent-owned, tunable within ranges:
 

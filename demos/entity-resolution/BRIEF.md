@@ -20,9 +20,9 @@ class Resolver(Protocol):
 The interface test any backend must pass: a fixed set of labelled pairs and groups, including
 aliases, typos, abbreviations, and near-misses that must not match.
 
-## Points
+## Cells
 
-| Point | Modality | Parameters (owner) |
+| Cell | Modality | Parameters (owner) |
 |---|---|---|
 | `blocking` (which pairs are compared at all) | code, numeric | blocking key (agent, choices), window size (agent, range) |
 | `matcher` (scores a pair) | code, text, model | threshold (agent, range [0.5, 0.99]), model (operator, choices) |

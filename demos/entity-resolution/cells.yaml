@@ -1,5 +1,5 @@
-# Points Morphogen may work on, in the draft format from BRIEF.md. Nothing reads this file yet.
-points:
+# Cells Morphogen may work on, in the draft format from BRIEF.md. Nothing reads this file yet.
+cells:
   backend:
     at: er/__init__.py#BACKENDS
     modality: alternatives

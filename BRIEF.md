@@ -9,30 +9,30 @@ the code this brief carries over, and [LESSONS.md](https://github.com/OpenReplic
 
 In development, cells do not consult a blueprint. Each reads a morphogen's concentration where
 it sits and responds; the shape emerges from many local responses. Morphogen is that drive for
-software and agent systems. At each point it is given, it picks an optimizer and a measure,
+software and agent systems. At each cell it is given, it picks an optimizer and a measure,
 runs the search behind a judge the search cannot edit, and proposes the change with its
 evidence.
 
 Many tools already optimize things, and some already measure and judge. Morphogen does little
-on its own: it integrates the right piece at the right point, and owns the search over those
+on its own: it integrates the right piece at the right cell, and owns the search over those
 choices.
 
 It is one subsystem of a larger cognitive framework, operable alone:
 
 | Piece | Job | Relation to Morphogen |
 |---|---|---|
-| **Mapper** | builds representations: the intent map (as tests), the observed map, catalogs | produces the points Morphogen works on; reads Morphogen's evidence back |
+| **Mapper** | builds representations: the system structure, intended (as tests) and observed, and catalogs | produces the cells Morphogen works on; reads Morphogen's evidence back |
 | **Builder** | builds from the intent, fixes, upgrades, instruments (ordinary Claude Code) | makes red tests green; assembles candidates |
-| **Morphogen** | changes a system at any scope, from one point to the whole, against a judge it cannot edit | this project |
+| **Morphogen** | changes a system at any scope, from one cell to the whole, against a judge it cannot edit | this project |
 | **Deploy** | the target's own release process | applies what the operator promotes; what it observes comes back as evidence |
 
 ## Precedents
 
 - **Reconciliation.** A Kubernetes object has a `spec` (intended) and a `status` (observed), and
-  a controller reconciles them. That is the intent map, the observed map and the builder.
+  a controller reconciles them. That is the intended structure, the observed structure and the builder.
 - **Local drives.** The Horizontal Pod Autoscaler attaches to one target, reads metrics, and
   changes one setting within `minReplicas` and `maxReplicas`, bounds the operator owns. Morphogen
-  generalizes it: any point, any modality, structural changes too, behind a judge built for
+  generalizes it: any cell, any modality, structural changes too, behind a judge built for
   agent-written candidates.
 - **Judges for deployments.** Kayenta (Netflix and Google) compares canary with baseline using a
   Mann-Whitney U test; a metric fails when its 98% confidence interval lies outside a tolerance
@@ -57,7 +57,7 @@ reconciliation and reflexion models. Two claims carry the project:
    combines them (optimizers trust their evaluator; canary tools trust outside collection and
    ignore the candidate's author; coding agents can edit their tests). The Darwin Gödel Machine
    result is the evidence that instructions alone do not hold.
-2. **Scope is part of the search.** A change can target one point, a group of neighbours, or
+2. **Scope is part of the search.** A change can target one cell, a group of neighbours, or
    the whole system, and no scope wins in general: which pays off depends on the system and the
    moment. So the selector chooses scope the way it chooses an optimizer, from evidence, and the
    gate judges every scope the same way. There is no claim that local beats whole, or the
@@ -70,7 +70,7 @@ cheats that get through:
 |---|---|
 | A | GEPA, or Claude Code, on the whole system, with its own evaluator |
 | B | the same, behind Morphogen's gate only |
-| C | Morphogen's gate plus the selector, choosing scope (point, group, whole) and optimizer from evidence |
+| C | Morphogen's gate plus the selector, choosing scope (cell, group, whole) and optimizer from evidence |
 
 B over A means the gate is the value. C over B means choosing scope and optimizer from evidence
 adds something over a fixed choice. If C does not beat B, Morphogen is the gate plus adapters,
@@ -78,9 +78,9 @@ and the selector is cut.
 
 ## Test-driven, end to end
 
-The intent map is an executable spec, and the three roles follow red, green, refactor:
+The intended structure is an executable spec, and the three roles follow red, green, refactor:
 
-| Step | Two-map view | Who |
+| Step | In the two structures | Who |
 |---|---|---|
 | **Red** | the intent declares an interface, connection or behaviour; its test fails (an absence) | the mapper, writing intent as tests |
 | **Green** | the observed system passes | the builder |
@@ -104,25 +104,32 @@ Rules that follow:
 3. **Intent coverage, not code coverage.** The mapper reports which intent claims have a test and
    which are only stated. Purpose and design reasons stay as notes.
 4. **Tests are the drift check.** Intent changes turn tests red (the builder's work); code drift
-   shows as divergence in the observed map (the mapper's question).
+   shows as divergence in the observed structure (the mapper's question).
 
-## Mapping: optional, and what it adds
+## System structure: optional, and what it adds
 
-Morphogen needs points, not a map. A mapper helps when there are many points, when structural
+Morphogen needs cells, not a system structure. A mapper helps when there are many cells, when structural
 changes need neighbours, or when intent is missing from the code. Without one, start by
 measuring:
 
-1. **One point by hand.** Name a location, its existing tests and a measure (rebuild 6 ran this
+1. **One cell by hand.** Name a location, its existing tests and a measure (rebuild 6 ran this
    way: a `target.yaml` and nothing else).
 2. **Or profile first.** Run the system under its tests or workload with outside observation (a
-   profiler offline, OBI live). The hot spots, by time, cost or errors, become candidate points.
-   An agent drafts each point from what is already there (location, modality, tests it finds);
+   profiler offline, OBI live). The hot spots, by time, cost or errors, become candidate cells.
+   An agent drafts each cell from what is already there (location, modality, tests it finds);
    the operator confirms owners and bounds.
-3. **The map grows from points that earned attention.** Measure first, map what matters.
+3. **The structure grows from cells that earned attention.** Measure first, map what matters.
 
-Morphogen's own vocabulary is four words: **point** (a changeable place, at any grain),
+**Rendered as a diagram.** The intended and observed structures render as one picture: cells as
+nodes, neighbours as edges, parts only intended drawn as absences, parts only observed flagged
+as divergences. Live traces light it up: OBI's service relationships and OpenTelemetry spans mark
+which cells and edges ran, how often, how slowly and with what errors, and verdicts mark the
+cells under trial. Rendering is an adapter (a diagram format such as Mermaid, D2 or Graphviz,
+or a trace viewer's service graph); the structure is the data.
+
+Morphogen's own vocabulary is four words: **cell** (a changeable place, at any grain),
 **parameter** (with an owner and bounds), **interface** (as tests), **neighbour**. Existing
-formats are address spaces a point's location can refer into, not the ontology:
+formats are address spaces a cell's location can refer into, not the ontology:
 
 | Grain | Format |
 |---|---|
@@ -131,7 +138,7 @@ formats are address spaces a point's location can refer into, not the ontology:
 | symbols: functions, classes, references | SCIP, or an indexer |
 | anything else | a file path, `path#symbol` or `path:key` |
 
-None has points: a prompt, a config key, a skill, a hook, an MCP tool or a model choice is below
+None has cells: a prompt, a config key, a skill, a hook, an MCP tool or a model choice is below
 Backstage's grain, and none of these formats has parameters with owners, interfaces as behaviour
 tests, requirements with reasons, an observed side, provenance or intent coverage. So the mapper
 adds computations, not a representation:
@@ -146,7 +153,7 @@ Any store can hold the graph. Sources of claims, by trust:
 
 | Source | Produces | Trust | Tool |
 |---|---|---|---|
-| code, config, the running system | the observed map | derived | an indexer; OBI's service graph |
+| code, config, the running system | the observed structure | derived | an indexer; OBI's service graph |
 | documents, interviews, specs | candidate intent | stated | graphiti or cognee, off the shelf, once there is a corpus |
 | an agent while it works | attestations and corrections, each with a reason | inferred | a log entry (rebuild 6's evidence notes) |
 | the operator, or a passing test | confirmed intent | asserted, or test-backed | the intent's tests |
@@ -163,7 +170,7 @@ The nearest precedent is Palantir Foundry's Ontology: object and link types boun
 sources (the semantic part), and action types with typed parameters and submission criteria
 that validate an edit before it is written (the kinetic part). Foundry stages edits as
 proposals for review and develops ontology changes on branches. I found no source saying its
-agents create new types on their own. Points with owned parameters are Foundry's action types
+agents create new types on their own. Cells with owned parameters are Foundry's action types
 applied to a system's own parts, with the judge as the submission criteria.
 
 ## Catalogs and supply-chain risk
@@ -206,16 +213,17 @@ before adding a dependency.
 
 | Part | Job | Written or integrated |
 |---|---|---|
-| **Spec** | desired state per point: location, modality, interface tests, parameters with owners and bounds, neighbours, measures, held-out cases | written: the format |
-| **Selector** | the search over (scope × optimizer × measure), where scope is a point, a group of neighbours or the whole: modality narrows it, evidence from past runs updates it | written: where Morphogen sits |
-| **Optimizer adapters** | hand a point and an inner evaluator to GEPA, Optuna, OpenEvolve, AFlow or a Claude Code worker | integrated |
-| **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each point's harness | integrated |
-| **Gate** | offline at each point: protected test setup, held-out cases, owners enforced, neighbour tests, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
+| **Spec** | desired state per cell: location, modality, interface tests, parameters with owners and bounds, neighbours, measures, held-out cases | written: the format |
+| **Selector** | the search over (scope × optimizer × measure), where scope is a cell, a group of neighbours or the whole: modality narrows it, evidence from past runs updates it | written: where Morphogen sits |
+| **Optimizer adapters** | hand a cell and an inner evaluator to GEPA, Optuna, OpenEvolve, AFlow or a Claude Code worker | integrated |
+| **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each cell's harness | integrated |
+| **Gate** | offline at each cell: protected test setup, held-out cases, owners enforced, neighbour tests, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
 | **Apply and observe adapters** | turn a promoted change into a branch, PR or deploy; read status back | integrated (git, Argo, Terraform, ...) |
-| **Map adapters** | suggest points from a profile, an indexer, Backstage's `catalog-info.yaml` files (no Backstage server needed), or a hand-written spec | integrated |
+| **Structure adapters** | suggest cells from a profile, an indexer, Backstage's `catalog-info.yaml` files (no Backstage server needed), or a hand-written spec | integrated |
+| **Structure view** | render the intended and observed structures as one diagram, lit by live traces and verdicts | integrated: a diagram format, a trace viewer |
 | **Supply-chain evidence** | evidence for each allowed alternative: registry existence and age, OSV, Scorecard, deps.dev, SLSA, Sigstore, licence | integrated |
 | **Evidence ledger** | every trial, verdict and observation as claims with trust classes | written, or a store |
-| **Loop** | observe → pick a point → optimize → gate → propose → (operator) → apply → observe | written: small |
+| **Loop** | observe → pick a cell → optimize → gate → propose → (operator) → apply → observe | written: small |
 
 ## Measurement rule
 
@@ -227,18 +235,18 @@ errors, duration and service relationships from the executable and network witho
 
 ## The gate at two scales
 
-- **Point, offline, before merge.** Inner evaluator for the search: cheap, outside the optimizer's
+- **Cell, offline, before merge.** Inner evaluator for the search: cheap, outside the optimizer's
   reach, not statistical. Then the judge, once, on the optimizer's best, with paired statistics,
   on held-out cases, with the neighbours' interface tests. Catches cheating and overfitting.
 - **System, online, after apply.** Canary against a fresh baseline running the production version
   (Google's guidance), on outside-observed telemetry. Catches interactions, load and emergent
-  regressions. A change that passes at the point and fails here is rolled back, and the selector
+  regressions. A change that passes at the cell and fails here is rolled back, and the selector
   learns from it.
 
 ## The spec format (draft)
 
 ```yaml
-points:
+cells:
   retrieval-prompt:
     at: agent/prompts/retrieve.md        # a file, file#symbol, or a marked block
     modality: text                       # text | code | numeric | workflow | ...
@@ -268,7 +276,7 @@ A mapper writes it, or a person does by hand. Morphogen reads it and nothing els
 
 ## First milestone
 
-One prompt point, GEPA as its optimizer, end to end:
+One prompt cell, GEPA as its optimizer, end to end:
 
 1. Red team first: a candidate that reads or edits the inner evaluator, the interface tests or
    the held-out cases is refused.
@@ -276,9 +284,9 @@ One prompt point, GEPA as its optimizer, end to end:
 3. The judge on held-out cases accepts a real improvement and refuses an overfit one.
 4. The verdict records the optimizer and the parameter values as evidence.
 
-Then: a numeric point with Optuna; a structural change gated by a neighbour's contract test;
-then the three-arm comparison above, on a system with at least two points, before building more
-of the selector. One live point gated by a canary on OBI telemetry comes after that.
+Then: a numeric cell with Optuna; a structural change gated by a neighbour's contract test;
+then the three-arm comparison above, on a system with at least two cells, before building more
+of the selector. One live cell gated by a canary on OBI telemetry comes after that.
 
 ## Demos
 
@@ -294,7 +302,7 @@ The core is a controller: a library and a CLI, with an MCP server so agents can 
 Claude Code plugin or skill folder wraps it (Agent Skills format; an optional
 `.claude-plugin/plugin.json` adds agents, hooks and MCP servers, loaded as `<name>@skills-dir`).
 Subagents shipped inside a plugin ignore `mcpServers` and `hooks`. On Kubernetes the same core
-could run as an operator with a `Point` resource. Checked against code.claude.com/docs on
+could run as an operator with a `Cell` resource. Checked against code.claude.com/docs on
 2026-11-04.
 
 ## Carry over, drop
@@ -313,7 +321,7 @@ From the `rebuild-6` branch:
 
 ## Open questions
 
-- Running neighbours' contract tests without the judge's cost multiplying per point.
+- Running neighbours' contract tests without the judge's cost multiplying per cell.
 - Where held-out cases live so no candidate can read them: outside the container, or only in the
   judge's process.
 - Learned-state reset between trials for stateful targets such as an agent's memory (#45).

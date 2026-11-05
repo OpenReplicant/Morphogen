@@ -9,11 +9,11 @@ is a component that stands alone, or a larger system built from them.
 | [catalog](catalog/BRIEF.md) | take in entities: resolve, classify under adopted schemes, attach claims with trust | entity-resolution |
 | [cognitive-model](cognitive-model/BRIEF.md) | the Common Model of Cognition on Claude Code | catalog, and the rest of its spec |
 
-Build them in that order: each one's points become available to the next.
+Build them in that order: each one's cells become available to the next.
 
 ## Rules
 
-1. **A demo starts as a brief, not code.** The brief says what the system is for, its points
+1. **A demo starts as a brief, not code.** The brief says what the system is for, its cells
    (interface tests, parameters with owners), its measure and held-out cases, and its
    alternatives. A builder makes the tests pass; Morphogen improves it from there.
 2. **The core never imports from `demos/`.** Demos depend on Morphogen, never the reverse.

@@ -1,8 +1,8 @@
-"""Settings Morphogen may tune. Each is declared as a parameter in points.yaml (file, name, owner,
+"""Settings Morphogen may tune. Each is declared as a parameter in cells.yaml (file, name, owner,
 range or choices), so the judge can read it in base and candidate and refuse a change it may not
 make. Plain constants only: a value computed by an expression cannot be read by the judge."""
 
-# Which backend fills the `backend` point (agent, choices: see er.BACKENDS).
+# Which backend fills the `backend` cell (agent, choices: see er.BACKENDS).
 BACKEND = "tfidf"
 
 # A candidate is returned by resolve() only at or above this score (agent, range [0.5, 0.99]).
