@@ -20,6 +20,7 @@ from . import judge as judge_mod
 from .documents import DocumentError, load_config
 from .evidence import Evidence
 from .render import mermaid
+from .project import structure_file
 from .structure import Structure, StructureError
 
 PAGE = Path(__file__).with_name("ui.html")
@@ -38,7 +39,7 @@ class Api:
         return Evidence.for_project(self.root)
 
     def _structure_file(self, file: str | None) -> Path:
-        f = (self.root / (file or self._cfg().get("structure", "cells.yaml"))).resolve()
+        f = (self.root / (file or structure_file(self.root, self._cfg()))).resolve()
         f.relative_to(self.root)  # only files inside the project
         return f
 
@@ -50,7 +51,7 @@ class Api:
         for r in recs:
             kinds[r.get("kind", "note")] = kinds.get(r.get("kind", "note"), 0) + 1
         cfg = self._cfg()
-        return {"root": str(self.root), "structure": cfg.get("structure", "cells.yaml"),
+        return {"root": str(self.root), "structure": structure_file(self.root, cfg),
                 "sandbox": cfg.get("sandbox"), "evidence": {"chain": "intact" if ok else f"broken at record {at}",
                                                             "records": len(recs), "kinds": kinds}}
 

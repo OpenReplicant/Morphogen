@@ -1,4 +1,5 @@
-"""Naming a target: a directory with a target.yaml, or `cell:NAME` for a cell's `measure`.
+"""Naming a target: a directory with a target.yaml, or `cell:NAME` for a cell's `measure`. In the
+cell format (morphogen.yaml with `cells`), names pass through unchanged and the judge resolves them.
 
     resolve(root, cfg, "targets/classify")  -> ("targets/classify", None)
     resolve(root, cfg, "cell:classify")     -> ("targets/classify", "classify")
@@ -18,6 +19,10 @@ PREFIX = "cell:"
 
 
 def resolve(root: Path, cfg: dict, target: str) -> tuple[str, str | None]:
+    if (Path(root) / "morphogen.yaml").exists():
+        from .project import Project
+        if Project.load(root) is not None:
+            return target, None   # the cell format: the judge resolves cell:NAME on the base commit
     if not target.startswith(PREFIX):
         return target, None
     name = target[len(PREFIX):]

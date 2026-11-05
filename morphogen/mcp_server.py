@@ -18,6 +18,7 @@ from .evidence import Evidence
 from .optimize import catalog, make, prior_from_evidence
 from .optimize import tune as tune_mod
 from .render import mermaid
+from .project import structure_file
 from .structure import Structure, StructureError
 from .targets import resolve
 
@@ -57,7 +58,7 @@ def _safe(fn):
 
 def _structure(file: str | None) -> Structure:
     root, cfg = _ctx()
-    return Structure.load(root / (file or cfg.get("structure", "cells.yaml")))
+    return Structure.load(root / (file or structure_file(root, cfg)))
 
 
 def _target(target: str) -> tuple[str, str | None]:

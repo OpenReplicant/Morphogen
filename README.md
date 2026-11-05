@@ -62,7 +62,48 @@ metric a constraint: the system's primary metric may regress at most 5% (`guard:
 0.1}` on the cell to change it, `guard: false` to turn it off), and its other metrics keep their
 own limits. The verdict records the system's comparison under `system`.
 
-## A target
+## The cell format
+
+One `morphogen.yaml` at the root holds the project's cells and interfaces (it replaces
+`target.yaml` plus `cells.yaml`, which still work until the project's own files move over):
+
+```yaml
+cells:
+  app: {}
+  classify:
+    in: app                                   # the cell this one belongs to
+    dir: classify                             # where its commands run (default: the root)
+    change: classify/classify.py#THRESHOLD in 0..100   # what may change; nothing else may
+    run: python bench.py                      # the workload
+    better: accuracy higher                   # the primary metric and its direction
+    score: python score.py                    # scores each run's output, from the base
+    tests: python -m unittest -q test_classify   # must pass; a failure refuses
+    provides: labels
+  report: {in: app, consumes: labels}
+interfaces:
+  labels: python -m unittest -q contracts.test_labels   # run from the root
+```
+
+- **Default deny.** A candidate may change only what the judged cell's scope names in `change`.
+  Anything else changed, the project file and every test included, refuses the candidate before
+  anything runs. Candidates may not add symbolic links.
+- **`change`** entries: a path or glob (`src/**`, `prompts/`); a setting, `path#NAME` (a Python
+  constant) or `path:dotted.key` (YAML, JSON), with `in lo..hi` or `in [a, b]`. A setting entry lets
+  only that setting change in its file. `keep: path#NAME` holds a setting fixed in a file `change`
+  opens.
+- **`better`**: `metric higher|lower`, comma-separated for constraints after the primary, or the long
+  form `{accuracy: {higher: true, min: 0.05, gain: absolute, aggregate: mean}}`. Plain names are the
+  judge's (`wall_seconds`, `cpu_seconds`, `max_rss_kb`), else from `observe`, else from `score`.
+- **Optional:** `observe` (`otel`, or an observer), `same_as_base: {gen, run, cases}` (outputs must
+  match the base on generated inputs), `rounds`, `timeout`, `guard`, `simulates`, `requires`.
+- **Held-out answers** go in an uncommitted `morphogen.local.yaml`:
+  `cells: {classify: {private: /path/outside/the/repo, search: /another}}`. It may also set
+  `sandbox` and `budget`.
+- Name a target `cell:classify` (or `classify`). `morphogen migrate` prints the cell format for an
+  old project (`--write` writes it); the result allows what the old format allowed, so narrow each
+  `change` afterwards.
+
+## A target (the old format)
 
 A directory with a `target.yaml`. The judge reads it, and the harness files it lists, from the
 base commit, so a candidate cannot change how it is scored.

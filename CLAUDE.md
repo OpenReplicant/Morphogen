@@ -7,7 +7,8 @@ docs/restart/LESSONS.md.
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
   judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
-  `otel`), `documents.py` (morphogen.yaml,
+  `otel`), `project.py` (the cell format: morphogen.yaml's cells, default deny), `migrate.py` (old
+  format to new), `documents.py` (morphogen.yaml settings,
   target.yaml), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
   `morphogen` (improve a target) and `map` (draft cells.yaml or a first target.yaml).

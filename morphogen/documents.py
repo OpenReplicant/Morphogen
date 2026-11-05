@@ -136,6 +136,16 @@ def load(kind: str, path: Path) -> dict:
 
 
 def load_config(root: Path) -> dict:
-    """morphogen.yaml at the project root, or the defaults."""
+    """morphogen.yaml at the project root, or the defaults, with the operator's morphogen.local.yaml
+    (uncommitted) laid over it: `sandbox`, `sandbox_image` and `budget` override, and `cells` (held-out
+    answer paths per cell: `private`, `search`) is kept under `local`."""
+    from .project import local_config
     f = Path(root) / "morphogen.yaml"
-    return load("config", f) if f.exists() else validate("config", {})
+    cfg = load("config", f) if f.exists() else validate("config", {})
+    local = local_config(root)
+    for k in ("sandbox", "sandbox_image", "budget"):
+        if k in local:
+            cfg[k] = local[k]
+    cfg = validate("config", cfg, f)
+    cfg["local"] = {"cells": local.get("cells") or {}}
+    return cfg
