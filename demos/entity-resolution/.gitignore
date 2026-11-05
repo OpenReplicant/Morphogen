@@ -1,0 +1,3 @@
+# downloaded benchmark data (licence version not stated; fetched by data/fetch.py)
+data/*/
+__pycache__/

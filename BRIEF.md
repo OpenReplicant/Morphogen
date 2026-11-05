@@ -23,7 +23,7 @@ It is one subsystem of a larger cognitive framework, operable alone:
 |---|---|---|
 | **Mapper** | builds representations: the intent map (as tests), the observed map, catalogs | produces the points Morphogen works on; reads Morphogen's evidence back |
 | **Builder** | builds from the intent, fixes, upgrades, instruments (ordinary Claude Code) | makes red tests green; assembles candidates |
-| **Morphogen** | changes a system locally, point by point, against a judge it cannot edit | this project |
+| **Morphogen** | changes a system at any scope, from one point to the whole, against a judge it cannot edit | this project |
 | **Deploy** | the target's own release process | applies what the operator promotes; what it observes comes back as evidence |
 
 ## Precedents
@@ -57,10 +57,11 @@ reconciliation and reflexion models. Two claims carry the project:
    combines them (optimizers trust their evaluator; canary tools trust outside collection and
    ignore the candidate's author; coding agents can edit their tests). The Darwin Gödel Machine
    result is the evidence that instructions alone do not hold.
-2. **Point by point beats whole-system.** Improving a system at points, with an optimizer chosen
-   per point and neighbour checks, does better than one optimizer on the whole system.
-   **Unproven**, and possibly false: GEPA already evolves several components together, and an
-   agent given the whole repository may match it.
+2. **Scope is part of the search.** A change can target one point, a group of neighbours, or
+   the whole system, and no scope wins in general: which pays off depends on the system and the
+   moment. So the selector chooses scope the way it chooses an optimizer, from evidence, and the
+   gate judges every scope the same way. There is no claim that local beats whole, or the
+   reverse.
 
 The test, same system and same budget, comparing improvement on held-out cases and the rate of
 cheats that get through:
@@ -69,10 +70,11 @@ cheats that get through:
 |---|---|
 | A | GEPA, or Claude Code, on the whole system, with its own evaluator |
 | B | the same, behind Morphogen's gate only |
-| C | full Morphogen: points, selector, gate |
+| C | Morphogen's gate plus the selector, choosing scope (point, group, whole) and optimizer from evidence |
 
-B over A means the gate is the value. C over B means the selector adds something. If C does not
-beat B, Morphogen is the gate plus adapters, and the selector is cut.
+B over A means the gate is the value. C over B means choosing scope and optimizer from evidence
+adds something over a fixed choice. If C does not beat B, Morphogen is the gate plus adapters,
+and the selector is cut.
 
 ## Test-driven, end to end
 
@@ -205,7 +207,7 @@ before adding a dependency.
 | Part | Job | Written or integrated |
 |---|---|---|
 | **Spec** | desired state per point: location, modality, interface tests, parameters with owners and bounds, neighbours, measures, held-out cases | written: the format |
-| **Selector** | the search over (point × optimizer × measure): modality narrows it, evidence from past runs updates it | written: where Morphogen sits |
+| **Selector** | the search over (scope × optimizer × measure), where scope is a point, a group of neighbours or the whole: modality narrows it, evidence from past runs updates it | written: where Morphogen sits |
 | **Optimizer adapters** | hand a point and an inner evaluator to GEPA, Optuna, OpenEvolve, AFlow or a Claude Code worker | integrated |
 | **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each point's harness | integrated |
 | **Gate** | offline at each point: protected test setup, held-out cases, owners enforced, neighbour tests, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
@@ -317,7 +319,7 @@ From the `rebuild-6` branch:
 - Learned-state reset between trials for stateful targets such as an agent's memory (#45).
 - Token cost observed from outside, through a model gateway (#43).
 - How the selector learns: a lookup by modality plus evidence, or a bandit over
-  (point × optimizer).
+  (scope × optimizer).
 - Not read yet: Optuna; AFlow's evaluator; Pact; Argo Rollouts' official analysis docs (the
   field names seen were in tutorials); the scip-python and scip-typescript licences.
 
