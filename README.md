@@ -12,7 +12,7 @@ the design; this file is how to use what is built.
 | Structure | `structure.py`, `render.py` | `cells.yaml`: cells in a containment tree, interfaces as hyperedges with their tests, parameters with owners. Checks, scopes, computed boundaries, the tests a change in a scope must pass, intent coverage, intended against observed, a Mermaid diagram |
 | Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules (see below) |
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
-| Optimizers | `optimize.py` | one interface; built-in grid and random search over agent-owned parameters; `tune` probes each proposal and judges the best |
+| Optimizers | `optimize.py` | the optimizer slot: a catalog (`morphogen optimizers`) of built-in grid, random and hill-climb search, an Optuna adapter (`uv sync --extra optuna`), and the `selector`, an optimizer whose policy (a bandit on probe gains, primed by earlier verdicts) chooses which one proposes next; GEPA and a model-based selector policy are listed as planned; other packages add optimizers through the `morphogen.optimizers` entry point. `tune` probes each proposal and judges the best |
 | CLI | `cli.py` | `morphogen structure`, `measure`, `judge`, `tune`, `evidence` |
 | MCP server | `mcp_server.py` | the same as ten tools for an agent: `structure_check`, `structure_scope`, `structure_render`, `measure`, `probe`, `judge`, `tune`, `evidence_query`, `evidence_note` (stated or inferred only), `evidence_verify` |
 | Web UI | `ui.py`, `ui.html` | `morphogen ui`: a local, read-only page (Alpine.js and Mermaid) with the structure diagram (click a cell for its scope, boundary, tests and parameters), findings and intent coverage; the evidence log with filters, verdict metrics, reasons and parameter values; and each target's primary metric, parameters and latest results |
@@ -37,7 +37,8 @@ uv sync
 uv run morphogen structure check cells.yaml
 uv run morphogen measure targets/my-target
 uv run morphogen judge targets/my-target my-branch
-uv run morphogen tune targets/my-target --optimizer grid --steps 5
+uv run morphogen tune targets/my-target              # the selector chooses optimizers
+uv run morphogen optimizers                          # the catalog
 uv run morphogen evidence --verify
 uv run morphogen ui              # http://127.0.0.1:8765/
 ```
@@ -47,6 +48,14 @@ structure (`morphogen.yaml` key `structure`, default `cells.yaml`). Judged that 
 must also pass the tests of every interface the cell's scope touches. Those tests, the files they
 list (`interfaces.<name>.files`) and `cells.yaml` itself come from the base commit, and run from
 the structure file's directory; each verdict records which ran.
+
+**The system guard.** Improving one part can make the whole worse: a cell can win on its own
+benchmark by shifting work onto code only the system runs, or onto a shared resource (the Theory
+of Constraints' local optimum). So when a cell is judged, its topmost ancestor cell with a
+`measure` (the system) is measured too, base against candidate, in paired rounds, with every
+metric a constraint: the system's primary metric may regress at most 5% (`guard: {max_regression:
+0.1}` on the cell to change it, `guard: false` to turn it off), and its other metrics keep their
+own limits. The verdict records the system's comparison under `system`.
 
 ## A target
 
@@ -91,10 +100,35 @@ one a scorer computes outside the candidate (`scored.*`). Numbers the workload p
 - Paired rounds in alternating order; the median (or mean) paired gain must clear the bar and a
   sign test must reject luck at p ≤ 0.01. Identical code passed 0 of 12 times (A/A, 2026-11-05).
 - Files that shadow standard or harness modules, or customise the interpreter, are refused.
+- Judging a cell: the tests of every interface it touches, from the base's structure, must pass,
+  and the system around it must not get worse (the system guard).
+- Runners declare their guarantees (Podman by default: no network, read-only tree, only the
+  candidate's tree visible, nothing kept between runs, resource limits); a target can require them.
 - Every verdict and probe is evidence: `trust: measured, by: judge`.
 
-`tests/test_redteam.py` holds the known ways to cheat: 26 of them, from patching the timer to
-reading the held-out answers. Every one must fail; a new one that passes goes there first.
+`tests/test_redteam.py` holds the known ways to cheat: 31 of them, from patching the timer to
+reading the held-out answers, breaking a neighbour's contract, or winning locally while the system
+gets slower. Every one must fail; a new one that passes goes there first.
+
+## How Morphogen compares
+
+Morphogen is not another optimizer, evaluator or catalog. It is the workspace around them: it
+says what may change (the structure, owners and bounds), runs a search with whichever optimizer
+fits, and only accepts what a judge the improver cannot edit measures as better, for the cell and
+for the system around it. Most of the tools below fit one of its slots; what Morphogen adds is the
+wrapping. Details are from each project's own docs or source, read on 2026-11-04 and 2026-11-05.
+
+| System | What it does | Relation to Morphogen | What Morphogen adds around it |
+|---|---|---|---|
+| **Optuna** (MIT) | samples parameter values (TPE and others), ask/tell interface | fills the optimizer slot (`optuna` adapter, built) | which parameters may change and within what bounds; probes as its objective; a verdict on held-out cases before anything is kept |
+| **GEPA** (MIT) | evolves anything interpretable as text with model reflection and a Pareto front; you supply the evaluator | would fill the optimizer slot for text cells (planned) | an evaluator out of the candidate's reach (GEPA leaves isolation to you); held-out answers; neighbours' contracts and the system guard |
+| **OpenEvolve / AlphaEvolve** (Apache-2.0) | evolves marked code blocks against an evaluator | could fill the optimizer slot for code cells | OpenEvolve imports your evaluator into its own process with no sandbox; Morphogen scores outside the candidate, in a container |
+| **AFlow, ADAS, Darwin Gödel Machine** | search over agent workflows or rewrite whole agents against benchmarks | research systems with the same aim at the whole-agent scope | the Darwin Gödel Machine reports objective hacking (an agent removed the signal its checker read); Morphogen's red team and outside measurement exist for exactly that |
+| **Kayenta, Argo Rollouts** | judge a canary against a baseline on metrics collected outside the code, after deploy | precedents for the judge, one stage later | judging before merge, on candidates written by an agent that may cheat, with held-out cases and parameter ownership |
+| **Kubernetes Horizontal Pod Autoscaler** | changes one setting (replicas) within operator-owned bounds from live metrics | the precedent for a local drive with owned bounds | any cell and modality, structural change, and a judge instead of a fixed rule |
+| **Backstage, C4, CycloneDX, SCIP** | describe software at the level of organisations, artifacts or symbols | address spaces a cell's location can point into | cells, parameters with owners, interfaces as tests, and the comparison of intended with observed |
+| **graphiti, cognee** | build knowledge graphs from text with model calls | belong to the demos (catalog, ingestion), not the core | a resolver that Morphogen can tune against held-out answers (demos/entity-resolution) |
+| **Claude Code, or any coding agent** | builds and changes code | the builder, and the agent that drives Morphogen through its MCP tools | a referee it cannot edit, so its changes are accepted on evidence, not on its own say-so |
 
 ## Limits
 

@@ -44,12 +44,15 @@ class Evidence:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as c:
+        c = self._connect()
+        try:
             c.execute("CREATE TABLE IF NOT EXISTS evidence (seq INTEGER PRIMARY KEY, hash TEXT NOT NULL, "
                       "prev TEXT NOT NULL, raw TEXT NOT NULL)")
             for op in ("UPDATE", "DELETE"):
                 c.execute(f"CREATE TRIGGER IF NOT EXISTS evidence_no_{op.lower()} BEFORE {op} ON evidence "
                           "BEGIN SELECT RAISE(ABORT, 'evidence is append-only'); END")
+        finally:
+            c.close()
 
     @classmethod
     def for_project(cls, root: Path) -> Evidence:

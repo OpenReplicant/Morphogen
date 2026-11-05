@@ -390,7 +390,58 @@ def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None) -> dict:
             if before != src.read_bytes():
                 replaced.append(str(rel.parent / name))
     tests = [{"interface": i, "test": t} for i in s.touched(scope) for t in s.interfaces[i].tests]
-    return {"cell": cell, "scope": sorted(scope), "tests": tests, "replaced": replaced, "dir": sdir_c}
+    guard = None
+    if s.cells[cell].guard is not False:
+        ancestors, c = [], s.cells[cell].parent
+        while c is not None and c in s.cells and c not in ancestors:
+            ancestors.append(c)
+            c = s.cells[c].parent
+        top = next((a for a in reversed(ancestors) if s.cells[a].measure), None)
+        if top is not None:
+            opts = s.cells[cell].guard if isinstance(s.cells[cell].guard, dict) else {}
+            guard = {"cell": top, "target": str(rel.parent / s.cells[top].measure),
+                     "max_regression": float(opts.get("max_regression", 0.05))}
+    return {"cell": cell, "scope": sorted(scope), "tests": tests, "replaced": replaced, "dir": sdir_c,
+            "guard": guard}
+
+
+def _system_guard(guard: dict, repo: Path, cfg: dict, btree: Path, ctree: Path, timeout: int) -> dict:
+    """Measure the system around a judged cell, base against candidate, with every metric a constraint:
+    a change that wins locally must not cost the whole (the system's primary metric may regress at
+    most max_regression; other metrics keep their own limits). Paired rounds as for the verdict."""
+    grel = Path(guard["target"])
+    spec = load_spec(btree, grel)
+    metrics = _check_spec(spec)
+    _prepare_score(spec, repo, grel)
+    _check_runner(spec, cfg)
+    gb, gc = btree / grel, ctree / grel
+    if not gc.exists():
+        return {**guard, "ok": False, "reason": f"{grel} does not exist on the candidate"}
+    _overlay(spec, gb, gc)
+    constraints = {m: {**v, "primary": False,
+                       "max_regression": guard["max_regression"] if v.get("primary")
+                       else v.get("max_regression", 0.05)} for m, v in metrics.items()}
+    m = spec["measure"]
+    samples: list[dict[str, list[float]]] = [{}, {}]
+    outputs: list = []
+    seeds = []
+
+    def round_(into):
+        seeds.append(secrets.randbelow(2**31))
+        _one_round(spec, [gb, gc], cfg, seeds[-1], timeout, into, gb, outputs=outputs)
+
+    for _ in range(int(m.get("warmup", 1))):
+        round_([{}, {}])
+    outputs.clear()
+    for _ in range(int(m.get("repeats", 10))):
+        round_(samples)
+    comparisons, undecided = _compare(constraints, *samples)
+    while undecided and len(samples[0]["wall_seconds"]) < int(m.get("max_repeats", 30)):
+        round_(samples)
+        comparisons, undecided = _compare(constraints, *samples)
+    mismatches = sum(1 for b, c in outputs if b != c) if m.get("same_output", True) else 0
+    ok = not mismatches and all(c["ok"] for c in comparisons.values())
+    return {**guard, "ok": ok, "metrics": comparisons, "timed_output_mismatches": mismatches, "seeds": seeds}
 
 
 def _run_interface_tests(gate: dict, cfg: dict, timeout: int) -> list[dict]:
@@ -747,7 +798,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                     mismatches += 1
         equivalent = mismatches == 0 and failures == 0
 
-        comparisons, perf_ok, bench_seeds, outputs, timed_mismatches = {}, False, [], [], 0
+        comparisons, perf_ok, bench_seeds, outputs, timed_mismatches, system = {}, False, [], [], 0, None
         if check_ok and equivalent and not refused:
             m = spec["measure"]
             # A fresh seed every round: base and candidate share it within a round (a fair pair),
@@ -774,6 +825,9 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
             if m.get("same_output", True):
                 timed_mismatches = sum(1 for b, c in outputs if b != c)
             perf_ok = not timed_mismatches and all(c["ok"] for c in comparisons.values())
+            if perf_ok and gate.get("guard"):
+                system = _system_guard(gate["guard"], repo, cfg, btree, ctree, timeout)
+                perf_ok = system["ok"]
 
     passed = not refused and check_ok and equivalent and perf_ok
     reasons = []
@@ -781,6 +835,11 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         reasons.append(f"changes files that shadow standard or harness modules, or customise Python: "
                        f"{', '.join(forbidden)}")
     reasons += param_violations
+    if system and not system["ok"]:
+        worst = [f"{k} {c['gain']:+.1%}" for k, c in (system.get("metrics") or {}).items() if not c["ok"]]
+        reasons.append(f"the system ({system['cell']}, {system['target']}) gets worse: "
+                       + (", ".join(worst) or system.get("reason") or
+                          f"{system.get('timed_output_mismatches')} runs changed its output"))
     for x in interface_results:
         if not x["passed"]:
             reasons.append(f"interface {x['interface']}: its test fails on the candidate ({x['test']})")
@@ -813,7 +872,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                   "random inputs; paired ABBA runs timed outside the process, each checked for the base's "
                   "output; sign test",
         "outcome": {"forbidden": forbidden, "parameter_violations": param_violations,
-                    "check": check_ok, "interfaces": interface_results, "generated_inputs": len(eq_seeds),
+                    "check": check_ok, "interfaces": interface_results, "system": system,
+                    "generated_inputs": len(eq_seeds),
                     "wrong": mismatches, "failed": failures, "timed_output_mismatches": timed_mismatches,
                     "metrics": comparisons},
         "refs": {"base": base_sha, "candidate": cand_sha},
@@ -837,6 +897,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "check": check_detail if not check_ok else "passed",
         "cell": cell,
         "interfaces": interface_results,
+        "system": system,
         "generated_inputs": {"cases": len(eq_seeds), "wrong": mismatches, "failed": failures},
         "metrics": comparisons,
         "reasons": reasons,

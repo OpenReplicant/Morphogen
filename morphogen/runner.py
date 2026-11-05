@@ -90,6 +90,20 @@ class Result:
     seconds: float
 
 
+_ROOTS: dict[str, Path] = {}
+
+
+def tree_root(cwd: Path) -> Path:
+    """The top of the git worktree holding `cwd` (the candidate's or the base's whole tree), or `cwd`
+    itself outside git. Containers mount this tree, so a target can use code shared with the rest of
+    its repository; the scorer's private answers live outside it and stay hidden."""
+    key = str(Path(cwd).resolve())
+    if key not in _ROOTS:
+        r = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd, capture_output=True, text=True)
+        _ROOTS[key] = Path(r.stdout.strip()).resolve() if r.returncode == 0 and r.stdout.strip() else Path(key)
+    return _ROOTS[key]
+
+
 def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict | None = None,
         timeout: int = 300, private: bool = False) -> Result:
     """Run `cmd` in `cwd`. `private`: for code under test. In a container every run is fresh
@@ -99,9 +113,11 @@ def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict |
     env = {"PYTHONDONTWRITEBYTECODE": "1", **(env or {})}
     scratch = None
     if mode in ("docker", "podman"):
-        mount = f"{cwd}:/w:ro" + (",Z" if mode == "podman" else "")  # Z: SELinux relabel for rootless Podman
+        root = tree_root(cwd)
+        inner = Path("/w") / Path(cwd).resolve().relative_to(root)
+        mount = f"{root}:/w:ro" + (",Z" if mode == "podman" else "")  # Z: SELinux relabel for rootless Podman
         args = [mode, "run", "--rm", "-i", "--network", "none", "--memory", "1g", "--cpus", "1",
-                "-v", mount, "-w", "/w"]
+                "-v", mount, "-w", str(inner)]
         for k, v in env.items():
             args += ["-e", f"{k}={v}"]
         args += [cfg.get("sandbox_image", "python:3.12-slim"), "sh", "-c", cmd]

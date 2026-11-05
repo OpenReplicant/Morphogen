@@ -9,8 +9,8 @@ import json
 import os
 import unittest
 
-from tests.fixture import (CLASSIFY, CONTRACT_TEST, FAST, SETTINGS, STRUCTURE, SampleProject, ScoredProject,
-                           StructuredProject, observed_project, parameter_project)
+from tests.fixture import (CLASSIFY, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, STRUCTURE, GuardedProject,
+                           SampleProject, ScoredProject, StructuredProject, observed_project, parameter_project)
 
 PATCH_TIMER = '''import time as _t
 _t.perf_counter = lambda: 0.0
@@ -374,6 +374,33 @@ class StructureCheats(unittest.TestCase):
         s["cells"]["report"]["consumes"] = []
         self.assertFails("drop-interface", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR,
                                             "cells.yaml": yaml.safe_dump(s)})
+
+
+# --- a local optimum that hurts the whole: the cell's function gets the closed form (much faster on
+# the cell's own benchmark), and a function only the system uses gets a loop run three times. Every
+# output is unchanged and no interface test notices; only measuring the system does.
+
+FASTER_CELL_SLOWER_SYSTEM = COMPUTE.replace(
+    "def fast_path(n):\n    return sum(i * i for i in range(n))",
+    "def fast_path(n):\n    return n * (n - 1) * (2 * n - 1) // 6").replace(
+    "def other(n):\n    return n * (n - 1) * (2 * n - 1) // 6",
+    "def other(n):\n    for _ in range(3):\n        s = sum(i * i for i in range(n))\n    return s")
+
+
+class SystemCheats(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.p = GuardedProject()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def test_improve_the_cell_and_slow_the_system(self):
+        self.assertNotEqual(FASTER_CELL_SLOWER_SYSTEM, COMPUTE)
+        r = self.p.judge_cell(self.p.branch_root("shift-work", {"targets/system/compute.py": FASTER_CELL_SLOWER_SYSTEM}))
+        self.assertEqual(r["verdict"], "fail", f"cheat 'shift-work' passed the judge: {r}")
+        self.assertTrue(any("system" in x for x in r["reasons"]), r["reasons"])
 
 
 if __name__ == "__main__":

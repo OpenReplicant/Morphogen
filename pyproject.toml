@@ -13,6 +13,10 @@ dependencies = [
   "mcp==2.3.0",
 ]
 
+[project.optional-dependencies]
+# The Optuna adapter (optimize.OptunaTPE). MIT. 5.0.0: September 2026.
+optuna = ["optuna==5.0.0"]
+
 [project.scripts]
 morphogen = "morphogen.cli:main"
 morphogen-mcp = "morphogen.mcp_server:main"
@@ -33,4 +37,6 @@ constraint-dependencies = [
   "jsonschema-specifications==2025.9.1", "mcp-types==2.3.0", "pycparser==3.12", "pyjwt==2.15.1",
   "python-multipart==0.0.33", "pywin32==312", "referencing==0.37.0", "rpds-py==2026.9.1",
   "sse-starlette==3.6.0", "starlette==1.10.0", "truststore==0.10.5", "uvicorn==0.54.0",
+  # optuna's: SQLAlchemy 2.1.8 is a day old (2026-11-05); 2.0.51 is what rebuild 6 tested.
+  "sqlalchemy==2.0.51", "greenlet==3.5.2",
 ]

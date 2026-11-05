@@ -3,7 +3,8 @@
     morphogen structure check|scope|render FILE [CELL] [--observed FILE]
     morphogen measure TARGET [--ref main]
     morphogen judge TARGET CANDIDATE [--base main]
-    morphogen tune TARGET [--optimizer grid|random] [--steps N] [--trials N]
+    morphogen tune TARGET [--optimizer NAME] [--steps N] [--trials N]
+    morphogen optimizers
     morphogen evidence [--verify] [--limit N] [--by judge]
     morphogen ui [--host 127.0.0.1] [--port 8765]
 
@@ -21,7 +22,7 @@ from pathlib import Path
 from . import judge as judge_mod
 from .documents import DocumentError, load_config
 from .evidence import Evidence
-from .optimize import OPTIMIZERS, Grid, RandomSearch, tune
+from .optimize import CATALOG, catalog, make, prior_from_evidence, tune
 from .render import mermaid
 from .structure import Structure, StructureError, compare
 
@@ -104,12 +105,20 @@ def cmd_judge(a) -> int:
 def cmd_tune(a) -> int:
     root = _root()
     cfg = load_config(root)
-    opt = Grid(steps=a.steps) if a.optimizer == "grid" else RandomSearch(trials=a.trials, seed=a.seed)
     cell = a.target[5:] if a.target.startswith("cell:") else None
-    r = tune(root, cfg, _target(root, cfg, a.target), opt, Evidence.for_project(root), base=a.base,
-             rounds=a.rounds, max_trials=a.trials, cell=cell)
+    target, ev = _target(root, cfg, a.target), Evidence.for_project(root)
+    options = {"trials": a.trials, "seed": a.seed, "steps": a.steps}
+    if a.optimizer == "selector":
+        options["prior"] = prior_from_evidence(ev, target)
+    opt = make(a.optimizer, **options)
+    r = tune(root, cfg, target, opt, ev, base=a.base, rounds=a.rounds, max_trials=a.trials, cell=cell)
     _print(r)
     return 0 if r.get("verdict") == "pass" else 1
+
+
+def cmd_optimizers(a) -> int:
+    _print(catalog())
+    return 0
 
 
 def cmd_evidence(a) -> int:
@@ -161,13 +170,17 @@ def main(argv: list[str] | None = None) -> int:
 
     tu = sub.add_parser("tune", help="search a target's agent-owned parameters; judge the best")
     tu.add_argument("target")
-    tu.add_argument("--optimizer", choices=sorted(OPTIMIZERS), default="grid")
+    tu.add_argument("--optimizer", choices=sorted(CATALOG), default="selector",
+                    help="from the catalog (morphogen optimizers); default: selector, which chooses among the others")
     tu.add_argument("--steps", type=int, default=5, help="grid: values per numeric range")
     tu.add_argument("--trials", type=int, default=20, help="most proposals to try")
     tu.add_argument("--seed", type=int, default=None, help="random: the seed")
     tu.add_argument("--rounds", type=int, default=2, help="probe rounds per proposal")
     tu.add_argument("--base", default="main")
     tu.set_defaults(fn=cmd_tune)
+
+    op = sub.add_parser("optimizers", help="list the optimizer catalog")
+    op.set_defaults(fn=cmd_optimizers)
 
     ev = sub.add_parser("evidence", help="read or verify the evidence log")
     ev.add_argument("--verify", action="store_true")

@@ -6,7 +6,7 @@ docs/restart/LESSONS.md.
 ## Layout
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
-  judge), `evidence.py`, `optimize.py` (optimizers and `tune`), `documents.py` (morphogen.yaml,
+  judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `documents.py` (morphogen.yaml,
   target.yaml), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server.
 - `tests/`: the core's tests and red team, with sample targets in `tests/fixtures`.
@@ -26,7 +26,8 @@ docs/restart/LESSONS.md.
 
 ## Checks before every commit
 ```
-uv run python -m unittest discover -s tests -t . -v
+uv run --extra optuna python -m unittest discover -s tests -t . -v
+MORPHOGEN_TEST_SANDBOX=podman uv run --extra optuna python -m unittest discover -s tests -t .   # judge or runner changes
 claude plugin validate . && claude plugin validate .claude-plugin/plugin.json
 ```
 

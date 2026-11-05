@@ -19,6 +19,7 @@ TOOLS = {
     "tune": ["target", "optimizer", "steps", "trials", "rounds", "base", "seed"],
     "evidence_query": ["contains", "by", "limit"],
     "evidence_note": ["claim", "source", "trust", "supports", "challenges"], "evidence_verify": [],
+    "optimizers_list": [],
 }
 
 
