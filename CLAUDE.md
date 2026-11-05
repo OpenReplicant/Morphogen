@@ -38,33 +38,32 @@ local clone added as a marketplace runs the plugin from the clone, so the judge 
 candidate. Never edit the installed plugin's directory.
 
 ## State (2026-11-05)
-- On main: the base (#61), MCP server, plugin and web UI (#62). Open: #63, the optimizer catalog
-  and selector, the system guard, the README comparison, and the observer slot (`otel`).
-- 108 tests pass (1 container-only case skipped); the whole suite passes in Podman (98 tests at
-  the system guard; rerun after observers). A/A: 0 of 12.
+- On main: the base (#61); MCP server, plugin and web UI (#62); the optimizer catalog, selector and
+  system guard (#63). #63 merged before GitHub picked up the observer commit, so the observer slot
+  (`otel`) reaches main with the consolidation PR.
+- Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
+  judge or runner changes. A/A: 0 of 12 after the measuring loop became one function.
 - CI is advisory: `judge` runs the candidate's tests (required on main); `base-tests` runs main's
   tests against the candidate and is not required. Make it required again when rebuild 7 settles.
 - Podman, Docker and bubblewrap are installed in the cloud container; only Podman's service runs.
+- Model calls: run them through this session's Claude Code (the user's subscription), e.g.
+  `claude -p`, rather than an API key.
 
 ## Next
-1. Consolidate (below), then open a PR.
+1. Design simplifications under discussion (one structure document instead of target.yaml plus
+   cells.yaml; the cell gate whenever a target belongs to a cell; probe as a mode of the judge).
 2. Optimizers that escape local optima: random restarts, simulated annealing, a stagnation signal
    for the selector; later a stepping-stone archive and multi-step candidates.
 3. The entity-resolution demo as the first real run: move its F1 into a scorer outside the
    candidate, contract tests for its three untested interfaces, then tune the matcher.
 4. An agent target: Claude Code on a small task set, cells for its skills and prompts, measured by
-   the `otel` observer (needs a model API key; costs money).
+   the `otel` observer.
 5. Later: GEPA adapter (text cells), model-based selector policy, choosing scope, learned-state
    reset (#45), model gateway (#43), the observed structure from traces, a bubblewrap runner.
 
-## To consolidate
-- Parameters are declared in target.yaml (enforced, searched) and in cells.yaml (shown, unused).
-  When a cell is judged or tuned, its cells.yaml parameters should be enforced and searched too.
-- judge.py repeats one measuring loop in judge, probe, measure and the system guard; make it one.
-- `cell:NAME` is parsed in cli.py, mcp_server.py and optimize callers; mcp_server imports cli's
-  `_target`. Move target resolution next to the judge.
-- BRIEF.md has drafts the code has overtaken (the cells format, "points", the first milestone):
-  trim it to the design, and keep status in README only (README, BRIEF and CLAUDE.md all list it).
-- Wording left from rebuild 6 (probe docstrings mention strategies and an archive).
-- tests/fixture.py holds six sample projects; split it by project.
-- Repository: stale rebuild 6 branches on GitHub and issues #43-#49 that describe rebuild 6 code.
+## Consolidated (2026-11-05)
+Cell parameters in cells.yaml are enforced and searched; one measuring loop (`judge._rounds`) for
+judge, probe, measure and the system guard; target resolution in `targets.py`; the brief trimmed
+to the design (status lives in README); fixtures split by project; rebuild 6 wording removed.
+Left for the operator: stale rebuild 6 branches on GitHub, and issues #43-#49, which describe
+rebuild 6 code.

@@ -452,5 +452,33 @@ class TelemetryCheats(unittest.TestCase):
         self.assertTrue(any("negative" in x for x in r["reasons"]), r["reasons"])
 
 
+class CellParameterCheats(unittest.TestCase):
+    """Parameters declared on a cell in cells.yaml (not in target.yaml) are enforced when the cell is
+    judged: the candidate improves the cell and also changes an operator-owned setting."""
+
+    @classmethod
+    def setUpClass(cls):
+        import yaml
+        cls.p = StructuredProject()
+        s = json.loads(json.dumps(STRUCTURE))
+        s["cells"]["classify"]["parameters"] = {
+            "limit": {"file": "targets/classify/classify.py", "name": "LIMIT", "owner": "operator"}}
+        from tests.fixture import git
+        (cls.p.repo / "cells.yaml").write_text(yaml.safe_dump(s, sort_keys=False))
+        cls.p.path("classify.py").write_text(CLASSIFY + "LIMIT = 100\n")
+        git(cls.p.repo, "add", "-A")
+        git(cls.p.repo, "commit", "-q", "-m", "an operator-owned setting on the cell")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def test_change_an_operator_owned_cell_parameter(self):
+        better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50") + "LIMIT = 5\n"
+        r = self.p.judge_cell(self.p.branch_files("limit-5", {"targets/classify/classify.py": better}))
+        self.assertEqual(r["verdict"], "fail", f"cheat 'limit-5' passed the judge: {r}")
+        self.assertTrue(any("classify.limit" in x for x in r["reasons"]), r["reasons"])
+
+
 if __name__ == "__main__":
     unittest.main()

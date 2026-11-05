@@ -1,18 +1,10 @@
-# Restart brief: Morphogen as the local morphological drive
+# Morphogen: the design
 
-Written 2026-11-04, when the previous build moved to the
-[`rebuild-6`](https://github.com/OpenReplicant/Morphogen/tree/rebuild-6) branch. That branch holds
-the code this brief carries over, and [LESSONS.md](https://github.com/OpenReplicant/Morphogen/blob/rebuild-6/docs/restart/LESSONS.md), what it taught. Issue and PR numbers
-(#43, #45, #58) refer to this repository's history.
-
-**Status (2026-11-05):** built and tested: the structure, the judge (carried from rebuild 6, plus
-scoring outside the candidate with held-out answers, the tests of every interface a judged cell
-touches, and a system guard: the system around a judged cell must not get worse), Podman as the
-default runner with declared guarantees, observers (`command` and `otel`), evidence, an optimizer
-catalog (grid, random, hill climb, Optuna, and a selector that chooses among them) with `tune`,
-the CLI, the MCP server, the Claude Code plugin and a read-only web UI. See README.md. Not built:
-the GEPA and worker adapters, a model-based selector policy, choosing scope (cell, group, whole),
-observers beyond `command` and `otel`, and the observed structure from traces.
+The design behind rebuild 7: what Morphogen is, why, and what it rests on. What is built, and how
+to use it, is in [README.md](README.md). The previous build is on the
+[`rebuild-6`](https://github.com/OpenReplicant/Morphogen/tree/rebuild-6) branch, with
+[LESSONS.md](https://github.com/OpenReplicant/Morphogen/blob/rebuild-6/docs/restart/LESSONS.md),
+what it taught. Issue numbers (#43, #45) refer to this repository's history.
 
 ## What it is
 
@@ -280,70 +272,15 @@ errors, duration and service relationships from the executable and network witho
 
 ## The gate at two scales
 
-- **Cell, offline, before merge.** Inner evaluator for the search: cheap, outside the optimizer's
-  reach, not statistical. Then the judge, once, on the optimizer's best, with paired statistics,
-  on held-out cases, with the tests of every interface the changed scope touches. Catches cheating and overfitting.
+- **Cell, offline, before merge.** Inner evaluator for the search (probes): cheap, outside the
+  optimizer's reach, not statistical, on search answers. Then the judge, once, on the optimizer's
+  best, with paired statistics, on held-out answers, with the tests of every interface the changed
+  scope touches, and the system guard: the system around the cell, measured too, must not get
+  worse (a local optimum must not cost the whole). Catches cheating, overfitting and local wins.
 - **System, online, after apply.** Canary against a fresh baseline running the production version
   (Google's guidance), on outside-observed telemetry. Catches interactions, load and emergent
   regressions. A change that passes at the cell and fails here is rolled back, and the selector
   learns from it.
-
-## The structure format (draft)
-
-```yaml
-cells:
-  agent:                                 # a cell with children: a system (the root here)
-    measure: targets/qa                  # a directory with target.yaml: harness and metrics
-    cases: {search: cases/search, holdout: cases/holdout}   # holdout is read by the judge only
-  retrieval-prompt:
-    parent: agent
-    at: agent/prompts/retrieve.md        # a file, file#symbol, or a marked block
-    modality: text                       # text | code | numeric | workflow | ...
-    provides: [retrieve]
-    consumes: [memory-read]
-    parameters:                          # the #58 format, unchanged
-      top_k: {file: agent/config.yaml, key: retrieve.top_k, owner: agent, range: [1, 50]}
-      model: {file: agent/config.yaml, key: llm.model, owner: operator}
-    alternatives: catalog/retrieval      # optional: where candidate fillings come from
-  memory:
-    parent: agent
-    at: agent/memory/
-    provides: [memory-read]
-
-interfaces:                              # owned by the intent; read-only to builder and optimizer
-  retrieve:                              # crosses agent's boundary: a system-level test
-    tests: [python -m pytest -q tests/test_retrieve.py]
-  memory-read:                           # internal to agent
-    tests: [python -m pytest -q tests/contracts/test_memory_read.py]
-    parameters:
-      timeout_ms: {file: agent/config.yaml, key: memory.timeout_ms, owner: operator}
-```
-
-A mapper writes it, or a person does by hand. Morphogen reads it and nothing else about the system.
-
-## Optimizer catalogue (first entries)
-
-| Modality | Optimizer | Licence | From the source (read 2026-11-04) |
-|---|---|---|---|
-| text, DSPy programs | GEPA 0.1.4 | MIT | candidate is a dict of named texts; one component per round or all; merge of Pareto candidates; DSPy adapter changes signatures, modules and control flow; evaluator isolation is the user's (in-process or subprocess helper) |
-| marked code blocks | OpenEvolve 0.4.1 | Apache-2.0 | evaluator file imported into OpenEvolve's own process; timeouts and retries, no sandbox |
-| workflow graphs | AFlow | not checked | Monte Carlo tree search over workflows as code; evaluator not read |
-| numeric settings | Optuna | not checked | not yet read |
-| anything, by an agent | Claude Code workers with strategy cards | ours | what rebuild 6 does |
-
-## First milestone
-
-One prompt cell, GEPA as its optimizer, end to end:
-
-1. Red team first: a candidate that reads or edits the inner evaluator, the interface tests or
-   the held-out cases is refused.
-2. GEPA improves the inner score.
-3. The judge on held-out cases accepts a real improvement and refuses an overfit one.
-4. The verdict records the optimizer and the parameter values as evidence.
-
-Then: a numeric cell with Optuna; a structural change gated by the contract tests of the interfaces it touches;
-then the three-arm comparison above, on a system with at least two cells, before building more
-of the selector. One live cell gated by a canary on OBI telemetry comes after that.
 
 ## Demos
 
@@ -353,40 +290,16 @@ comparison), a catalog on top of it, and the cognitive model that uses the catal
 declarative memory's store. The core never imports from `demos/`; a demo with working code
 graduates to its own repository.
 
-## Packaging
-
-The core is a controller: a library and a CLI, with an MCP server so agents can drive it. A
-Claude Code plugin or skill folder wraps it (Agent Skills format; an optional
-`.claude-plugin/plugin.json` adds agents, hooks and MCP servers, loaded as `<name>@skills-dir`).
-Subagents shipped inside a plugin ignore `mcpServers` and `hooks`. On Kubernetes the same core
-could run as an operator with a `Cell` resource. Checked against code.claude.com/docs on
-2026-11-04.
-
-## Carry over, drop
-
-From the `rebuild-6` branch:
-
-| Carry over | Drop (or hand to the mapper) |
-|---|---|
-| judge: statistics, overlay of the test setup, parameter reading, probes | lists, maps, mounting, catalogs, the self-map |
-| runners (Docker, Podman, none) | map, onboard and playbook skills; the explorer agent |
-| the red team, every cheat | knowledge-system and role slots |
-| the evidence log and trust classes | the admin UI |
-| `documents.load` with a schema per document | most of the 19 MCP tools: keep judge, measure, evidence |
-| the worker and reviewer agents | |
-| evals with and without; the eval-loop CI job | |
-
 ## Open questions
 
 - Running the tests of every touched interface without the judge's cost multiplying per cell.
-- Where held-out cases live so no candidate can read them: outside the container, or only in the
-  judge's process.
 - Learned-state reset between trials for stateful targets such as an agent's memory (#45).
 - Token cost observed from outside, through a model gateway (#43).
-- How the selector learns: a lookup by modality plus evidence, or a bandit over
-  (scope × optimizer).
-- Not read yet: Optuna; AFlow's evaluator; Pact; Argo Rollouts' official analysis docs (the
-  field names seen were in tutorials); the scip-python and scip-typescript licences.
+- How the selector learns beyond a bandit over optimizers: choosing scope (cell, group, whole), and a
+  model-based policy that can also extend the catalog.
+- Escaping local optima at the promotion level: multi-step candidates and a stepping-stone archive.
+- Not read yet: AFlow's evaluator; Pact; Argo Rollouts' official analysis docs (the field names
+  seen were in tutorials); the scip-python and scip-typescript licences.
 
 ## Research this rests on
 

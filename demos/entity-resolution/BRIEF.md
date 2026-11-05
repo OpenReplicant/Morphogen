@@ -3,7 +3,7 @@
 Decide whether two records refer to the same entity, and group records that do. One interface,
 swappable backends, so any system that needs it (a catalog, a knowledge base, a cognitive model)
 can change backend without changing its code. It is also the first system for the three-arm
-comparison in the [restart brief](../../BRIEF.md#value-claims-and-how-to-test-them): measurable,
+comparison in the [design brief](../../BRIEF.md#value-claims-and-how-to-test-them): measurable,
 with real alternatives and real parameters.
 
 ## Interface
