@@ -11,6 +11,9 @@ judge is the only thing that can say a change is better; you cannot edit how it 
 
 ## 1. Understand what you may change
 
+If the project has no `target.yaml` (and no `cells.yaml`), there is nothing to judge yet: use
+the `map` skill to draft one with the operator first.
+
 - `structure_check` and `structure_render`: the cells, the interfaces joining them, and which
   interfaces have tests (intent coverage). Errors (gaps, cycles) come before anything else.
 - `structure_scope(cell)`: what a change inside that cell touches, and the tests it must pass.

@@ -202,6 +202,30 @@ suits intent that changes; cognee aligns extraction to an existing OWL ontology.
 anything executable: tests do. The mapper may be a skill plus these checks, not a product, until
 they prove useful on a real system (the CMC spec is a ready corpus).
 
+**The mapper as a target.** The mapper is a skill (`skills/map/SKILL.md`), and a skill is a text
+cell, so Morphogen can improve its own mapper. The plan:
+
+- **Cell:** the skill's text, modality `text`, owned by the agent.
+- **Workload:** a set of small systems, each with a gold map the operator keeps outside the
+  repository (`measure.score.private`; a separate `search` set for probes). The bench copies each
+  system, runs Claude Code with the candidate skill (`claude -p`, on the operator's subscription),
+  and prints the draft map.
+- **Scorer (from the base):** cells and interfaces matched to the gold map (F1, matching by
+  address and name, which is the entity-resolution demo's problem again); `structure check`
+  errors; whether the drafted interface tests fail on a known-broken variant of the system;
+  intent coverage.
+- **Constraints:** tokens, cost and turns from the `otel` observer.
+- **Interviews:** the run is unattended, so the operator is played by a model holding a written
+  intent for each system. That measures the skill against a simulated operator, and the verdict
+  should say so.
+- **Optimizer:** GEPA's `optimize_anything` fits, since it evolves any text artifact against an
+  evaluator and feeds the evaluator's diagnostics back to its proposer. Here the evaluator is a
+  probe, and the scorer's per-system misses are the diagnostics. DSPy fits less well. Its
+  optimizers (GEPA among them, as `dspy.GEPA`) tune the instructions of a DSPy program, and a
+  Claude Code skill is not one.
+- **Risk:** a mapper tuned on a few systems learns those systems. Held-out systems and the
+  `search`/`private` split exist for this.
+
 A **generalist mapper**, one that builds ontology as a domain needs it, is a separate project.
 The nearest precedent is Palantir Foundry's Ontology: object and link types bound to data
 sources (the semantic part), and action types with typed parameters and submission criteria

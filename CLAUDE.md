@@ -9,7 +9,8 @@ docs/restart/LESSONS.md.
   judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
   `otel`), `documents.py` (morphogen.yaml,
   target.yaml), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
-- `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server.
+- `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
+  `morphogen` (improve a target) and `map` (draft cells.yaml or a first target.yaml).
 - `tests/`: the core's tests and red team, with sample targets in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
 
@@ -59,6 +60,9 @@ candidate. Never edit the installed plugin's directory.
    candidate, contract tests for its three untested interfaces, then tune the matcher.
 4. An agent target: Claude Code on a small task set, cells for its skills and prompts, measured by
    the `otel` observer.
+   First candidate: the mapper skill itself (`skills/map/SKILL.md`), scored against gold maps of
+   small systems held outside the repository, with GEPA as the optimizer (BRIEF, "The mapper as a
+   target").
 5. Later: GEPA adapter (text cells), model-based selector policy, choosing scope, learned-state
    reset (#45), model gateway (#43), the observed structure from traces, a bubblewrap runner.
 
