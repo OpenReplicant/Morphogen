@@ -51,6 +51,9 @@ candidate. Never edit the installed plugin's directory.
   `claude -p`, rather than an API key.
 
 ## Next
+[PLAN.md](PLAN.md) brings everything into the small-core paradigm (phases 0-6); the items below
+fold into it.
+
 1. Design simplifications under discussion (one structure document instead of target.yaml plus
    cells.yaml; one kind of "still works" test; probe as a mode of the judge). Done: the cell gate
    applies whenever the base's structure says a cell measures the target, however it is named.
