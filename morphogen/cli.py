@@ -1,65 +1,166 @@
-"""Command line: morphogen structure check|scope|render FILE ..."""
+"""Command line.
+
+    morphogen structure check|scope|render FILE [CELL] [--observed FILE]
+    morphogen measure TARGET [--ref main]
+    morphogen judge TARGET CANDIDATE [--base main]
+    morphogen tune TARGET [--optimizer grid|random] [--steps N] [--trials N]
+    morphogen evidence [--verify] [--limit N] [--by judge]
+
+TARGET is a directory with a target.yaml, or `cell:NAME` for the `measure` of a cell in the
+project's structure (morphogen.yaml `structure`, default cells.yaml).
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+from pathlib import Path
 
+from . import judge as judge_mod
+from .documents import DocumentError, load_config
+from .evidence import Evidence
+from .optimize import OPTIMIZERS, Grid, RandomSearch, tune
 from .render import mermaid
 from .structure import Structure, StructureError, compare
 
 
-def _structure(args) -> int:
-    s = Structure.load(args.file)
-    if args.action == "check":
-        findings = s.check()
-        out = {"findings": [f.__dict__ for f in findings], "coverage": s.coverage()}
-        print(json.dumps(out, indent=2))
-        return 1 if any(f.severity == "error" for f in findings) else 0
-    if args.action == "scope":
-        cells = sorted(s.scope(args.cell))
-        print(json.dumps({"cell": args.cell, "scope": cells, "touched": s.touched(cells),
-                          "boundary": s.boundary(cells), "tests": s.tests_for(cells),
-                          "neighbours": s.neighbours(args.cell)}, indent=2))
-        return 0
-    if args.action == "render":
-        overlay = compare(s, Structure.load(args.observed)) if args.observed else None
-        sys.stdout.write(mermaid(s if not args.observed else _union(s, Structure.load(args.observed)), overlay))
-        return 0
-    return 2
+def _print(obj) -> None:
+    print(json.dumps(obj, indent=2, default=str))
+
+
+def _root() -> Path:
+    return judge_mod.repo_root(Path.cwd())
+
+
+def _target(root: Path, cfg: dict, target: str) -> str:
+    if not target.startswith("cell:"):
+        return target
+    name = target[5:]
+    s = Structure.load(root / cfg.get("structure", "cells.yaml"))
+    cell = s.cells.get(name)
+    if cell is None:
+        raise KeyError(f"no cell {name!r} in the structure")
+    if not cell.measure:
+        raise KeyError(f"cell {name!r} has no measure (a directory with target.yaml)")
+    base = Path(cell.at).parent if cell.at and not cell.at.endswith("/") else Path(cell.at or ".")
+    for candidate in (root / cell.measure, root / base / cell.measure):
+        if (candidate / "target.yaml").exists():
+            return str(candidate.relative_to(root))
+    return cell.measure
 
 
 def _union(intended: Structure, observed: Structure) -> Structure:
     """Both layers in one structure, so the overlay can mark what each lacks."""
     data = intended.doc.model_dump(exclude_none=True)
-    obs = observed.doc.model_dump(exclude_none=True)
-    for cid, cell in obs.get("cells", {}).items():
+    for cid, cell in observed.doc.model_dump(exclude_none=True).get("cells", {}).items():
         mine = data.setdefault("cells", {}).setdefault(cid, {})
         for k, v in cell.items():
-            if isinstance(v, list):
-                mine[k] = sorted(set(mine.get(k, [])) | set(v))
-            else:
-                mine.setdefault(k, v)
-    for iid, spec in obs.get("interfaces", {}).items():
+            mine[k] = sorted(set(mine.get(k, [])) | set(v)) if isinstance(v, list) else mine.get(k, v)
+    for iid, spec in observed.doc.model_dump(exclude_none=True).get("interfaces", {}).items():
         data.setdefault("interfaces", {}).setdefault(iid, spec)
     return Structure.from_dict(data, f"{intended.source} + {observed.source}")
 
 
+def cmd_structure(a) -> int:
+    s = Structure.load(a.file)
+    if a.action == "check":
+        findings = s.check()
+        _print({"findings": [f.__dict__ for f in findings], "coverage": s.coverage()})
+        return 1 if any(f.severity == "error" for f in findings) else 0
+    if a.action == "scope":
+        if not a.cell:
+            raise KeyError("scope needs a cell")
+        cells = sorted(s.scope(a.cell))
+        _print({"cell": a.cell, "scope": cells, "touched": s.touched(cells), "boundary": s.boundary(cells),
+                "tests": s.tests_for(cells), "neighbours": s.neighbours(a.cell)})
+        return 0
+    if a.observed:
+        o = Structure.load(a.observed)
+        sys.stdout.write(mermaid(_union(s, o), compare(s, o)))
+    else:
+        sys.stdout.write(mermaid(s))
+    return 0
+
+
+def cmd_measure(a) -> int:
+    root = _root()
+    cfg = load_config(root)
+    _print(judge_mod.measure(root, cfg, _target(root, cfg, a.target), a.ref, Evidence.for_project(root)))
+    return 0
+
+
+def cmd_judge(a) -> int:
+    root = _root()
+    cfg = load_config(root)
+    r = judge_mod.judge(root, cfg, _target(root, cfg, a.target), a.base, a.candidate, Evidence.for_project(root))
+    _print(r)
+    return 0 if r["verdict"] == "pass" else 1
+
+
+def cmd_tune(a) -> int:
+    root = _root()
+    cfg = load_config(root)
+    opt = Grid(steps=a.steps) if a.optimizer == "grid" else RandomSearch(trials=a.trials, seed=a.seed)
+    r = tune(root, cfg, _target(root, cfg, a.target), opt, Evidence.for_project(root), base=a.base,
+             rounds=a.rounds, max_trials=a.trials)
+    _print(r)
+    return 0 if r.get("verdict") == "pass" else 1
+
+
+def cmd_evidence(a) -> int:
+    ev = Evidence.for_project(_root())
+    if a.verify:
+        ok, at = ev.verify()
+        _print({"chain": "intact" if ok else f"broken at record {at}", "records": len(ev.dump()),
+                "path": str(ev.path)})
+        return 0 if ok else 1
+    _print(ev.query(by=a.by, limit=a.limit))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="morphogen")
+    ap = argparse.ArgumentParser(prog="morphogen", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
+
     st = sub.add_parser("structure", help="check, scope or render a system structure")
     st.add_argument("action", choices=["check", "scope", "render"])
     st.add_argument("file")
     st.add_argument("cell", nargs="?", help="for scope: the cell whose scope to report")
     st.add_argument("--observed", help="for render: an observed structure to overlay")
-    args = ap.parse_args(argv)
+    st.set_defaults(fn=cmd_structure)
+
+    me = sub.add_parser("measure", help="measure a target at a commit")
+    me.add_argument("target")
+    me.add_argument("--ref", default="main")
+    me.set_defaults(fn=cmd_measure)
+
+    ju = sub.add_parser("judge", help="score a candidate commit against a base, by the base's rules")
+    ju.add_argument("target")
+    ju.add_argument("candidate")
+    ju.add_argument("--base", default="main")
+    ju.set_defaults(fn=cmd_judge)
+
+    tu = sub.add_parser("tune", help="search a target's agent-owned parameters; judge the best")
+    tu.add_argument("target")
+    tu.add_argument("--optimizer", choices=sorted(OPTIMIZERS), default="grid")
+    tu.add_argument("--steps", type=int, default=5, help="grid: values per numeric range")
+    tu.add_argument("--trials", type=int, default=20, help="most proposals to try")
+    tu.add_argument("--seed", type=int, default=None, help="random: the seed")
+    tu.add_argument("--rounds", type=int, default=2, help="probe rounds per proposal")
+    tu.add_argument("--base", default="main")
+    tu.set_defaults(fn=cmd_tune)
+
+    ev = sub.add_parser("evidence", help="read or verify the evidence log")
+    ev.add_argument("--verify", action="store_true")
+    ev.add_argument("--limit", type=int, default=20)
+    ev.add_argument("--by")
+    ev.set_defaults(fn=cmd_evidence)
+
+    a = ap.parse_args(argv)
     try:
-        if args.action == "scope" and not args.cell:
-            ap.error("scope needs a cell")
-        return _structure(args)
-    except (StructureError, KeyError) as e:
+        return a.fn(a)
+    except (StructureError, DocumentError, judge_mod.JudgeError, KeyError, LookupError) as e:
         print(f"morphogen: {e}", file=sys.stderr)
         return 2
 
