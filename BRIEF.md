@@ -118,10 +118,21 @@ measuring:
    the operator confirms owners and bounds.
 3. **The map grows from points that earned attention.** Measure first, map what matters.
 
-On structure alone the intent map is a Backstage graph: systems, components, APIs, owners,
-`dependsOn`, `partOf`. Backstage has interface schemas (`spec.definition`), not behaviour tests,
-and no parameters with owners, requirements with reasons, observed side, provenance or intent
-coverage. So the mapper adds computations, not a representation:
+Morphogen's own vocabulary is four words: **point** (a changeable place, at any grain),
+**parameter** (with an owner and bounds), **interface** (as tests), **neighbour**. Existing
+formats are address spaces a point's location can refer into, not the ontology:
+
+| Grain | Format |
+|---|---|
+| organisation: systems, services, owners, APIs | Backstage (`catalog-info.yaml`) |
+| artifacts: CycloneDX 1.6 component types `application`, `library`, `framework`, `container`, `platform`, `file`, `data`, `machine-learning-model`, `firmware`, ...; services with `endpoints` and a `trustZone` | CycloneDX (`bom-ref`) |
+| symbols: functions, classes, references | SCIP, or an indexer |
+| anything else | a file path, `path#symbol` or `path:key` |
+
+None has points: a prompt, a config key, a skill, a hook, an MCP tool or a model choice is below
+Backstage's grain, and none of these formats has parameters with owners, interfaces as behaviour
+tests, requirements with reasons, an observed side, provenance or intent coverage. So the mapper
+adds computations, not a representation:
 
 - binding intent to what is observed;
 - the comparison: convergences, divergences, absences;
@@ -129,7 +140,7 @@ coverage. So the mapper adds computations, not a representation:
 - promoting a claim from stated to test-backed;
 - parameter ownership.
 
-Backstage, or anything else, can hold the graph. Sources of claims, by trust:
+Any store can hold the graph. Sources of claims, by trust:
 
 | Source | Produces | Trust | Tool |
 |---|---|---|---|
@@ -145,6 +156,14 @@ suits intent that changes; cognee aligns extraction to an existing OWL ontology.
 anything executable: tests do. The mapper may be a skill plus these checks, not a product, until
 they prove useful on a real system (the CMC spec is a ready corpus).
 
+A **generalist mapper**, one that builds ontology as a domain needs it, is a separate project.
+The nearest precedent is Palantir Foundry's Ontology: object and link types bound to data
+sources (the semantic part), and action types with typed parameters and submission criteria
+that validate an edit before it is written (the kinetic part). Foundry stages edits as
+proposals for review and develops ontology changes on branches. I found no source saying its
+agents create new types on their own. Points with owned parameters are Foundry's action types
+applied to a system's own parts, with the judge as the submission criteria.
+
 ## Catalogs and supply-chain risk
 
 Alternatives come from catalogs: package registries, MCP servers, skills, model hubs, internal
@@ -157,9 +176,15 @@ secondary reports; read the paper before quoting them).
 
 Strategy:
 
-1. **The catalog is operator-owned.** An optimizer chooses only among entries in it, the way an
-   agent-owned parameter stays within its range. Adding an entry is an operator decision, with
-   evidence attached.
+1. **Allowed alternatives are a parameter's `choices`.** No new concept: an agent-owned
+   parameter whose `choices` are set in `target.yaml` at the base commit, where no candidate can
+   change them. Adding a choice is an operator change, with its evidence attached:
+
+   ```yaml
+   parameters:
+     http_client: {file: pyproject.toml, key: project.dependencies.http, owner: agent,
+                   choices: ["httpx==0.28.1", "requests==2.32.5"]}
+   ```
 2. **Each entry carries evidence from existing tools:** the name exists in the registry, with its
    age and maintainers (catches hallucinated and typosquatted names); vulnerabilities from OSV;
    project practices from OpenSSF Scorecard (0-10, a flag for review, not an automatic reject);
@@ -185,8 +210,8 @@ before adding a dependency.
 | **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each point's harness | integrated |
 | **Gate** | offline at each point: protected test setup, held-out cases, owners enforced, neighbour tests, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
 | **Apply and observe adapters** | turn a promoted change into a branch, PR or deploy; read status back | integrated (git, Argo, Terraform, ...) |
-| **Map adapters** | read points from Backstage, an indexer, a profile, or a hand-written spec | integrated |
-| **Catalog policy** | which alternatives an optimizer may choose, with each entry's supply-chain evidence | written: the policy; integrated: OSV, Scorecard, deps.dev, SLSA, Sigstore |
+| **Map adapters** | suggest points from a profile, an indexer, Backstage's `catalog-info.yaml` files (no Backstage server needed), or a hand-written spec | integrated |
+| **Supply-chain evidence** | evidence for each allowed alternative: registry existence and age, OSV, Scorecard, deps.dev, SLSA, Sigstore, licence | integrated |
 | **Evidence ledger** | every trial, verdict and observation as claims with trust classes | written, or a store |
 | **Loop** | observe → pick a point → optimize → gate → propose → (operator) → apply → observe | written: small |
 
@@ -307,5 +332,8 @@ From the `rebuild-6` branch:
 - Supply chain: the slopsquatting study (USENIX Security 2025) through secondary reports (CSA,
   Infosecurity Magazine); OpenSSF Scorecard, OSV, deps.dev, SLSA and Sigstore through secondary
   descriptions, not their own docs.
+- Palantir Foundry Ontology: its core-concepts docs and secondary write-ups (action types,
+  submission criteria, proposals, branching); dates for its 2026 features came from third-party
+  sites only.
 - Parameter ownership: no standard found. flagd has free-form `metadata` only; Atlas has
   ownership rules for database schema objects.
