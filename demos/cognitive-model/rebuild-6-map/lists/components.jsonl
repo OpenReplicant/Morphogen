@@ -1,0 +1,36 @@
+{"card": "agents/chunker.md", "id": "comp/agent-chunker", "source": "src/cmc-plugin", "status": "planned", "type": "type/subagent"}
+{"card": "agents/consolidator.md", "id": "comp/agent-consolidator", "source": "src/cmc-plugin", "status": "planned", "type": "type/subagent"}
+{"card": "agents/critic.md", "id": "comp/agent-critic", "source": "src/cmc-plugin", "status": "planned", "type": "type/subagent"}
+{"id": "comp/claude-code", "source": "src/anthropic", "status": "in use", "type": "type/agent-harness", "version": "2.1.295 or later (onFailure)"}
+{"id": "comp/claude-code-read-tools", "source": "src/anthropic", "status": "in use", "type": "type/builtin-tool"}
+{"id": "comp/claude-code-write-tools", "source": "src/anthropic", "status": "in use", "type": "type/builtin-tool"}
+{"id": "comp/cmc-cycle", "source": "src/cmc-plugin", "status": "planned", "system": "cycle", "type": "type/cmc-cycle"}
+{"id": "comp/cmc-dm", "source": "src/cmc-plugin", "status": "planned", "system": "dm", "type": "type/cmc-dm"}
+{"id": "comp/cmc-learn", "source": "src/cmc-plugin", "status": "planned", "system": "learn", "type": "type/cmc-learn"}
+{"id": "comp/cmc-motor", "source": "src/cmc-plugin", "status": "planned", "system": "motor", "type": "type/cmc-motor"}
+{"id": "comp/cmc-percept", "source": "src/cmc-plugin", "status": "planned", "system": "percept", "type": "type/cmc-percept"}
+{"id": "comp/cmc-pm", "source": "src/cmc-plugin", "status": "planned", "system": "pm", "type": "type/cmc-pm"}
+{"id": "comp/cmc-wm", "source": "src/cmc-plugin", "status": "planned", "system": "wm", "type": "type/cmc-wm"}
+{"id": "comp/dm-chunks-table", "source": "src/sqlite", "status": "planned", "type": "type/sqlite-table"}
+{"id": "comp/dm-server", "language": "node", "notes": "chunks, activation, retrieval", "provides": [], "source": "src/cmc-plugin", "status": "planned", "type": "type/mcp-server"}
+{"id": "comp/hook-boot", "provides": ["survives-compaction"], "script": "hooks/boot.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-close-cycle", "provides": ["context-every-cycle"], "script": "hooks/close-cycle.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-encode-episode", "provides": [], "script": "hooks/encode-episode.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-file-changed", "provides": [], "script": "hooks/file-changed.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-flush-wm", "provides": ["survives-compaction"], "script": "hooks/flush-wm.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-gate-motor", "provides": ["fail-closed"], "script": "hooks/gate-motor.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-inject-wm", "provides": ["context-every-cycle"], "script": "hooks/inject-wm.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-judge", "provides": [], "script": "hooks/judge.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-log-skill", "provides": ["sees-skill-calls"], "script": "hooks/log-skill.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-motor-outcome", "provides": [], "script": "hooks/motor-outcome.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-perceive", "provides": ["replace-tool-output"], "script": "hooks/perceive.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/hook-queue-learning", "provides": [], "script": "hooks/queue-learning.js", "source": "src/cmc-plugin", "status": "planned", "type": "type/hook-command"}
+{"id": "comp/percept-server", "language": "node", "notes": "extra senses", "provides": [], "source": "src/cmc-plugin", "status": "planned", "type": "type/mcp-server"}
+{"id": "comp/project-claude-md", "source": "src/cmc-plugin", "status": "planned", "type": "type/instructions-file"}
+{"allow": ["mcp__plugin_cmc_wm", "mcp__plugin_cmc_dm__dm_retrieve", "mcp__plugin_cmc_dm__dm_encode", "mcp__plugin_cmc_percept", "Read", "Grep", "Glob"], "deny": ["mcp__plugin_cmc_dm__dm_search"], "id": "comp/project-settings", "source": "src/cmc-plugin", "status": "planned", "type": "type/permission-rules"}
+{"id": "comp/project-skills", "path": ".claude/skills/", "source": "src/cmc-plugin", "status": "planned", "type": "type/skill"}
+{"id": "comp/proposed-folder", "path": ".claude/skills/_proposed/", "source": "src/cmc-plugin", "status": "planned", "type": "type/folder"}
+{"id": "comp/session-model", "source": "src/anthropic", "status": "in use", "type": "type/llm"}
+{"id": "comp/wm-buffers-table", "source": "src/sqlite", "status": "planned", "type": "type/sqlite-table"}
+{"id": "comp/wm-procedures-table", "source": "src/sqlite", "status": "planned", "type": "type/sqlite-table"}
+{"id": "comp/wm-server", "language": "node", "notes": "buffers, goal stack, procedures", "provides": ["concurrent-writers"], "source": "src/cmc-plugin", "status": "planned", "type": "type/mcp-server"}

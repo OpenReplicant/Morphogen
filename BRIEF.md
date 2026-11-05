@@ -278,6 +278,14 @@ Then: a numeric point with Optuna; a structural change gated by a neighbour's co
 then the three-arm comparison above, on a system with at least two points, before building more
 of the selector. One live point gated by a canary on OBI telemetry comes after that.
 
+## Demos
+
+[demos/](demos/README.md) holds projects a fresh Morphogen can start building and then
+drive, each starting as a brief: entity resolution (the first system for the three-arm
+comparison), a catalog on top of it, and the cognitive model that uses the catalog as
+declarative memory's store. The core never imports from `demos/`; a demo with working code
+graduates to its own repository.
+
 ## Packaging
 
 The core is a controller: a library and a CLI, with an MCP server so agents can drive it. A

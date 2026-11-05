@@ -1,0 +1,24 @@
+{"description": "Runs the top-level LLM loop with tools and skills", "id": "type/agent-harness"}
+{"description": "A harness tool (Read, Grep, Edit, Bash, ...)", "id": "type/builtin-tool"}
+{"description": "One model step between tool batches; hooks run each phase", "id": "type/cmc-cycle"}
+{"description": "Semantic and episodic chunks, retrieved one at a time by activation", "id": "type/cmc-dm"}
+{"description": "Reinforcement, encoding, chunking and consolidation as side effects of work", "id": "type/cmc-learn"}
+{"description": "Write-side tools, gated on a stated goal", "id": "type/cmc-motor"}
+{"description": "Read-side tools and watchers, compressed into the percept buffer", "id": "type/cmc-percept"}
+{"description": "Productions (skills, subagents, the model's weights) with utilities", "id": "type/cmc-pm"}
+{"description": "A small, slot-based workspace re-injected into context every cycle; the only hub", "id": "type/cmc-wm"}
+{"description": "Turns text into vectors for similarity", "id": "type/embedding-model"}
+{"description": "A directory used as a queue or state (proposed, inactive skills)", "id": "type/folder"}
+{"description": "A command hook (exec form) on a lifecycle event", "id": "type/hook-command"}
+{"description": "A hook that calls an MCP server's tool", "id": "type/hook-mcp-tool"}
+{"description": "A prompt hook: an LLM evaluates the event", "id": "type/hook-prompt"}
+{"description": "A file the harness loads into every session (CLAUDE.md)", "id": "type/instructions-file"}
+{"description": "A language model", "id": "type/llm"}
+{"description": "A stdio MCP server the harness starts", "id": "type/mcp-server"}
+{"description": "Allow and deny rules in settings.json", "id": "type/permission-rules"}
+{"description": "A person in a role", "id": "type/person"}
+{"description": "A SKILL.md: description is the condition, body the action (a production)", "id": "type/skill"}
+{"description": "A table in the project's .cmc/cmc.sqlite", "id": "type/sqlite-table"}
+{"description": "A delegated agent with its own context and tools", "id": "type/subagent"}
+{"description": "Recurring tasks run with and without the system", "id": "type/task-suite"}
+{"description": "Nearest-neighbour search over embeddings", "id": "type/vector-index"}
