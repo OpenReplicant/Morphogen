@@ -148,11 +148,9 @@ skill.
 - The UI/UX quorum as a scorer demo.
 - Domain modules around a shared knowledge base, joined by the resolver.
 
-## Decisions for the operator
-1. **One file:** fold the cell format and project settings into `morphogen.yaml` at the root
-   (proposed), or keep a separate `cells.yaml`?
-2. **The old format after phase 2:** remove it (proposed; nothing outside this repository uses
-   it) or keep it read-only?
-3. **`change` or `at`:** `change` (proposed) says what it is for; `at` matches today's files.
-4. **Order of 3 and 4:** they are independent. Backstage first (proposed) proves the "slots onto
-   anything above it" claim; GEPA first gets to a real text-cell run sooner.
+## Decisions (operator, 2026-11-05)
+1. **One file:** the cell format and project settings live in `morphogen.yaml` at the root;
+   held-out paths, budget overrides and the sandbox in an uncommitted `morphogen.local.yaml`.
+2. **The old format** (`target.yaml` plus `cells.yaml`) is removed after phase 2.
+3. **The field is `change`.**
+4. **Phase 3 (Backstage) before phase 4 (GEPA).**
