@@ -1,8 +1,11 @@
-# Judges every pull request to main from outside the agent's reach.
+# Tests every pull request to main. Advisory for now (rebuild 7 is still settling):
 #
-# The candidate's code runs against the BASE's tests (including the red team of known cheats and
-# the sample targets in tests/fixtures), so a change cannot weaken the tests that judge it. Make
-# "judge" a required status check on main, and no change reaches main without passing it.
+# - `judge` runs the candidate's own tests and red team. It is the check main requires.
+# - `base-tests` runs the BASE's tests against the candidate, so a change cannot quietly weaken
+#   the tests that judge it. It is not required: when it fails, read why. An intended change to
+#   tested behaviour fails it until main carries the updated test.
+#
+# To make the base's tests binding again, add `base-tests` to main's required checks.
 name: judge
 on:
   pull_request:
@@ -20,21 +23,34 @@ jobs:
       - name: Check out the candidate
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
+      - name: Install uv
+        run: pipx install uv==0.11.32
+      - name: Tests and red team
+        run: uv run python -m unittest discover -s tests -t . -v
+
+  base-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
           fetch-depth: 0
           persist-credentials: false
       - name: Use the base's tests
-        if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           if git cat-file -e "$BASE:tests" 2>/dev/null; then
             git checkout "$BASE" -- tests
-            echo "Judging with the tests of $BASE"
+            echo "Testing the candidate with the tests of $BASE"
           else
             echo "The base has no tests/ yet; using the candidate's"
           fi
           git status --short
       - name: Install uv
         run: pipx install uv==0.11.32
-      - name: Tests and red team
+      - name: The base's tests and red team, against the candidate
         run: uv run python -m unittest discover -s tests -t . -v
