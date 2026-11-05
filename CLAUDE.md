@@ -9,7 +9,8 @@ docs/restart/LESSONS.md.
   judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
   `otel`), `documents.py` (morphogen.yaml,
   target.yaml), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
-- `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server.
+- `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
+  `morphogen` (improve a target) and `map` (draft cells.yaml or a first target.yaml).
 - `tests/`: the core's tests and red team, with sample targets in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
 
@@ -50,14 +51,21 @@ candidate. Never edit the installed plugin's directory.
   `claude -p`, rather than an API key.
 
 ## Next
+[PLAN.md](PLAN.md) brings everything into the small-core paradigm (phases 0-6); the items below
+fold into it.
+
 1. Design simplifications under discussion (one structure document instead of target.yaml plus
-   cells.yaml; the cell gate whenever a target belongs to a cell; probe as a mode of the judge).
+   cells.yaml; one kind of "still works" test; probe as a mode of the judge). Done: the cell gate
+   applies whenever the base's structure says a cell measures the target, however it is named.
 2. Optimizers that escape local optima: random restarts, simulated annealing, a stagnation signal
    for the selector; later a stepping-stone archive and multi-step candidates.
 3. The entity-resolution demo as the first real run: move its F1 into a scorer outside the
    candidate, contract tests for its three untested interfaces, then tune the matcher.
 4. An agent target: Claude Code on a small task set, cells for its skills and prompts, measured by
    the `otel` observer.
+   First candidate: the mapper skill itself (`skills/map/SKILL.md`), scored against gold maps of
+   small systems held outside the repository, with GEPA as the optimizer (BRIEF, "The mapper as a
+   target").
 5. Later: GEPA adapter (text cells), model-based selector policy, choosing scope, learned-state
    reset (#45), model gateway (#43), the observed structure from traces, a bubblewrap runner.
 

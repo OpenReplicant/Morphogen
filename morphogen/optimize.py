@@ -388,10 +388,12 @@ def _git(cwd: Path, *args: str) -> str:
 
 def space_of(spec: dict, tree_dir: Path, tree: Path | None = None, cfg: dict | None = None,
              cell: str | None = None) -> dict[str, dict]:
-    """The agent-owned parameters with a range or choices: what an optimizer may search. With a cell,
-    also those on the cells in its scope in the structure (read from `tree`, the base's checkout).
+    """The agent-owned parameters with a range or choices: what an optimizer may search. With a cell
+    (named, or the one whose measure is `tree_dir`), also those on the cells in its scope in the structure (read from `tree`, the base's checkout).
     Each entry carries `_value` (its value on the base) and `_dir` (where its file path starts)."""
     items = [(n, p, tree_dir) for n, p in (spec.get("parameters") or {}).items()]
+    if not cell and tree is not None:
+        cell = judge_mod.cell_of(cfg or {}, tree, tree_dir.relative_to(tree))
     if cell and tree is not None:
         from .structure import Structure
         rel = Path((cfg or {}).get("structure", "cells.yaml"))

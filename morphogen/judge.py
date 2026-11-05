@@ -387,10 +387,30 @@ def _names_private(spec: dict, ctree: Path, changed: list[str]) -> list[str]:
     return hits
 
 
-def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None) -> dict:
-    """For a judgment of one cell: the structure from the base commit, the interfaces the cell's scope
-    touches, and the base's copies of their test files laid over the candidate. Tests run later, in
-    the candidate's tree, from the structure file's directory."""
+def cell_of(cfg: dict, tree: Path, target: Path) -> str | None:
+    """The cell whose `measure` is the target directory, in the structure on `tree` (the base's
+    checkout), or None when no cell measures it. A cell's measure is relative to the structure file's
+    directory or, failing that, the repository root, as in `targets.resolve`."""
+    rel = Path(cfg.get("structure", "cells.yaml"))
+    f = tree / rel
+    if not f.exists():
+        return None
+    s = Structure.load(f)
+    want = (tree / target).resolve()
+    hits = sorted(n for n, c in s.cells.items() if c.measure and want in
+                  ((f.parent / c.measure).resolve(), (tree / c.measure).resolve()))
+    if len(hits) > 1:
+        raise JudgeError(f"cells {', '.join(hits)} all measure {target}; name the one to judge (cell:NAME)")
+    return hits[0] if hits else None
+
+
+def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None, target: Path | None = None) -> dict:
+    """The structure from the base commit, the interfaces the cell's scope touches, and the base's
+    copies of their test files laid over the candidate. Tests run later, in the candidate's tree, from
+    the structure file's directory. The cell is the one named or, when none is, the one the base's
+    structure says measures `target`: naming a target by its directory gets the same checks."""
+    if not cell and target is not None:
+        cell = cell_of(cfg, btree, target)
     if not cell:
         return {"cell": None, "tests": [], "replaced": [], "parameters": []}
     rel = Path(cfg.get("structure", "cells.yaml"))
@@ -700,7 +720,10 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         if not cdir.exists():
             raise JudgeError(f"{rel} does not exist on the candidate commit")
         _overlay(spec, bdir, cdir)
-        gate = _cell_gate(cfg, btree, ctree, cell)
+        gate = _cell_gate(cfg, btree, ctree, cell, rel)
+        cell = gate["cell"]
+        if cell:
+            out["cell"] = cell
         out["parameters"], out["parameter_violations"] = _parameters(declared_parameters(spec, bdir, cdir, btree, gate))
         named = _names_private(spec, ctree, changed)
         if named:
@@ -799,8 +822,9 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
 
 def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
           labels: dict | None = None, cell: str | None = None) -> dict:
-    """Score `candidate` against `base` by the base's rules. With `cell`, also the tests of every
-    interface the cell's scope touches, its parameters in the base's structure, and the system guard.
+    """Score `candidate` against `base` by the base's rules. For a cell (named, or found because the base's
+    structure says it measures `target`), also the tests of every interface the cell's scope touches,
+    its parameters in the base's structure, and the system guard.
     `labels` (optimizer, member, values, approach) are recorded with the verdict and never affect it."""
     limit = int((cfg.get("budget") or {}).get("trials_per_day", 0) or 0)
     if limit and _trials_today(evidence) >= limit:
@@ -825,7 +849,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         if not cdir.exists():
             raise JudgeError(f"{rel} does not exist on the candidate commit")
         _overlay(spec, bdir, cdir)
-        gate = _cell_gate(cfg, btree, ctree, cell)
+        gate = _cell_gate(cfg, btree, ctree, cell, rel)
+        cell = gate["cell"]
         parameters, param_violations = _parameters(declared_parameters(spec, bdir, cdir, btree, gate))
         names_private = _names_private(spec, ctree, changed)
         if names_private:

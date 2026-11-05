@@ -79,3 +79,7 @@ class GuardedProject(Project):
 
     def judge_cell(self, candidate, cell="fast"):
         return judge_mod.judge(self.repo, self.cfg, self.target, "main", candidate, self.evidence, cell=cell)
+
+    def judge_path(self, candidate, target=None):
+        """Judge by the target's directory, without naming the cell."""
+        return judge_mod.judge(self.repo, self.cfg, target or self.target, "main", candidate, self.evidence)

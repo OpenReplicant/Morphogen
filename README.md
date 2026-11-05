@@ -2,8 +2,10 @@
 
 The local morphological drive: improve a system at any scope, from one cell to the whole, behind
 a judge the improver cannot edit. Morphogen does little on its own. It connects a system's
-structure, optimizers and measurements, and keeps the improver honest. [BRIEF.md](BRIEF.md) is
-the design; this file is how to use what is built.
+structure, optimizers and measurements, and keeps the improver honest. Tools above it, such as
+Backstage, describe what exists; optimizers beside it, such as Optuna or GEPA, propose changes; the
+judge decides. [BRIEF.md](BRIEF.md) is the design (its first section is the one-page version), and
+[PLAN.md](PLAN.md) the way there; this file is how to use what is built.
 
 ## What is built
 
@@ -45,8 +47,10 @@ uv run morphogen ui              # http://127.0.0.1:8765/
 ```
 
 A target can also be named as `cell:NAME`, for the `measure` of a cell in the project's
-structure (`morphogen.yaml` key `structure`, default `cells.yaml`). Judged that way, the candidate
-must also pass the tests of every interface the cell's scope touches. Those tests, the files they
+structure (`morphogen.yaml` key `structure`, default `cells.yaml`). A target belongs to a cell
+however it is named: when the base's structure has a cell whose `measure` is the target's
+directory, judging the directory is judging the cell. The candidate must then also pass the tests
+of every interface the cell's scope touches. Those tests, the files they
 list (`interfaces.<name>.files`) and `cells.yaml` itself come from the base commit, and run from
 the structure file's directory; each verdict records which ran.
 

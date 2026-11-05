@@ -9,6 +9,7 @@ import json
 import os
 import unittest
 
+from morphogen import judge as judge_mod
 from tests.fixture import (AGENT, CLASSIFY, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, STRUCTURE, AgentProject,
                            GuardedProject,
                            SampleProject, ScoredProject, StructuredProject, observed_project, parameter_project)
@@ -376,6 +377,18 @@ class StructureCheats(unittest.TestCase):
         self.assertFails("drop-interface", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR,
                                             "cells.yaml": yaml.safe_dump(s)})
 
+    def test_break_a_neighbours_interface_naming_the_target_by_path(self):
+        """The target is the cell's measure, named by its directory (spelled oddly) and not as a cell."""
+        cand = self.p.branch_files("break-neighbour-by-path", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR})
+        r = self.p.judge_path(cand, "./targets/../targets/classify/")
+        self.assertEqual(r["verdict"], "fail", f"cheat 'break-neighbour-by-path' passed the judge: {r}")
+        self.assertTrue(any("interface" in x for x in r["reasons"]), r["reasons"])
+
+    def test_probe_by_path_runs_the_interface_tests(self):
+        cand = self.p.branch_files("probe-by-path", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR})
+        r = judge_mod.probe(self.p.repo, self.p.cfg, self.p.target, cand, self.p.evidence, cases=0, rounds=0)
+        self.assertTrue(r.get("interfaces") and not all(x["passed"] for x in r["interfaces"]), r)
+
 
 # --- a local optimum that hurts the whole: the cell's function gets the closed form (much faster on
 # the cell's own benchmark), and a function only the system uses gets a loop run three times. Every
@@ -401,6 +414,11 @@ class SystemCheats(unittest.TestCase):
         self.assertNotEqual(FASTER_CELL_SLOWER_SYSTEM, COMPUTE)
         r = self.p.judge_cell(self.p.branch_root("shift-work", {"targets/system/compute.py": FASTER_CELL_SLOWER_SYSTEM}))
         self.assertEqual(r["verdict"], "fail", f"cheat 'shift-work' passed the judge: {r}")
+        self.assertTrue(any("system" in x for x in r["reasons"]), r["reasons"])
+
+    def test_improve_the_cell_and_slow_the_system_naming_the_target_by_path(self):
+        r = self.p.judge_path(self.p.branch_root("shift-work-by-path", {"targets/system/compute.py": FASTER_CELL_SLOWER_SYSTEM}))
+        self.assertEqual(r["verdict"], "fail", f"cheat 'shift-work-by-path' passed the judge: {r}")
         self.assertTrue(any("system" in x for x in r["reasons"]), r["reasons"])
 
 
@@ -477,6 +495,12 @@ class CellParameterCheats(unittest.TestCase):
         better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50") + "LIMIT = 5\n"
         r = self.p.judge_cell(self.p.branch_files("limit-5", {"targets/classify/classify.py": better}))
         self.assertEqual(r["verdict"], "fail", f"cheat 'limit-5' passed the judge: {r}")
+        self.assertTrue(any("classify.limit" in x for x in r["reasons"]), r["reasons"])
+
+    def test_change_an_operator_owned_cell_parameter_naming_the_target_by_path(self):
+        better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50") + "LIMIT = 6\n"
+        r = self.p.judge_path(self.p.branch_files("limit-6", {"targets/classify/classify.py": better}))
+        self.assertEqual(r["verdict"], "fail", f"cheat 'limit-6' passed the judge: {r}")
         self.assertTrue(any("classify.limit" in x for x in r["reasons"]), r["reasons"])
 
 

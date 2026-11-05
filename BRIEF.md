@@ -6,6 +6,51 @@ to use it, is in [README.md](README.md). The previous build is on the
 [LESSONS.md](https://github.com/OpenReplicant/Morphogen/blob/rebuild-6/docs/restart/LESSONS.md),
 what it taught. Issue numbers (#43, #45) refer to this repository's history.
 
+## Morphogen in one page
+
+**The core** is what nothing else provides:
+
+- a judge the improver cannot edit: the rules come from the base commit, the measurements are
+  taken outside the candidate, and paired rounds with a sign test decide;
+- a "still works" gate: the tests of every interface a change touches, from the base;
+- the system guard: the system around a changed cell must not get worse;
+- an evidence log that cannot be quietly edited.
+
+**A cell** is described by five things, and an optimizer needs nearly the same five:
+
+| Field | Says | For an optimizer it is |
+|---|---|---|
+| `change` | what may change: files, or settings with a range or choices. Nothing else may | the search space, or the artifact (GEPA) |
+| `run` | the workload, from the base | part of the evaluator, held by the judge |
+| `better` | the primary metric and its direction | the objective |
+| `tests` | what must keep passing; a failure refuses, it is never traded for score | constraints |
+| `in` | the cell or system this one belongs to | none: Morphogen uses it for scope and the guard |
+
+Optional: a `score` command (from the base) for outputs that are scored rather than timed, and
+`observe` for telemetry collected outside the run. Everything else is a default, computed from the
+containment tree, or kept on the operator's machine (held-out answers, budget, sandbox).
+
+**Above Morphogen**, other tools map what exists. Morphogen reads whichever are present and adds
+only the cell grain and what the judge needs:
+
+| Layer | Intended | Observed |
+|---|---|---|
+| business: capabilities, processes | ArchiMate | event logs (OCEL 2.0), process mining |
+| software: systems, components, APIs | Backstage `catalog-info.yaml` | traces, OpenTelemetry |
+| cells: code, prompts, settings, skills | Morphogen's cell file | the judge's measurements |
+
+**Beside Morphogen**, optimizers get one contract: a space (from `change`), an evaluator they do not
+hold (`evaluate(candidate) -> score, diagnostics`, which is a probe), and one verdict from the
+judge on their best. Grid, random, hill-climb, Optuna, GEPA, or a quorum of models used as a
+scorer all fit it.
+
+**The family** around it, each judged the same way: the mapper (a skill that drafts the map), the
+builder (ordinary Claude Code, making red tests green), domain modules (skills, an ontology,
+resolver settings and log parsers, bundled) around a shared knowledge base joined by the entity
+resolver, and deployment, whose canary stage is the online half of the gate.
+
+[PLAN.md](PLAN.md) brings what is built into this shape. The rest of this brief is the rationale.
+
 ## What it is
 
 In development, cells do not consult a blueprint. Each reads a morphogen's concentration where
@@ -201,6 +246,30 @@ traced to the episode it came from and closes superseded facts instead of deleti
 suits intent that changes; cognee aligns extraction to an existing OWL ontology. Neither makes
 anything executable: tests do. The mapper may be a skill plus these checks, not a product, until
 they prove useful on a real system (the CMC spec is a ready corpus).
+
+**The mapper as a target.** The mapper is a skill (`skills/map/SKILL.md`), and a skill is a text
+cell, so Morphogen can improve its own mapper. The plan:
+
+- **Cell:** the skill's text, modality `text`, owned by the agent.
+- **Workload:** a set of small systems, each with a gold map the operator keeps outside the
+  repository (`measure.score.private`; a separate `search` set for probes). The bench copies each
+  system, runs Claude Code with the candidate skill (`claude -p`, on the operator's subscription),
+  and prints the draft map.
+- **Scorer (from the base):** cells and interfaces matched to the gold map (F1, matching by
+  address and name, which is the entity-resolution demo's problem again); `structure check`
+  errors; whether the drafted interface tests fail on a known-broken variant of the system;
+  intent coverage.
+- **Constraints:** tokens, cost and turns from the `otel` observer.
+- **Interviews:** the run is unattended, so the operator is played by a model holding a written
+  intent for each system. That measures the skill against a simulated operator, and the verdict
+  should say so.
+- **Optimizer:** GEPA's `optimize_anything` fits, since it evolves any text artifact against an
+  evaluator and feeds the evaluator's diagnostics back to its proposer. Here the evaluator is a
+  probe, and the scorer's per-system misses are the diagnostics. DSPy fits less well. Its
+  optimizers (GEPA among them, as `dspy.GEPA`) tune the instructions of a DSPy program, and a
+  Claude Code skill is not one.
+- **Risk:** a mapper tuned on a few systems learns those systems. Held-out systems and the
+  `search`/`private` split exist for this.
 
 A **generalist mapper**, one that builds ontology as a domain needs it, is a separate project.
 The nearest precedent is Palantir Foundry's Ontology: object and link types bound to data

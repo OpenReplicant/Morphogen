@@ -44,6 +44,9 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           if git cat-file -e "$BASE:tests" 2>/dev/null; then
+            # Replace the directory whole: a checkout on top would keep the candidate's own test
+            # files, which then import from the base's fixtures (#64 failed this way).
+            rm -rf tests
             git checkout "$BASE" -- tests
             echo "Testing the candidate with the tests of $BASE"
           else
