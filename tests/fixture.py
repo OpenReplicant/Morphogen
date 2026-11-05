@@ -252,3 +252,68 @@ class ScoredProject(Project):
         if self.search_dir:
             shutil.rmtree(self.search_dir, ignore_errors=True)
         super().close()
+
+
+# --- a structure around the classifier: `report` consumes the labels `classify` provides, and the
+# `labels` interface has a contract test owned by the intent (not by the cell under change).
+
+CONTRACT_TEST = '''import sys
+import unittest
+
+sys.path.insert(0, "targets/classify")
+from classify import label  # noqa: E402
+
+
+class LabelsContract(unittest.TestCase):
+    """What report relies on: any number gets "high" or "low", negative ones included."""
+
+    def test_every_number_gets_a_label(self):
+        for x in (-5, 0, 3.5, 49, 50, 1000):
+            self.assertIn(label(x), ("high", "low"))
+
+
+if __name__ == "__main__":
+    unittest.main()
+'''
+
+STRUCTURE = {
+    "cells": {
+        "app": {},
+        "classify": {"parent": "app", "at": "targets/classify/classify.py", "measure": "targets/classify",
+                     "provides": ["labels"]},
+        "report": {"parent": "app", "consumes": ["labels"]},
+    },
+    "interfaces": {
+        "labels": {"tests": ["python -m unittest -q contracts.test_labels"],
+                   "files": ["contracts/test_labels.py", "contracts/__init__.py"]},
+    },
+}
+
+
+class StructuredProject(ScoredProject):
+    """The classifier inside a structure, with cells.yaml and the contract test committed on main."""
+
+    def __init__(self):
+        super().__init__()
+        import yaml
+        (self.repo / "cells.yaml").write_text(yaml.safe_dump(STRUCTURE, sort_keys=False))
+        (self.repo / "contracts").mkdir()
+        (self.repo / "contracts" / "__init__.py").write_text("")
+        (self.repo / "contracts" / "test_labels.py").write_text(CONTRACT_TEST)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "structure and contract")
+
+    def branch_files(self, name, files):
+        """Commit a candidate whose files are paths relative to the repository root."""
+        git(self.repo, "checkout", "-q", "-B", name, "main")
+        for rel, text in files.items():
+            p = self.repo / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", name)
+        git(self.repo, "checkout", "-q", "main")
+        return name
+
+    def judge_cell(self, candidate, cell="classify"):
+        return judge_mod.judge(self.repo, self.cfg, self.target, "main", candidate, self.evidence, cell=cell)

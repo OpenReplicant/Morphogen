@@ -7,9 +7,9 @@ the code this brief carries over, and [LESSONS.md](https://github.com/OpenReplic
 
 **Status (2026-11-05):** built and tested: the structure, the judge (carried from rebuild 6, plus
 scoring outside the candidate with held-out answers), evidence, grid and random optimizers with
-`tune`, and the CLI. See README.md. Not built: the GEPA, Optuna and worker adapters, the observed
-structure from traces, the selector across cells and scopes, and packaging as a plugin or MCP
-server.
+`tune`, the CLI, and the MCP server and Claude Code plugin. See README.md. Not built: the GEPA,
+Optuna and worker adapters, the observed structure from traces, and the selector across cells and
+scopes.
 
 ## What it is
 

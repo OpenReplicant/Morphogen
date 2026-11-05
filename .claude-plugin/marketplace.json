@@ -1,0 +1,17 @@
+{
+  "name": "morphogen",
+  "owner": {
+    "name": "OpenReplicant"
+  },
+  "metadata": {
+    "description": "Morphogen: improve systems at any scope under a judge the agent cannot edit."
+  },
+  "plugins": [
+    {
+      "name": "morphogen",
+      "source": "./",
+      "description": "Improve a system at any scope, from one cell to the whole, behind a judge the agent cannot edit.",
+      "version": "0.7.0"
+    }
+  ]
+}

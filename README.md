@@ -14,8 +14,23 @@ the design; this file is how to use what is built.
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
 | Optimizers | `optimize.py` | one interface; built-in grid and random search over agent-owned parameters; `tune` probes each proposal and judges the best |
 | CLI | `cli.py` | `morphogen structure`, `measure`, `judge`, `tune`, `evidence` |
+| MCP server | `mcp_server.py` | the same as ten tools for an agent: `structure_check`, `structure_scope`, `structure_render`, `measure`, `probe`, `judge`, `tune`, `evidence_query`, `evidence_note` (stated or inferred only), `evidence_verify` |
+| Web UI | `ui.py`, `ui.html` | `morphogen ui`: a local, read-only page (Alpine.js and Mermaid) with the structure diagram (click a cell for its scope, boundary, tests and parameters), findings and intent coverage; the evidence log with filters, verdict metrics, reasons and parameter values; and each target's primary metric, parameters and latest results |
+| Claude Code plugin | `.claude-plugin/`, `skills/`, `agents/` | the MCP server, the `morphogen` skill (how to improve a target honestly), and the `worker` and `reviewer` agents |
 
-Python 3.11 or later; pydantic and PyYAML (both MIT, pinned in `uv.lock`).
+Python 3.11 or later and [uv](https://docs.astral.sh/uv/); pydantic, PyYAML and the MCP SDK (all
+MIT, pinned in `uv.lock` at the versions rebuild 6 tested).
+
+## In Claude Code
+
+```
+/plugin install morphogen --marketplace OpenReplicant/Morphogen
+```
+
+Install it from GitHub, not from a local clone: a clone added as a marketplace runs the plugin
+from the clone itself, so the judge would be the candidate you are changing.
+
+## From the command line
 
 ```
 uv sync
@@ -24,10 +39,14 @@ uv run morphogen measure targets/my-target
 uv run morphogen judge targets/my-target my-branch
 uv run morphogen tune targets/my-target --optimizer grid --steps 5
 uv run morphogen evidence --verify
+uv run morphogen ui              # http://127.0.0.1:8765/
 ```
 
 A target can also be named as `cell:NAME`, for the `measure` of a cell in the project's
-structure (`morphogen.yaml` key `structure`, default `cells.yaml`).
+structure (`morphogen.yaml` key `structure`, default `cells.yaml`). Judged that way, the candidate
+must also pass the tests of every interface the cell's scope touches. Those tests, the files they
+list (`interfaces.<name>.files`) and `cells.yaml` itself come from the base commit, and run from
+the structure file's directory; each verdict records which ran.
 
 ## A target
 
@@ -79,20 +98,30 @@ reading the held-out answers. Every one must fail; a new one that passes goes th
 
 ## Limits
 
-- Without a container (`sandbox: docker` or `podman`), code under test runs as you and can read
-  any file you can. Naming the private directory is refused, but an obfuscated path is not
-  caught; the strong version is a container, where only the candidate's tree is mounted.
+- The default runner is Podman (`sandbox: auto` picks Podman, then Docker, then none). Without a
+  container, code under test runs as you and can read any file you can: naming the private
+  directory is refused, but an obfuscated path gets through. In Podman it fails, since only the
+  candidate's tree is mounted (a red-team case, run with `MORPHOGEN_TEST_SANDBOX=podman`, where the
+  whole suite runs with every trial in a container). A target can insist with `requires: [network_isolated,
+  private_paths_hidden, ...]`, and is then refused on a runner without them. Containers use
+  `sandbox_image` (default `python:3.12-slim`), so a target's own dependencies must be in that
+  image. Bubblewrap, gVisor, Firecracker and remote runners are future options (runner.py).
 - The scorer runs without a container: it is the judge's code from the base commit.
 - Parameters are read statically; code that changes a setting at run time is the reviewer's to
   catch. TOML keys can be read but not yet written by `tune`.
+- The web UI binds to localhost, has no authentication and only reads. It loads Alpine.js 3.17.5
+  and Mermaid 12.2.0 (both MIT) from cdn.jsdelivr.net, so the diagram needs network access.
 - The evidence log refuses edits through SQLite triggers; whoever can write the file can drop
   them, and the hash chain then shows the edit.
 - Optimizer adapters beyond grid and random search (GEPA, Optuna, a Claude Code worker), the
-  observed structure from traces, and a selector across cells are designed in BRIEF.md, not built.
+  observed structure from traces, and a selector across cells and scopes are designed in
+  BRIEF.md, not built.
 
 ## Layout
 
-    morphogen/   the core
-    tests/       its tests and red team, with sample targets in tests/fixtures
+    morphogen/       the core, its CLI and MCP server
+    tests/           its tests and red team, with sample targets in tests/fixtures
+    .claude-plugin/  the plugin and marketplace manifests
+    skills/, agents/ the Claude Code skill and agents
     demos/       projects Morphogen can build and drive (the core never imports from them)
     BRIEF.md     the design

@@ -9,10 +9,13 @@ dependencies = [
   "pydantic==2.13.4",
   # YAML documents. MIT.
   "pyyaml==6.0.3",
+  # The MCP server. MIT. The version rebuild 6 used and tested (its API: mcp.server.mcpserver).
+  "mcp==2.3.0",
 ]
 
 [project.scripts]
 morphogen = "morphogen.cli:main"
+morphogen-mcp = "morphogen.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -22,5 +25,12 @@ build-backend = "hatchling.build"
 packages = ["morphogen"]
 
 [tool.uv]
-# Keep pydantic's helpers at the versions rebuild 6 locked and tested.
-constraint-dependencies = ["typing-inspection==0.4.4"]
+# Keep the dependency tree at the versions rebuild 6 locked and tested (checked 2026-11-03).
+constraint-dependencies = [
+  "typing-inspection==0.4.4", "anyio==4.16.0", "attrs==26.1.0", "certifi==2026.10.23",
+  "cffi==2.1.1", "click==8.5.0", "cryptography==50.0.2", "h11==0.16.0", "httpcore2==2.16.0",
+  "httpx2==2.16.0", "httpx2-jsfetch==1.0", "idna==3.20", "jsonschema==4.26.0",
+  "jsonschema-specifications==2025.9.1", "mcp-types==2.3.0", "pycparser==3.12", "pyjwt==2.15.1",
+  "python-multipart==0.0.33", "pywin32==312", "referencing==0.37.0", "rpds-py==2026.9.1",
+  "sse-starlette==3.6.0", "starlette==1.10.0", "truststore==0.10.5", "uvicorn==0.54.0",
+]

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "morphogen",
+  "version": "0.7.0",
+  "description": "Improve a system at any scope, from one cell to the whole, behind a judge the agent cannot edit: structure, judge, evidence and optimizers over MCP.",
+  "author": {
+    "name": "OpenReplicant"
+  },
+  "homepage": "https://github.com/OpenReplicant/morphogen",
+  "repository": "https://github.com/OpenReplicant/morphogen",
+  "license": "Apache-2.0",
+  "keywords": [
+    "self-improvement",
+    "evaluation",
+    "judge",
+    "optimization",
+    "mcp"
+  ],
+  "mcpServers": {
+    "morphogen": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--quiet",
+        "--project",
+        "${CLAUDE_PLUGIN_ROOT}",
+        "morphogen-mcp"
+      ]
+    }
+  }
+}

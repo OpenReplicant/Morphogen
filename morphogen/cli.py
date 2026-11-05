@@ -5,6 +5,7 @@
     morphogen judge TARGET CANDIDATE [--base main]
     morphogen tune TARGET [--optimizer grid|random] [--steps N] [--trials N]
     morphogen evidence [--verify] [--limit N] [--by judge]
+    morphogen ui [--host 127.0.0.1] [--port 8765]
 
 TARGET is a directory with a target.yaml, or `cell:NAME` for the `measure` of a cell in the
 project's structure (morphogen.yaml `structure`, default cells.yaml).
@@ -93,7 +94,9 @@ def cmd_measure(a) -> int:
 def cmd_judge(a) -> int:
     root = _root()
     cfg = load_config(root)
-    r = judge_mod.judge(root, cfg, _target(root, cfg, a.target), a.base, a.candidate, Evidence.for_project(root))
+    cell = a.target[5:] if a.target.startswith("cell:") else None
+    r = judge_mod.judge(root, cfg, _target(root, cfg, a.target), a.base, a.candidate, Evidence.for_project(root),
+                        cell=cell)
     _print(r)
     return 0 if r["verdict"] == "pass" else 1
 
@@ -102,8 +105,9 @@ def cmd_tune(a) -> int:
     root = _root()
     cfg = load_config(root)
     opt = Grid(steps=a.steps) if a.optimizer == "grid" else RandomSearch(trials=a.trials, seed=a.seed)
+    cell = a.target[5:] if a.target.startswith("cell:") else None
     r = tune(root, cfg, _target(root, cfg, a.target), opt, Evidence.for_project(root), base=a.base,
-             rounds=a.rounds, max_trials=a.trials)
+             rounds=a.rounds, max_trials=a.trials, cell=cell)
     _print(r)
     return 0 if r.get("verdict") == "pass" else 1
 
@@ -116,6 +120,20 @@ def cmd_evidence(a) -> int:
                 "path": str(ev.path)})
         return 0 if ok else 1
     _print(ev.query(by=a.by, limit=a.limit))
+    return 0
+
+
+def cmd_ui(a) -> int:
+    from .ui import serve
+    httpd = serve(_root(), a.host, a.port)
+    host, port = httpd.server_address[:2]
+    print(f"Morphogen UI on http://{host}:{port}/ (read-only; Ctrl-C to stop)", flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
     return 0
 
 
@@ -156,6 +174,11 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--limit", type=int, default=20)
     ev.add_argument("--by")
     ev.set_defaults(fn=cmd_evidence)
+
+    ui = sub.add_parser("ui", help="serve the read-only web UI on localhost")
+    ui.add_argument("--host", default="127.0.0.1")
+    ui.add_argument("--port", type=int, default=8765)
+    ui.set_defaults(fn=cmd_ui)
 
     a = ap.parse_args(argv)
     try:

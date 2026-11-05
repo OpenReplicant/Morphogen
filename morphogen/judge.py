@@ -52,7 +52,8 @@ import yaml
 
 
 from . import documents
-from .runner import capabilities, run, sandbox_mode
+from .runner import capabilities, missing, run, sandbox_mode
+from .structure import Structure
 
 INTERFACES = ("direct", "simulated")
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
@@ -362,6 +363,44 @@ def _names_private(spec: dict, ctree: Path, changed: list[str]) -> list[str]:
     return hits
 
 
+def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None) -> dict:
+    """For a judgment of one cell: the structure from the base commit, the interfaces the cell's scope
+    touches, and the base's copies of their test files laid over the candidate. Tests run later, in
+    the candidate's tree, from the structure file's directory."""
+    if not cell:
+        return {"cell": None, "tests": [], "replaced": []}
+    rel = Path(cfg.get("structure", "cells.yaml"))
+    f = btree / rel
+    if not f.exists():
+        raise JudgeError(f"judging cell {cell!r} needs the structure ({rel}) on the base commit")
+    s = Structure.load(f)
+    if cell not in s.cells:
+        raise JudgeError(f"no cell {cell!r} in the base's structure")
+    scope = s.scope(cell)
+    sdir_b, sdir_c = f.parent, ctree / rel.parent
+    replaced = []
+    # The structure itself, and every touched interface's files, come from the base.
+    owned = [rel.name] + [x for i in s.touched(scope) for x in s.interfaces[i].files]
+    for name in dict.fromkeys(owned):
+        src, dst = sdir_b / name, sdir_c / name
+        before = dst.read_bytes() if dst.exists() else None
+        if src.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+            if before != src.read_bytes():
+                replaced.append(str(rel.parent / name))
+    tests = [{"interface": i, "test": t} for i in s.touched(scope) for t in s.interfaces[i].tests]
+    return {"cell": cell, "scope": sorted(scope), "tests": tests, "replaced": replaced, "dir": sdir_c}
+
+
+def _run_interface_tests(gate: dict, cfg: dict, timeout: int) -> list[dict]:
+    out = []
+    for t in gate["tests"]:
+        r = run(t["test"], gate["dir"], cfg, timeout=timeout, private=True)
+        out.append({**t, "passed": r.rc == 0, **({} if r.rc == 0 else {"output": _clip(r.err or r.out, 600)})})
+    return out
+
+
 def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
                samples: list[dict[str, list[float]]], observer_dir: Path | None = None,
                sides: tuple[str, ...] = ("base", "candidate"), outputs: list | None = None) -> None:
@@ -451,8 +490,15 @@ def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tup
         out[metric] = {"base": statistics.median(bs[metric]), "candidate": statistics.median(cs[metric]),
                        "gain": round(pr["point"], 4), "ci95": [round(x, 4) for x in pr["ci95"]],
                        "sign_test_p": round(p, 5), "ok": ok, "primary": bool(ms.get("primary")), "runs": n,
-                       "tied": n - untied}
+                       "tied": n - untied, "gain_kind": ms.get("gain", "relative")}
     return out, undecided
+
+
+def _check_runner(spec: dict, cfg: dict) -> None:
+    gaps = missing(cfg, spec.get("requires") or [])
+    if gaps:
+        raise JudgeError(f"this target requires {', '.join(gaps)}, which the {sandbox_mode(cfg)} runner does not "
+                         "provide; set sandbox: podman (or auto, with Podman installed) in morphogen.yaml")
 
 
 def _check_spec(spec: dict) -> dict:
@@ -506,7 +552,7 @@ def _clip_pair(expected: str, got: str, n: int = 300) -> tuple[str, str]:
 
 
 def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: str | None = None,
-          cases: int = 5, rounds: int = 3) -> dict:
+          cases: int = 5, rounds: int = 3, cell: str | None = None) -> dict:
     """A practice run for strategies: feedback on a candidate, never a verdict.
 
     Same rules as the judge (the base's spec and harness laid over the candidate, the
@@ -532,6 +578,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         spec = load_spec(btree, rel)
         metrics_spec = _check_spec(spec)
         _prepare_score(spec, repo, rel, "probe")
+        _check_runner(spec, cfg)
         timeout = int(spec.get("timeout", 300))
         out["forbidden"] = _forbidden(changed, rel, list(spec.get("harness", [])))
         bdir, cdir = btree / rel, ctree / rel
@@ -543,7 +590,10 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         if named:
             out["parameter_violations"] = out["parameter_violations"] + [
                 f"names the scorer's private directory (held-out answers): {', '.join(named)}"]
+        gate = _cell_gate(cfg, btree, ctree, cell)
         if not out["forbidden"] and not out["parameter_violations"]:
+            if gate["tests"]:
+                out["interfaces"] = _run_interface_tests(gate, cfg, timeout)
             if spec.get("check"):
                 r = run(spec["check"], cdir, cfg, timeout=timeout, private=True)
                 out["check"] = {"passed": r.rc == 0, "output": "" if r.rc == 0 else _clip(r.err or r.out, 1200)}
@@ -583,7 +633,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         "kind": "probe", "subject": {"system": _target_name(spec, rel), "path": str(rel)},
         "refs": {"base": base_sha, "candidate": cand_sha}, "parameters": out["parameters"],
         "outcome": {k: v for k, v in out.items() if k in ("forbidden", "parameter_violations", "check", "metrics",
-                                                          "timed_output_mismatches")}
+                                                          "timed_output_mismatches", "interfaces")}
         | {"cases": [{k: c[k] for k in ("seed", "status")} for c in out.get("cases", [])]},
         "sandbox": sandbox_mode(cfg), "trust": "measured", "by": "judge",
     })
@@ -600,6 +650,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         spec = load_spec(tree, rel)
         _check_spec(spec)
         _prepare_score(spec, repo, rel)
+        _check_runner(spec, cfg)
         name = _target_name(spec, rel)
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
@@ -634,7 +685,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
 
 
 def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
-          labels: dict | None = None) -> dict:
+          labels: dict | None = None, cell: str | None = None) -> dict:
     """Score `candidate` against `base`. `labels` (strategy, approach, family) are recorded with the
     verdict for the archive and never affect it."""
     limit = int((cfg.get("budget") or {}).get("trials_per_day", 0) or 0)
@@ -650,6 +701,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         forbidden = _forbidden(changed, rel, list(spec.get("harness", [])))
         metrics_spec = _check_spec(spec)
         _prepare_score(spec, repo, rel)
+        _check_runner(spec, cfg)
         name = _target_name(spec, rel)
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
@@ -664,6 +716,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         if names_private:
             param_violations = param_violations + [
                 f"names the scorer's private directory (held-out answers): {', '.join(names_private)}"]
+        gate = _cell_gate(cfg, btree, ctree, cell)
         refused = bool(forbidden or param_violations)  # refused before anything runs
 
         check_ok, check_detail = True, "no check defined"
@@ -671,6 +724,9 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
             r = run(spec["check"], cdir, cfg, timeout=timeout, private=True)
             check_ok = r.rc == 0
             check_detail = "passed" if check_ok else (r.err or r.out).strip()[-600:]
+        interface_results = _run_interface_tests(gate, cfg, timeout) if not refused else []
+        interfaces_ok = all(x["passed"] for x in interface_results)
+        check_ok = check_ok and interfaces_ok
 
         eq = spec.get("equivalence")
         eq_seeds, mismatches, failures = [], 0, 0
@@ -725,7 +781,10 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         reasons.append(f"changes files that shadow standard or harness modules, or customise Python: "
                        f"{', '.join(forbidden)}")
     reasons += param_violations
-    if not check_ok:
+    for x in interface_results:
+        if not x["passed"]:
+            reasons.append(f"interface {x['interface']}: its test fails on the candidate ({x['test']})")
+    if not check_ok and interfaces_ok:
         reasons.append("the base's tests fail on the candidate")
     if not equivalent:
         reasons.append(f"{mismatches} wrong and {failures} failed outputs on {len(eq_seeds)} generated inputs")
@@ -738,6 +797,9 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                            f"{c['ci95'][1]:+.1%}, sign test p={c['sign_test_p']}) does not meet the bar")
     notes = [f"harness files changed by the candidate were replaced by the base's: {', '.join(harness_touched)}"] \
         if harness_touched else []
+    if gate["replaced"]:
+        notes.append(f"structure and interface test files changed by the candidate were replaced by the base's: "
+                     f"{', '.join(gate['replaced'])}")
     if interface == "simulated":
         notes.append(SIMULATED_NOTE.format(what=spec["simulates"]))
     verdict = "pass" if passed else "fail"
@@ -751,11 +813,12 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                   "random inputs; paired ABBA runs timed outside the process, each checked for the base's "
                   "output; sign test",
         "outcome": {"forbidden": forbidden, "parameter_violations": param_violations,
-                    "check": check_ok, "generated_inputs": len(eq_seeds),
+                    "check": check_ok, "interfaces": interface_results, "generated_inputs": len(eq_seeds),
                     "wrong": mismatches, "failed": failures, "timed_output_mismatches": timed_mismatches,
                     "metrics": comparisons},
         "refs": {"base": base_sha, "candidate": cand_sha},
         "parameters": parameters,
+        **({"cell": cell, "scope": gate["scope"]} if cell else {}),
         "seeds": {"equivalence": eq_seeds, "bench": bench_seeds},
         "labels": {str(k): str(v) for k, v in (labels or {}).items()},
         "interface": interface,
@@ -772,6 +835,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "candidate": cand_sha,
         "parameters": parameters,
         "check": check_detail if not check_ok else "passed",
+        "cell": cell,
+        "interfaces": interface_results,
         "generated_inputs": {"cases": len(eq_seeds), "wrong": mismatches, "failed": failures},
         "metrics": comparisons,
         "reasons": reasons,

@@ -11,7 +11,7 @@ from morphogen import documents
 from morphogen import judge as judge_mod
 from morphogen.evidence import Evidence
 from tests.fixture import (CLASSIFY, FAST, SETTINGS, TARGET, WRONG, SampleProject, ScoredProject,
-                           parameter_project)
+                           StructuredProject, parameter_project)
 
 
 class JudgeOnSample(unittest.TestCase):
@@ -120,11 +120,59 @@ class Scored(unittest.TestCase):
         finally:
             q.close()
 
+    def test_a_target_that_requires_isolation_is_refused_without_it(self):
+        spec = documents.validate("target", {"requires": ["network_isolated", "private_paths_hidden"]})
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            judge_mod._check_runner(spec, {"sandbox": "none"})
+        self.assertIn("network_isolated", str(e.exception))
+        judge_mod._check_runner(documents.validate("target", {}), {"sandbox": "none"})
+        with self.assertRaises(documents.DocumentError):
+            documents.validate("target", {"requires": ["magic"]})
+
     def test_a_scored_primary_needs_a_scorer(self):
         spec = documents.validate("target", {"measure": {"run": "x", "metrics": {
             "scored.accuracy": {"direction": "higher", "primary": True}}}})
         with self.assertRaises(judge_mod.JudgeError):
             judge_mod._check_spec(spec)
+
+
+class CellGate(unittest.TestCase):
+    """Judging a cell runs the tests of every interface its scope touches, from the base's structure."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = StructuredProject()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def test_a_change_that_keeps_its_interfaces_passes(self):
+        better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")
+        r = self.p.judge_cell(self.p.branch_files("ok-cell", {"targets/classify/classify.py": better}))
+        self.assertEqual(r["verdict"], "pass", r)
+        self.assertEqual(r["cell"], "classify")
+        self.assertEqual([(x["interface"], x["passed"]) for x in r["interfaces"]], [("labels", True)])
+        rec = self.p.evidence.query(by="judge", where={"kind": "verdict"}, limit=1)[0]
+        self.assertEqual(rec["scope"], ["classify"])
+        self.assertEqual(rec["outcome"]["interfaces"][0]["interface"], "labels")
+
+    def test_without_a_cell_no_interface_tests_run(self):
+        better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")
+        r = self.p.judge(self.p.branch_files("no-cell", {"targets/classify/classify.py": better}))
+        self.assertEqual(r["interfaces"], [])
+
+    def test_probe_reports_interface_tests(self):
+        broken = CLASSIFY.replace("def label(x):\n", "def label(x):\n    if x < 0:\n        raise ValueError\n")
+        r = judge_mod.probe(self.p.repo, self.p.cfg, self.p.target,
+                            self.p.branch_files("probe-cell", {"targets/classify/classify.py": broken}),
+                            self.p.evidence, cases=0, rounds=0, cell="classify")
+        self.assertFalse(r["interfaces"][0]["passed"])
+        self.assertIn("output", r["interfaces"][0])
+
+    def test_an_unknown_cell_is_an_error(self):
+        with self.assertRaises(judge_mod.JudgeError):
+            self.p.judge_cell("main", cell="nope")
 
 
 class Tune(unittest.TestCase):
@@ -180,7 +228,7 @@ class CommandLine(unittest.TestCase):
         try:
             (p.repo / "cells.yaml").write_text(
                 "cells:\n  classify:\n    at: targets/classify/classify.py\n    measure: targets/classify\n"
-                "    provides: [labels]\ninterfaces:\n  labels: {tests: [python -m unittest -q test_classify],"
+                "    provides: [labels]\ninterfaces:\n  labels: {tests: [cd targets/classify && python -m unittest -q test_classify],"
                 " external: consumes}\n")
             subprocess.run(["git", "add", "-A"], cwd=p.repo, check=True)
             subprocess.run(["git", "commit", "-qm", "structure"], cwd=p.repo, check=True)
