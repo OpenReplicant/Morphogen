@@ -10,8 +10,8 @@ from pathlib import Path
 from morphogen import documents
 from morphogen import judge as judge_mod
 from morphogen.evidence import Evidence
-from tests.fixture import (CLASSIFY, FAST, SETTINGS, TARGET, WRONG, SampleProject, ScoredProject,
-                           StructuredProject, parameter_project)
+from tests.fixture import (CLASSIFY, COMPUTE, FAST, GUARD_STRUCTURE, SETTINGS, TARGET, WRONG, GuardedProject,
+                           SampleProject, ScoredProject, StructuredProject, parameter_project)
 
 
 class JudgeOnSample(unittest.TestCase):
@@ -173,6 +173,42 @@ class CellGate(unittest.TestCase):
     def test_an_unknown_cell_is_an_error(self):
         with self.assertRaises(judge_mod.JudgeError):
             self.p.judge_cell("main", cell="nope")
+
+
+class SystemGuard(unittest.TestCase):
+    """Judging a cell also measures the system around it (its topmost ancestor with a measure)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = GuardedProject()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    FASTER = COMPUTE.replace("def fast_path(n):\n    return sum(i * i for i in range(n))",
+                             "def fast_path(n):\n    return n * (n - 1) * (2 * n - 1) // 6")
+
+    def test_a_cell_speedup_that_helps_the_system_passes(self):
+        r = self.p.judge_cell(self.p.branch_root("faster", {"targets/system/compute.py": self.FASTER}))
+        self.assertEqual(r["verdict"], "pass", r)
+        self.assertEqual((r["system"]["cell"], r["system"]["target"]), ("system", "targets/system"))
+        self.assertTrue(r["system"]["ok"])
+        self.assertFalse(r["system"]["metrics"]["wall_seconds"]["primary"])   # a constraint, not the goal
+        rec = self.p.evidence.query(by="judge", where={"kind": "verdict"}, limit=1)[0]
+        self.assertEqual(rec["outcome"]["system"]["cell"], "system")
+
+    def test_no_guard_without_a_cell_or_when_turned_off(self):
+        self.assertIsNone(self.p.judge(self.p.branch_root("faster-2", {"targets/system/compute.py": self.FASTER}))["system"])
+        import yaml
+        s = json.loads(json.dumps(GUARD_STRUCTURE))
+        s["cells"]["fast"]["guard"] = False
+        self.p.branch_root("no-guard-base", {"cells.yaml": yaml.safe_dump(s)})
+        r = judge_mod.judge(self.p.repo, self.p.cfg, self.p.target, "no-guard-base",
+                            self.p.branch_root("faster-3", {"cells.yaml": yaml.safe_dump(s),
+                                                            "targets/system/compute.py": self.FASTER}),
+                            self.p.evidence, cell="fast")
+        self.assertIsNone(r["system"])
 
 
 class Tune(unittest.TestCase):

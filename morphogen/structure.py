@@ -54,6 +54,10 @@ class Cell(_Doc):
     measure: str | None = None
     cases: dict[str, str] = {}
     alternatives: str | None = None
+    # When this cell is judged, its topmost ancestor with a `measure` (the system) is measured too, as a
+    # constraint: the system's primary metric may not regress beyond `max_regression` (default 0.05).
+    # `guard: false` turns it off for this cell.
+    guard: bool | dict[str, float] | None = None
 
 
 class Interface(_Doc):
