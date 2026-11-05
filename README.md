@@ -12,6 +12,7 @@ the design; this file is how to use what is built.
 | Structure | `structure.py`, `render.py` | `cells.yaml`: cells in a containment tree, interfaces as hyperedges with their tests, parameters with owners. Checks, scopes, computed boundaries, the tests a change in a scope must pass, intent coverage, intended against observed, a Mermaid diagram |
 | Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules (see below) |
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
+| Observers | `observers.py` | the observer slot: `command` (a command after each run) and `otel` (an OpenTelemetry receiver in the judge that adds up each run's telemetry, such as Claude Code's cost, tokens and tool results) |
 | Optimizers | `optimize.py` | the optimizer slot: a catalog (`morphogen optimizers`) of built-in grid, random and hill-climb search, an Optuna adapter (`uv sync --extra optuna`), and the `selector`, an optimizer whose policy (a bandit on probe gains, primed by earlier verdicts) chooses which one proposes next; GEPA and a model-based selector policy are listed as planned; other packages add optimizers through the `morphogen.optimizers` entry point. `tune` probes each proposal and judges the best |
 | CLI | `cli.py` | `morphogen structure`, `measure`, `judge`, `tune`, `evidence` |
 | MCP server | `mcp_server.py` | the same as ten tools for an agent: `structure_check`, `structure_scope`, `structure_render`, `measure`, `probe`, `judge`, `tune`, `evidence_query`, `evidence_note` (stated or inferred only), `evidence_verify` |
@@ -80,6 +81,45 @@ parameters:
   threshold: {file: classify.py, name: THRESHOLD, owner: agent, range: [0, 100]}
 ```
 
+### Observers
+
+An observer measures each timed run from outside the code under test; its metrics become
+`observed.*`, and may decide a verdict when the target says the data is `collected: outside`.
+
+- `command`: a command from the base commit, run after each run, printing one JSON object of
+  numbers (a Prometheus query, a proxy's log, a bill).
+- `otel`: an OpenTelemetry receiver inside the judge (OTLP/HTTP JSON, standard library only).
+  Before each run the judge points the run's telemetry at it and tags the run with its id; after
+  the run it adds up what arrived for that id. A run that sends nothing, or a negative value in a
+  sum, refuses the candidate. It keeps only each run's totals: no traces, no dashboards.
+
+```yaml
+measure:
+  run: python run_tasks.py                  # e.g. Claude Code on a fixed task set
+  same_output: false
+  observer:
+    type: otel
+    collected: outside                      # Claude Code itself reports, not the candidate's code
+    metrics:
+      cost_usd:      {metric: claude_code.cost.usage}
+      output_tokens: {metric: claude_code.token.usage, where: {type: output}}
+      tool_failures: {event: claude_code.tool_result, where: {success: "false"}, count: true}
+  metrics:
+    observed.cost_usd: {direction: lower, primary: true, min_improvement: 0.10}
+```
+
+### Optimizing agents
+
+An agent is a system like any other: put the harness (Claude Code, its settings, skills, prompts,
+hooks, MCP servers, subagents) in the structure as cells, with interfaces between them, and
+measure it on a fixed task set. Claude Code reports its own usage over OpenTelemetry
+(`CLAUDE_CODE_ENABLE_TELEMETRY=1`, which the `otel` observer sets with the other exporter
+variables), so cost, tokens and failed tools are observed outside the candidate; task success is
+scored outside it by a scorer on held-out tasks. A skill can then be tuned or rewritten under the
+same judge, its neighbours' contracts and the system guard. Until a model gateway exists, agent
+targets run with `sandbox: none` (the model needs the network; an `otel` observer is refused in a
+container), and an agent's learned state is not yet reset between trials (#45).
+
 The primary metric must be one the judge measures (`wall_seconds`, `cpu_seconds`, `max_rss_kb`),
 one an observer collects outside the code under test (`observed.*` with `collected: outside`), or
 one a scorer computes outside the candidate (`scored.*`). Numbers the workload prints are kept as
@@ -106,9 +146,11 @@ one a scorer computes outside the candidate (`scored.*`). Numbers the workload p
   candidate's tree visible, nothing kept between runs, resource limits); a target can require them.
 - Every verdict and probe is evidence: `trust: measured, by: judge`.
 
-`tests/test_redteam.py` holds the known ways to cheat: 31 of them, from patching the timer to
+`tests/test_redteam.py` holds the known ways to cheat: 33 of them, from patching the timer to
 reading the held-out answers, breaking a neighbour's contract, or winning locally while the system
-gets slower. Every one must fail; a new one that passes goes there first.
+gets slower, or switching telemetry off to look free. Every one must fail; a new one that passes
+goes there first. The whole suite also runs with every trial in Podman
+(`MORPHOGEN_TEST_SANDBOX=podman`), where the container-only cheats run too.
 
 ## How Morphogen compares
 

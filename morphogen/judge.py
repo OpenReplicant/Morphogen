@@ -52,6 +52,7 @@ import yaml
 
 
 from . import documents
+from .observers import ObserverError, OtelObserver
 from .runner import capabilities, missing, run, sandbox_mode
 from .structure import Structure
 
@@ -75,6 +76,11 @@ sys.stdout.write(o.read().decode(errors="replace")); sys.stderr.write(e.read().d
 sys.stdout.write("\n__MORPHOGEN_JUDGE__" + json.dumps({"rc": p.returncode, "wall_seconds": wall,
     "cpu_seconds": ru.ru_utime + ru.ru_stime, "max_rss_kb": ru.ru_maxrss}) + "\n")
 """
+
+
+class CandidateFault(Exception):
+    """A run of the candidate could not be measured because of the candidate (it sent no telemetry,
+    or impossible values): the candidate is refused, not the judgment."""
 
 
 class JudgeError(Exception):
@@ -291,7 +297,7 @@ def _observe(spec: dict, observer_dir: Path, cfg: dict, env: dict, timeout: int)
     collector, Prometheus, a proxy's access log) for this run's id and time window.
     """
     obs = (spec.get("measure") or {}).get("observer") or {}
-    if not obs.get("run"):
+    if obs.get("type", "command") != "command" or not obs.get("run"):
         return {}
     r = run(obs["run"], observer_dir, cfg, env=env, timeout=timeout)
     if r.rc != 0:
@@ -452,6 +458,11 @@ def _run_interface_tests(gate: dict, cfg: dict, timeout: int) -> list[dict]:
     return out
 
 
+def _otel(spec: dict) -> OtelObserver | None:
+    obs = (spec.get("measure") or {}).get("observer") or {}
+    return OtelObserver(obs) if obs.get("type") == "otel" else None
+
+
 def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
                samples: list[dict[str, list[float]]], observer_dir: Path | None = None,
                sides: tuple[str, ...] = ("base", "candidate"), outputs: list | None = None) -> None:
@@ -467,6 +478,9 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
         side = sides[i] if i < len(sides) else str(i)
         env = {"MORPHOGEN_SEED": str(seed), "MORPHOGEN_RUN_ID": run_id, "MORPHOGEN_SIDE": side,
                "OTEL_RESOURCE_ATTRIBUTES": f"morphogen.run_id={run_id},morphogen.side={side}"}
+        otel = _otel(spec)
+        if otel:
+            env.update(otel.env(run_id))
         start = time.time()
         stats, out = _timed(spec["measure"]["run"], dirs[i], cfg, env, timeout)
         results[i] = _result(out)
@@ -477,6 +491,15 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
             samples[i].setdefault(f"reported.{k}", []).append(v)
         for k, v in _observe(spec, observer_dir or dirs[i], cfg, env, timeout).items():
             samples[i].setdefault(k, []).append(v)
+        if otel:
+            try:
+                observed = otel.collect(run_id)
+            except ObserverError as e:
+                if e.fault == "candidate" and side == "candidate":
+                    raise CandidateFault(f"observer: {e}") from None
+                raise JudgeError(f"observer, on the {side}'s run: {e}") from None
+            for k, v in observed.items():
+                samples[i].setdefault(f"observed.{k}", []).append(v)
         for k, v in _score(spec, observer_dir or dirs[i], env, results[i], timeout).items():
             samples[i].setdefault(k, []).append(v)
     if outputs is not None:
@@ -546,6 +569,11 @@ def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tup
 
 
 def _check_runner(spec: dict, cfg: dict) -> None:
+    obs = (spec.get("measure") or {}).get("observer") or {}
+    if obs.get("type") == "otel" and capabilities(cfg).get("network_isolated"):
+        raise JudgeError("an otel observer needs the run to reach the judge's receiver, and this runner has no "
+                         f"network ({sandbox_mode(cfg)}); targets that are agents run with sandbox: none until a "
+                         "model gateway can carry their traffic (#43)")
     gaps = missing(cfg, spec.get("requires") or [])
     if gaps:
         raise JudgeError(f"this target requires {', '.join(gaps)}, which the {sandbox_mode(cfg)} runner does not "
@@ -668,9 +696,13 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
                 out["cases"] = results
             samples: list[dict[str, list[float]]] = [{}, {}]
             outputs: list = []
-            for _ in range(max(0, min(int(rounds), 10))):
-                _one_round(spec, [bdir, cdir], cfg, secrets.randbelow(2**31), timeout, samples, bdir,
-                           outputs=outputs)
+            try:
+                for _ in range(max(0, min(int(rounds), 10))):
+                    _one_round(spec, [bdir, cdir], cfg, secrets.randbelow(2**31), timeout, samples, bdir,
+                               outputs=outputs)
+            except CandidateFault as e:
+                out["observer_error"] = str(e)
+                outputs = []
             if outputs:
                 out["metrics"] = {
                     m: {"base": statistics.median(samples[0][m]), "candidate": statistics.median(samples[1][m]),
@@ -799,6 +831,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         equivalent = mismatches == 0 and failures == 0
 
         comparisons, perf_ok, bench_seeds, outputs, timed_mismatches, system = {}, False, [], [], 0, None
+        candidate_fault = None
         if check_ok and equivalent and not refused:
             m = spec["measure"]
             # A fresh seed every round: base and candidate share it within a round (a fair pair),
@@ -810,21 +843,25 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                 _one_round(spec, dirs, cfg, bench_seeds[-1], timeout, samples, bdir, outputs=outputs)
 
             dirs = [bdir, cdir]
-            for _ in range(int(m.get("warmup", 1))):
-                round_([{}, {}])
-            samples: list[dict[str, list[float]]] = [{}, {}]
-            for _ in range(int(m.get("repeats", 10))):
-                round_(samples)
-            comparisons, undecided = _compare(metrics_spec, *samples)
-            while undecided and len(samples[0]["wall_seconds"]) < int(m.get("max_repeats", 30)):
-                round_(samples)
+            try:
+                for _ in range(int(m.get("warmup", 1))):
+                    round_([{}, {}])
+                samples: list[dict[str, list[float]]] = [{}, {}]
+                for _ in range(int(m.get("repeats", 10))):
+                    round_(samples)
                 comparisons, undecided = _compare(metrics_spec, *samples)
+                while undecided and len(samples[0]["wall_seconds"]) < int(m.get("max_repeats", 30)):
+                    round_(samples)
+                    comparisons, undecided = _compare(metrics_spec, *samples)
+            except CandidateFault as e:
+                candidate_fault = str(e)
             # The timed runs must produce what the base produces on the same input. Otherwise code
             # that can tell a timed run from a checked one (an environment variable, argv, the caller)
             # could do less work only when timed. Opt out only for workloads whose output varies.
             if m.get("same_output", True):
                 timed_mismatches = sum(1 for b, c in outputs if b != c)
-            perf_ok = not timed_mismatches and all(c["ok"] for c in comparisons.values())
+            perf_ok = not candidate_fault and not timed_mismatches and bool(comparisons) and \
+                all(c["ok"] for c in comparisons.values())
             if perf_ok and gate.get("guard"):
                 system = _system_guard(gate["guard"], repo, cfg, btree, ctree, timeout)
                 perf_ok = system["ok"]
@@ -835,6 +872,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         reasons.append(f"changes files that shadow standard or harness modules, or customise Python: "
                        f"{', '.join(forbidden)}")
     reasons += param_violations
+    if candidate_fault:
+        reasons.append(candidate_fault)
     if system and not system["ok"]:
         worst = [f"{k} {c['gain']:+.1%}" for k, c in (system.get("metrics") or {}).items() if not c["ok"]]
         reasons.append(f"the system ({system['cell']}, {system['target']}) gets worse: "

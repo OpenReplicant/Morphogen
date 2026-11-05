@@ -54,8 +54,13 @@ class Metric(_Doc):
 
 
 class Observer(_Doc):
-    run: str
+    """observers.py: `command` (run, after each run) or `otel` (a receiver in the judge; metrics:)."""
+    type: Literal["command", "otel"] = "command"
+    run: str | None = None
     collected: str | None = None
+    settle_ms: int | None = None
+    export_interval_ms: int | None = None
+    metrics: dict[str, dict[str, Any]] = {}
 
 
 class Score(_Doc):
