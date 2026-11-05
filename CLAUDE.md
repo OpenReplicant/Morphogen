@@ -51,7 +51,8 @@ candidate. Never edit the installed plugin's directory.
 
 ## Next
 1. Design simplifications under discussion (one structure document instead of target.yaml plus
-   cells.yaml; the cell gate whenever a target belongs to a cell; probe as a mode of the judge).
+   cells.yaml; one kind of "still works" test; probe as a mode of the judge). Done: the cell gate
+   applies whenever the base's structure says a cell measures the target, however it is named.
 2. Optimizers that escape local optima: random restarts, simulated annealing, a stagnation signal
    for the selector; later a stepping-stone archive and multi-step candidates.
 3. The entity-resolution demo as the first real run: move its F1 into a scorer outside the

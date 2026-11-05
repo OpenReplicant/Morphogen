@@ -14,7 +14,9 @@ judge is the only thing that can say a change is better; you cannot edit how it 
 - `structure_check` and `structure_render`: the cells, the interfaces joining them, and which
   interfaces have tests (intent coverage). Errors (gaps, cycles) come before anything else.
 - `structure_scope(cell)`: what a change inside that cell touches, and the tests it must pass.
-- A target is a directory with `target.yaml`, or `cell:NAME` for a cell with a `measure`. Read its
+- A target is a directory with `target.yaml`, or `cell:NAME` for a cell with a `measure`. Either
+  way, a target that is a cell's `measure` is judged as that cell (interface tests, the system
+  guard). Read its
   `target.yaml`: the harness files and `target.yaml` itself belong to the judge, and its
   `parameters` say which settings you may change (owner `agent`, within `range` or `choices`).
   Settings owned by `operator` or `judge` are not yours.

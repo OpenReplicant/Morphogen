@@ -10,8 +10,8 @@ from pathlib import Path
 from morphogen import documents
 from morphogen import judge as judge_mod
 from morphogen.evidence import Evidence
-from tests.fixture import (CLASSIFY, COMPUTE, FAST, GUARD_STRUCTURE, SETTINGS, TARGET, WRONG, GuardedProject,
-                           SampleProject, ScoredProject, StructuredProject, parameter_project)
+from tests.fixture import (CLASSIFY, COMPUTE, FAST, GUARD_STRUCTURE, SETTINGS, STRUCTURE, TARGET, WRONG, GuardedProject,
+                           SampleProject, ScoredProject, StructuredProject, git, parameter_project)
 
 
 class JudgeOnSample(unittest.TestCase):
@@ -157,9 +157,24 @@ class CellGate(unittest.TestCase):
         self.assertEqual(rec["scope"], ["classify"])
         self.assertEqual(rec["outcome"]["interfaces"][0]["interface"], "labels")
 
-    def test_without_a_cell_no_interface_tests_run(self):
+    def test_naming_the_directory_judges_the_cell_that_measures_it(self):
         better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")
-        r = self.p.judge(self.p.branch_files("no-cell", {"targets/classify/classify.py": better}))
+        r = self.p.judge(self.p.branch_files("by-path", {"targets/classify/classify.py": better}))
+        self.assertEqual(r["cell"], "classify")
+        self.assertEqual([(x["interface"], x["passed"]) for x in r["interfaces"]], [("labels", True)])
+
+    def test_a_target_no_cell_measures_runs_no_interface_tests(self):
+        import yaml
+        s = json.loads(json.dumps(STRUCTURE))
+        del s["cells"]["classify"]["measure"]
+        base = self.p.branch_files("unmeasured-base", {"cells.yaml": yaml.safe_dump(s)})
+        better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")
+        git(self.p.repo, "checkout", "-q", "-B", "unmeasured", base)
+        self.p.path("classify.py").write_text(better)
+        git(self.p.repo, "commit", "-qam", "unmeasured")
+        git(self.p.repo, "checkout", "-q", "main")
+        r = judge_mod.judge(self.p.repo, self.p.cfg, self.p.target, base, "unmeasured", self.p.evidence)
+        self.assertIsNone(r["cell"])
         self.assertEqual(r["interfaces"], [])
 
     def test_probe_reports_interface_tests(self):
@@ -226,8 +241,7 @@ class SystemGuard(unittest.TestCase):
         rec = self.p.evidence.query(by="judge", where={"kind": "verdict"}, limit=1)[0]
         self.assertEqual(rec["outcome"]["system"]["cell"], "system")
 
-    def test_no_guard_without_a_cell_or_when_turned_off(self):
-        self.assertIsNone(self.p.judge(self.p.branch_root("faster-2", {"targets/system/compute.py": self.FASTER}))["system"])
+    def test_no_guard_when_turned_off(self):
         import yaml
         s = json.loads(json.dumps(GUARD_STRUCTURE))
         s["cells"]["fast"]["guard"] = False

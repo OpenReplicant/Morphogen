@@ -45,8 +45,10 @@ uv run morphogen ui              # http://127.0.0.1:8765/
 ```
 
 A target can also be named as `cell:NAME`, for the `measure` of a cell in the project's
-structure (`morphogen.yaml` key `structure`, default `cells.yaml`). Judged that way, the candidate
-must also pass the tests of every interface the cell's scope touches. Those tests, the files they
+structure (`morphogen.yaml` key `structure`, default `cells.yaml`). A target belongs to a cell
+however it is named: when the base's structure has a cell whose `measure` is the target's
+directory, judging the directory is judging the cell. The candidate must then also pass the tests
+of every interface the cell's scope touches. Those tests, the files they
 list (`interfaces.<name>.files`) and `cells.yaml` itself come from the base commit, and run from
 the structure file's directory; each verdict records which ran.
 
