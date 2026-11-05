@@ -15,6 +15,7 @@ the design; this file is how to use what is built.
 | Optimizers | `optimize.py` | one interface; built-in grid and random search over agent-owned parameters; `tune` probes each proposal and judges the best |
 | CLI | `cli.py` | `morphogen structure`, `measure`, `judge`, `tune`, `evidence` |
 | MCP server | `mcp_server.py` | the same as ten tools for an agent: `structure_check`, `structure_scope`, `structure_render`, `measure`, `probe`, `judge`, `tune`, `evidence_query`, `evidence_note` (stated or inferred only), `evidence_verify` |
+| Web UI | `ui.py`, `ui.html` | `morphogen ui`: a local, read-only page (Alpine.js and Mermaid) with the structure diagram (click a cell for its scope, boundary, tests and parameters), findings and intent coverage; the evidence log with filters, verdict metrics, reasons and parameter values; and each target's primary metric, parameters and latest results |
 | Claude Code plugin | `.claude-plugin/`, `skills/`, `agents/` | the MCP server, the `morphogen` skill (how to improve a target honestly), and the `worker` and `reviewer` agents |
 
 Python 3.11 or later and [uv](https://docs.astral.sh/uv/); pydantic, PyYAML and the MCP SDK (all
@@ -38,6 +39,7 @@ uv run morphogen measure targets/my-target
 uv run morphogen judge targets/my-target my-branch
 uv run morphogen tune targets/my-target --optimizer grid --steps 5
 uv run morphogen evidence --verify
+uv run morphogen ui              # http://127.0.0.1:8765/
 ```
 
 A target can also be named as `cell:NAME`, for the `measure` of a cell in the project's
@@ -99,6 +101,8 @@ reading the held-out answers. Every one must fail; a new one that passes goes th
 - The scorer runs without a container: it is the judge's code from the base commit.
 - Parameters are read statically; code that changes a setting at run time is the reviewer's to
   catch. TOML keys can be read but not yet written by `tune`.
+- The web UI binds to localhost, has no authentication and only reads. It loads Alpine.js 3.17.5
+  and Mermaid 12.2.0 (both MIT) from cdn.jsdelivr.net, so the diagram needs network access.
 - The evidence log refuses edits through SQLite triggers; whoever can write the file can drop
   them, and the hash chain then shows the edit.
 - Optimizer adapters beyond grid and random search (GEPA, Optuna, a Claude Code worker), the

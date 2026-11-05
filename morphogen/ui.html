@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Morphogen</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e2dc;
+  --accent: #2f6f5e; --accent-soft: #e3f0eb; --pass: #2f7d4a; --pass-soft: #e2f3e7;
+  --fail: #b2412e; --fail-soft: #f8e4df; --warn: #9a6a00; --warn-soft: #f6ecd2;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161715; --panel: #1f201e; --text: #e8e7e2; --muted: #9b9a93; --line: #33342f;
+    --accent: #7cc4ad; --accent-soft: #23352f; --pass: #7cc98f; --pass-soft: #1f3326;
+    --fail: #ee8a77; --fail-soft: #3b2420; --warn: #e0b14a; --warn-soft: #392f19;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161715; --panel: #1f201e; --text: #e8e7e2; --muted: #9b9a93; --line: #33342f;
+  --accent: #7cc4ad; --accent-soft: #23352f; --pass: #7cc98f; --pass-soft: #1f3326;
+  --fail: #ee8a77; --fail-soft: #3b2420; --warn: #e0b14a; --warn-soft: #392f19;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { margin: 0; font-size: 17px; letter-spacing: .2px; }
+header .root { color: var(--muted); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+nav { display: flex; gap: 4px; }
+nav button { border: 1px solid var(--line); background: transparent; color: var(--text); padding: 6px 12px;
+  border-radius: 6px; cursor: pointer; font: inherit; }
+nav button[aria-current="page"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+.grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } main { padding: 16px; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.panel h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.diagram { overflow-x: auto; }
+.diagram svg { max-width: 100%; height: auto; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.pass { background: var(--pass-soft); color: var(--pass); }
+.fail, .error { background: var(--fail-soft); color: var(--fail); }
+.warning { background: var(--warn-soft); color: var(--warn); }
+.neutral { background: var(--accent-soft); color: var(--accent); }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { padding: 6px 0; border-top: 1px solid var(--line); }
+.list li:first-child { border-top: 0; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
+button.link[aria-pressed="true"] { font-weight: 700; text-decoration: underline; }
+.mono { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 6px 0 2px; }
+.bar > div { height: 100%; background: var(--accent); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.table-wrap { overflow-x: auto; }
+td.mono:first-child { white-space: nowrap; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.filters select, .filters input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--text); font: inherit; }
+.filters input { flex: 1; min-width: 160px; }
+details summary { cursor: pointer; }
+.diagram g[role="button"]:focus { outline: 2px solid var(--accent); }
+details pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow-x: auto; font-family: var(--mono); font-size: 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+@media (max-width: 400px) { .cards { grid-template-columns: 1fr; } }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+.empty { color: var(--muted); padding: 20px 0; }
+.err { color: var(--fail); }
+</style>
+</head>
+<body x-data="app()" x-init="init()">
+<header>
+  <div>
+    <h1>Morphogen</h1>
+    <div class="root" x-text="overview.root || ''"></div>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <span class="badge" :class="chainOk ? 'pass' : 'fail'"
+          x-text="overview.evidence ? 'evidence ' + overview.evidence.chain + ' · ' + overview.evidence.records + ' records' : 'loading'"></span>
+    <nav>
+      <template x-for="t in tabs" :key="t.id">
+        <button @click="go(t.id)" :aria-current="tab === t.id ? 'page' : null" x-text="t.label"></button>
+      </template>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <p class="err" x-show="error" x-text="error"></p>
+
+  <!-- Structure -->
+  <section x-show="tab === 'structure'">
+    <template x-if="structure && structure.missing">
+      <p class="empty">No structure at <span class="mono" x-text="structure.file"></span>. Write a cells.yaml (see BRIEF.md) to see it here.</p>
+    </template>
+    <div class="grid" x-show="structure && !structure.missing">
+      <div class="panel">
+        <h2>Structure · <span class="mono" x-text="structure?.file"></span></h2>
+        <div class="diagram" x-ref="diagram"></div>
+        <p class="err" x-show="diagramError" x-text="diagramError"></p>
+      </div>
+      <div style="display:grid;gap:16px;align-content:start">
+        <div class="panel">
+          <h2>Intent coverage</h2>
+          <div><strong x-text="structure?.coverage?.tested"></strong> of <span x-text="structure?.coverage?.interfaces"></span> interfaces have tests</div>
+          <div class="bar"><div :style="`width:${Math.round((structure?.coverage?.share || 0) * 100)}%`"></div></div>
+        </div>
+        <div class="panel">
+          <h2>Findings</h2>
+          <p class="muted" x-show="structure && !structure.findings?.length">None.</p>
+          <ul class="list">
+            <template x-for="f in structure?.findings || []" :key="f.kind + f.subject">
+              <li><span class="badge" :class="f.severity" x-text="f.kind"></span>
+                <span class="mono" x-text="f.subject"></span> <span class="muted" x-text="f.message"></span></li>
+            </template>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Cells</h2>
+          <ul class="list">
+            <template x-for="(cell, name) in structure?.cells || {}" :key="name">
+              <li>
+                <button class="link" @click="pick(name)" :aria-pressed="selected === name" x-text="name"></button>
+                <span class="muted" x-text="cell.modality ? ' · ' + cell.modality : ''"></span>
+                <div class="mono muted" x-show="cell.at" x-text="cell.at"></div>
+              </li>
+            </template>
+          </ul>
+        </div>
+        <div class="panel" x-show="scope">
+          <h2>Scope of <span class="mono" x-text="scope?.cell"></span></h2>
+          <div class="kv">
+            <span class="muted">cells</span><span class="mono" x-text="(scope?.scope || []).join(', ')"></span>
+            <span class="muted">touches</span><span class="mono" x-text="(scope?.touched || []).join(', ') || '—'"></span>
+            <span class="muted">boundary</span><span class="mono" x-text="(scope?.boundary || []).join(', ') || '—'"></span>
+            <span class="muted">neighbours</span><span class="mono" x-text="(scope?.neighbours || []).join(', ') || '—'"></span>
+          </div>
+          <h2 style="margin-top:12px">Tests a change here must pass</h2>
+          <p class="muted" x-show="!scope?.tests?.length">None declared: what these interfaces promise is not enforced.</p>
+          <ul class="list"><template x-for="t in scope?.tests || []" :key="t"><li class="mono" x-text="t"></li></template></ul>
+          <template x-if="structure?.cells?.[scope?.cell]?.parameters && Object.keys(structure.cells[scope.cell].parameters).length">
+            <div>
+              <h2 style="margin-top:12px">Parameters</h2>
+              <div class="table-wrap"><table>
+                <tr><th>name</th><th>owner</th><th>bounds</th><th>where</th></tr>
+                <template x-for="(p, n) in structure.cells[scope.cell].parameters" :key="n">
+                  <tr><td class="mono" x-text="n"></td><td x-text="p.owner"></td>
+                    <td class="mono" x-text="bounds(p)"></td><td class="mono" x-text="p.file + (p.name ? '#' + p.name : ':' + p.key)"></td></tr>
+                </template>
+              </table></div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Evidence -->
+  <section x-show="tab === 'evidence'">
+    <div class="panel">
+      <div class="filters">
+        <select x-model="filters.kind" @change="loadEvidence()" aria-label="kind">
+          <option value="">all kinds</option>
+          <template x-for="k in Object.keys(overview.evidence?.kinds || {})" :key="k"><option :value="k" x-text="k"></option></template>
+        </select>
+        <select x-model="filters.by" @change="loadEvidence()" aria-label="by">
+          <option value="">anyone</option><option value="judge">judge</option><option value="agent">agent</option>
+        </select>
+        <input type="search" placeholder="search claims" x-model.debounce.300ms="filters.contains" @input="loadEvidence()">
+      </div>
+      <p class="empty" x-show="!evidence.length">No evidence yet. Measure, probe or judge a target to start the log.</p>
+      <ul class="list">
+        <template x-for="r in evidence" :key="r.seq">
+          <li>
+            <details>
+              <summary>
+                <span class="mono muted" x-text="'#' + r.seq"></span>
+                <span class="badge" :class="r.verdict || 'neutral'" x-text="r.verdict || r.kind || 'note'"></span>
+                <span x-text="r.claim"></span>
+                <span class="muted" x-text="' · ' + r.by + ' · ' + r.trust + ' · ' + (r.at || '')"></span>
+              </summary>
+              <template x-if="r.outcome?.metrics && Object.keys(r.outcome.metrics).length && r.kind === 'verdict'">
+                <div class="table-wrap"><table>
+                  <tr><th>metric</th><th>base</th><th>candidate</th><th>gain</th><th>95% interval</th><th>ok</th></tr>
+                  <template x-for="(m, name) in r.outcome.metrics" :key="name">
+                    <tr><td class="mono" x-text="name + (m.primary ? ' (primary)' : '')"></td>
+                      <td x-text="fmt(m.base)"></td><td x-text="fmt(m.candidate)"></td>
+                      <td x-text="pct(m.gain, m.gain_kind === 'absolute')"></td>
+                      <td x-text="m.ci95 ? pct(m.ci95[0], m.gain_kind === 'absolute') + ' to ' + pct(m.ci95[1], m.gain_kind === 'absolute') : ''"></td>
+                      <td><span class="badge" :class="m.ok ? 'pass' : 'fail'" x-text="m.ok ? 'yes' : 'no'"></span></td></tr>
+                  </template>
+                </table></div>
+              </template>
+              <template x-if="r.kind === 'verdict' && r.verdict === 'fail' && reasonsOf(r).length">
+                <ul class="list"><template x-for="why in reasonsOf(r)" :key="why"><li class="muted" x-text="why"></li></template></ul>
+              </template>
+              <template x-if="r.parameters && Object.keys(r.parameters).length">
+                <div class="table-wrap"><table>
+                  <tr><th>parameter</th><th>owner</th><th>base</th><th>candidate</th></tr>
+                  <template x-for="(v, n) in r.parameters" :key="n">
+                    <tr><td class="mono" x-text="n"></td><td x-text="v.owner"></td>
+                      <td class="mono" x-text="JSON.stringify(v.base)"></td>
+                      <td class="mono" x-text="JSON.stringify(v.candidate)"></td></tr>
+                  </template>
+                </table></div>
+              </template>
+              <div class="kv" style="margin-top:8px">
+                <template x-if="r.refs"><span style="display:contents"><span class="muted">commits</span>
+                  <span class="mono" x-text="Object.entries(r.refs).map(([k, v]) => k + ' ' + String(v).slice(0, 12)).join(' · ')"></span></span></template>
+                <template x-if="r.labels && Object.keys(r.labels).length"><span style="display:contents"><span class="muted">labels</span>
+                  <span class="mono" x-text="Object.entries(r.labels).map(([k, v]) => k + '=' + v).join(' · ')"></span></span></template>
+                <template x-if="r.sandbox"><span style="display:contents"><span class="muted">sandbox</span><span class="mono" x-text="r.sandbox"></span></span></template>
+                <template x-if="r.source"><span style="display:contents"><span class="muted">source</span><span class="mono" x-text="r.source"></span></span></template>
+              </div>
+              <details style="margin-top:8px"><summary class="muted">raw record</summary>
+                <pre x-text="JSON.stringify(r, null, 2)"></pre></details>
+            </details>
+          </li>
+        </template>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Targets -->
+  <section x-show="tab === 'targets'">
+    <p class="empty" x-show="!targets.length">No target.yaml in this repository.</p>
+    <div class="cards">
+      <template x-for="t in targets" :key="t.path">
+        <div class="panel">
+          <h2 x-text="t.name || t.path"></h2>
+          <div class="mono muted" x-text="t.path"></div>
+          <p class="err" x-show="t.error" x-text="t.error"></p>
+          <p x-show="t.description" x-text="t.description"></p>
+          <div class="kv">
+            <span class="muted">primary</span><span class="mono" x-text="t.primary || '—'"></span>
+            <span class="muted">verdicts</span>
+            <span><span class="badge pass" x-text="(t.verdicts?.pass || 0) + ' pass'"></span>
+                  <span class="badge fail" x-text="(t.verdicts?.fail || 0) + ' fail'"></span></span>
+            <span class="muted">harness</span><span class="mono" x-text="(t.harness || []).join(', ') || '—'"></span>
+          </div>
+          <template x-if="t.parameters && Object.keys(t.parameters).length">
+            <div class="table-wrap"><table>
+              <tr><th>parameter</th><th>owner</th><th>bounds</th></tr>
+              <template x-for="(p, n) in t.parameters" :key="n">
+                <tr><td class="mono" x-text="n"></td><td x-text="p.owner"></td><td class="mono" x-text="bounds(p)"></td></tr>
+              </template>
+            </table></div>
+          </template>
+          <template x-if="t.last_measurement">
+            <div><h2 style="margin-top:12px">Last measurement</h2>
+              <div class="kv"><template x-for="(v, k) in t.last_measurement.outcome" :key="k">
+                <span style="display:contents"><span class="mono muted" x-text="k"></span><span x-text="fmt(v)"></span></span>
+              </template></div></div>
+          </template>
+          <template x-if="t.last_verdict">
+            <div><h2 style="margin-top:12px">Last verdict</h2>
+              <span class="badge" :class="t.last_verdict.verdict" x-text="t.last_verdict.verdict"></span>
+              <span class="muted" x-text="t.last_verdict.claim"></span></div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </section>
+</main>
+
+<script>
+function app() {
+  return {
+    tabs: [{id: 'structure', label: 'Structure'}, {id: 'evidence', label: 'Evidence'}, {id: 'targets', label: 'Targets'}],
+    tab: (location.hash || '#structure').slice(1),
+    overview: {}, structure: null, scope: null, selected: null, evidence: [], targets: [],
+    filters: {kind: '', by: '', contains: ''}, error: '', diagramError: '',
+    get chainOk() { return this.overview.evidence && this.overview.evidence.chain === 'intact'; },
+    async get(path) {
+      const r = await fetch(path);
+      const d = await r.json();
+      if (!r.ok || (d && d.error)) throw new Error(d.error || r.statusText);
+      return d;
+    },
+    async init() {
+      if (!this.tabs.some(t => t.id === this.tab)) this.tab = 'structure';
+      if (window.mermaid) {
+        const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+        mermaid.initialize({startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'neutral'});
+      }
+      try {
+        this.overview = await this.get('/api/overview');
+        await Promise.all([this.loadStructure(), this.loadEvidence(), this.loadTargets()]);
+      } catch (e) { this.error = String(e.message || e); }
+    },
+    go(id) { this.tab = id; location.hash = id; if (id === 'structure') this.$nextTick(() => this.draw()); },
+    async loadStructure() {
+      this.structure = await this.get('/api/structure');
+      this.$nextTick(() => this.draw());
+    },
+    async draw() {
+      if (!this.structure || this.structure.missing || !window.mermaid) {
+        if (!window.mermaid) this.diagramError = 'Mermaid did not load (no network?); the diagram source is in /api/structure.';
+        return;
+      }
+      try {
+        const {svg} = await mermaid.render('structure-' + Date.now(), this.structure.mermaid);
+        this.$refs.diagram.innerHTML = svg;
+        this.diagramError = '';
+        // Cells are drawn with ids c_<name> (punctuation as _): map them back and make them clickable.
+        const byId = {};
+        for (const name of Object.keys(this.structure.cells)) byId['c_' + name.replace(/[^0-9A-Za-z_]/g, '_')] = name;
+        for (const g of this.$refs.diagram.querySelectorAll('g.node, g.cluster')) {
+          const m = g.id.match(/(?:flowchart-)?(c_[0-9A-Za-z_]+?)(?:-\d+)?$/);
+          const name = m && byId[m[1]];
+          if (!name) continue;
+          g.style.cursor = 'pointer';
+          g.setAttribute('tabindex', '0');
+          g.setAttribute('role', 'button');
+          g.setAttribute('aria-label', 'show the scope of ' + name);
+          const go = (e) => { e.stopPropagation(); this.pick(name); };
+          g.addEventListener('click', go);
+          g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(e); });
+        }
+      } catch (e) { this.diagramError = 'Could not draw the diagram: ' + (e.message || e); }
+    },
+    async pick(name) {
+      this.selected = name;
+      try { this.scope = await this.get('/api/scope?cell=' + encodeURIComponent(name)); }
+      catch (e) { this.error = String(e.message || e); }
+    },
+    async loadEvidence() {
+      const q = new URLSearchParams({limit: 200, ...this.filters});
+      try { this.evidence = await this.get('/api/evidence?' + q); } catch (e) { this.error = String(e.message || e); }
+    },
+    async loadTargets() { this.targets = await this.get('/api/targets'); },
+    reasonsOf(r) {
+      const o = r.outcome || {}, out = [];
+      if ((o.forbidden || []).length) out.push('forbidden files: ' + o.forbidden.join(', '));
+      for (const v of o.parameter_violations || []) out.push(v);
+      if (o.check === false) out.push("the base's tests fail on the candidate");
+      if (o.wrong || o.failed) out.push(`${o.wrong} wrong and ${o.failed} failed outputs on generated inputs`);
+      if (o.timed_output_mismatches) out.push(`${o.timed_output_mismatches} timed runs gave different output from the base`);
+      for (const [m, c] of Object.entries(o.metrics || {})) if (!c.ok) out.push(`${m}: gain ${this.pct(c.gain, c.gain_kind === 'absolute')} does not meet the bar`);
+      return out;
+    },
+    bounds(p) {
+      if (p.choices) return 'choices ' + JSON.stringify(p.choices);
+      if (p.range) return p.range[0] + ' to ' + p.range[1];
+      return p.owner === 'agent' ? 'unbounded' : 'fixed';
+    },
+    fmt(v) {
+      if (typeof v !== 'number') return v == null ? '' : String(v);
+      return Math.abs(v) >= 1000 || Number.isInteger(v) ? v.toLocaleString() : v.toPrecision(4);
+    },
+    pct(v, absolute) {
+      if (typeof v !== 'number') return '';
+      return absolute ? (v >= 0 ? '+' : '') + v.toPrecision(3) : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+    },
+  };
+}
+</script>
+</body>
+</html>

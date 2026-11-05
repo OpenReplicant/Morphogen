@@ -7,7 +7,7 @@ docs/restart/LESSONS.md.
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
   judge), `evidence.py`, `optimize.py` (optimizers and `tune`), `documents.py` (morphogen.yaml,
-  target.yaml), `cli.py`, `mcp_server.py`.
+  target.yaml), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server.
 - `tests/`: the core's tests and red team, with sample targets in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.

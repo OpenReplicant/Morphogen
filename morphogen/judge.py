@@ -451,7 +451,7 @@ def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tup
         out[metric] = {"base": statistics.median(bs[metric]), "candidate": statistics.median(cs[metric]),
                        "gain": round(pr["point"], 4), "ci95": [round(x, 4) for x in pr["ci95"]],
                        "sign_test_p": round(p, 5), "ok": ok, "primary": bool(ms.get("primary")), "runs": n,
-                       "tied": n - untied}
+                       "tied": n - untied, "gain_kind": ms.get("gain", "relative")}
     return out, undecided
 
 

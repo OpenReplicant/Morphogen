@@ -5,6 +5,7 @@
     morphogen judge TARGET CANDIDATE [--base main]
     morphogen tune TARGET [--optimizer grid|random] [--steps N] [--trials N]
     morphogen evidence [--verify] [--limit N] [--by judge]
+    morphogen ui [--host 127.0.0.1] [--port 8765]
 
 TARGET is a directory with a target.yaml, or `cell:NAME` for the `measure` of a cell in the
 project's structure (morphogen.yaml `structure`, default cells.yaml).
@@ -119,6 +120,20 @@ def cmd_evidence(a) -> int:
     return 0
 
 
+def cmd_ui(a) -> int:
+    from .ui import serve
+    httpd = serve(_root(), a.host, a.port)
+    host, port = httpd.server_address[:2]
+    print(f"Morphogen UI on http://{host}:{port}/ (read-only; Ctrl-C to stop)", flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="morphogen", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -156,6 +171,11 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--limit", type=int, default=20)
     ev.add_argument("--by")
     ev.set_defaults(fn=cmd_evidence)
+
+    ui = sub.add_parser("ui", help="serve the read-only web UI on localhost")
+    ui.add_argument("--host", default="127.0.0.1")
+    ui.add_argument("--port", type=int, default=8765)
+    ui.set_defaults(fn=cmd_ui)
 
     a = ap.parse_args(argv)
     try:
