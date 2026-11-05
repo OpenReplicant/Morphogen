@@ -386,12 +386,28 @@ def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def space_of(spec: dict, tree_dir: Path) -> dict[str, dict]:
-    """The agent-owned parameters with a range or choices: what an optimizer may search."""
-    out = {}
-    for n, p in (spec.get("parameters") or {}).items():
+def space_of(spec: dict, tree_dir: Path, tree: Path | None = None, cfg: dict | None = None,
+             cell: str | None = None) -> dict[str, dict]:
+    """The agent-owned parameters with a range or choices: what an optimizer may search. With a cell,
+    also those on the cells in its scope in the structure (read from `tree`, the base's checkout).
+    Each entry carries `_value` (its value on the base) and `_dir` (where its file path starts)."""
+    items = [(n, p, tree_dir) for n, p in (spec.get("parameters") or {}).items()]
+    if cell and tree is not None:
+        from .structure import Structure
+        rel = Path((cfg or {}).get("structure", "cells.yaml"))
+        s = Structure.load(tree / rel)
+        if cell not in s.cells:
+            raise judge_mod.JudgeError(f"no cell {cell!r} in the base's structure")
+        items += [(f"{c}.{n}", p.model_dump(exclude_none=True), (tree / rel).parent)
+                  for c in sorted(s.scope(cell)) for n, p in s.cells[c].parameters.items()]
+    out, seen = {}, set()
+    for n, p, d in items:
+        where = (str((d / p["file"]).resolve()), p.get("name"), p.get("key"))
+        if where in seen:
+            continue
+        seen.add(where)
         if p.get("owner") == "agent" and (p.get("range") is not None or p.get("choices") is not None):
-            out[n] = {**p, "_value": judge_mod._read_parameter(tree_dir, p)}
+            out[n] = {**p, "_value": judge_mod._read_parameter(d, p), "_dir": d}
     return out
 
 
@@ -408,7 +424,7 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
         _git(repo, "worktree", "add", "--detach", "--quiet", str(work), base_sha)
         try:
             spec = judge_mod.load_spec(work, rel)
-            space = space_of(spec, work / rel)
+            space = space_of(spec, work / rel, work, cfg, cell)
             if not space:
                 raise judge_mod.JudgeError("no agent-owned parameters with a range or choices in target.yaml")
             metrics = judge_mod._check_spec(spec)
@@ -416,7 +432,8 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
             attempts = 0
             while len(trials) < max_trials and attempts < 4 * max_trials:
                 attempts += 1
-                values = optimizer.propose({k: dict(v) for k, v in space.items()}, trials)
+                values = optimizer.propose({k: {x: y for x, y in v.items() if x != "_dir"} for k, v in space.items()},
+                                           trials)
                 if values is None:
                     break
                 who = getattr(optimizer, "proposer", "") or optimizer.name
@@ -431,7 +448,7 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
                 seen.add(key)
                 _git(work, "checkout", "--quiet", "--detach", base_sha)
                 for k, v in values.items():
-                    write_parameter(work / rel, space[k], v)
+                    write_parameter(space[k]["_dir"], space[k], v)
                 branch = f"morphogen/tune/{rel.name}/{optimizer.name}-{len(trials) + 1}"
                 _git(work, "checkout", "--quiet", "-B", branch)
                 _git(work, "commit", "--quiet", "-am", f"tune {rel.name} ({who}): " +

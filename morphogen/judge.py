@@ -52,6 +52,7 @@ import yaml
 
 
 from . import documents
+from .observers import ObserverError, OtelObserver
 from .runner import capabilities, missing, run, sandbox_mode
 from .structure import Structure
 
@@ -75,6 +76,11 @@ sys.stdout.write(o.read().decode(errors="replace")); sys.stderr.write(e.read().d
 sys.stdout.write("\n__MORPHOGEN_JUDGE__" + json.dumps({"rc": p.returncode, "wall_seconds": wall,
     "cpu_seconds": ru.ru_utime + ru.ru_stime, "max_rss_kb": ru.ru_maxrss}) + "\n")
 """
+
+
+class CandidateFault(Exception):
+    """A run of the candidate could not be measured because of the candidate (it sent no telemetry,
+    or impossible values): the candidate is refused, not the judgment."""
 
 
 class JudgeError(Exception):
@@ -177,12 +183,30 @@ def _read_parameter(tree_dir: Path, p: dict):
     return data
 
 
-def _parameters(spec: dict, bdir: Path, cdir: Path) -> tuple[dict, list[str]]:
-    """The target's declared parameters, read in the base and the candidate (after the overlay), and the
-    changes the candidate may not make: to a judge- or operator-owned parameter, an agent-owned one outside
-    its range or choices, or one that can no longer be read."""
+def declared_parameters(spec: dict, bdir: Path, cdir: Path, btree: Path,
+                        gate: dict | None = None) -> list[tuple[str, dict, Path, Path]]:
+    """Every parameter that applies: the target's (paths relative to its directory) and, when a cell is
+    judged, those declared on the cells in its scope in the base's structure (paths relative to the
+    structure file, named `cell.parameter`). One declared in both places counts once, under the
+    target's name."""
+    out, seen = [], set()
+    items = [(n, p, bdir, cdir) for n, p in (spec.get("parameters") or {}).items()]
+    items += (gate or {}).get("parameters", [])
+    for name, p, bd, cd in items:
+        where = (str((bd / p["file"]).resolve().relative_to(btree.resolve())), p.get("name"), p.get("key"))
+        if where in seen:
+            continue
+        seen.add(where)
+        out.append((name, p, bd, cd))
+    return out
+
+
+def _parameters(items: list[tuple[str, dict, Path, Path]]) -> tuple[dict, list[str]]:
+    """Each declared parameter read in the base and the candidate (after the overlay), and the changes the
+    candidate may not make: to a judge- or operator-owned parameter, an agent-owned one outside its
+    range or choices, or one that can no longer be read."""
     values, violations = {}, []
-    for name, p in (spec.get("parameters") or {}).items():
+    for name, p, bdir, cdir in items:
         try:
             b = _read_parameter(bdir, p)
         except (LookupError, SyntaxError) as e:
@@ -291,7 +315,7 @@ def _observe(spec: dict, observer_dir: Path, cfg: dict, env: dict, timeout: int)
     collector, Prometheus, a proxy's access log) for this run's id and time window.
     """
     obs = (spec.get("measure") or {}).get("observer") or {}
-    if not obs.get("run"):
+    if obs.get("type", "command") != "command" or not obs.get("run"):
         return {}
     r = run(obs["run"], observer_dir, cfg, env=env, timeout=timeout)
     if r.rc != 0:
@@ -368,7 +392,7 @@ def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None) -> dict:
     touches, and the base's copies of their test files laid over the candidate. Tests run later, in
     the candidate's tree, from the structure file's directory."""
     if not cell:
-        return {"cell": None, "tests": [], "replaced": []}
+        return {"cell": None, "tests": [], "replaced": [], "parameters": []}
     rel = Path(cfg.get("structure", "cells.yaml"))
     f = btree / rel
     if not f.exists():
@@ -390,6 +414,8 @@ def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None) -> dict:
             if before != src.read_bytes():
                 replaced.append(str(rel.parent / name))
     tests = [{"interface": i, "test": t} for i in s.touched(scope) for t in s.interfaces[i].tests]
+    parameters = [(f"{c}.{n}", p.model_dump(exclude_none=True), sdir_b, sdir_c)
+                  for c in sorted(scope) for n, p in s.cells[c].parameters.items()]
     guard = None
     if s.cells[cell].guard is not False:
         ancestors, c = [], s.cells[cell].parent
@@ -402,7 +428,7 @@ def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None) -> dict:
             guard = {"cell": top, "target": str(rel.parent / s.cells[top].measure),
                      "max_regression": float(opts.get("max_regression", 0.05))}
     return {"cell": cell, "scope": sorted(scope), "tests": tests, "replaced": replaced, "dir": sdir_c,
-            "guard": guard}
+            "guard": guard, "parameters": parameters}
 
 
 def _system_guard(guard: dict, repo: Path, cfg: dict, btree: Path, ctree: Path, timeout: int) -> dict:
@@ -422,23 +448,8 @@ def _system_guard(guard: dict, repo: Path, cfg: dict, btree: Path, ctree: Path, 
                        "max_regression": guard["max_regression"] if v.get("primary")
                        else v.get("max_regression", 0.05)} for m, v in metrics.items()}
     m = spec["measure"]
-    samples: list[dict[str, list[float]]] = [{}, {}]
-    outputs: list = []
-    seeds = []
-
-    def round_(into):
-        seeds.append(secrets.randbelow(2**31))
-        _one_round(spec, [gb, gc], cfg, seeds[-1], timeout, into, gb, outputs=outputs)
-
-    for _ in range(int(m.get("warmup", 1))):
-        round_([{}, {}])
-    outputs.clear()
-    for _ in range(int(m.get("repeats", 10))):
-        round_(samples)
-    comparisons, undecided = _compare(constraints, *samples)
-    while undecided and len(samples[0]["wall_seconds"]) < int(m.get("max_repeats", 30)):
-        round_(samples)
-        comparisons, undecided = _compare(constraints, *samples)
+    rounds = _rounds(spec, [gb, gc], cfg, timeout, gb, metrics_spec=constraints)
+    comparisons, outputs, seeds = rounds["comparisons"], rounds["outputs"], rounds["seeds"]
     mismatches = sum(1 for b, c in outputs if b != c) if m.get("same_output", True) else 0
     ok = not mismatches and all(c["ok"] for c in comparisons.values())
     return {**guard, "ok": ok, "metrics": comparisons, "timed_output_mismatches": mismatches, "seeds": seeds}
@@ -450,6 +461,43 @@ def _run_interface_tests(gate: dict, cfg: dict, timeout: int) -> list[dict]:
         r = run(t["test"], gate["dir"], cfg, timeout=timeout, private=True)
         out.append({**t, "passed": r.rc == 0, **({} if r.rc == 0 else {"output": _clip(r.err or r.out, 600)})})
     return out
+
+
+def _rounds(spec: dict, dirs: list[Path], cfg: dict, timeout: int, scorer_dir: Path, *,
+            sides: tuple[str, ...] = ("base", "candidate"), metrics_spec: dict | None = None,
+            warmup: int | None = None, repeats: int | None = None, max_repeats: int | None = None,
+            into: dict | None = None) -> dict:
+    """The one measuring loop: warm-up rounds, then repeated rounds and, with `metrics_spec` and two sides,
+    more rounds while the comparison is still undecided, up to `max_repeats`. Every round gets a fresh
+    seed, shared by the sides within it (a fair pair) and new each round, so nothing learned in one
+    round helps the next. Warm-up outputs count for the same-output check too. `into` is filled as the
+    rounds run, so a caller that catches CandidateFault keeps the rounds so far."""
+    m = spec["measure"]
+    warmup = int(m.get("warmup", 1)) if warmup is None else warmup
+    repeats = int(m.get("repeats", 10)) if repeats is None else repeats
+    max_repeats = int(m.get("max_repeats", 30)) if max_repeats is None else max_repeats
+    r = into if into is not None else {}
+    r.update({"seeds": [], "outputs": [], "samples": [{} for _ in dirs], "comparisons": {}})
+
+    def one(samples):
+        r["seeds"].append(secrets.randbelow(2**31))
+        _one_round(spec, dirs, cfg, r["seeds"][-1], timeout, samples, scorer_dir, sides, outputs=r["outputs"])
+
+    for _ in range(warmup):
+        one([{} for _ in dirs])
+    for _ in range(repeats):
+        one(r["samples"])
+    if metrics_spec is not None and len(dirs) == 2:
+        r["comparisons"], undecided = _compare(metrics_spec, *r["samples"])
+        while undecided and len(r["samples"][0].get("wall_seconds", [])) < max_repeats:
+            one(r["samples"])
+            r["comparisons"], undecided = _compare(metrics_spec, *r["samples"])
+    return r
+
+
+def _otel(spec: dict) -> OtelObserver | None:
+    obs = (spec.get("measure") or {}).get("observer") or {}
+    return OtelObserver(obs) if obs.get("type") == "otel" else None
 
 
 def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
@@ -467,6 +515,9 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
         side = sides[i] if i < len(sides) else str(i)
         env = {"MORPHOGEN_SEED": str(seed), "MORPHOGEN_RUN_ID": run_id, "MORPHOGEN_SIDE": side,
                "OTEL_RESOURCE_ATTRIBUTES": f"morphogen.run_id={run_id},morphogen.side={side}"}
+        otel = _otel(spec)
+        if otel:
+            env.update(otel.env(run_id))
         start = time.time()
         stats, out = _timed(spec["measure"]["run"], dirs[i], cfg, env, timeout)
         results[i] = _result(out)
@@ -477,6 +528,15 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
             samples[i].setdefault(f"reported.{k}", []).append(v)
         for k, v in _observe(spec, observer_dir or dirs[i], cfg, env, timeout).items():
             samples[i].setdefault(k, []).append(v)
+        if otel:
+            try:
+                observed = otel.collect(run_id)
+            except ObserverError as e:
+                if e.fault == "candidate" and side == "candidate":
+                    raise CandidateFault(f"observer: {e}") from None
+                raise JudgeError(f"observer, on the {side}'s run: {e}") from None
+            for k, v in observed.items():
+                samples[i].setdefault(f"observed.{k}", []).append(v)
         for k, v in _score(spec, observer_dir or dirs[i], env, results[i], timeout).items():
             samples[i].setdefault(k, []).append(v)
     if outputs is not None:
@@ -546,6 +606,11 @@ def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tup
 
 
 def _check_runner(spec: dict, cfg: dict) -> None:
+    obs = (spec.get("measure") or {}).get("observer") or {}
+    if obs.get("type") == "otel" and capabilities(cfg).get("network_isolated"):
+        raise JudgeError("an otel observer needs the run to reach the judge's receiver, and this runner has no "
+                         f"network ({sandbox_mode(cfg)}); targets that are agents run with sandbox: none until a "
+                         "model gateway can carry their traffic (#43)")
     gaps = missing(cfg, spec.get("requires") or [])
     if gaps:
         raise JudgeError(f"this target requires {', '.join(gaps)}, which the {sandbox_mode(cfg)} runner does not "
@@ -604,15 +669,14 @@ def _clip_pair(expected: str, got: str, n: int = 300) -> tuple[str, str]:
 
 def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: str | None = None,
           cases: int = 5, rounds: int = 3, cell: str | None = None) -> dict:
-    """A practice run for strategies: feedback on a candidate, never a verdict.
+    """A practice run: feedback on a candidate, never a verdict. It is the optimizers' inner evaluator.
 
-    Same rules as the judge (the base's spec and harness laid over the candidate, the
-    forbidden-file check, fresh random inputs), but it reports what a strategy needs to
-    learn from: the check's output, each generated case with the base's output and the
-    candidate's where they differ, and medians of a few paired timing rounds. It shows
-    nothing a candidate could not already compute, since the generator and the base's code
-    are in the repository. Recorded as evidence of kind `probe`; it cannot be proposed for
-    merging, strategy selection ignores it, and it does not count against
+    Same rules as the judge (the base's spec and harness laid over the candidate, the forbidden-file
+    and parameter checks, the cell's interface tests, fresh random inputs; scored against `search`
+    answers, not the held-out ones), but it reports what an optimizer or an agent needs to learn
+    from: the check's output, each generated case with the base's output and the candidate's where
+    they differ, interface test results, and medians of a few paired rounds. Recorded as evidence of
+    kind `probe`; it cannot be proposed for merging, and it does not count against
     budget.trials_per_day (budget.probes_per_day caps it instead).
     """
     limit = int((cfg.get("budget") or {}).get("probes_per_day", 0) or 0)
@@ -636,12 +700,12 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         if not cdir.exists():
             raise JudgeError(f"{rel} does not exist on the candidate commit")
         _overlay(spec, bdir, cdir)
-        out["parameters"], out["parameter_violations"] = _parameters(spec, bdir, cdir)
+        gate = _cell_gate(cfg, btree, ctree, cell)
+        out["parameters"], out["parameter_violations"] = _parameters(declared_parameters(spec, bdir, cdir, btree, gate))
         named = _names_private(spec, ctree, changed)
         if named:
             out["parameter_violations"] = out["parameter_violations"] + [
                 f"names the scorer's private directory (held-out answers): {', '.join(named)}"]
-        gate = _cell_gate(cfg, btree, ctree, cell)
         if not out["forbidden"] and not out["parameter_violations"]:
             if gate["tests"]:
                 out["interfaces"] = _run_interface_tests(gate, cfg, timeout)
@@ -666,11 +730,14 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
                         case.update({"input": _clip(g.out, 200), "expected": exp, "got": got})
                     results.append(case)
                 out["cases"] = results
-            samples: list[dict[str, list[float]]] = [{}, {}]
-            outputs: list = []
-            for _ in range(max(0, min(int(rounds), 10))):
-                _one_round(spec, [bdir, cdir], cfg, secrets.randbelow(2**31), timeout, samples, bdir,
-                           outputs=outputs)
+            practice: dict = {}
+            try:
+                _rounds(spec, [bdir, cdir], cfg, timeout, bdir, warmup=0, repeats=max(0, min(int(rounds), 10)),
+                        into=practice)
+                samples, outputs = practice["samples"], practice["outputs"]
+            except CandidateFault as e:
+                out["observer_error"] = str(e)
+                samples, outputs = [{}, {}], []
             if outputs:
                 out["metrics"] = {
                     m: {"base": statistics.median(samples[0][m]), "candidate": statistics.median(samples[1][m]),
@@ -705,13 +772,8 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         name = _target_name(spec, rel)
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
-        m = spec["measure"]
-        seeds = []
-        samples: list[dict[str, list[float]]] = [{}]
-        for i in range(int(m.get("warmup", 1)) + int(m.get("repeats", 10))):
-            seeds.append(secrets.randbelow(2**31))
-            _one_round(spec, [tree / rel], cfg, seeds[-1], timeout, samples if i >= int(m.get("warmup", 1)) else [{}],
-                       tree / rel, ("measured",))
+        measured = _rounds(spec, [tree / rel], cfg, timeout, tree / rel, sides=("measured",))
+        seeds, samples = measured["seeds"], measured["samples"]
     metrics = {k: statistics.median(v) for k, v in samples[0].items()}
     rec = evidence.append({
         "claim": f"{name} at {sha[:12]} measures {json.dumps({k: round(v, 6) for k, v in metrics.items()}, sort_keys=True)}",
@@ -737,8 +799,9 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
 
 def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
           labels: dict | None = None, cell: str | None = None) -> dict:
-    """Score `candidate` against `base`. `labels` (strategy, approach, family) are recorded with the
-    verdict for the archive and never affect it."""
+    """Score `candidate` against `base` by the base's rules. With `cell`, also the tests of every
+    interface the cell's scope touches, its parameters in the base's structure, and the system guard.
+    `labels` (optimizer, member, values, approach) are recorded with the verdict and never affect it."""
     limit = int((cfg.get("budget") or {}).get("trials_per_day", 0) or 0)
     if limit and _trials_today(evidence) >= limit:
         raise JudgeError(f"the trial budget for today ({limit}) is spent; the operator can raise "
@@ -762,12 +825,12 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         if not cdir.exists():
             raise JudgeError(f"{rel} does not exist on the candidate commit")
         _overlay(spec, bdir, cdir)
-        parameters, param_violations = _parameters(spec, bdir, cdir)
+        gate = _cell_gate(cfg, btree, ctree, cell)
+        parameters, param_violations = _parameters(declared_parameters(spec, bdir, cdir, btree, gate))
         names_private = _names_private(spec, ctree, changed)
         if names_private:
             param_violations = param_violations + [
                 f"names the scorer's private directory (held-out answers): {', '.join(names_private)}"]
-        gate = _cell_gate(cfg, btree, ctree, cell)
         refused = bool(forbidden or param_violations)  # refused before anything runs
 
         check_ok, check_detail = True, "no check defined"
@@ -799,32 +862,22 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         equivalent = mismatches == 0 and failures == 0
 
         comparisons, perf_ok, bench_seeds, outputs, timed_mismatches, system = {}, False, [], [], 0, None
+        candidate_fault = None
         if check_ok and equivalent and not refused:
             m = spec["measure"]
-            # A fresh seed every round: base and candidate share it within a round (a fair pair),
-            # but no two rounds see the same input, so nothing learned in one round helps the next.
-            bench_seeds, outputs = [], []
-
-            def round_(samples):
-                bench_seeds.append(secrets.randbelow(2**31))
-                _one_round(spec, dirs, cfg, bench_seeds[-1], timeout, samples, bdir, outputs=outputs)
-
-            dirs = [bdir, cdir]
-            for _ in range(int(m.get("warmup", 1))):
-                round_([{}, {}])
-            samples: list[dict[str, list[float]]] = [{}, {}]
-            for _ in range(int(m.get("repeats", 10))):
-                round_(samples)
-            comparisons, undecided = _compare(metrics_spec, *samples)
-            while undecided and len(samples[0]["wall_seconds"]) < int(m.get("max_repeats", 30)):
-                round_(samples)
-                comparisons, undecided = _compare(metrics_spec, *samples)
+            rounds: dict = {}
+            try:
+                _rounds(spec, [bdir, cdir], cfg, timeout, bdir, metrics_spec=metrics_spec, into=rounds)
+            except CandidateFault as e:
+                candidate_fault = str(e)
+            comparisons, outputs, bench_seeds = rounds["comparisons"], rounds["outputs"], rounds["seeds"]
             # The timed runs must produce what the base produces on the same input. Otherwise code
             # that can tell a timed run from a checked one (an environment variable, argv, the caller)
             # could do less work only when timed. Opt out only for workloads whose output varies.
             if m.get("same_output", True):
                 timed_mismatches = sum(1 for b, c in outputs if b != c)
-            perf_ok = not timed_mismatches and all(c["ok"] for c in comparisons.values())
+            perf_ok = not candidate_fault and not timed_mismatches and bool(comparisons) and \
+                all(c["ok"] for c in comparisons.values())
             if perf_ok and gate.get("guard"):
                 system = _system_guard(gate["guard"], repo, cfg, btree, ctree, timeout)
                 perf_ok = system["ok"]
@@ -835,6 +888,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         reasons.append(f"changes files that shadow standard or harness modules, or customise Python: "
                        f"{', '.join(forbidden)}")
     reasons += param_violations
+    if candidate_fault:
+        reasons.append(candidate_fault)
     if system and not system["ok"]:
         worst = [f"{k} {c['gain']:+.1%}" for k, c in (system.get("metrics") or {}).items() if not c["ok"]]
         reasons.append(f"the system ({system['cell']}, {system['target']}) gets worse: "

@@ -19,6 +19,7 @@ from .optimize import catalog, make, prior_from_evidence
 from .optimize import tune as tune_mod
 from .render import mermaid
 from .structure import Structure, StructureError
+from .targets import resolve
 
 server = MCPServer(
     name="morphogen",
@@ -59,10 +60,9 @@ def _structure(file: str | None) -> Structure:
     return Structure.load(root / (file or cfg.get("structure", "cells.yaml")))
 
 
-def _target(target: str) -> str:
-    from .cli import _target as resolve_target
+def _target(target: str) -> tuple[str, str | None]:
     root, cfg = _ctx()
-    return resolve_target(root, cfg, target)
+    return resolve(root, cfg, target)
 
 
 @server.tool()
@@ -97,7 +97,7 @@ def structure_render(file: str | None = None) -> dict:
 def measure(target: str, ref: str = "main") -> dict:
     """Measure a target (a directory with target.yaml, or cell:NAME) at a commit; recorded as evidence."""
     root, cfg = _ctx()
-    return judge_mod.measure(root, cfg, _target(target), ref, Evidence.for_project(root))
+    return judge_mod.measure(root, cfg, _target(target)[0], ref, Evidence.for_project(root))
 
 
 @server.tool()
@@ -106,9 +106,8 @@ def probe(target: str, candidate: str, base: str | None = None, cases: int = 5, 
     """Practice feedback on a candidate under the judge's rules: check output, wrong cases, metric
     estimates. Never a verdict, and it cannot be proposed for merging."""
     root, cfg = _ctx()
-    cell = target[5:] if target.startswith("cell:") else None
-    return judge_mod.probe(root, cfg, _target(target), candidate, Evidence.for_project(root), base, cases, rounds,
-                           cell=cell)
+    tgt, cell = _target(target)
+    return judge_mod.probe(root, cfg, tgt, candidate, Evidence.for_project(root), base, cases, rounds, cell=cell)
 
 
 @server.tool()
@@ -119,8 +118,8 @@ def judge(target: str, candidate: str, base: str = "main", labels: dict | None =
     touches, from the base's structure. The verdict is measured evidence. `labels` (optimizer,
     approach) are recorded, never decide."""
     root, cfg = _ctx()
-    cell = target[5:] if target.startswith("cell:") else None
-    return judge_mod.judge(root, cfg, _target(target), base, candidate, Evidence.for_project(root), labels, cell=cell)
+    tgt, cell = _target(target)
+    return judge_mod.judge(root, cfg, tgt, base, candidate, Evidence.for_project(root), labels, cell=cell)
 
 
 @server.tool()
@@ -131,8 +130,7 @@ def tune(target: str, optimizer: str = "selector", steps: int = 5, trials: int =
     on a branch, then judge the best. optimizer: a name from optimizers_list; the default, selector,
     chooses among the available ones (a bandit on probe gains, primed by earlier verdicts)."""
     root, cfg = _ctx()
-    cell = target[5:] if target.startswith("cell:") else None
-    tgt, ev = _target(target), Evidence.for_project(root)
+    (tgt, cell), ev = _target(target), Evidence.for_project(root)
     options = {"trials": trials, "seed": seed, "steps": steps}
     if optimizer == "selector":
         options["prior"] = prior_from_evidence(ev, tgt)

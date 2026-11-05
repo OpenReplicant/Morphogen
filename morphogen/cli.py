@@ -25,6 +25,7 @@ from .evidence import Evidence
 from .optimize import CATALOG, catalog, make, prior_from_evidence, tune
 from .render import mermaid
 from .structure import Structure, StructureError, compare
+from .targets import resolve
 
 
 def _print(obj) -> None:
@@ -35,21 +36,8 @@ def _root() -> Path:
     return judge_mod.repo_root(Path.cwd())
 
 
-def _target(root: Path, cfg: dict, target: str) -> str:
-    if not target.startswith("cell:"):
-        return target
-    name = target[5:]
-    s = Structure.load(root / cfg.get("structure", "cells.yaml"))
-    cell = s.cells.get(name)
-    if cell is None:
-        raise KeyError(f"no cell {name!r} in the structure")
-    if not cell.measure:
-        raise KeyError(f"cell {name!r} has no measure (a directory with target.yaml)")
-    base = Path(cell.at).parent if cell.at and not cell.at.endswith("/") else Path(cell.at or ".")
-    for candidate in (root / cell.measure, root / base / cell.measure):
-        if (candidate / "target.yaml").exists():
-            return str(candidate.relative_to(root))
-    return cell.measure
+def _target(root: Path, cfg: dict, target: str) -> tuple[str, str | None]:
+    return resolve(root, cfg, target)
 
 
 def _union(intended: Structure, observed: Structure) -> Structure:
@@ -88,16 +76,16 @@ def cmd_structure(a) -> int:
 def cmd_measure(a) -> int:
     root = _root()
     cfg = load_config(root)
-    _print(judge_mod.measure(root, cfg, _target(root, cfg, a.target), a.ref, Evidence.for_project(root)))
+    target, _ = _target(root, cfg, a.target)
+    _print(judge_mod.measure(root, cfg, target, a.ref, Evidence.for_project(root)))
     return 0
 
 
 def cmd_judge(a) -> int:
     root = _root()
     cfg = load_config(root)
-    cell = a.target[5:] if a.target.startswith("cell:") else None
-    r = judge_mod.judge(root, cfg, _target(root, cfg, a.target), a.base, a.candidate, Evidence.for_project(root),
-                        cell=cell)
+    target, cell = _target(root, cfg, a.target)
+    r = judge_mod.judge(root, cfg, target, a.base, a.candidate, Evidence.for_project(root), cell=cell)
     _print(r)
     return 0 if r["verdict"] == "pass" else 1
 
@@ -105,8 +93,7 @@ def cmd_judge(a) -> int:
 def cmd_tune(a) -> int:
     root = _root()
     cfg = load_config(root)
-    cell = a.target[5:] if a.target.startswith("cell:") else None
-    target, ev = _target(root, cfg, a.target), Evidence.for_project(root)
+    (target, cell), ev = _target(root, cfg, a.target), Evidence.for_project(root)
     options = {"trials": a.trials, "seed": a.seed, "steps": a.steps}
     if a.optimizer == "selector":
         options["prior"] = prior_from_evidence(ev, target)

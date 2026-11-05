@@ -6,7 +6,8 @@ docs/restart/LESSONS.md.
 ## Layout
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
-  judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `documents.py` (morphogen.yaml,
+  judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
+  `otel`), `documents.py` (morphogen.yaml,
   target.yaml), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server.
 - `tests/`: the core's tests and red team, with sample targets in `tests/fixtures`.
@@ -35,3 +36,34 @@ claude plugin validate . && claude plugin validate .claude-plugin/plugin.json
 `/plugin install morphogen --marketplace OpenReplicant/Morphogen` installs a copy of main. A
 local clone added as a marketplace runs the plugin from the clone, so the judge would be the
 candidate. Never edit the installed plugin's directory.
+
+## State (2026-11-05)
+- On main: the base (#61); MCP server, plugin and web UI (#62); the optimizer catalog, selector and
+  system guard (#63). #63 merged before GitHub picked up the observer commit, so the observer slot
+  (`otel`) reaches main with the consolidation PR.
+- Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
+  judge or runner changes. A/A: 0 of 12 after the measuring loop became one function.
+- CI is advisory: `judge` runs the candidate's tests (required on main); `base-tests` runs main's
+  tests against the candidate and is not required. Make it required again when rebuild 7 settles.
+- Podman, Docker and bubblewrap are installed in the cloud container; only Podman's service runs.
+- Model calls: run them through this session's Claude Code (the user's subscription), e.g.
+  `claude -p`, rather than an API key.
+
+## Next
+1. Design simplifications under discussion (one structure document instead of target.yaml plus
+   cells.yaml; the cell gate whenever a target belongs to a cell; probe as a mode of the judge).
+2. Optimizers that escape local optima: random restarts, simulated annealing, a stagnation signal
+   for the selector; later a stepping-stone archive and multi-step candidates.
+3. The entity-resolution demo as the first real run: move its F1 into a scorer outside the
+   candidate, contract tests for its three untested interfaces, then tune the matcher.
+4. An agent target: Claude Code on a small task set, cells for its skills and prompts, measured by
+   the `otel` observer.
+5. Later: GEPA adapter (text cells), model-based selector policy, choosing scope, learned-state
+   reset (#45), model gateway (#43), the observed structure from traces, a bubblewrap runner.
+
+## Consolidated (2026-11-05)
+Cell parameters in cells.yaml are enforced and searched; one measuring loop (`judge._rounds`) for
+judge, probe, measure and the system guard; target resolution in `targets.py`; the brief trimmed
+to the design (status lives in README); fixtures split by project; rebuild 6 wording removed.
+Left for the operator: stale rebuild 6 branches on GitHub, and issues #43-#49, which describe
+rebuild 6 code.

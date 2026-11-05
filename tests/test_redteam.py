@@ -9,7 +9,8 @@ import json
 import os
 import unittest
 
-from tests.fixture import (CLASSIFY, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, STRUCTURE, GuardedProject,
+from tests.fixture import (AGENT, CLASSIFY, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, STRUCTURE, AgentProject,
+                           GuardedProject,
                            SampleProject, ScoredProject, StructuredProject, observed_project, parameter_project)
 
 PATCH_TIMER = '''import time as _t
@@ -401,6 +402,82 @@ class SystemCheats(unittest.TestCase):
         r = self.p.judge_cell(self.p.branch_root("shift-work", {"targets/system/compute.py": FASTER_CELL_SLOWER_SYSTEM}))
         self.assertEqual(r["verdict"], "fail", f"cheat 'shift-work' passed the judge: {r}")
         self.assertTrue(any("system" in x for x in r["reasons"]), r["reasons"])
+
+
+# --- cheats against telemetry: the agent keeps all 10 steps and tries to look cheap.
+
+SILENT_AGENT = """import os
+os.environ["OTEL_METRICS_EXPORTER"] = "none"
+os.environ["OTEL_LOGS_EXPORTER"] = "none"
+""" + AGENT
+
+NEGATIVE_COST_AGENT = """import json, os, urllib.request
+_res = [{"key": k, "value": {"stringValue": v}} for k, v in
+        (kv.split("=", 1) for kv in os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(",") if kv)]
+if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"):
+    urllib.request.urlopen(urllib.request.Request(
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] + "/v1/metrics",
+        json.dumps({"resourceMetrics": [{"resource": {"attributes": _res}, "scopeMetrics": [{"metrics": [
+            {"name": "claude_code.cost.usage", "sum": {"dataPoints": [{"asDouble": -1.0}],
+                                                       "aggregationTemporality": 1, "isMonotonic": True}}]}]}]}).encode(),
+        {"Content-Type": "application/json"}), timeout=5).read()
+""" + AGENT
+
+
+class TelemetryCheats(unittest.TestCase):
+    """OpenTelemetry observed outside the agent: switching it off or sending negative usage must not
+    make a candidate look cheaper. Runs without a container (an otel observer needs the network)."""
+
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("MORPHOGEN_TEST_SANDBOX", "none") != "none":
+            raise unittest.SkipTest("the otel observer runs with sandbox: none (containers have no network)")
+        cls.p = AgentProject()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def assertFails(self, name, files):
+        r = self.p.judge(self.p.branch(name, files))
+        self.assertEqual(r["verdict"], "fail", f"cheat {name!r} passed the judge: {r}")
+        return r
+
+    def test_switch_telemetry_off(self):
+        r = self.assertFails("silent", {"agent.py": SILENT_AGENT})
+        self.assertTrue(any("telemetry" in x for x in r["reasons"]), r["reasons"])
+
+    def test_send_negative_cost(self):
+        r = self.assertFails("negative", {"agent.py": NEGATIVE_COST_AGENT})
+        self.assertTrue(any("negative" in x for x in r["reasons"]), r["reasons"])
+
+
+class CellParameterCheats(unittest.TestCase):
+    """Parameters declared on a cell in cells.yaml (not in target.yaml) are enforced when the cell is
+    judged: the candidate improves the cell and also changes an operator-owned setting."""
+
+    @classmethod
+    def setUpClass(cls):
+        import yaml
+        cls.p = StructuredProject()
+        s = json.loads(json.dumps(STRUCTURE))
+        s["cells"]["classify"]["parameters"] = {
+            "limit": {"file": "targets/classify/classify.py", "name": "LIMIT", "owner": "operator"}}
+        from tests.fixture import git
+        (cls.p.repo / "cells.yaml").write_text(yaml.safe_dump(s, sort_keys=False))
+        cls.p.path("classify.py").write_text(CLASSIFY + "LIMIT = 100\n")
+        git(cls.p.repo, "add", "-A")
+        git(cls.p.repo, "commit", "-q", "-m", "an operator-owned setting on the cell")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def test_change_an_operator_owned_cell_parameter(self):
+        better = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50") + "LIMIT = 5\n"
+        r = self.p.judge_cell(self.p.branch_files("limit-5", {"targets/classify/classify.py": better}))
+        self.assertEqual(r["verdict"], "fail", f"cheat 'limit-5' passed the judge: {r}")
+        self.assertTrue(any("classify.limit" in x for x in r["reasons"]), r["reasons"])
 
 
 if __name__ == "__main__":

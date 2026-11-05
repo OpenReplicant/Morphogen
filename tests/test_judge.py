@@ -170,6 +170,34 @@ class CellGate(unittest.TestCase):
         self.assertFalse(r["interfaces"][0]["passed"])
         self.assertIn("output", r["interfaces"][0])
 
+    def test_cell_parameters_are_recorded_searched_and_counted_once(self):
+        import yaml
+        from morphogen.optimize import space_of
+        from tests.fixture import STRUCTURE
+        s = json.loads(json.dumps(STRUCTURE))
+        s["cells"]["classify"]["parameters"] = {
+            "threshold": {"file": "targets/classify/classify.py", "name": "THRESHOLD", "owner": "agent",
+                          "range": [0, 100]},                              # also in target.yaml
+            "margin": {"file": "targets/classify/classify.py", "name": "MARGIN", "owner": "agent",
+                       "choices": [0, 1, 2]}}                              # only here
+        base = self.p.branch_files("cell-params", {"cells.yaml": yaml.safe_dump(s),
+                                                   "targets/classify/classify.py": CLASSIFY + "MARGIN = 0\n"})
+        spec = judge_mod.load_spec(self.p.repo, Path(self.p.target))
+        subprocess_git = __import__("subprocess")
+        subprocess_git.run(["git", "checkout", "-q", base], cwd=self.p.repo, check=True)
+        try:
+            space = space_of(spec, self.p.path("."), self.p.repo, self.p.cfg, "classify")
+        finally:
+            subprocess_git.run(["git", "checkout", "-q", "main"], cwd=self.p.repo, check=True)
+        self.assertEqual(sorted(space), ["classify.margin", "threshold"])
+        self.assertEqual(space["classify.margin"]["_value"], 0)
+        cand = self.p.branch_files("cell-params-cand", {"cells.yaml": yaml.safe_dump(s),
+                                                        "targets/classify/classify.py":
+                                                        CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50") + "MARGIN = 1\n"})
+        r = judge_mod.judge(self.p.repo, self.p.cfg, self.p.target, base, cand, self.p.evidence, cell="classify")
+        self.assertEqual(r["parameters"]["classify.margin"], {"owner": "agent", "base": 0, "candidate": 1})
+        self.assertNotIn("classify.threshold", r["parameters"])
+
     def test_an_unknown_cell_is_an_error(self):
         with self.assertRaises(judge_mod.JudgeError):
             self.p.judge_cell("main", cell="nope")
