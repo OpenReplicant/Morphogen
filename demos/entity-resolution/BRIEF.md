@@ -29,7 +29,8 @@ aliases, typos, abbreviations, and near-misses that must not match.
 | `clustering` (pairs into groups) | code | method (agent, choices), linkage threshold (agent, range) |
 | `backend` (the whole implementation) | alternatives | which backend (agent, choices) |
 
-Neighbours: `blocking` → `matcher` → `clustering`. A structural change, such as replacing
+Interfaces: `blocking` provides `candidates`, `backend` provides `similarity` to `matcher`, which
+provides `pair-score` to `clustering`; the root provides `resolver`. A structural change, such as replacing
 blocking with embedding search, must keep the matcher's interface test green.
 
 ## Measure

@@ -57,7 +57,7 @@ reconciliation and reflexion models. Two claims carry the project:
    combines them (optimizers trust their evaluator; canary tools trust outside collection and
    ignore the candidate's author; coding agents can edit their tests). The Darwin Gödel Machine
    result is the evidence that instructions alone do not hold.
-2. **Scope is part of the search.** A change can target one cell, a group of neighbours, or
+2. **Scope is part of the search.** A change can target one cell, a scope of nested cells, or
    the whole system, and no scope wins in general: which pays off depends on the system and the
    moment. So the selector chooses scope the way it chooses an optimizer, from evidence, and the
    gate judges every scope the same way. There is no claim that local beats whole, or the
@@ -109,7 +109,7 @@ Rules that follow:
 ## System structure: optional, and what it adds
 
 Morphogen needs cells, not a system structure. A mapper helps when there are many cells, when structural
-changes need neighbours, or when intent is missing from the code. Without one, start by
+changes cross interfaces, or when intent is missing from the code. Without one, start by
 measuring:
 
 1. **One cell by hand.** Name a location, its existing tests and a measure (rebuild 6 ran this
@@ -121,15 +121,51 @@ measuring:
 3. **The structure grows from cells that earned attention.** Measure first, map what matters.
 
 **Rendered as a diagram.** The intended and observed structures render as one picture: cells as
-nodes, neighbours as edges, parts only intended drawn as absences, parts only observed flagged
-as divergences. Live traces light it up: OBI's service relationships and OpenTelemetry spans mark
+nested boxes, interfaces as edges (hubs when they join more than two cells), parts only intended
+drawn as absences, parts only observed flagged as divergences. Live traces light it up: OBI's service relationships and OpenTelemetry spans mark
 which cells and edges ran, how often, how slowly and with what errors, and verdicts mark the
 cells under trial. Rendering is an adapter (a diagram format such as Mermaid, D2 or Graphviz,
 or a trace viewer's service graph); the structure is the data.
 
-Morphogen's own vocabulary is four words: **cell** (a changeable place, at any grain),
-**parameter** (with an owner and bounds), **interface** (as tests), **neighbour**. Existing
-formats are address spaces a cell's location can refer into, not the ontology:
+### The structure, explicitly
+
+A graph ontology chosen for what Morphogen needs to compute, not for interchange. Its shape is
+that of Milner's bigraphs: two structures over the same nodes, a nesting forest (place graph) and
+a hypergraph of connections (link graph), without bigraphs' reaction rules (Morphogen's changes
+and the judge are the dynamics). SysML internal block diagrams are the engineering version:
+parts nested in blocks, joined through ports, with connectors delegated through the enclosing
+boundary.
+
+1. **Cells, in a containment tree.** Each cell has at most one parent; a system is a cell with
+   children, to any depth; the root is the whole system. A **scope** is a cell with everything
+   inside it, so one cell, a group and the whole are one idea.
+2. **Interfaces, as hyperedges.** Each interface joins the cells attached to it, each with a role,
+   `provides` or `consumes`. One interface can have several providers (alternatives) and many
+   consumers. An interface carries its tests: contract tests, and for interfaces at the root's
+   boundary, the system's acceptance tests and service-level objectives.
+3. **Parameters** on a cell or an interface: a location, an owner, a range or choices.
+4. **Two layers on one schema**, intended and observed. Each cell, interface and attachment is
+   intended only (an absence), observed only (a divergence), or both (a convergence). Traces and
+   verdicts are annotations on these elements.
+
+Rules, checked:
+
+- containment has no cycles and each cell one parent;
+- every consumed interface has a provider (otherwise a gap); a provided interface nobody consumes
+  is flagged as unused;
+- **a scope's boundary is computed, not declared:** the interfaces joining something inside it to
+  something outside it.
+
+What follows:
+
+- **The gate's tests for any scope:** a change inside it passes the tests of every interface it
+  touches, internal and boundary. For the root, those are the system's own acceptance tests.
+- **Alternatives:** whatever provides and consumes a cell's interfaces can fill it.
+- **Two cells are neighbours** exactly when they share an interface; no separate list.
+
+Authored as YAML (intended, in git); loaded into a typed in-memory graph; the observed layer is
+generated in the same schema. Existing formats are address spaces a cell's location can refer
+into, or export targets, not the ontology:
 
 | Grain | Format |
 |---|---|
@@ -213,11 +249,11 @@ before adding a dependency.
 
 | Part | Job | Written or integrated |
 |---|---|---|
-| **Spec** | desired state per cell: location, modality, interface tests, parameters with owners and bounds, neighbours, measures, held-out cases | written: the format |
-| **Selector** | the search over (scope × optimizer × measure), where scope is a cell, a group of neighbours or the whole: modality narrows it, evidence from past runs updates it | written: where Morphogen sits |
+| **Structure** | cells in a containment tree, interfaces as hyperedges with their tests, parameters with owners and bounds, measures, held-out cases; intended and observed layers | written: the schema and its checks |
+| **Selector** | the search over (scope × optimizer × measure), where scope is a cell, a nested scope or the whole: modality narrows it, evidence from past runs updates it | written: where Morphogen sits |
 | **Optimizer adapters** | hand a cell and an inner evaluator to GEPA, Optuna, OpenEvolve, AFlow or a Claude Code worker | integrated |
 | **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each cell's harness | integrated |
-| **Gate** | offline at each cell: protected test setup, held-out cases, owners enforced, neighbour tests, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
+| **Gate** | offline at each cell: protected test setup, held-out cases, owners enforced, the tests of every touched interface, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
 | **Apply and observe adapters** | turn a promoted change into a branch, PR or deploy; read status back | integrated (git, Argo, Terraform, ...) |
 | **Structure adapters** | suggest cells from a profile, an indexer, Backstage's `catalog-info.yaml` files (no Backstage server needed), or a hand-written spec | integrated |
 | **Structure view** | render the intended and observed structures as one diagram, lit by live traces and verdicts | integrated: a diagram format, a trace viewer |
@@ -237,29 +273,41 @@ errors, duration and service relationships from the executable and network witho
 
 - **Cell, offline, before merge.** Inner evaluator for the search: cheap, outside the optimizer's
   reach, not statistical. Then the judge, once, on the optimizer's best, with paired statistics,
-  on held-out cases, with the neighbours' interface tests. Catches cheating and overfitting.
+  on held-out cases, with the tests of every interface the changed scope touches. Catches cheating and overfitting.
 - **System, online, after apply.** Canary against a fresh baseline running the production version
   (Google's guidance), on outside-observed telemetry. Catches interactions, load and emergent
   regressions. A change that passes at the cell and fails here is rolled back, and the selector
   learns from it.
 
-## The spec format (draft)
+## The structure format (draft)
 
 ```yaml
 cells:
+  agent:                                 # a cell with children: a system (the root here)
+    measure: targets/qa                  # a directory with target.yaml: harness and metrics
+    cases: {search: cases/search, holdout: cases/holdout}   # holdout is read by the judge only
   retrieval-prompt:
+    parent: agent
     at: agent/prompts/retrieve.md        # a file, file#symbol, or a marked block
     modality: text                       # text | code | numeric | workflow | ...
-    interface:                           # owned by the intent; read-only to builder and optimizer
-      check: python -m pytest -q tests/test_retrieve.py
-      contracts: [contracts/answer-prompt.json]   # tests at the boundaries with neighbours
+    provides: [retrieve]
+    consumes: [memory-read]
     parameters:                          # the #58 format, unchanged
       top_k: {file: agent/config.yaml, key: retrieve.top_k, owner: agent, range: [1, 50]}
       model: {file: agent/config.yaml, key: llm.model, owner: operator}
-    neighbours: [answer-prompt, memory-store]
-    measure: targets/qa                  # a directory with target.yaml: harness and metrics
-    cases: {search: cases/search, holdout: cases/holdout}   # holdout is read by the judge only
     alternatives: catalog/retrieval      # optional: where candidate fillings come from
+  memory:
+    parent: agent
+    at: agent/memory/
+    provides: [memory-read]
+
+interfaces:                              # owned by the intent; read-only to builder and optimizer
+  retrieve:                              # crosses agent's boundary: a system-level test
+    tests: [python -m pytest -q tests/test_retrieve.py]
+  memory-read:                           # internal to agent
+    tests: [python -m pytest -q tests/contracts/test_memory_read.py]
+    parameters:
+      timeout_ms: {file: agent/config.yaml, key: memory.timeout_ms, owner: operator}
 ```
 
 A mapper writes it, or a person does by hand. Morphogen reads it and nothing else about the system.
@@ -284,7 +332,7 @@ One prompt cell, GEPA as its optimizer, end to end:
 3. The judge on held-out cases accepts a real improvement and refuses an overfit one.
 4. The verdict records the optimizer and the parameter values as evidence.
 
-Then: a numeric cell with Optuna; a structural change gated by a neighbour's contract test;
+Then: a numeric cell with Optuna; a structural change gated by the contract tests of the interfaces it touches;
 then the three-arm comparison above, on a system with at least two cells, before building more
 of the selector. One live cell gated by a canary on OBI telemetry comes after that.
 
@@ -321,7 +369,7 @@ From the `rebuild-6` branch:
 
 ## Open questions
 
-- Running neighbours' contract tests without the judge's cost multiplying per cell.
+- Running the tests of every touched interface without the judge's cost multiplying per cell.
 - Where held-out cases live so no candidate can read them: outside the container, or only in the
   judge's process.
 - Learned-state reset between trials for stateful targets such as an agent's memory (#45).
