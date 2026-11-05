@@ -98,9 +98,14 @@ reading the held-out answers. Every one must fail; a new one that passes goes th
 
 ## Limits
 
-- Without a container (`sandbox: docker` or `podman`), code under test runs as you and can read
-  any file you can. Naming the private directory is refused, but an obfuscated path is not
-  caught; the strong version is a container, where only the candidate's tree is mounted.
+- The default runner is Podman (`sandbox: auto` picks Podman, then Docker, then none). Without a
+  container, code under test runs as you and can read any file you can: naming the private
+  directory is refused, but an obfuscated path gets through. In Podman it fails, since only the
+  candidate's tree is mounted (a red-team case, run with `MORPHOGEN_TEST_SANDBOX=podman`, where the
+  whole suite runs with every trial in a container). A target can insist with `requires: [network_isolated,
+  private_paths_hidden, ...]`, and is then refused on a runner without them. Containers use
+  `sandbox_image` (default `python:3.12-slim`), so a target's own dependencies must be in that
+  image. Bubblewrap, gVisor, Firecracker and remote runners are future options (runner.py).
 - The scorer runs without a container: it is the judge's code from the base commit.
 - Parameters are read statically; code that changes a setting at run time is the reviewer's to
   catch. TOML keys can be read but not yet written by `tune`.

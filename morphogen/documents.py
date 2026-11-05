@@ -36,7 +36,7 @@ class Budget(_Doc):
 
 class Config(_Doc):
     trunk: str = "main"
-    sandbox: Literal["auto", "docker", "podman", "none"] = "auto"
+    sandbox: Literal["auto", "podman", "docker", "none"] = "auto"
     sandbox_image: str = "python:3.12-slim"
     budget: Budget | None = None
     structure: str = "cells.yaml"
@@ -97,6 +97,9 @@ class Target(_Doc):
     measure: Measure | None = None
     timeout: int | None = None
     parameters: dict[str, Parameter] = {}
+    # Guarantees the runner must provide for this target to be judged at all (runner.GUARANTEES).
+    requires: list[Literal["network_isolated", "read_only_tree", "private_paths_hidden", "fresh_state",
+                           "resource_limits"]] = []
 
 
 SCHEMAS: dict[str, type[BaseModel]] = {"config": Config, "target": Target}

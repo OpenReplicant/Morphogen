@@ -1,17 +1,24 @@
-"""Runners: where the judge's commands run. A port, like the data backends.
+"""Runners: where the judge's commands run, and which guarantees hold there.
 
-Each runner declares capabilities so the judge and `doctor` say which
-guarantees hold:
+Each runner declares the guarantees it provides; a target may require some (`requires:` in
+target.yaml), and the judge refuses to score it on a runner that lacks them rather than quietly
+giving weaker evidence. Every verdict records the guarantees that held.
 
-    network_isolated   the command cannot reach the network
-    read_only_tree     the command cannot change the code it is judging
-    resource_limits    memory and CPU are capped
-    timing             'stable' when timings are comparable run to run, 'noisy' otherwise
+    network_isolated      the command cannot reach the network
+    read_only_tree        the command cannot change the code it is judged on
+    private_paths_hidden  only the candidate's tree is visible: not the scorer's private answers,
+                          not the rest of the machine
+    fresh_state           nothing a run writes survives into the next run
+    resource_limits       memory and CPU are capped
+    timing                'stable' when timings are comparable run to run, 'noisy' otherwise
 
-Shipped: `none` (directly on this machine), `docker`, `podman` (rootless,
-no daemon). `auto` picks Docker, then Podman, then none. Cluster runners
-(Kubernetes Jobs, Nomad batch jobs) and stronger isolation (gVisor,
-Firecracker) are listed in the sample catalog as planned.
+Shipped: `podman` (the default: rootless, no daemon), `docker` (the same container path, for
+machines that have Docker), and `none` (directly on this machine, with a private TMPDIR and HOME
+per run, which is not isolation). `auto` picks Podman, then Docker, then none.
+
+Future runners, not built: bubblewrap (unprivileged Linux namespaces, no images, the host's own
+interpreter and packages; what Claude Code's Linux sandbox uses), gVisor (a user-space kernel),
+Firecracker (micro-VMs), macOS's sandbox, and remote runners (a CI job, a Kubernetes Job).
 """
 
 from __future__ import annotations
@@ -24,12 +31,14 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-CONTAINER_CAPS = {"network_isolated": True, "read_only_tree": True, "resource_limits": True, "timing": "stable"}
+GUARANTEES = ("network_isolated", "read_only_tree", "private_paths_hidden", "fresh_state", "resource_limits")
+CONTAINER_CAPS = {**{g: True for g in GUARANTEES}, "timing": "stable"}
 RUNNERS = {
-    "none": {"network_isolated": False, "read_only_tree": False, "resource_limits": False, "timing": "stable"},
-    "docker": CONTAINER_CAPS,
+    "none": {**{g: False for g in GUARANTEES}, "timing": "stable"},
     "podman": CONTAINER_CAPS,
+    "docker": CONTAINER_CAPS,
 }
+ENGINES = ("podman", "docker")  # auto's order
 _AVAILABLE: dict[str, bool] = {}
 
 
@@ -50,13 +59,13 @@ def sandbox_mode(cfg: dict) -> str:
     want = cfg.get("sandbox", "auto")
     if want == "none":
         return "none"
-    if want in ("docker", "podman"):
+    if want in ENGINES:
         if not available(want):
             raise RuntimeError(f"sandbox is set to {want}, but {want} is not available")
         return want
     if want != "auto":
-        raise RuntimeError(f"unknown sandbox {want!r}; use auto, docker, podman or none")
-    for engine in ("docker", "podman"):
+        raise RuntimeError(f"unknown sandbox {want!r}; use auto, podman, docker or none")
+    for engine in ENGINES:
         if available(engine):
             return engine
     return "none"
@@ -65,6 +74,12 @@ def sandbox_mode(cfg: dict) -> str:
 def capabilities(cfg: dict) -> dict:
     mode = sandbox_mode(cfg)
     return {"runner": mode, **RUNNERS[mode]}
+
+
+def missing(cfg: dict, required: list[str]) -> list[str]:
+    """The required guarantees this project's runner does not provide."""
+    caps = capabilities(cfg)
+    return [g for g in required if not caps.get(g)]
 
 
 @dataclass

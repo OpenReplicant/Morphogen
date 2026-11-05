@@ -52,7 +52,7 @@ import yaml
 
 
 from . import documents
-from .runner import capabilities, run, sandbox_mode
+from .runner import capabilities, missing, run, sandbox_mode
 from .structure import Structure
 
 INTERFACES = ("direct", "simulated")
@@ -494,6 +494,13 @@ def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tup
     return out, undecided
 
 
+def _check_runner(spec: dict, cfg: dict) -> None:
+    gaps = missing(cfg, spec.get("requires") or [])
+    if gaps:
+        raise JudgeError(f"this target requires {', '.join(gaps)}, which the {sandbox_mode(cfg)} runner does not "
+                         "provide; set sandbox: podman (or auto, with Podman installed) in morphogen.yaml")
+
+
 def _check_spec(spec: dict) -> dict:
     m = spec.get("measure") or {}
     if not m.get("run"):
@@ -571,6 +578,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         spec = load_spec(btree, rel)
         metrics_spec = _check_spec(spec)
         _prepare_score(spec, repo, rel, "probe")
+        _check_runner(spec, cfg)
         timeout = int(spec.get("timeout", 300))
         out["forbidden"] = _forbidden(changed, rel, list(spec.get("harness", [])))
         bdir, cdir = btree / rel, ctree / rel
@@ -642,6 +650,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         spec = load_spec(tree, rel)
         _check_spec(spec)
         _prepare_score(spec, repo, rel)
+        _check_runner(spec, cfg)
         name = _target_name(spec, rel)
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
@@ -692,6 +701,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         forbidden = _forbidden(changed, rel, list(spec.get("harness", [])))
         metrics_spec = _check_spec(spec)
         _prepare_score(spec, repo, rel)
+        _check_runner(spec, cfg)
         name = _target_name(spec, rel)
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))

@@ -6,6 +6,7 @@ the judge. The share of these that fail is the judge's own metric.
 """
 
 import json
+import os
 import unittest
 
 from tests.fixture import (CLASSIFY, CONTRACT_TEST, FAST, SETTINGS, STRUCTURE, SampleProject, ScoredProject,
@@ -316,6 +317,17 @@ class ScoreCheats(unittest.TestCase):
         # whose files name it. Obfuscating the path defeats this; a container is the strong defence.
         r = self.assertFails("read-path", {"classify.py": read_named_private(str(self.p.private_dir))})
         self.assertTrue(any("private" in x for x in r["reasons"]), r["reasons"])
+
+    def test_read_the_held_out_answers_by_an_obfuscated_path(self):
+        # The path is assembled at run time, so the judge's search for it in the candidate's files
+        # finds nothing. Only a container stops this: there, only the candidate's tree is mounted.
+        if os.environ.get("MORPHOGEN_TEST_SANDBOX", "none") == "none":
+            self.skipTest("only a container runner (MORPHOGEN_TEST_SANDBOX=podman) can stop this cheat")
+        hidden = str(self.p.private_dir)[::-1]
+        code = read_named_private("@@").replace("os.path.join('@@', \"gold.json\")",
+                                                f"os.path.join({hidden!r}[::-1], 'gold.json')")
+        self.assertNotIn(str(self.p.private_dir), code)
+        self.assertFails("read-obfuscated", {"classify.py": code})
 
     def test_edit_the_bar_in_target_yaml(self):
         spec = self.p.original("target.yaml").replace("min_improvement: 0.05", "min_improvement: -1")

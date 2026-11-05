@@ -120,6 +120,15 @@ class Scored(unittest.TestCase):
         finally:
             q.close()
 
+    def test_a_target_that_requires_isolation_is_refused_without_it(self):
+        spec = documents.validate("target", {"requires": ["network_isolated", "private_paths_hidden"]})
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            judge_mod._check_runner(spec, {"sandbox": "none"})
+        self.assertIn("network_isolated", str(e.exception))
+        judge_mod._check_runner(documents.validate("target", {}), {"sandbox": "none"})
+        with self.assertRaises(documents.DocumentError):
+            documents.validate("target", {"requires": ["magic"]})
+
     def test_a_scored_primary_needs_a_scorer(self):
         spec = documents.validate("target", {"measure": {"run": "x", "metrics": {
             "scored.accuracy": {"direction": "higher", "primary": True}}}})
