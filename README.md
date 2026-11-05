@@ -12,7 +12,7 @@ the design; this file is how to use what is built.
 | Structure | `structure.py`, `render.py` | `cells.yaml`: cells in a containment tree, interfaces as hyperedges with their tests, parameters with owners. Checks, scopes, computed boundaries, the tests a change in a scope must pass, intent coverage, intended against observed, a Mermaid diagram |
 | Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules (see below) |
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
-| Optimizers | `optimize.py` | one interface; built-in grid and random search over agent-owned parameters; `tune` probes each proposal and judges the best |
+| Optimizers | `optimize.py` | the optimizer slot: a catalog (`morphogen optimizers`) of built-in grid, random and hill-climb search, an Optuna adapter (`uv sync --extra optuna`), and the `selector`, an optimizer whose policy (a bandit on probe gains, primed by earlier verdicts) chooses which one proposes next; GEPA and a model-based selector policy are listed as planned; other packages add optimizers through the `morphogen.optimizers` entry point. `tune` probes each proposal and judges the best |
 | CLI | `cli.py` | `morphogen structure`, `measure`, `judge`, `tune`, `evidence` |
 | MCP server | `mcp_server.py` | the same as ten tools for an agent: `structure_check`, `structure_scope`, `structure_render`, `measure`, `probe`, `judge`, `tune`, `evidence_query`, `evidence_note` (stated or inferred only), `evidence_verify` |
 | Web UI | `ui.py`, `ui.html` | `morphogen ui`: a local, read-only page (Alpine.js and Mermaid) with the structure diagram (click a cell for its scope, boundary, tests and parameters), findings and intent coverage; the evidence log with filters, verdict metrics, reasons and parameter values; and each target's primary metric, parameters and latest results |
@@ -37,7 +37,8 @@ uv sync
 uv run morphogen structure check cells.yaml
 uv run morphogen measure targets/my-target
 uv run morphogen judge targets/my-target my-branch
-uv run morphogen tune targets/my-target --optimizer grid --steps 5
+uv run morphogen tune targets/my-target              # the selector chooses optimizers
+uv run morphogen optimizers                          # the catalog
 uv run morphogen evidence --verify
 uv run morphogen ui              # http://127.0.0.1:8765/
 ```

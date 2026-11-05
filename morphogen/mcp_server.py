@@ -15,7 +15,7 @@ from mcp.server.mcpserver import MCPServer
 from . import judge as judge_mod
 from .documents import DocumentError, load_config
 from .evidence import Evidence
-from .optimize import Grid, RandomSearch
+from .optimize import catalog, make, prior_from_evidence
 from .optimize import tune as tune_mod
 from .render import mermaid
 from .structure import Structure, StructureError
@@ -125,15 +125,27 @@ def judge(target: str, candidate: str, base: str = "main", labels: dict | None =
 
 @server.tool()
 @_safe
-def tune(target: str, optimizer: str = "grid", steps: int = 5, trials: int = 20, rounds: int = 2,
+def tune(target: str, optimizer: str = "selector", steps: int = 5, trials: int = 20, rounds: int = 2,
          base: str = "main", seed: int | None = None) -> dict:
     """Search the target's agent-owned parameters (within their range or choices): probe each proposal
-    on a branch, then judge the best. optimizer: grid or random."""
+    on a branch, then judge the best. optimizer: a name from optimizers_list; the default, selector,
+    chooses among the available ones (a bandit on probe gains, primed by earlier verdicts)."""
     root, cfg = _ctx()
-    opt = Grid(steps=steps) if optimizer == "grid" else RandomSearch(trials=trials, seed=seed)
     cell = target[5:] if target.startswith("cell:") else None
-    return tune_mod(root, cfg, _target(target), opt, Evidence.for_project(root), base=base,
-                    rounds=rounds, max_trials=trials, cell=cell)
+    tgt, ev = _target(target), Evidence.for_project(root)
+    options = {"trials": trials, "seed": seed, "steps": steps}
+    if optimizer == "selector":
+        options["prior"] = prior_from_evidence(ev, tgt)
+    return tune_mod(root, cfg, tgt, make(optimizer, **options), ev, base=base, rounds=rounds,
+                    max_trials=trials, cell=cell)
+
+
+@server.tool()
+@_safe
+def optimizers_list() -> list:
+    """The optimizer catalog: built-in, adapters (available when installed), the selector, and planned
+    entries, each with the modalities it handles and what it needs."""
+    return catalog()
 
 
 @server.tool()

@@ -6,10 +6,12 @@ the code this brief carries over, and [LESSONS.md](https://github.com/OpenReplic
 (#43, #45, #58) refer to this repository's history.
 
 **Status (2026-11-05):** built and tested: the structure, the judge (carried from rebuild 6, plus
-scoring outside the candidate with held-out answers), evidence, grid and random optimizers with
-`tune`, the CLI, and the MCP server and Claude Code plugin. See README.md. Not built: the GEPA,
-Optuna and worker adapters, the observed structure from traces, and the selector across cells and
-scopes.
+scoring outside the candidate with held-out answers, and the tests of every interface a judged
+cell touches), Podman as the default runner with declared guarantees, evidence, an optimizer
+catalog (grid, random, hill climb, Optuna, and a selector that chooses among them) with `tune`,
+the CLI, the MCP server, the Claude Code plugin and a read-only web UI. See README.md. Not built:
+the GEPA and worker adapters, a model-based selector policy, choosing scope (cell, group, whole),
+observers beyond a command (OpenTelemetry next), and the observed structure from traces.
 
 ## What it is
 

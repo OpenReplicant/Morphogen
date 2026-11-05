@@ -240,7 +240,7 @@ class CommandLine(unittest.TestCase):
             r = cli("judge", "cell:classify", branch)
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             self.assertEqual(json.loads(r.stdout)["verdict"], "pass")
-            r = cli("tune", "targets/classify", "--steps", "3", "--rounds", "1")
+            r = cli("tune", "targets/classify", "--optimizer", "grid", "--steps", "3", "--rounds", "1")
             self.assertEqual(json.loads(r.stdout)["best"]["values"], {"threshold": 50}, r.stderr)
             r = cli("evidence", "--verify")
             self.assertEqual(json.loads(r.stdout)["chain"], "intact")
