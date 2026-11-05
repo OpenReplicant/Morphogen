@@ -20,3 +20,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["morphogen"]
+
+[tool.uv]
+# Keep pydantic's helpers at the versions rebuild 6 locked and tested.
+constraint-dependencies = ["typing-inspection==0.4.4"]
