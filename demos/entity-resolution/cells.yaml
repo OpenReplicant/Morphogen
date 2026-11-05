@@ -45,6 +45,7 @@ cells:
 
 interfaces:
   resolver:                              # the root's boundary: the Resolver protocol
+    external: consumes                   # used by whatever needs resolution
     tests: [python -m unittest discover -s tests]
   candidates:   {tests: []}              # no contract tests yet: an intent-coverage gap
   pair-score:   {tests: []}
