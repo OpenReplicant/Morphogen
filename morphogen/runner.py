@@ -1,7 +1,7 @@
 """Runners: where the judge's commands run, and which guarantees hold there.
 
-Each runner declares the guarantees it provides; a target may require some (`requires:` in
-target.yaml), and the judge refuses to score it on a runner that lacks them rather than quietly
+Each runner declares the guarantees it provides; a cell may require some (`requires:` in
+morphogen.yaml), and the judge refuses to score it on a runner that lacks them rather than quietly
 giving weaker evidence. Every verdict records the guarantees that held.
 
     network_isolated      the command cannot reach the network

@@ -1,6 +1,6 @@
 """The optimizer slot: a catalog of optimizers behind one interface, and `tune`.
 
-An optimizer proposes values for a target's agent-owned parameters; Morphogen writes each proposal
+An optimizer proposes values for a cell's bounded settings; Morphogen writes each proposal
 onto a branch, scores it with a probe (the cheap inner evaluator: practice, never a verdict), tells
 the optimizer the result, and sends only the best proposal to the judge, which scores it on the
 held-out cases with full statistics.
@@ -386,35 +386,24 @@ def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def space_of(spec: dict, tree_dir: Path, tree: Path | None = None, cfg: dict | None = None,
-             cell: str | None = None) -> dict[str, dict]:
-    """The agent-owned parameters with a range or choices: what an optimizer may search. With a cell
-    (named, or the one whose measure is `tree_dir`), also those on the cells in its scope in the structure (read from `tree`, the base's checkout).
-    Each entry carries `_value` (its value on the base) and `_dir` (where its file path starts)."""
-    items = [(n, p, tree_dir) for n, p in (spec.get("parameters") or {}).items()]
-    if not cell and tree is not None:
-        cell = judge_mod.cell_of(cfg or {}, tree, tree_dir.relative_to(tree))
-    if cell and tree is not None:
-        found = judge_mod.structure_of(cfg or {}, tree)
-        if found is None or cell not in found[0].cells:
-            raise judge_mod.JudgeError(f"no cell {cell!r} in the base's structure")
-        s, _, sdir = found
-        items += [(f"{c}.{n}", p.model_dump(exclude_none=True), sdir)
-                  for c in sorted(s.scope(cell)) for n, p in s.cells[c].parameters.items()]
-    out, seen = {}, set()
-    for n, p, d in items:
-        where = (str((d / p["file"]).resolve()), p.get("name"), p.get("key"))
-        if where in seen:
-            continue
-        seen.add(where)
-        if p.get("owner") == "agent" and (p.get("range") is not None or p.get("choices") is not None):
-            out[n] = {**p, "_value": judge_mod._read_parameter(d, p), "_dir": d}
+def space_of(tree: Path, cell: str) -> dict[str, dict]:
+    """The agent-owned settings with a range or choices on the cells in `cell`'s scope, in the project
+    on `tree` (the base's checkout): what an optimizer may search. Each entry carries `_value` (its
+    value on the base) and `_dir` (where its file path starts, the root)."""
+    proj = judge_mod.structure_of(tree)
+    s = proj.structure()
+    out = {}
+    for c in sorted(s.scope(cell)):
+        for n, p in s.cells[c].parameters.items():
+            d = p.model_dump(exclude_none=True)
+            if d.get("owner") == "agent" and (d.get("range") is not None or d.get("choices") is not None):
+                out[f"{c}.{n}"] = {**d, "_value": judge_mod._read_parameter(tree, d), "_dir": tree}
     return out
 
 
 def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, base: str = "main",
          rounds: int = 2, max_trials: int = 50, cell: str | None = None) -> dict:
-    """Search the target's agent-owned parameters with `optimizer`; probe every proposal; judge the best."""
+    """Search the cell's bounded settings with `optimizer`; probe every proposal; judge the best."""
     repo = judge_mod.repo_root(root)
     base_sha = judge_mod.resolve(repo, base)
     trials: list[Trial] = []
@@ -423,9 +412,9 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
         work = Path(tmp) / "w"
         _git(repo, "worktree", "add", "--detach", "--quiet", str(work), base_sha)
         try:
-            spec, rel, cell, proj, subject = judge_mod._target(root, repo, cfg, target, work, cell)
-            label = cell if proj is not None else rel.name
-            space = space_of(spec, work / rel, work, cfg, cell)
+            spec, rel, cell, _ = judge_mod._target(root, repo, cfg, target, work, cell)
+            label, subject = cell, f"cell:{cell}"
+            space = space_of(work, cell)
             if not space:
                 raise judge_mod.JudgeError("no agent-owned settings with a range or choices to search")
             metrics = judge_mod._check_spec(spec)

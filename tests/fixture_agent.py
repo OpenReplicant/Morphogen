@@ -49,33 +49,27 @@ if os.environ.get("CLAUDE_CODE_ENABLE_TELEMETRY") == "1":
         post("/v1/logs", {"resourceLogs": [{**res, "scopeLogs": [{"logRecords": recs}]}]})
 '''
 
-AGENT_TARGET = '''name: agent
-harness: [bench.py]
-measure:
-  run: python bench.py
-  warmup: 0
-  repeats: 4
-  max_repeats: 8
-  same_output: false
-  observer:
-    type: otel
-    collected: outside
-    settle_ms: 150
-    metrics:
-      cost_usd: {metric: claude_code.cost.usage}
-      output_tokens: {metric: claude_code.token.usage, where: {type: output}}
-      api_requests: {event: claude_code.api_request, count: true}
-      api_ms: {event: claude_code.api_request, field: duration_ms}
-  metrics:
-    observed.cost_usd: {direction: lower, primary: true, min_improvement: 0.10}
-timeout: 60
-parameters:
-  steps: {file: agent.py, name: STEPS, owner: agent, range: [1, 20]}
-'''
+AGENT_CELL = {
+    "dir": "targets/agent",
+    "change": ["targets/agent/agent.py", "targets/agent/agent.py#STEPS in 1..20"],
+    "run": "python bench.py",
+    "observe": {"type": "otel", "collected": "outside", "settle_ms": 150, "metrics": {
+        "cost_usd": {"metric": "claude_code.cost.usage"},
+        "output_tokens": {"metric": "claude_code.token.usage", "where": {"type": "output"}},
+        "api_requests": {"event": "claude_code.api_request", "count": True},
+        "api_ms": {"event": "claude_code.api_request", "field": "duration_ms"}}},
+    "better": {"cost_usd": {"lower": True, "min": 0.10}},
+    "same_output": False,
+    "rounds": {"warmup": 0, "repeats": 4, "max_repeats": 8},
+    "timeout": 60,
+}
 
 
 class AgentProject(Project):
-    target = "targets/agent"
+    home = "targets/agent"
+    cell = "agent"
 
-    def __init__(self):
-        super().__init__({"agent.py": AGENT, "bench.py": AGENT_BENCH, "target.yaml": AGENT_TARGET}, sample=None)
+    def __init__(self, cells=None):
+        import copy
+        super().__init__({"agent.py": AGENT, "bench.py": AGENT_BENCH}, sample=None,
+                         cells=cells or {"agent": copy.deepcopy(AGENT_CELL)})

@@ -1,35 +1,27 @@
 """The web UI: its JSON API on a project with evidence, the page, and that it only reads."""
 
+import copy
 import json
-import re
-import subprocess
 import threading
 import unittest
 import urllib.error
 import urllib.request
 
-import yaml
 
 from morphogen import judge as judge_mod
 from morphogen.ui import PAGE, Api, serve
-from tests.fixture import CLASSIFY, ScoredProject
+from tests.fixture import CLASSIFY, CLASSIFY_CELL, ScoredProject
 
 
 class Ui(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.p = ScoredProject()
-        (cls.p.repo / "cells.yaml").write_text(yaml.safe_dump({
-            "cells": {"app": {"provides": ["labels"]},
-                      "classify": {"parent": "app", "at": "targets/classify/classify.py", "provides": ["score"],
-                                   "parameters": {"threshold": {"file": "targets/classify/classify.py",
-                                                                "name": "THRESHOLD", "owner": "agent",
-                                                                "range": [0, 100]}}},
-                      "report": {"parent": "app", "consumes": ["score"]}},
-            "interfaces": {"labels": {"tests": ["python -m unittest -q test_classify"], "external": "consumes"},
-                           "score": {}}}))
-        subprocess.run(["git", "add", "-A"], cwd=cls.p.repo, check=True)
-        subprocess.run(["git", "commit", "-qm", "structure"], cwd=cls.p.repo, check=True)
+        cls.p = ScoredProject(
+            cells={"app": {"provides": "labels"},
+                   "classify": {"in": "app", "provides": "score", **copy.deepcopy(CLASSIFY_CELL)},
+                   "report": {"in": "app", "consumes": "score"}},
+            interfaces={"labels": {"tests": "python -m unittest -q test_classify", "external": "consumes"},
+                        "score": []})
         judge_mod.measure(cls.p.repo, cls.p.cfg, cls.p.target, "main", cls.p.evidence)
         cls.p.judge(cls.p.branch("t50", {"classify.py": CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")}))
         cls.httpd = serve(cls.p.repo, "127.0.0.1", 0)
@@ -77,7 +69,8 @@ class Ui(unittest.TestCase):
 
     def test_targets(self):
         t = json.loads(self.get("/api/targets")[2])
-        self.assertEqual([x["path"] for x in t], ["targets/classify"])
+        self.assertEqual([x["path"] for x in t], ["cell:classify"])
+        self.assertEqual(t[0]["change"], ["targets/classify/classify.py"])
         self.assertEqual(t[0]["primary"], "scored.accuracy")
         self.assertEqual(t[0]["verdicts"], {"pass": 1, "fail": 0})
         self.assertIsNotNone(t[0]["last_measurement"])

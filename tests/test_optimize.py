@@ -106,7 +106,7 @@ class TuneWithEach(unittest.TestCase):
         r = O.tune(self.p.repo, self.p.cfg, self.p.target, O.make(name, **options), self.p.evidence,
                    rounds=1, max_trials=options.get("trials", 20))
         self.assertEqual(r["verdict"], "pass", r.get("note") or r.get("judge"))
-        self.assertIn(r["best"]["values"]["threshold"], (49, 50, 51))   # inputs are multiples of 3
+        self.assertIn(r["best"]["values"]["classify.THRESHOLD"], (49, 50, 51))   # inputs are multiples of 3
         return r
 
     def test_hillclimb(self):

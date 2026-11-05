@@ -1,12 +1,13 @@
 """Sample projects scored outside the candidate: a classifier with held-out answers, and the same
 classifier inside a structure with a contract test."""
 
+import copy
 import json
 import shutil
 import tempfile
 from pathlib import Path
 
-from tests.fixture import Project, git, judge_mod
+from tests.fixture import Project
 
 
 # --- a target scored outside the candidate: classify numbers against held-out labels
@@ -55,46 +56,40 @@ INPUTS = list(range(0, 100, 3))
 GOLD = ["high" if x >= 50 else "low" for x in INPUTS]
 
 
-def classify_target(private: str) -> str:
-    return f"""name: classify
-harness: [bench.py, score.py, test_classify.py, inputs.json]
-check: python -m unittest -q test_classify
-measure:
-  run: python bench.py
-  warmup: 0
-  repeats: 4
-  max_repeats: 8
-  same_output: false
-  score: {{run: python score.py, private: {private}}}
-  metrics:
-    scored.accuracy: {{direction: higher, primary: true, min_improvement: 0.05, gain: absolute, aggregate: mean}}
-timeout: 60
-parameters:
-  threshold: {{file: classify.py, name: THRESHOLD, owner: agent, range: [0, 100]}}
-"""
+CLASSIFY_CELL = {
+    "dir": "targets/classify",
+    "change": ["targets/classify/classify.py", "targets/classify/classify.py#THRESHOLD in 0..100"],
+    "run": "python bench.py",
+    "better": {"accuracy": {"higher": True, "min": 0.05, "gain": "absolute", "aggregate": "mean"}},
+    "score": "python score.py",
+    "tests": "python -m unittest -q test_classify",
+    "rounds": {"warmup": 0, "repeats": 4, "max_repeats": 8},
+    "timeout": 60,
+}
 
 
 class ScoredProject(Project):
-    """A classifier scored outside the candidate, with the held-out answers outside the repository."""
+    """A classifier scored outside the candidate, with the held-out answers outside the repository
+    (named in the uncommitted morphogen.local.yaml)."""
 
-    target = "targets/classify"
+    home = "targets/classify"
+    cell = "classify"
 
-    def __init__(self, private_inside=False, search=False):
+    def __init__(self, private_inside=False, search=False, cells=None, interfaces=None, root_files=None):
         self.private_dir = Path(tempfile.mkdtemp(prefix="morphogen-private-"))
         (self.private_dir / "gold.json").write_text(json.dumps(GOLD))
-        private = "held-out" if private_inside else str(self.private_dir)
-        spec = classify_target(private)
         self.search_dir = None
+        local = {"private": "targets/classify/held-out" if private_inside else str(self.private_dir)}
         if search:
             self.search_dir = Path(tempfile.mkdtemp(prefix="morphogen-search-"))
             (self.search_dir / "gold.json").write_text(json.dumps(GOLD))
-            spec = spec.replace(f"private: {private}}}", f"private: {private}, search: {self.search_dir}}}")
+            local["search"] = str(self.search_dir)
         files = {"classify.py": CLASSIFY, "bench.py": CLASSIFY_BENCH, "score.py": CLASSIFY_SCORE,
-                 "test_classify.py": CLASSIFY_TEST, "inputs.json": json.dumps(INPUTS),
-                 "target.yaml": spec}
+                 "test_classify.py": CLASSIFY_TEST, "inputs.json": json.dumps(INPUTS)}
         if private_inside:
             files["held-out/gold.json"] = json.dumps(GOLD)
-        super().__init__(files, sample=None)
+        super().__init__(files, sample=None, cells=cells or {"classify": copy.deepcopy(CLASSIFY_CELL)},
+                         interfaces=interfaces, local={"cells": {"classify": local}}, root_files=root_files)
         if private_inside:
             self.private_dir = self.path("held-out")
 
@@ -127,48 +122,19 @@ if __name__ == "__main__":
     unittest.main()
 '''
 
-STRUCTURE = {
-    "cells": {
-        "app": {},
-        "classify": {"parent": "app", "at": "targets/classify/classify.py", "measure": "targets/classify",
-                     "provides": ["labels"]},
-        "report": {"parent": "app", "consumes": ["labels"]},
-    },
-    "interfaces": {
-        "labels": {"tests": ["python -m unittest -q contracts.test_labels"],
-                   "files": ["contracts/test_labels.py", "contracts/__init__.py"]},
-    },
-}
+def structure_cells() -> dict:
+    """classify inside app, providing the labels that report consumes."""
+    return {"app": {},
+            "classify": {"in": "app", "provides": "labels", **copy.deepcopy(CLASSIFY_CELL)},
+            "report": {"in": "app", "consumes": "labels"}}
+
+
+STRUCTURE = {"cells": structure_cells(), "interfaces": {"labels": "python -m unittest -q contracts.test_labels"}}
 
 
 class StructuredProject(ScoredProject):
-    """The classifier inside a structure, with cells.yaml and the contract test committed on main."""
+    """The classifier inside a structure, with the `labels` contract test committed on main."""
 
     def __init__(self):
-        super().__init__()
-        import yaml
-        (self.repo / "cells.yaml").write_text(yaml.safe_dump(STRUCTURE, sort_keys=False))
-        (self.repo / "contracts").mkdir()
-        (self.repo / "contracts" / "__init__.py").write_text("")
-        (self.repo / "contracts" / "test_labels.py").write_text(CONTRACT_TEST)
-        git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-q", "-m", "structure and contract")
-
-    def branch_files(self, name, files):
-        """Commit a candidate whose files are paths relative to the repository root."""
-        git(self.repo, "checkout", "-q", "-B", name, "main")
-        for rel, text in files.items():
-            p = self.repo / rel
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(text)
-        git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-q", "-m", name)
-        git(self.repo, "checkout", "-q", "main")
-        return name
-
-    def judge_cell(self, candidate, cell="classify"):
-        return judge_mod.judge(self.repo, self.cfg, self.target, "main", candidate, self.evidence, cell=cell)
-
-    def judge_path(self, candidate, target=None):
-        """Judge by the target's directory, without naming the cell."""
-        return judge_mod.judge(self.repo, self.cfg, target or self.target, "main", candidate, self.evidence)
+        super().__init__(cells=structure_cells(), interfaces=copy.deepcopy(STRUCTURE["interfaces"]),
+                         root_files={"contracts/__init__.py": "", "contracts/test_labels.py": CONTRACT_TEST})

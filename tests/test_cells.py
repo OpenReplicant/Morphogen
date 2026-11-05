@@ -1,7 +1,6 @@
 """The cell format (morphogen.yaml): parsing, compiling, and default deny. A candidate may change only
 what the judged cell's scope names in `change`; everything else is the judge's."""
 
-import json
 from pathlib import Path
 import unittest
 
@@ -10,10 +9,9 @@ import yaml
 from morphogen import judge as judge_mod
 from morphogen import optimize as O
 from morphogen import project as P
-from morphogen import targets
 from morphogen.structure import Structure
 from tests.fixture_cells import CELLS_CONTRACT, CellsProject, cells_doc
-from tests.fixture_scored import CLASSIFY, CLASSIFY_BENCH, GOLD, StructuredProject
+from tests.fixture_scored import CLASSIFY, CLASSIFY_BENCH
 
 BETTER = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")
 
@@ -182,8 +180,7 @@ class Paths(unittest.TestCase):
         cls.p.close()
 
     def test_names(self):
-        self.assertEqual(targets.resolve(self.p.repo, self.p.cfg, "cell:classify"), ("cell:classify", None))
-        self.assertEqual(judge_mod.cell_of(self.p.cfg, self.p.repo, Path("classify")), "classify")
+        self.assertEqual(judge_mod.cell_of(self.p.repo, Path("classify")), "classify")
         r = self.p.judge(self.p.branch("by-name", {"classify/classify.py": BETTER}), target="classify")
         self.assertEqual(r["cell"], "classify")
         with self.assertRaises(judge_mod.JudgeError):
@@ -215,71 +212,6 @@ class Paths(unittest.TestCase):
         self.assertIn(r["best"]["values"]["classify.THRESHOLD"], (49, 50, 51))
         self.assertEqual(r["target"], "cell:classify")
         self.assertTrue(O.prior_from_evidence(self.p.evidence, "cell:classify"))
-
-
-class BothFormats(unittest.TestCase):
-    """The same classifier in the old format (target.yaml plus cells.yaml) and the cell format reaches the
-    same verdicts, so moving a project over changes nothing the judge decides."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.old, cls.new = StructuredProject(), CellsProject()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.old.close()
-        cls.new.close()
-
-    def both(self, name, classify):
-        o = self.old.judge_cell(self.old.branch_files(name, {"targets/classify/classify.py": classify}))
-        n = self.new.judge(self.new.branch(name, {"classify/classify.py": classify}))
-        return o, n
-
-    def test_same_verdicts(self):
-        for name, text, word in (
-                ("t50", BETTER, None),
-                ("t500", CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 500"), "range"),
-                ("t11", CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 11"), "gain")):
-            o, n = self.both(name, text)
-            self.assertEqual(o["verdict"], n["verdict"], (name, o["reasons"], n["reasons"]))
-            if word:
-                self.assertTrue(any(word in x for x in o["reasons"]) and any(word in x for x in n["reasons"]),
-                                (name, o["reasons"], n["reasons"]))
-
-
-class Migrate(unittest.TestCase):
-    """`morphogen migrate` turns the old classifier into the cell format; the migrated project reaches
-    the same verdicts as the old one on the same candidates."""
-
-    def test_migrated_project_judges_the_same(self):
-        from morphogen.documents import load_config
-        from morphogen.migrate import dump, migrate
-        from tests.fixture import git
-        old = StructuredProject()
-        try:
-            doc, local = migrate(old.repo, old.cfg)
-            c = doc["cells"]["classify"]
-            self.assertEqual(c["in"], "app")
-            self.assertEqual(c["dir"], "targets/classify")
-            self.assertIn("targets/classify/classify.py#THRESHOLD in 0..100", c["change"])
-            self.assertNotIn("targets/classify/bench.py", c["change"])        # a harness file
-            self.assertEqual(local["cells"]["classify"]["private"], str(old.private_dir))
-            self.assertEqual(doc["interfaces"]["labels"], "python -m unittest -q contracts.test_labels")
-            verdicts = {}
-            for name, text in (("t50", BETTER), ("t500", CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 500"))):
-                verdicts[name] = old.judge_cell(old.branch_files(name, {"targets/classify/classify.py": text}))["verdict"]
-            (old.repo / "morphogen.yaml").write_text(dump(doc))
-            (old.repo / "morphogen.local.yaml").write_text(dump(local))
-            (old.repo / ".git" / "info" / "exclude").write_text("morphogen.local.yaml\n")
-            git(old.repo, "add", "morphogen.yaml")
-            git(old.repo, "commit", "-q", "-m", "migrate")
-            old.cfg = load_config(old.repo)
-            for name, text in (("n50", BETTER), ("n500", CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 500"))):
-                r = old.judge_path(old.branch_files(name, {"targets/classify/classify.py": text}), "cell:classify")
-                self.assertEqual(r["verdict"], verdicts["t" + name[1:]], r["reasons"])
-                self.assertEqual(r["cell"], "classify")
-        finally:
-            old.close()
 
 
 if __name__ == "__main__":

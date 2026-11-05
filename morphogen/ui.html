@@ -99,7 +99,7 @@ details pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow
   <!-- Structure -->
   <section x-show="tab === 'structure'">
     <template x-if="structure && structure.missing">
-      <p class="empty">No structure at <span class="mono" x-text="structure.file"></span>. Write a cells.yaml (see BRIEF.md) to see it here.</p>
+      <p class="empty">No structure at <span class="mono" x-text="structure.file"></span>. Write a morphogen.yaml with cells (see README.md, The cell format).</p>
     </template>
     <div class="grid" x-show="structure && !structure.missing">
       <div class="panel">
@@ -231,7 +231,7 @@ details pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow
 
   <!-- Targets -->
   <section x-show="tab === 'targets'">
-    <p class="empty" x-show="!targets.length">No target.yaml in this repository.</p>
+    <p class="empty" x-show="!targets.length">No cell with a run in morphogen.yaml.</p>
     <div class="cards">
       <template x-for="t in targets" :key="t.path">
         <div class="panel">
@@ -244,7 +244,7 @@ details pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow
             <span class="muted">verdicts</span>
             <span><span class="badge pass" x-text="(t.verdicts?.pass || 0) + ' pass'"></span>
                   <span class="badge fail" x-text="(t.verdicts?.fail || 0) + ' fail'"></span></span>
-            <span class="muted">harness</span><span class="mono" x-text="(t.harness || []).join(', ') || '—'"></span>
+            <span class="muted">may change</span><span class="mono" x-text="(t.change || []).join(', ') || 'nothing'"></span>
           </div>
           <template x-if="t.parameters && Object.keys(t.parameters).length">
             <div class="table-wrap"><table>

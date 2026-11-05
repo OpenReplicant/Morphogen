@@ -7,12 +7,12 @@ docs/restart/LESSONS.md.
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
   judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
-  `otel`), `project.py` (the cell format: morphogen.yaml's cells, default deny), `migrate.py` (old
-  format to new), `documents.py` (morphogen.yaml settings,
-  target.yaml), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
+  `otel`), `project.py` (the cell format: morphogen.yaml's cells and interfaces, default deny),
+  `documents.py` (morphogen.yaml's settings, and the target spec a cell compiles to), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
-  `morphogen` (improve a target) and `map` (draft cells.yaml or a first target.yaml).
-- `tests/`: the core's tests and red team, with sample targets in `tests/fixtures`.
+  `morphogen` (improve a cell) and `map` (draft morphogen.yaml's cells).
+- `tests/`: the core's tests and red team; fixture projects in `tests/fixture*.py`, the timed
+  sample's files in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
 
 ## Rules
@@ -40,11 +40,10 @@ local clone added as a marketplace runs the plugin from the clone, so the judge 
 candidate. Never edit the installed plugin's directory.
 
 ## State (2026-11-05)
-- On main: the base (#61); MCP server, plugin and web UI (#62); the optimizer catalog, selector and
-  system guard (#63). #63 merged before GitHub picked up the observer commit, so the observer slot
-  (`otel`) reaches main with the consolidation PR.
+- On main through phase 1 of PLAN.md (#65, #66). Phase 2, the cell format only (morphogen.yaml;
+  target.yaml and cells.yaml no longer read), is on the branch.
 - Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
-  judge or runner changes. A/A: 0 of 12 after the measuring loop became one function.
+  judge or runner changes. A/A: 0 of 12 in the cell format.
 - CI is advisory: `judge` runs the candidate's tests (required on main); `base-tests` runs main's
   tests against the candidate and is not required. Make it required again when rebuild 7 settles.
 - Podman, Docker and bubblewrap are installed in the cloud container; only Podman's service runs.
@@ -55,9 +54,8 @@ candidate. Never edit the installed plugin's directory.
 [PLAN.md](PLAN.md) brings everything into the small-core paradigm (phases 0-6); the items below
 fold into it.
 
-1. Design simplifications under discussion (one structure document instead of target.yaml plus
-   cells.yaml; one kind of "still works" test; probe as a mode of the judge). Done: the cell gate
-   applies whenever the base's structure says a cell measures the target, however it is named.
+1. Design simplifications left: probe as a mode of the judge. Done: one structure document
+   (morphogen.yaml, phases 1-2), one kind of "still works" test (`tests`, `same_as_base`).
 2. Optimizers that escape local optima: random restarts, simulated annealing, a stagnation signal
    for the selector; later a stepping-stone archive and multi-step candidates.
 3. The entity-resolution demo as the first real run: move its F1 into a scorer outside the
@@ -71,7 +69,7 @@ fold into it.
    reset (#45), model gateway (#43), the observed structure from traces, a bubblewrap runner.
 
 ## Consolidated (2026-11-05)
-Cell parameters in cells.yaml are enforced and searched; one measuring loop (`judge._rounds`) for
+Cell parameters are enforced and searched; one measuring loop (`judge._rounds`) for
 judge, probe, measure and the system guard; target resolution in `targets.py`; the brief trimmed
 to the design (status lives in README); fixtures split by project; rebuild 6 wording removed.
 Left for the operator: stale rebuild 6 branches on GitHub, and issues #43-#49, which describe

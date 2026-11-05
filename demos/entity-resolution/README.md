@@ -7,7 +7,7 @@ Plan and build are done for a baseline; optimizing waits for Morphogen's base. S
 |---|---|
 | Plan: interface tests | `tests/test_interface.py`: variants, near-miss models and editions, unknowns, ordering, merge and split |
 | Build: two backends | `overlap` (overlap coefficient) and `tfidf` (TF-IDF cosine); both pass the interface test |
-| Cells | `cells.yaml`: backend, blocking, matcher, with parameters in `er/settings.py` |
+| Cells | `morphogen.yaml` (the cell format): backend, blocking, matcher, with settings in `er/settings.py` |
 | Measure | `bench.py`: F1 on a fixed search/holdout split of left records (70/30) |
 | Optimize | not started: needs the judge, held-out scoring outside the candidate, and an optimizer adapter |
 

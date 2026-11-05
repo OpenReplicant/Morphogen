@@ -1,9 +1,10 @@
 """The documents people write and git versions, and the one way they are read.
 
-`morphogen.yaml` (settings) and `target.yaml` (how the judge scores a target). Each has a schema;
+`morphogen.yaml`'s settings (trunk, sandbox, budget), and the target spec a cell compiles to (how
+the judge scores it; see project.py for the cell format the operator writes). Each has a schema;
 `load` reads a file, checks it and returns plain data, or raises DocumentError naming the file and
 every problem. Schemas check structure and types; what a value means is checked where it is used,
-by the judge. Unknown keys are kept. The structure (`cells.yaml`) has its own schema in structure.py.
+by the judge. Unknown keys are kept.
 """
 
 from __future__ import annotations
@@ -12,9 +13,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, RootModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
-from .structure import Parameter
 
 
 class DocumentError(ValueError):
@@ -39,10 +39,9 @@ class Config(_Doc):
     sandbox: Literal["auto", "podman", "docker", "none"] = "auto"
     sandbox_image: str = "python:3.12-slim"
     budget: Budget | None = None
-    structure: str = "cells.yaml"
 
 
-# target.yaml
+# the target spec (compiled from a cell)
 
 class Metric(_Doc):
     direction: Literal["lower", "higher"] = "lower"
@@ -96,12 +95,10 @@ class Target(_Doc):
     description: str | None = None
     interface: str = "direct"  # direct | simulated; the judge checks it and what follows from it
     simulates: str | None = None
-    harness: list[str] = []
     check: str | None = None
     equivalence: Equivalence | None = None
     measure: Measure | None = None
     timeout: int | None = None
-    parameters: dict[str, Parameter] = {}
     # Guarantees the runner must provide for this target to be judged at all (runner.GUARANTEES).
     requires: list[Literal["network_isolated", "read_only_tree", "private_paths_hidden", "fresh_state",
                            "resource_limits"]] = []

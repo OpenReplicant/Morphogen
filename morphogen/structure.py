@@ -62,9 +62,6 @@ class Cell(_Doc):
 
 class Interface(_Doc):
     tests: list[str] = []
-    # Files the tests use (paths relative to the structure file's directory). They belong to the
-    # intent: the judge takes them from the base commit, as it does a target's harness.
-    files: list[str] = []
     parameters: dict[str, Parameter] = {}
     # The world outside the structure takes the other role: "consumes" for something the system
     # offers (an API, the whole system's behaviour), "provides" for something it relies on (a
@@ -131,13 +128,13 @@ class Structure:
             raise StructureError(str(path), [f"cannot read: {e.strerror or e}"]) from None
         except yaml.YAMLError as e:
             raise StructureError(str(path), [f"not valid YAML: {e}"]) from None
-        if path.name == "morphogen.yaml" and isinstance(data, dict) and "cells" in data:
-            from .project import Project, ProjectError   # the cell format compiles to a structure
-            try:
-                return Project.from_dict(data, str(path)).structure()
-            except ProjectError as e:
-                raise StructureError(str(path), [str(e)]) from None
-        return cls.from_dict(data, str(path))
+        from .project import Project, ProjectError   # files are in the cell format; it compiles to this
+        if not isinstance(data, dict) or "cells" not in data:
+            raise StructureError(str(path), ["no cells: a structure file is in the cell format (morphogen.yaml)"])
+        try:
+            return Project.from_dict(data, str(path)).structure()
+        except ProjectError as e:
+            raise StructureError(str(path), [str(e)]) from None
 
     # containment
 
