@@ -6,6 +6,51 @@ to use it, is in [README.md](README.md). The previous build is on the
 [LESSONS.md](https://github.com/OpenReplicant/Morphogen/blob/rebuild-6/docs/restart/LESSONS.md),
 what it taught. Issue numbers (#43, #45) refer to this repository's history.
 
+## Morphogen in one page
+
+**The core** is what nothing else provides:
+
+- a judge the improver cannot edit: the rules come from the base commit, the measurements are
+  taken outside the candidate, and paired rounds with a sign test decide;
+- a "still works" gate: the tests of every interface a change touches, from the base;
+- the system guard: the system around a changed cell must not get worse;
+- an evidence log that cannot be quietly edited.
+
+**A cell** is described by five things, and an optimizer needs nearly the same five:
+
+| Field | Says | For an optimizer it is |
+|---|---|---|
+| `change` | what may change: files, or settings with a range or choices. Nothing else may | the search space, or the artifact (GEPA) |
+| `run` | the workload, from the base | part of the evaluator, held by the judge |
+| `better` | the primary metric and its direction | the objective |
+| `tests` | what must keep passing; a failure refuses, it is never traded for score | constraints |
+| `in` | the cell or system this one belongs to | none: Morphogen uses it for scope and the guard |
+
+Optional: a `score` command (from the base) for outputs that are scored rather than timed, and
+`observe` for telemetry collected outside the run. Everything else is a default, computed from the
+containment tree, or kept on the operator's machine (held-out answers, budget, sandbox).
+
+**Above Morphogen**, other tools map what exists. Morphogen reads whichever are present and adds
+only the cell grain and what the judge needs:
+
+| Layer | Intended | Observed |
+|---|---|---|
+| business: capabilities, processes | ArchiMate | event logs (OCEL 2.0), process mining |
+| software: systems, components, APIs | Backstage `catalog-info.yaml` | traces, OpenTelemetry |
+| cells: code, prompts, settings, skills | Morphogen's cell file | the judge's measurements |
+
+**Beside Morphogen**, optimizers get one contract: a space (from `change`), an evaluator they do not
+hold (`evaluate(candidate) -> score, diagnostics`, which is a probe), and one verdict from the
+judge on their best. Grid, random, hill-climb, Optuna, GEPA, or a quorum of models used as a
+scorer all fit it.
+
+**The family** around it, each judged the same way: the mapper (a skill that drafts the map), the
+builder (ordinary Claude Code, making red tests green), domain modules (skills, an ontology,
+resolver settings and log parsers, bundled) around a shared knowledge base joined by the entity
+resolver, and deployment, whose canary stage is the online half of the gate.
+
+[PLAN.md](PLAN.md) brings what is built into this shape. The rest of this brief is the rationale.
+
 ## What it is
 
 In development, cells do not consult a blueprint. Each reads a morphogen's concentration where
