@@ -1,0 +1,26 @@
+[project]
+name = "morphogen"
+version = "0.7.0.dev0"
+description = "The local morphological drive: improve a system at any scope, behind a judge the improver cannot edit."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+  # Document schemas. MIT. The versions rebuild 6 pinned and tested (2.13.4: May 2026).
+  "pydantic==2.13.4",
+  # YAML documents. MIT.
+  "pyyaml==6.0.3",
+]
+
+[project.scripts]
+morphogen = "morphogen.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["morphogen"]
+
+[tool.uv]
+# Keep pydantic's helpers at the versions rebuild 6 locked and tested.
+constraint-dependencies = ["typing-inspection==0.4.4"]

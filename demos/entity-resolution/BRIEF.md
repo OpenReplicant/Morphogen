@@ -20,16 +20,17 @@ class Resolver(Protocol):
 The interface test any backend must pass: a fixed set of labelled pairs and groups, including
 aliases, typos, abbreviations, and near-misses that must not match.
 
-## Points
+## Cells
 
-| Point | Modality | Parameters (owner) |
+| Cell | Modality | Parameters (owner) |
 |---|---|---|
 | `blocking` (which pairs are compared at all) | code, numeric | blocking key (agent, choices), window size (agent, range) |
 | `matcher` (scores a pair) | code, text, model | threshold (agent, range [0.5, 0.99]), model (operator, choices) |
 | `clustering` (pairs into groups) | code | method (agent, choices), linkage threshold (agent, range) |
 | `backend` (the whole implementation) | alternatives | which backend (agent, choices) |
 
-Neighbours: `blocking` → `matcher` → `clustering`. A structural change, such as replacing
+Interfaces: `blocking` provides `candidates`, `backend` provides `similarity` to `matcher`, which
+provides `pair-score` to `clustering`; the root provides `resolver`. A structural change, such as replacing
 blocking with embedding search, must keep the matcher's interface test green.
 
 ## Measure

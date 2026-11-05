@@ -52,9 +52,9 @@ hypothesis and is never acted on.
 
 Trust classes, pruning and promotion to tests live in the catalog, not the backend.
 
-## Points
+## Cells
 
-| Point | Parameters (owner) |
+| Cell | Parameters (owner) |
 |---|---|
 | `resolve` (the entity-resolution backend) | backend (agent, choices), threshold (agent, range) |
 | `classify` (which scheme and class) | scheme set (operator), confidence floor (agent, range) |
