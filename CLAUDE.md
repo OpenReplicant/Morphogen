@@ -7,7 +7,8 @@ docs/restart/LESSONS.md.
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
   judge), `evidence.py`, `optimize.py` (optimizers and `tune`), `documents.py` (morphogen.yaml,
-  target.yaml), `cli.py`.
+  target.yaml), `cli.py`, `mcp_server.py`.
+- `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server.
 - `tests/`: the core's tests and red team, with sample targets in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
 
@@ -26,4 +27,10 @@ docs/restart/LESSONS.md.
 ## Checks before every commit
 ```
 uv run python -m unittest discover -s tests -t . -v
+claude plugin validate . && claude plugin validate .claude-plugin/plugin.json
 ```
+
+## Install the judge from GitHub, not from this folder
+`/plugin install morphogen --marketplace OpenReplicant/Morphogen` installs a copy of main. A
+local clone added as a marketplace runs the plugin from the clone, so the judge would be the
+candidate. Never edit the installed plugin's directory.

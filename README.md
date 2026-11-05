@@ -14,8 +14,22 @@ the design; this file is how to use what is built.
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
 | Optimizers | `optimize.py` | one interface; built-in grid and random search over agent-owned parameters; `tune` probes each proposal and judges the best |
 | CLI | `cli.py` | `morphogen structure`, `measure`, `judge`, `tune`, `evidence` |
+| MCP server | `mcp_server.py` | the same as ten tools for an agent: `structure_check`, `structure_scope`, `structure_render`, `measure`, `probe`, `judge`, `tune`, `evidence_query`, `evidence_note` (stated or inferred only), `evidence_verify` |
+| Claude Code plugin | `.claude-plugin/`, `skills/`, `agents/` | the MCP server, the `morphogen` skill (how to improve a target honestly), and the `worker` and `reviewer` agents |
 
-Python 3.11 or later; pydantic and PyYAML (both MIT, pinned in `uv.lock`).
+Python 3.11 or later and [uv](https://docs.astral.sh/uv/); pydantic, PyYAML and the MCP SDK (all
+MIT, pinned in `uv.lock` at the versions rebuild 6 tested).
+
+## In Claude Code
+
+```
+/plugin install morphogen --marketplace OpenReplicant/Morphogen
+```
+
+Install it from GitHub, not from a local clone: a clone added as a marketplace runs the plugin
+from the clone itself, so the judge would be the candidate you are changing.
+
+## From the command line
 
 ```
 uv sync
@@ -88,11 +102,14 @@ reading the held-out answers. Every one must fail; a new one that passes goes th
 - The evidence log refuses edits through SQLite triggers; whoever can write the file can drop
   them, and the hash chain then shows the edit.
 - Optimizer adapters beyond grid and random search (GEPA, Optuna, a Claude Code worker), the
-  observed structure from traces, and a selector across cells are designed in BRIEF.md, not built.
+  observed structure from traces, and a selector across cells and scopes are designed in
+  BRIEF.md, not built.
 
 ## Layout
 
-    morphogen/   the core
-    tests/       its tests and red team, with sample targets in tests/fixtures
+    morphogen/       the core, its CLI and MCP server
+    tests/           its tests and red team, with sample targets in tests/fixtures
+    .claude-plugin/  the plugin and marketplace manifests
+    skills/, agents/ the Claude Code skill and agents
     demos/       projects Morphogen can build and drive (the core never imports from them)
     BRIEF.md     the design
