@@ -106,16 +106,21 @@ def probe(target: str, candidate: str, base: str | None = None, cases: int = 5, 
     """Practice feedback on a candidate under the judge's rules: check output, wrong cases, metric
     estimates. Never a verdict, and it cannot be proposed for merging."""
     root, cfg = _ctx()
-    return judge_mod.probe(root, cfg, _target(target), candidate, Evidence.for_project(root), base, cases, rounds)
+    cell = target[5:] if target.startswith("cell:") else None
+    return judge_mod.probe(root, cfg, _target(target), candidate, Evidence.for_project(root), base, cases, rounds,
+                           cell=cell)
 
 
 @server.tool()
 @_safe
 def judge(target: str, candidate: str, base: str = "main", labels: dict | None = None) -> dict:
     """Score a candidate commit against the base by the base's rules (its target.yaml and harness).
-    The verdict is measured evidence. `labels` (optimizer, approach) are recorded, never decide."""
+    With target `cell:NAME`, the candidate must also pass the tests of every interface the cell's scope
+    touches, from the base's structure. The verdict is measured evidence. `labels` (optimizer,
+    approach) are recorded, never decide."""
     root, cfg = _ctx()
-    return judge_mod.judge(root, cfg, _target(target), base, candidate, Evidence.for_project(root), labels)
+    cell = target[5:] if target.startswith("cell:") else None
+    return judge_mod.judge(root, cfg, _target(target), base, candidate, Evidence.for_project(root), labels, cell=cell)
 
 
 @server.tool()
@@ -126,8 +131,9 @@ def tune(target: str, optimizer: str = "grid", steps: int = 5, trials: int = 20,
     on a branch, then judge the best. optimizer: grid or random."""
     root, cfg = _ctx()
     opt = Grid(steps=steps) if optimizer == "grid" else RandomSearch(trials=trials, seed=seed)
+    cell = target[5:] if target.startswith("cell:") else None
     return tune_mod(root, cfg, _target(target), opt, Evidence.for_project(root), base=base,
-                    rounds=rounds, max_trials=trials)
+                    rounds=rounds, max_trials=trials, cell=cell)
 
 
 @server.tool()

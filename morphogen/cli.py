@@ -94,7 +94,9 @@ def cmd_measure(a) -> int:
 def cmd_judge(a) -> int:
     root = _root()
     cfg = load_config(root)
-    r = judge_mod.judge(root, cfg, _target(root, cfg, a.target), a.base, a.candidate, Evidence.for_project(root))
+    cell = a.target[5:] if a.target.startswith("cell:") else None
+    r = judge_mod.judge(root, cfg, _target(root, cfg, a.target), a.base, a.candidate, Evidence.for_project(root),
+                        cell=cell)
     _print(r)
     return 0 if r["verdict"] == "pass" else 1
 
@@ -103,8 +105,9 @@ def cmd_tune(a) -> int:
     root = _root()
     cfg = load_config(root)
     opt = Grid(steps=a.steps) if a.optimizer == "grid" else RandomSearch(trials=a.trials, seed=a.seed)
+    cell = a.target[5:] if a.target.startswith("cell:") else None
     r = tune(root, cfg, _target(root, cfg, a.target), opt, Evidence.for_project(root), base=a.base,
-             rounds=a.rounds, max_trials=a.trials)
+             rounds=a.rounds, max_trials=a.trials, cell=cell)
     _print(r)
     return 0 if r.get("verdict") == "pass" else 1
 

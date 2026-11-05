@@ -43,7 +43,10 @@ uv run morphogen ui              # http://127.0.0.1:8765/
 ```
 
 A target can also be named as `cell:NAME`, for the `measure` of a cell in the project's
-structure (`morphogen.yaml` key `structure`, default `cells.yaml`).
+structure (`morphogen.yaml` key `structure`, default `cells.yaml`). Judged that way, the candidate
+must also pass the tests of every interface the cell's scope touches. Those tests, the files they
+list (`interfaces.<name>.files`) and `cells.yaml` itself come from the base commit, and run from
+the structure file's directory; each verdict records which ran.
 
 ## A target
 

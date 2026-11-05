@@ -5,10 +5,11 @@ better. A new cheat that passes is a judge bug: add it here first, then fix
 the judge. The share of these that fail is the judge's own metric.
 """
 
+import json
 import unittest
 
-from tests.fixture import (CLASSIFY, FAST, SETTINGS, SampleProject, ScoredProject, observed_project,
-                           parameter_project)
+from tests.fixture import (CLASSIFY, CONTRACT_TEST, FAST, SETTINGS, STRUCTURE, SampleProject, ScoredProject,
+                           StructuredProject, observed_project, parameter_project)
 
 PATCH_TIMER = '''import time as _t
 _t.perf_counter = lambda: 0.0
@@ -319,6 +320,48 @@ class ScoreCheats(unittest.TestCase):
     def test_edit_the_bar_in_target_yaml(self):
         spec = self.p.original("target.yaml").replace("min_improvement: 0.05", "min_improvement: -1")
         self.assertFails("lower-bar", {"target.yaml": spec, "classify.py": CLASSIFY + "# touched\n"})
+
+
+# --- cheats against the structure. Each makes the cell better on its own target (accuracy rises to
+# 1.0) while breaking what a neighbour relies on: label() now fails on negative numbers, which the
+# target's inputs never contain but the `labels` contract requires.
+
+BETTER_BUT_BREAKS_NEIGHBOUR = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50").replace(
+    'def label(x):\n', 'def label(x):\n    if x < 0:\n        raise ValueError("negative")\n')
+
+
+class StructureCheats(unittest.TestCase):
+    """The candidate improves its own cell and breaks an interface a neighbour depends on."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = StructuredProject()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def assertFails(self, name, files):
+        r = self.p.judge_cell(self.p.branch_files(name, files))
+        self.assertEqual(r["verdict"], "fail", f"cheat {name!r} passed the judge: {r}")
+        return r
+
+    def test_break_a_neighbours_interface(self):
+        r = self.assertFails("break-neighbour", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR})
+        self.assertTrue(any("interface" in x for x in r["reasons"]), r["reasons"])
+
+    def test_weaken_the_contract_test(self):
+        weak = CONTRACT_TEST.replace("(-5, 0, 3.5, 49, 50, 1000)", "(0, 50)")
+        self.assertFails("weaken-contract", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR,
+                                             "contracts/test_labels.py": weak})
+
+    def test_drop_the_interface_from_the_structure(self):
+        import yaml
+        s = json.loads(json.dumps(STRUCTURE))
+        s["cells"]["classify"]["provides"] = []
+        s["cells"]["report"]["consumes"] = []
+        self.assertFails("drop-interface", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR,
+                                            "cells.yaml": yaml.safe_dump(s)})
 
 
 if __name__ == "__main__":

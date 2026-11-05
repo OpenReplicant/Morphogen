@@ -58,6 +58,9 @@ class Cell(_Doc):
 
 class Interface(_Doc):
     tests: list[str] = []
+    # Files the tests use (paths relative to the structure file's directory). They belong to the
+    # intent: the judge takes them from the base commit, as it does a target's harness.
+    files: list[str] = []
     parameters: dict[str, Parameter] = {}
     # The world outside the structure takes the other role: "consumes" for something the system
     # offers (an API, the whole system's behaviour), "provides" for something it relies on (a

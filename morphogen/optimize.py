@@ -126,7 +126,7 @@ def space_of(spec: dict, tree_dir: Path) -> dict[str, dict]:
 
 
 def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, base: str = "main",
-         rounds: int = 2, max_trials: int = 50) -> dict:
+         rounds: int = 2, max_trials: int = 50, cell: str | None = None) -> dict:
     """Search the target's agent-owned parameters with `optimizer`; probe every proposal; judge the best."""
     repo = judge_mod.repo_root(root)
     rel = (Path(root) / target).resolve().relative_to(repo)
@@ -154,9 +154,10 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
                 branch = f"morphogen/tune/{rel.name}/{optimizer.name}-{len(trials) + 1}"
                 _git(work, "checkout", "--quiet", "-B", branch)
                 _git(work, "commit", "--quiet", "-am", f"tune {rel.name}: " + ", ".join(f"{k}={v!r}" for k, v in values.items()))
-                pr = judge_mod.probe(repo, cfg, str(rel), branch, evidence, base=base_sha, cases=1, rounds=rounds)
+                pr = judge_mod.probe(repo, cfg, str(rel), branch, evidence, base=base_sha, cases=1, rounds=rounds, cell=cell)
                 gain = None if pr.get("forbidden") or pr.get("parameter_violations") or \
-                    not (pr.get("check") or {"passed": True}).get("passed", True) \
+                    not (pr.get("check") or {"passed": True}).get("passed", True) or \
+                    not all(x["passed"] for x in pr.get("interfaces", [])) \
                     else (pr.get("metrics") or {}).get(primary, {}).get("gain")
                 trials.append(Trial(values, branch, gain, pr))
         finally:
@@ -170,7 +171,7 @@ def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, bas
         out["note"] = "no proposal improved on the base in probes; nothing sent to the judge"
         return out
     v = judge_mod.judge(repo, cfg, str(rel), base_sha, best.branch, evidence,
-                        {"optimizer": optimizer.name, "values": json.dumps(best.values, sort_keys=True)})
+                        {"optimizer": optimizer.name, "values": json.dumps(best.values, sort_keys=True)}, cell=cell)
     out.update({"best": {"values": best.values, "branch": best.branch, "probe_gain": best.gain},
                 "verdict": v["verdict"], "judge": v})
     return out
