@@ -260,7 +260,7 @@ class Project:
                     raise ProjectError(f"cell {n}: keep names a setting (path#NAME or path:key), without a range")
         for n, c in doc.cells.items():
             _safe_path(c.dir, f"cell {n}: dir")
-        self._structure = self._compile_structure()   # checks names, parents and interfaces too
+        self._structure = self._compile_structure()
 
     @classmethod
     def from_dict(cls, data: Any, source: str = FILE) -> Project:
@@ -308,10 +308,10 @@ class Project:
             s = Structure.from_dict({"cells": cells, "interfaces": interfaces}, self.source)
         except StructureError as e:
             raise ProjectError(str(e)) from None
-        errors = [f for f in s.check() if f.severity == "error"]
-        if errors:
-            raise ProjectError(f"{self.source}: " + "; ".join(f"{f.subject}: {f.message}" for f in errors))
-        return s
+        return s   # structural errors (gaps, cycles) are findings: `structure check` reports them
+
+    def errors(self) -> list[str]:
+        return [f"{f.subject}: {f.message}" for f in self._structure.check() if f.severity == "error"]
 
     def structure(self) -> Structure:
         return self._structure
@@ -325,7 +325,7 @@ class Project:
         return Path(self.cell(name).dir)
 
     def spec(self, name: str, local: dict | None = None) -> dict:
-        """The cell as a target spec (target.yaml's schema), with held-out paths from `local`."""
+        """The cell as a target spec (documents.Target), with held-out paths from `local`."""
         c, local = self.cell(name), local or {}
         if not c.run:
             raise ProjectError(f"cell {name!r} has no run: nothing to measure")
@@ -398,13 +398,8 @@ class Project:
 
 
 def structure_file(root: Path, cfg: dict) -> str:
-    """The file the structure is read from: morphogen.yaml in the cell format, else cfg `structure`."""
-    try:
-        if Project.load(root) is not None:
-            return FILE
-    except ProjectError:
-        return FILE
-    return cfg.get("structure", "cells.yaml")
+    """The file the structure is read from."""
+    return FILE
 
 
 def local_config(root: Path) -> dict:

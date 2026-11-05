@@ -38,6 +38,27 @@ AGENT = {
 }
 
 
+# The same structure as the operator writes it (morphogen.yaml's cell format).
+AGENT_FILE = {
+    "cells": {
+        "agent": {"provides": "answer"},
+        "retrieval": {"in": "agent", "provides": "retrieve", "consumes": "memory-read",
+                      "change": "config.yaml:retrieve.top_k in 1..50"},
+        "memory": {"in": "agent", "provides": "memory-read"},
+        "answerer": {"in": "agent", "consumes": ["retrieve", "llm"]},
+        "store": {"in": "memory", "provides": "rows"},
+        "index": {"in": "memory", "consumes": "rows"},
+    },
+    "interfaces": {
+        "answer": {"tests": "test_answer", "external": "consumes"},
+        "retrieve": "test_retrieve",
+        "memory-read": "test_memory_read",
+        "rows": [],
+        "llm": {"tests": "test_llm_contract", "external": "provides"},
+    },
+}
+
+
 def structure(data=None):
     return Structure.from_dict(json.loads(json.dumps(data or AGENT)))
 
@@ -171,10 +192,21 @@ class CommandLine(unittest.TestCase):
     def run_cli(self, *args):
         return subprocess.run([sys.executable, "-m", "morphogen", *args], capture_output=True, text=True, cwd=ROOT)
 
+    def test_the_file_compiles_to_the_same_structure(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "morphogen.yaml"
+            f.write_text(yaml.safe_dump(AGENT_FILE))
+            s, ref = Structure.load(f), structure()
+            for c in ref.cells:
+                self.assertEqual((s.parent(c), s.cells[c].provides, s.cells[c].consumes),
+                                 (ref.parent(c), ref.cells[c].provides, ref.cells[c].consumes), c)
+            self.assertEqual(s.cells["retrieval"].parameters["retrieve.top_k"].range, (1.0, 50.0))
+            self.assertEqual(s.coverage(), ref.coverage())
+
     def test_check_scope_render(self):
         with tempfile.TemporaryDirectory() as d:
-            f = Path(d) / "cells.yaml"
-            f.write_text(yaml.safe_dump(AGENT))
+            f = Path(d) / "morphogen.yaml"
+            f.write_text(yaml.safe_dump(AGENT_FILE))
             r = self.run_cli("structure", "check", str(f))
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(json.loads(r.stdout)["coverage"]["tested"], 4)
@@ -185,8 +217,8 @@ class CommandLine(unittest.TestCase):
 
     def test_check_fails_on_errors(self):
         with tempfile.TemporaryDirectory() as d:
-            f = Path(d) / "cells.yaml"
-            f.write_text(yaml.safe_dump({"cells": {"a": {"consumes": ["x"]}}, "interfaces": {"x": {}}}))
+            f = Path(d) / "morphogen.yaml"
+            f.write_text(yaml.safe_dump({"cells": {"a": {"consumes": "x"}}, "interfaces": {"x": []}}))
             self.assertEqual(self.run_cli("structure", "check", str(f)).returncode, 1)
             f.write_text("cells: [")
             self.assertEqual(self.run_cli("structure", "check", str(f)).returncode, 2)

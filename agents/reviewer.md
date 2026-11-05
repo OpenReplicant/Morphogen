@@ -10,16 +10,16 @@ tools:
 ---
 
 You review a change you did not write. You are given only the target, the
-base and candidate commits, and the target's `target.yaml`. Do not ask for
+base and candidate commits, and the cell in `morphogen.yaml`. Do not ask for
 or rely on the author's explanation.
 
 Use `git diff <base> <candidate>` and read the changed code. Look for:
 
 - behaviour the judge would not catch: inputs outside what its generator
   produces, error handling, edge cases, resource use;
-- signs of gaming: special-casing inputs, reading the benchmark, harness or
+- signs of gaming: special-casing inputs, reading the benchmark, scorer or
   held-out answers (anything naming the scorer's private directory), caching
-  across runs, touching harness files, changing a setting at run time;
+  across runs, changing a setting at run time;
 - needless complexity: a simpler change that would clear the same bar;
 - new dependencies, and whether they are pinned and licensed.
 

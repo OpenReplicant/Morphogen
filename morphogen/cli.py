@@ -8,8 +8,7 @@
     morphogen evidence [--verify] [--limit N] [--by judge]
     morphogen ui [--host 127.0.0.1] [--port 8765]
 
-TARGET is a directory with a target.yaml, or `cell:NAME` for the `measure` of a cell in the
-project's structure (morphogen.yaml `structure`, default cells.yaml).
+TARGET is `cell:NAME` for a cell with a `run` in morphogen.yaml (or the cell's name, or its `dir`).
 """
 
 from __future__ import annotations
@@ -26,7 +25,6 @@ from .optimize import CATALOG, catalog, make, prior_from_evidence, tune
 from .render import mermaid
 from .project import ProjectError
 from .structure import Structure, StructureError, compare
-from .targets import resolve
 
 
 def _print(obj) -> None:
@@ -38,7 +36,8 @@ def _root() -> Path:
 
 
 def _target(root: Path, cfg: dict, target: str) -> tuple[str, str | None]:
-    return resolve(root, cfg, target)
+    """A target is passed through: the judge resolves cell:NAME, a cell's name or its dir on the base."""
+    return target, None
 
 
 def _union(intended: Structure, observed: Structure) -> Structure:
@@ -120,23 +119,6 @@ def cmd_evidence(a) -> int:
     return 0
 
 
-def cmd_migrate(a) -> int:
-    from .migrate import dump, migrate
-    root = _root()
-    doc, local = migrate(root, load_config(root), a.targets)
-    if not a.write:
-        print("# morphogen.yaml\n" + dump(doc) + ("\n# morphogen.local.yaml (do not commit)\n" + dump(local)
-                                                 if local else ""), end="")
-        return 0
-    (root / "morphogen.yaml").write_text(dump(doc))
-    if local:
-        (root / "morphogen.local.yaml").write_text(dump(local))
-    print("wrote morphogen.yaml" + (" and morphogen.local.yaml (add it to .gitignore)" if local else "")
-          + ". The old target.yaml and structure files are no longer read; remove them when the new file "
-          "is committed, and narrow each cell's `change` to what it should be allowed to change.")
-    return 0
-
-
 def cmd_ui(a) -> int:
     from .ui import serve
     httpd = serve(_root(), a.host, a.port)
@@ -173,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     ju.add_argument("--base", default="main")
     ju.set_defaults(fn=cmd_judge)
 
-    tu = sub.add_parser("tune", help="search a target's agent-owned parameters; judge the best")
+    tu = sub.add_parser("tune", help="search a cell's bounded settings; judge the best")
     tu.add_argument("target")
     tu.add_argument("--optimizer", choices=sorted(CATALOG), default="selector",
                     help="from the catalog (morphogen optimizers); default: selector, which chooses among the others")
@@ -192,11 +174,6 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--limit", type=int, default=20)
     ev.add_argument("--by")
     ev.set_defaults(fn=cmd_evidence)
-
-    mi = sub.add_parser("migrate", help="write morphogen.yaml in the cell format from target.yaml and cells.yaml")
-    mi.add_argument("targets", nargs="*", help="target directories not named as a cell's measure")
-    mi.add_argument("--write", action="store_true", help="write the files (default: print them)")
-    mi.set_defaults(fn=cmd_migrate)
 
     ui = sub.add_parser("ui", help="serve the read-only web UI on localhost")
     ui.add_argument("--host", default="127.0.0.1")

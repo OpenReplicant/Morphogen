@@ -1,6 +1,6 @@
-"""Settings Morphogen may tune. Each is declared as a parameter in cells.yaml (file, name, owner,
-range or choices), so the judge can read it in base and candidate and refuse a change it may not
-make. Plain constants only: a value computed by an expression cannot be read by the judge."""
+"""Settings Morphogen may tune. Each is named in morphogen.yaml (`change: er/settings.py#NAME in ...`
+for the tunable ones, `keep:` for the operator's), so the judge can read it in base and candidate and
+refuse a change it may not make. Plain constants only: a value computed by an expression cannot be read by the judge."""
 
 # Which backend fills the `backend` cell (agent, choices: see er.BACKENDS).
 BACKEND = "tfidf"

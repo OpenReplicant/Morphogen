@@ -20,17 +20,16 @@ from .optimize import tune as tune_mod
 from .render import mermaid
 from .project import structure_file
 from .structure import Structure, StructureError
-from .targets import resolve
 
 server = MCPServer(
     name="morphogen",
     instructions=(
-        "Morphogen improves a system at any scope behind a judge the agent cannot edit. The structure "
-        "(cells.yaml) says what the cells are, which interfaces join them and which tests guard each. "
-        "To improve a target: measure it, change it on a branch, commit, then call judge(target, "
-        "candidate); or call tune(target) to search its agent-owned parameters. probe gives practice "
-        "feedback, never a verdict. Never edit a target's harness or target.yaml to make a change pass. "
-        "Merging is the operator's decision."
+        "Morphogen improves a system at any scope behind a judge the agent cannot edit. morphogen.yaml "
+        "says what the cells are, which interfaces join them, which tests guard each, and what each cell "
+        "may change (`change`); nothing else may change, and a candidate that touches anything else is "
+        "refused. To improve a cell: measure it (target cell:NAME), change it on a branch, commit, then "
+        "call judge(target, candidate); or call tune(target) to search its bounded settings. probe gives "
+        "practice feedback, never a verdict. Merging is the operator's decision."
     ),
 )
 
@@ -62,14 +61,14 @@ def _structure(file: str | None) -> Structure:
 
 
 def _target(target: str) -> tuple[str, str | None]:
-    root, cfg = _ctx()
-    return resolve(root, cfg, target)
+    """Passed through: the judge resolves cell:NAME, a cell's name or its dir on the base commit."""
+    return target, None
 
 
 @server.tool()
 @_safe
 def structure_check(file: str | None = None) -> dict:
-    """Check the system structure (default: morphogen.yaml `structure`, or cells.yaml): cycles, unknown
+    """Check the system structure (default: morphogen.yaml): cycles, unknown
     parents or interfaces, gaps, unused or untested interfaces; and intent coverage."""
     s = _structure(file)
     return {"findings": [f.__dict__ for f in s.check()], "coverage": s.coverage(), "roots": s.roots()}
@@ -96,7 +95,7 @@ def structure_render(file: str | None = None) -> dict:
 @server.tool()
 @_safe
 def measure(target: str, ref: str = "main") -> dict:
-    """Measure a target (a directory with target.yaml, or cell:NAME) at a commit; recorded as evidence."""
+    """Measure a cell (cell:NAME, its name, or its dir) at a commit; recorded as evidence."""
     root, cfg = _ctx()
     return judge_mod.measure(root, cfg, _target(target)[0], ref, Evidence.for_project(root))
 
@@ -114,7 +113,7 @@ def probe(target: str, candidate: str, base: str | None = None, cases: int = 5, 
 @server.tool()
 @_safe
 def judge(target: str, candidate: str, base: str = "main", labels: dict | None = None) -> dict:
-    """Score a candidate commit against the base by the base's rules (its target.yaml and harness).
+    """Score a candidate commit against the base by the base's rules (its morphogen.yaml; default deny).
     With target `cell:NAME`, the candidate must also pass the tests of every interface the cell's scope
     touches, from the base's structure. The verdict is measured evidence. `labels` (optimizer,
     approach) are recorded, never decide."""
@@ -127,7 +126,7 @@ def judge(target: str, candidate: str, base: str = "main", labels: dict | None =
 @_safe
 def tune(target: str, optimizer: str = "selector", steps: int = 5, trials: int = 20, rounds: int = 2,
          base: str = "main", seed: int | None = None) -> dict:
-    """Search the target's agent-owned parameters (within their range or choices): probe each proposal
+    """Search the cell's bounded settings (`change` entries with a range or choices): probe each proposal
     on a branch, then judge the best. optimizer: a name from optimizers_list; the default, selector,
     chooses among the available ones (a bandit on probe gains, primed by earlier verdicts)."""
     root, cfg = _ctx()

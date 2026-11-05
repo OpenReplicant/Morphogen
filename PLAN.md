@@ -58,7 +58,7 @@ interfaces:
 
 **Done when** both are on main.
 
-### 1. The loader and default deny (done on the branch, 2026-11-05)
+### 1. The loader and default deny (done, #66)
 - Red team first, against today's judge and then the new one:
   - edit a file outside `change`;
   - add a new file outside it (`conftest.py`, `sitecustomize.py`, a module shadowing a
@@ -75,20 +75,20 @@ interfaces:
 
 **Done when** both formats judge the fixtures identically, and every cheat, old and new, fails.
 
-### 2. Move everything onto it
+### 2. Move everything onto it (done on the branch, 2026-11-05)
 - Test fixtures and the fixture projects (`fixture_scored`, `fixture_system`, `fixture_agent`):
   new format; the red team runs against the new format only.
-- `demos/entity-resolution`: its draft `cells.yaml` in the new format, its F1 moved into a
-  scorer from the base, contract tests for its untested interfaces.
+- `demos/entity-resolution`: its draft structure in the new format. Its F1 scorer and contract
+  tests move to phase 6: its data is not committed (its licence names no version), so a commit's
+  checkout has no inputs until the run reads them from outside the tree.
 - `demos/cognitive-model`: convert the rebuild 6 map (`rebuild-6-map/lists`) to cells with a
   script; keep the old lists as the record.
 - `demos/catalog`: its brief in the new terms.
 - The `morphogen` and `map` skills, MCP tool descriptions, CLI help, the web UI, README and
   CLAUDE.md.
-- Then remove the old format from the loader, or keep it read-only (decision below).
+- Then remove the old format (decided: removed, with `migrate`, `targets.py` and the overlay).
 
-**Done when** no file in the repository uses `harness`, `check`, `equivalence` or `target.yaml`,
-except the migration test.
+**Done when** no file in the repository uses `harness`, `check`, `equivalence` or `target.yaml`.
 
 ### 3. Sources above: Backstage, level 1
 - Read `catalog-info.yaml` directly, with no Backstage running:

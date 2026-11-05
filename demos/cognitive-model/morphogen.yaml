@@ -1,0 +1,257 @@
+cells:
+  cmc:
+    description: 'Common Model of Cognition on Claude Code: Claude is the central pattern matcher and action selector;
+      the plugin supplies a small working memory, separate procedural and declarative stores, quantitative metadata,
+      and learning as a side effect of work'
+  cycle:
+    in: cmc/cycle
+    description: 'The cognitive cycle: one model step between tool batches'
+  dm:
+    in: cmc/declarative-memory
+    description: 'Declarative memory: semantic and episodic chunks; one best chunk per cue, by activation'
+  learn:
+    in: cmc/learning
+    description: 'Learning: online and gated'
+  motor:
+    in: cmc/motor
+    description: 'Motor: write-side tools are the only way to change the world'
+  percept:
+    in: cmc/perception
+    description: 'Perception: senses feed the percept buffer, compressed'
+  pm:
+    in: cmc/procedural-memory
+    description: 'Procedural memory: skills as explicit productions over the model''s implicit procedures'
+  wm:
+    in: cmc/working-memory
+    description: 'Working memory: named buffers, each holding at most one chunk (imaginal up to 5)'
+  cmc/central-selector:
+    in: cmc
+    description: reads the WM snapshot, matches productions, selects one act per cycle
+    consumes:
+    - wm/buffer-goal
+    - wm/buffer-imaginal
+  cmc/cycle:
+    in: cmc
+    description: One model step between tool batches; hooks run each phase
+    consumes:
+    - cmc/working-memory
+  cmc/declarative-memory:
+    in: cmc
+    description: Semantic and episodic chunks, retrieved one at a time by activation
+    consumes:
+    - cmc/working-memory
+  cmc/evaluation:
+    in: cmc
+    description: '20 recurring tasks over 2 weeks, with and without cmc: success rate, tokens per task, how often
+      the same mistake repeats'
+  cmc/harness:
+    in: cmc
+    description: hooks, skills, subagents, MCP client, permissions
+  cmc/learning:
+    in: cmc
+    description: Reinforcement, encoding, chunking and consolidation as side effects of work
+    consumes:
+    - cmc/working-memory
+  cmc/motor:
+    in: cmc
+    description: Write-side tools, gated on a stated goal
+    consumes:
+    - cmc/working-memory
+  cmc/operator:
+    in: cmc
+    description: promotes proposed skills; gives explicit feedback that outweighs the judge
+  cmc/perception:
+    in: cmc
+    description: Read-side tools and watchers, compressed into the percept buffer
+    consumes:
+    - cmc/working-memory
+  cmc/procedural-memory:
+    in: cmc
+    description: Productions (skills, subagents, the model's weights) with utilities
+    consumes:
+    - cmc/working-memory
+  cmc/working-memory:
+    in: cmc
+    description: A small, slot-based workspace re-injected into context every cycle; the only hub
+    provides: cmc/working-memory
+  cycle/act:
+    in: cycle
+    description: gate motor tools; log the selection
+  cycle/boot:
+    in: cycle
+    description: restore the goal stack from dm; inject WM and the active skills
+  cycle/close:
+    in: cycle
+    description: decay and evict; tick the cycle; re-inject WM
+  cycle/encode:
+    in: cycle
+    description: encode the turn as an episodic chunk
+  cycle/input:
+    in: cycle
+    description: prompt as percept; set goal; inject WM and top-3 candidates
+  cycle/perceive:
+    in: cycle
+    description: compress results; motor outcome; log fired skill
+  cycle/pre-compact:
+    in: cycle
+    description: flush WM and the goal stack to dm
+  cycle/select:
+    in: cycle
+    description: Claude matches skills against WM and chooses one act
+  cycle/session-end:
+    in: cycle
+    description: queue consolidation and chunking
+  cycle/turn-end:
+    in: cycle
+    description: judge the goal; record reward; continue if a subgoal is open
+  dm/activation:
+    in: dm
+    description: A_i = ln(sum t_j^-d) + sum W_k S_ki + beta sim(cue,i) + noise; below threshold returns failure
+  dm/core-facts:
+    in: dm
+    description: high-activation facts always loaded; promoted and demoted by the consolidator
+  dm/embeddings:
+    in: dm
+    description: embed chunks and cues
+  dm/encode:
+    in: dm
+    description: dm_encode(chunk)
+  dm/retrieve:
+    in: dm
+    description: dm_retrieve(cue, kind?) -> one chunk into the retrieval buffer; appends the time to access_times
+      (rehearsal)
+    consumes:
+    - wm/buffer-retrieval
+  dm/search:
+    in: dm
+    description: 'dm_search(query, k): debugging only; denied to Claude in settings'
+  dm/store:
+    in: dm
+    description: 'chunk: id, kind, slots (JSON), text, embedding, created, access_times[], source'
+  dm/vector-index:
+    in: dm
+    description: nearest chunks to a cue
+  learn/chunking:
+    in: learn
+    description: draft a skill from a tool sequence that recurred >= 3 times with high reward, into _proposed/ with
+      an evidence note
+  learn/consolidation:
+    in: learn
+    description: merge duplicate chunks; promote and demote CLAUDE.md facts; prune skills
+  learn/critic:
+    in: learn
+    description: after low reward twice in a row; writes the retrieval buffer
+    consumes:
+    - wm/buffer-retrieval
+  learn/episodic-encoding:
+    in: learn
+    description: goal, skills fired, key percepts, outcome, reward; also evicted WM chunks
+  learn/failure-credit:
+    in: learn
+    description: small negative reward to the active skill on PostToolUseFailure
+  learn/review-gate:
+    in: learn
+    description: a person moves drafts from _proposed/ to skills/
+  learn/reward:
+    in: learn
+    description: R in [0,1] from goal outcome, tests passing and explicit feedback; at most 2 continuations per
+      turn
+  learn/utility-update:
+    in: learn
+    description: U_i <- U_i + alpha (R - U_i) for every skill fired this turn
+  motor/effectors:
+    in: motor
+    description: Edit, Write, Bash, actuator MCP tools
+  motor/gate:
+    in: motor
+    description: deny a motor tool when the goal buffer is empty
+  motor/outcome:
+    in: motor
+    description: write the action and outcome to the motor buffer
+  motor/permissions:
+    in: motor
+    description: which effectors run without asking
+  motor/serial-bottleneck:
+    in: motor
+    description: one intention per batch; optionally deny a second motor tool in a batch
+  percept/compress:
+    in: percept
+    description: compress large results into a percept chunk; may replace the result with updatedToolOutput
+  percept/extra-senses:
+    in: percept
+    description: log tail, CI status poller, screenshot description
+  percept/senses:
+    in: percept
+    description: Read, Grep, Glob, WebFetch, WebSearch, read-only MCP servers
+  percept/watch:
+    in: percept
+    description: bottom-up percepts when watched files change
+  pm/candidate-ranking:
+    in: pm
+    description: top 3 skills by similarity(description, goal) x utility, added to the WM snapshot
+  pm/compiled-routines:
+    in: pm
+    description: long self-contained procedures; return one chunk to the retrieval or imaginal buffer
+  pm/implicit:
+    in: pm
+    description: 'the model''s weights: most procedural knowledge'
+  pm/productions:
+    in: pm
+    description: condition names WM buffers; every action step ends by changing WM
+  pm/pruning:
+    in: pm
+    description: move skills with utility < 0.2 after >= 10 fires to _inactive/, then reloadSkills
+  pm/skill-log:
+    in: pm
+    description: log which skill fired this cycle
+  pm/utility-table:
+    in: pm
+    description: 'per skill: utility (0..1, starts 0.5), fires, successes, last_fired'
+  wm/buffer-goal:
+    in: wm
+    description: holds current goal and subgoal stack
+    provides: wm/buffer-goal
+  wm/buffer-imaginal:
+    in: wm
+    description: holds scratch problem state (plan, partial answer)
+    provides: wm/buffer-imaginal
+  wm/buffer-motor:
+    in: wm
+    description: holds last action and its outcome
+    provides: wm/buffer-motor
+  wm/buffer-percept:
+    in: wm
+    description: holds latest compressed perception
+    provides: wm/buffer-percept
+  wm/buffer-retrieval:
+    in: wm
+    description: holds last chunk returned from declarative memory
+    provides: wm/buffer-retrieval
+  wm/compaction-guard:
+    in: wm
+    description: flush WM and the goal stack to dm before compaction; re-inject after
+  wm/decay:
+    in: wm
+    description: evict chunks untouched for N cycles and hand them to the encoder
+  wm/injection:
+    in: wm
+    description: snapshot as additionalContext at the start of every cycle, ~2,000 characters
+    consumes:
+    - wm/buffer-goal
+    - wm/buffer-imaginal
+    - wm/buffer-motor
+    - wm/buffer-percept
+    - wm/buffer-retrieval
+  wm/store:
+    in: wm
+    description: buffers, goal stack and the procedures table in .cmc/cmc.sqlite
+  wm/tools:
+    in: wm
+    description: wm_get, wm_put(buffer, chunk), wm_set_goal, wm_push_subgoal, wm_pop_subgoal, wm_clear(buffer)
+interfaces:
+  cmc/working-memory: []
+  wm/buffer-goal: []
+  wm/buffer-imaginal: []
+  wm/buffer-motor: []
+  wm/buffer-percept: []
+  wm/buffer-retrieval: []

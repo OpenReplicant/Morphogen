@@ -158,8 +158,8 @@ Morphogen needs cells, not a system structure. A mapper helps when there are man
 changes cross interfaces, or when intent is missing from the code. Without one, start by
 measuring:
 
-1. **One cell by hand.** Name a location, its existing tests and a measure (rebuild 6 ran this
-   way: a `target.yaml` and nothing else).
+1. **One cell by hand.** Name what may change, its existing tests and a measure: one cell in
+   `morphogen.yaml` and nothing else (rebuild 6 ran this way, with a `target.yaml`).
 2. **Or profile first.** Run the system under its tests or workload with outside observation (a
    profiler offline, OBI live). The hot spots, by time, cost or errors, become candidate cells.
    An agent drafts each cell from what is already there (location, modality, tests it finds);
@@ -291,14 +291,12 @@ secondary reports; read the paper before quoting them).
 
 Strategy:
 
-1. **Allowed alternatives are a parameter's `choices`.** No new concept: an agent-owned
-   parameter whose `choices` are set in `target.yaml` at the base commit, where no candidate can
-   change them. Adding a choice is an operator change, with its evidence attached:
+1. **Allowed alternatives are a setting's choices.** No new concept: a `change` entry whose
+   choices are set in `morphogen.yaml` at the base commit, where no candidate can change them.
+   Adding a choice is an operator change, with its evidence attached:
 
    ```yaml
-   parameters:
-     http_client: {file: pyproject.toml, key: project.dependencies.http, owner: agent,
-                   choices: ["httpx==0.28.1", "requests==2.32.5"]}
+   change: 'pyproject.toml:project.dependencies.http in ["httpx==0.28.1", "requests==2.32.5"]'
    ```
 2. **Each entry carries evidence from existing tools:** the name exists in the registry, with its
    age and maintainers (catches hallucinated and typosquatted names); vulnerabilities from OSV;
@@ -322,7 +320,7 @@ before adding a dependency.
 | **Structure** | cells in a containment tree, interfaces as hyperedges with their tests, parameters with owners and bounds, measures, held-out cases; intended and observed layers | written: the schema and its checks |
 | **Selector** | the search over (scope × optimizer × measure), where scope is a cell, a nested scope or the whole: modality narrows it, evidence from past runs updates it | written: where Morphogen sits |
 | **Optimizer adapters** | hand a cell and an inner evaluator to GEPA, Optuna, OpenEvolve, AFlow or a Claude Code worker | integrated |
-| **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each cell's harness | integrated |
+| **Measurement adapters** | the judge's runner offline; OpenTelemetry, its eBPF instrumentation (OBI) and Prometheus live; each cell's `run` and `score` | integrated |
 | **Gate** | offline at each cell: protected test setup, held-out cases, owners enforced, the tests of every touched interface, red team. At system scale: canary against a baseline | offline gate written; system scale integrated (Kayenta-style) |
 | **Apply and observe adapters** | turn a promoted change into a branch, PR or deploy; read status back | integrated (git, Argo, Terraform, ...) |
 | **Structure adapters** | suggest cells from a profile, an indexer, Backstage's `catalog-info.yaml` files (no Backstage server needed), or a hand-written spec | integrated |

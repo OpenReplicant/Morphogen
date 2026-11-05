@@ -10,7 +10,6 @@ nothing: measuring, judging and tuning stay with the CLI and the MCP server.
 from __future__ import annotations
 
 import json
-import subprocess
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,7 +19,7 @@ from . import judge as judge_mod
 from .documents import DocumentError, load_config
 from .evidence import Evidence
 from .render import mermaid
-from .project import structure_file
+from .project import FILE, Project, ProjectError, structure_file
 from .structure import Structure, StructureError
 
 PAGE = Path(__file__).with_name("ui.html")
@@ -85,23 +84,31 @@ class Api:
         return out
 
     def targets(self) -> list[dict]:
-        files = subprocess.run(["git", "ls-files", "*target.yaml", "**/target.yaml"], cwd=self.root,
-                               capture_output=True, text=True).stdout.split()
+        """Each cell with a `run`, from the working tree's morphogen.yaml, with its last results."""
         recs = self._evidence().dump()
         out = []
-        for f in sorted(set(files)):
-            rel = Path(f).parent
-            entry: dict = {"path": str(rel)}
+        try:
+            proj = Project.load(self.root)
+        except ProjectError as e:
+            return [{"path": FILE, "error": str(e)}]
+        if proj is None:
+            return []
+        s = proj.structure()
+        for name, c in proj.doc.cells.items():
+            if not c.run:
+                continue
+            path = f"cell:{name}"
+            entry: dict = {"path": path, "name": name, "dir": c.dir, "description": c.description,
+                           "change": sorted({e["path"] for e in proj.changes[name]})}
             try:
-                spec = judge_mod.load_spec(self.root, rel)
-                metrics = (spec.get("measure") or {}).get("metrics") or {}
-                entry.update({"name": spec.get("name") or rel.name, "description": spec.get("description"),
-                              "primary": next((k for k, v in metrics.items() if v.get("primary")), None),
-                              "metrics": metrics, "parameters": spec.get("parameters") or {},
-                              "harness": spec.get("harness") or []})
-            except judge_mod.JudgeError as e:
+                metrics = proj.spec(name)["measure"]["metrics"]
+                entry.update({"primary": next((k for k, v in metrics.items() if v.get("primary")), None),
+                              "metrics": metrics,
+                              "parameters": {f"{x}.{n}": p.model_dump(exclude_none=True)
+                                             for x in sorted(s.scope(name)) for n, p in s.cells[x].parameters.items()}})
+            except ProjectError as e:
                 entry["error"] = str(e)
-            mine = [r for r in recs if (r.get("subject") or {}).get("path") == str(rel)]
+            mine = [r for r in recs if (r.get("subject") or {}).get("path") == path]
             for kind in ("measurement", "verdict", "probe"):
                 last = [r for r in mine if r.get("kind") == kind]
                 entry[f"last_{kind}"] = last[-1] if last else None

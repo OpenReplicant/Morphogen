@@ -11,18 +11,18 @@ judge is the only thing that can say a change is better; you cannot edit how it 
 
 ## 1. Understand what you may change
 
-If the project has no `target.yaml` (and no `cells.yaml`), there is nothing to judge yet: use
-the `map` skill to draft one with the operator first.
+If the project has no `morphogen.yaml` with `cells`, there is nothing to judge yet: use the `map`
+skill to draft one with the operator first.
 
 - `structure_check` and `structure_render`: the cells, the interfaces joining them, and which
   interfaces have tests (intent coverage). Errors (gaps, cycles) come before anything else.
 - `structure_scope(cell)`: what a change inside that cell touches, and the tests it must pass.
-- A target is a directory with `target.yaml`, or `cell:NAME` for a cell with a `measure`. Either
-  way, a target that is a cell's `measure` is judged as that cell (interface tests, the system
-  guard). Read its
-  `target.yaml`: the harness files and `target.yaml` itself belong to the judge, and its
-  `parameters` say which settings you may change (owner `agent`, within `range` or `choices`).
-  Settings owned by `operator` or `judge` are not yours.
+- A target is `cell:NAME` for a cell with a `run` (or the cell's name, or its `dir`). Read the
+  cell in `morphogen.yaml`. **Its `change` is all you may change**: paths and globs you may edit,
+  and settings (`path#NAME in lo..hi`, `path:key in [a, b]`) you may set within their bounds, which
+  in a file named only that way are the only thing you may touch. Everything else, `morphogen.yaml`
+  and every test included, belongs to the judge: a candidate that changes any of it is refused
+  before it runs. `keep` lists settings you may not change even in a file you may edit.
 
 ## 2. Measure first
 
@@ -31,7 +31,7 @@ cost or errors go before choosing what to change.
 
 ## 3. Change, then let the judge decide
 
-- **Settings only:** `tune(target)` searches the agent-owned parameters (grid or random), probes
+- **Settings only:** `tune(target)` searches the settings `change` gives ranges or choices, probes
   each proposal on its own branch, and sends only the best to the judge.
 - **Code or structure:** make the change on a branch (one branch per approach; the `worker` agent
   builds one candidate in its own worktree), commit, use `probe(target, branch)` for feedback while
@@ -39,8 +39,8 @@ cost or errors go before choosing what to change.
 
 Rules that keep trials honest:
 
-- Never edit a target's harness files or `target.yaml` to make a change pass; the judge uses the
-  base's copies and records that you tried.
+- Never edit anything outside the cell's `change` to make a change pass: the bench, the scorer,
+  the tests and `morphogen.yaml` are the judge's, and a candidate that touches them is refused.
 - Never try to read held-out answers or name the scorer's private directory; the candidate is
   refused.
 - A probe is practice, never a verdict. Only a `pass` verdict can be proposed for merging.

@@ -2,9 +2,10 @@
 
 What makes it hard to fool:
 
-- The target's spec (`target.yaml`) and harness files (benchmark, tests,
-  input generator) come from the base commit and are laid over the
-  candidate, so a candidate cannot change how it is scored.
+- The rules come from the base commit: morphogen.yaml (the cells, their
+  workloads, scorers and tests), and every file a cell's `change` does not
+  name. Default deny: a candidate that changes anything else is refused
+  before anything runs, so it cannot change how it is scored.
 - Time and memory are measured from outside the measured process, by a
   wrapper that waits for it and reads the operating system's resource usage.
   Numbers the measured code prints are recorded as "reported" and can never
@@ -13,9 +14,9 @@ What makes it hard to fool:
   advance, and nothing one round learns helps the next. Base and candidate
   share the seed within a round. Without a container, each run of the code
   under test also gets its own empty TMPDIR and HOME.
-- A candidate may not add or change files that shadow standard-library
-  modules, customise the interpreter (`json.py`, `sitecustomize.py`, `.pth`),
-  or shadow a harness module (a `gen/` package or `gen.so` beside `gen.py`).
+- Even inside what it may change, a candidate may not add files that shadow
+  standard-library modules or customise the interpreter (`json.py`,
+  `sitecustomize.py`, `.pth`) where its commands run.
 - Every timed run must print what the base prints on the same input, so code
   cannot do less work only when it is being timed.
 - Runs are paired and alternate order between rounds (ABBA) after a warm-up.
@@ -51,11 +52,9 @@ from pathlib import Path
 import yaml
 
 
-from . import documents
 from .observers import ObserverError, OtelObserver
 from .runner import capabilities, missing, run, sandbox_mode
 from .project import FILE as PROJECT_FILE, Project, ProjectError
-from .structure import Structure
 
 INTERFACES = ("direct", "simulated")
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
@@ -120,20 +119,6 @@ def worktrees(repo: Path, shas: list[str]):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def load_spec(tree: Path, rel: Path) -> dict:
-    f = tree / rel / "target.yaml"
-    if not f.exists():
-        raise JudgeError(f"no target.yaml at {rel} on the base commit")
-    try:
-        return documents.load("target", f)
-    except documents.DocumentError as e:
-        raise JudgeError(f"target.yaml on the base commit: {'; '.join(e.problems)}") from None
-
-
-def _target_name(spec: dict, rel: Path) -> str:
-    return spec.get("name") or rel.name
-
-
 def _interface(spec: dict) -> tuple[str, str]:
     """`direct`: the judge acts on the real system. `simulated`: on a model of it.
 
@@ -142,7 +127,7 @@ def _interface(spec: dict) -> tuple[str, str]:
     """
     interface = spec.get("interface", "direct")
     if interface not in INTERFACES:
-        raise JudgeError(f"target.yaml interface must be one of {', '.join(INTERFACES)}, not {interface!r}")
+        raise JudgeError(f"interface must be one of {', '.join(INTERFACES)}, not {interface!r}")
     if interface == "simulated" and not spec.get("simulates"):
         raise JudgeError("a simulated target must say what it simulates (simulates: ...)")
     return interface, ("measured" if interface == "direct" else "simulated")
@@ -184,26 +169,8 @@ def _read_parameter(tree_dir: Path, p: dict):
     return data
 
 
-def declared_parameters(spec: dict, bdir: Path, cdir: Path, btree: Path,
-                        gate: dict | None = None) -> list[tuple[str, dict, Path, Path]]:
-    """Every parameter that applies: the target's (paths relative to its directory) and, when a cell is
-    judged, those declared on the cells in its scope in the base's structure (paths relative to the
-    structure file, named `cell.parameter`). One declared in both places counts once, under the
-    target's name."""
-    out, seen = [], set()
-    items = [(n, p, bdir, cdir) for n, p in (spec.get("parameters") or {}).items()]
-    items += (gate or {}).get("parameters", [])
-    for name, p, bd, cd in items:
-        where = (str((bd / p["file"]).resolve().relative_to(btree.resolve())), p.get("name"), p.get("key"))
-        if where in seen:
-            continue
-        seen.add(where)
-        out.append((name, p, bd, cd))
-    return out
-
-
 def _parameters(items: list[tuple[str, dict, Path, Path]]) -> tuple[dict, list[str]]:
-    """Each declared parameter read in the base and the candidate (after the overlay), and the changes the
+    """Each declared setting read in the base and the candidate, and the changes the
     candidate may not make: to a judge- or operator-owned parameter, an agent-owned one outside its
     range or choices, or one that can no longer be read."""
     values, violations = {}, []
@@ -230,48 +197,21 @@ def _parameters(items: list[tuple[str, dict, Path, Path]]) -> tuple[dict, list[s
     return values, violations
 
 
-def _overlay(spec: dict, base_dir: Path, cand_dir: Path) -> None:
-    """Copy the base's harness files over the candidate's."""
-    for name in list(spec.get("harness", [])) + ["target.yaml"]:
-        src, dst = base_dir / name, cand_dir / name
-        if src.exists():
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-        elif dst.exists():
-            dst.unlink()
-
-
-def _changed(repo: Path, base: str, cand: str, rel: Path) -> list[str]:
-    out = _git(repo, "diff", "--name-only", "--no-renames", base, cand, "--", str(rel))
+def _changed(repo: Path, base: str, cand: str) -> list[str]:
+    out = _git(repo, "diff", "--name-only", "--no-renames", base, cand)
     return [line for line in out.splitlines() if line]
 
 
-def _import_name(filename: str) -> str:
-    """The module name a file or directory would be imported as: gen.py, gen.cpython-312.so, gen/ -> gen."""
-    return filename.split(".", 1)[0]
-
-
-def _forbidden(changed: list[str], rel: Path, harness: list[str] = ()) -> list[str]:
-    """Changed paths that shadow a standard module, customise the interpreter, or shadow a harness
-    module (a package `gen/` or `gen.so` beside the harness's `gen.py` would be imported instead)."""
-    harness_mods = {(Path(h).parent, _import_name(Path(h).name)) for h in harness if h.endswith(".py")}
-    harness_files = {Path(h) for h in harness} | {Path("target.yaml")}
+def _forbidden(changed: list[str], rel: Path) -> list[str]:
+    """Changed paths under `rel` (where commands run) that shadow a standard module or customise Python."""
     bad = []
     for path in changed:
-        local = Path(path).relative_to(rel)
-        parts = local.parts
+        parts = Path(path).relative_to(rel).parts
         top = parts[0]
-        name = top[:-3] if top.endswith(".py") else top
-        if top.endswith(".pth") or (name in FORBIDDEN_MODULES and (top.endswith(".py") or len(parts) > 1)):
+        name = top[:-3] if top.endswith(".py") else top.split(".", 1)[0]
+        if top.endswith(".pth") or (name in FORBIDDEN_MODULES and (top.endswith(".py") or len(parts) > 1
+                                                                    or top.endswith((".so", ".pyd")))):
             bad.append(path)
-            continue
-        if local in harness_files:
-            continue  # replaced by the base's copy
-        # Any prefix of the path may be a package or module beside a harness module of that name.
-        for depth in range(1, len(parts) + 1):
-            if (Path(*parts[:depth - 1]), _import_name(parts[depth - 1])) in harness_mods:
-                bad.append(path)
-                break
     return bad
 
 
@@ -309,7 +249,7 @@ def _reported(out: str) -> dict[str, float]:
 
 
 def _observe(spec: dict, observer_dir: Path, cfg: dict, env: dict, timeout: int) -> dict[str, float]:
-    """Run the harness's observer after a workload run and return its metrics as observed.*.
+    """Run the cell's observer after a workload run and return its metrics as observed.*.
 
     The observer comes from the base commit and runs in the base's directory, so a
     candidate cannot change it. Typically it queries telemetry (an OpenTelemetry
@@ -345,7 +285,7 @@ def _score(spec: dict, scorer_dir: Path, env: dict, output: str, timeout: int) -
     return scores
 
 
-def _prepare_score(spec: dict, repo: Path, rel: Path = Path("."), phase: str = "verdict") -> None:
+def _prepare_score(spec: dict, repo: Path, phase: str = "verdict") -> None:
     """Resolve the scorer's private directory; it must exist and lie outside the repository, where no
     commit (and so no candidate) can hold or read a copy. Probes score against `search` when it is
     given, so the optimizer's search never sees the held-out answers a verdict is scored on."""
@@ -355,7 +295,7 @@ def _prepare_score(spec: dict, repo: Path, rel: Path = Path("."), phase: str = "
     if not sc.get("private"):
         return
     private = Path(sc["private"]).expanduser()
-    private = (private if private.is_absolute() else repo / rel / private).resolve()  # relative: to the target
+    private = (private if private.is_absolute() else repo / private).resolve()  # relative: to the root
     if not private.is_dir():
         raise JudgeError(f"measure.score.private {sc['private']!r} is not a directory")
     try:
@@ -368,8 +308,8 @@ def _prepare_score(spec: dict, repo: Path, rel: Path = Path("."), phase: str = "
 
 
 def _names_private(spec: dict, ctree: Path, changed: list[str]) -> list[str]:
-    """Changed files that name the scorer's private directory. target.yaml says where it is, and an
-    agent can read target.yaml; without a container nothing stops a candidate opening that path, so a
+    """Changed files that name the scorer's private directory. morphogen.local.yaml says where it is, and
+    an agent can read it; without a container nothing stops a candidate opening that path, so a
     candidate that names it is refused. Obfuscating the path defeats this check: run in a container
     (only the candidate's tree is mounted) for the strong version."""
     private = ((spec.get("measure") or {}).get("score") or {}).get("private")
@@ -396,76 +336,32 @@ def project_of(tree: Path) -> Project | None:
         raise JudgeError(f"{PROJECT_FILE} on the base commit: {e}") from None
 
 
-def structure_of(cfg: dict, tree: Path) -> tuple[Structure, Path, Path] | None:
-    """The structure on `tree`: (structure, its file relative to the tree, its directory in the tree),
-    from morphogen.yaml's cells or else the old structure file, or None when there is neither."""
+def structure_of(tree: Path) -> Project:
+    """The project (morphogen.yaml with `cells`) on `tree`, the base's checkout."""
     proj = project_of(tree)
-    if proj is not None:
-        return proj.structure(), Path(PROJECT_FILE), tree
-    rel = Path(cfg.get("structure", "cells.yaml"))
-    f = tree / rel
-    if not f.exists():
-        return None
-    return Structure.load(f), rel, f.parent
+    if proj is None:
+        raise JudgeError(f"no {PROJECT_FILE} with cells on the base commit")
+    if proj.errors():
+        raise JudgeError(f"the structure on the base commit has errors: {'; '.join(proj.errors())}")
+    return proj
 
 
-def cell_of(cfg: dict, tree: Path, target: Path) -> str | None:
-    """The cell whose `measure` is the target directory, in the structure on `tree` (the base's
-    checkout), or None when no cell measures it. A cell's measure is relative to the structure file's
-    directory or, failing that, the repository root, as in `targets.resolve`. In the cell format, the
-    cell with a `run` whose `dir` is the target."""
-    proj = project_of(tree)
-    if proj is not None:
-        hits = sorted(n for n, c in proj.doc.cells.items() if c.run and Path(c.dir) == Path(target))
-        if len(hits) > 1:
-            raise JudgeError(f"cells {', '.join(hits)} all run in {target}; name the one to judge (cell:NAME)")
-        return hits[0] if hits else None
-    found = structure_of(cfg, tree)
-    if found is None:
-        return None
-    s, rel, _ = found
-    f = tree / rel
-    want = (tree / target).resolve()
-    hits = sorted(n for n, c in s.cells.items() if c.measure and want in
-                  ((f.parent / c.measure).resolve(), (tree / c.measure).resolve()))
+def cell_of(tree: Path, target: Path) -> str | None:
+    """The cell with a `run` whose `dir` is the target directory, or None."""
+    proj = structure_of(tree)
+    hits = sorted(n for n, c in proj.doc.cells.items() if c.run and Path(c.dir) == Path(target))
     if len(hits) > 1:
-        raise JudgeError(f"cells {', '.join(hits)} all measure {target}; name the one to judge (cell:NAME)")
+        raise JudgeError(f"cells {', '.join(hits)} all run in {target}; name the one to judge (cell:NAME)")
     return hits[0] if hits else None
 
 
-def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None, target: Path | None = None) -> dict:
-    """The structure from the base commit, the interfaces the cell's scope touches, and the base's
-    copies of their test files laid over the candidate. Tests run later, in the candidate's tree, from
-    the structure file's directory. The cell is the one named or, when none is, the one the base's
-    structure says measures `target`: naming a target by its directory gets the same checks."""
-    if not cell and target is not None:
-        cell = cell_of(cfg, btree, target)
-    if not cell:
-        return {"cell": None, "tests": [], "replaced": [], "parameters": []}
-    found = structure_of(cfg, btree)
-    if found is None:
-        raise JudgeError(f"judging cell {cell!r} needs the structure ({cfg.get('structure', 'cells.yaml')}) "
-                         "on the base commit")
-    s, rel, sdir_b = found
-    if cell not in s.cells:
-        raise JudgeError(f"no cell {cell!r} in the base's structure")
+def _cell_gate(proj: Project, cell: str, ctree: Path, btree: Path) -> dict:
+    """What the judged cell's scope brings: the tests of every interface it touches (run from the
+    candidate's root), the settings declared on its cells, and the system guard."""
+    s = proj.structure()
     scope = s.scope(cell)
-    sdir_c = ctree / rel.parent
-    replaced = []
-    # The structure itself, and every touched interface's files, come from the base. (In the cell
-    # format nothing is copied: default deny refuses a candidate that changed any of them.)
-    owned = [] if rel.name == PROJECT_FILE and rel.parent == Path(".") else \
-        [rel.name] + [x for i in s.touched(scope) for x in s.interfaces[i].files]
-    for name in dict.fromkeys(owned):
-        src, dst = sdir_b / name, sdir_c / name
-        before = dst.read_bytes() if dst.exists() else None
-        if src.exists():
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            if before != src.read_bytes():
-                replaced.append(str(rel.parent / name))
     tests = [{"interface": i, "test": t} for i in s.touched(scope) for t in s.interfaces[i].tests]
-    parameters = [(f"{c}.{n}", p.model_dump(exclude_none=True), sdir_b, sdir_c)
+    parameters = [(f"{c}.{n}", p.model_dump(exclude_none=True), btree, ctree)
                   for c in sorted(scope) for n, p in s.cells[c].parameters.items()]
     guard = None
     if s.cells[cell].guard is not False:
@@ -476,11 +372,9 @@ def _cell_gate(cfg: dict, btree: Path, ctree: Path, cell: str | None, target: Pa
         top = next((a for a in reversed(ancestors) if s.cells[a].measure), None)
         if top is not None:
             opts = s.cells[cell].guard if isinstance(s.cells[cell].guard, dict) else {}
-            m = s.cells[top].measure
-            guard = {"cell": top, "target": m if m.startswith("cell:") else str(rel.parent / m),
-                     "max_regression": float(opts.get("max_regression", 0.05))}
-    return {"cell": cell, "scope": sorted(scope), "tests": tests, "replaced": replaced, "dir": sdir_c,
-            "guard": guard, "parameters": parameters}
+            guard = {"cell": top, "target": f"cell:{top}", "max_regression": float(opts.get("max_regression", 0.05))}
+    return {"cell": cell, "scope": sorted(scope), "tests": tests, "dir": ctree, "guard": guard,
+            "parameters": parameters}
 
 
 def _rel(root: Path, repo: Path, target: str) -> Path:
@@ -488,40 +382,25 @@ def _rel(root: Path, repo: Path, target: str) -> Path:
 
 
 def _target(root: Path, repo: Path, cfg: dict, target: str, tree: Path,
-            cell: str | None = None) -> tuple[dict, Path, str | None, Project | None, str]:
+            cell: str | None = None) -> tuple[dict, Path, str, Project]:
     """What `target` names on `tree` (the base's checkout): (spec, the directory its commands run in,
-    the cell, the cell-format project or None, the subject recorded in evidence). A target is
-    `cell:NAME`, a cell's name (cell format), or a directory: one with a target.yaml, or the `dir`
-    of exactly one cell with a `run`."""
-    proj = project_of(tree)
+    the cell, the project). A target is `cell:NAME`, a cell's name, or the `dir` of exactly one cell
+    with a `run`."""
+    proj = structure_of(tree)
     name = target[len("cell:"):] if target.startswith("cell:") else None
-    if proj is not None:
-        if name is None:
-            if target in proj.doc.cells:
-                name = target
-            else:
-                name = cell or cell_of(cfg, tree, _rel(root, repo, target))
-                if name is None:
-                    raise JudgeError(f"no cell with a run in {target}; name it as cell:NAME")
-        local = ((cfg.get("local") or {}).get("cells") or {}).get(name)
-        try:
-            spec = proj.spec(name, local)
-        except ProjectError as e:
-            raise JudgeError(str(e)) from None
-        return spec, proj.dir(name), name, proj, f"cell:{name}"
-    if name is not None:
-        found = structure_of(cfg, tree)
-        if found is None or name not in found[0].cells:
-            raise JudgeError(f"no cell {name!r} in the base's structure")
-        s, srel, sdir = found
-        measure = s.cells[name].measure
-        if not measure:
-            raise JudgeError(f"cell {name!r} has no measure (a directory with target.yaml)")
-        rel = next((d.resolve().relative_to(tree.resolve()) for d in (sdir / measure, tree / measure)
-                    if (d / "target.yaml").exists()), srel.parent / measure)
-        return load_spec(tree, rel), rel, name, None, str(rel)
-    rel = _rel(root, repo, target)
-    return load_spec(tree, rel), rel, cell, None, str(rel)
+    if name is None:
+        if target in proj.doc.cells:
+            name = target
+        else:
+            name = cell or cell_of(tree, _rel(root, repo, target))
+            if name is None:
+                raise JudgeError(f"no cell with a run in {target}; name it as cell:NAME")
+    local = ((cfg.get("local") or {}).get("cells") or {}).get(name)
+    try:
+        spec = proj.spec(name, local)
+    except ProjectError as e:
+        raise JudgeError(str(e)) from None
+    return spec, proj.dir(name), name, proj
 
 
 def _under(path: str, rel: Path) -> bool:
@@ -530,54 +409,40 @@ def _under(path: str, rel: Path) -> bool:
 
 def _admit(root: Path, repo: Path, cfg: dict, target: str, cell: str | None, base_sha: str, cand_sha: str,
            btree: Path, ctree: Path, phase: str = "verdict") -> dict:
-    """Everything decided before anything runs: the target and its spec, the candidate's changed files,
-    what it may not change (default deny in the cell format; harness and shadowing rules otherwise),
-    the cell gate, and the parameters with their violations."""
-    spec, rel, cell, proj, subject = _target(root, repo, cfg, target, btree, cell)
+    """Everything decided before anything runs: the cell and its spec, the candidate's changed files,
+    what it may not change (default deny), the cell gate, and the settings with their violations."""
+    spec, rel, cell, proj = _target(root, repo, cfg, target, btree, cell)
     metrics_spec = _check_spec(spec)
-    _prepare_score(spec, repo, Path(".") if proj else rel, phase)
+    _prepare_score(spec, repo, phase)
     _check_runner(spec, cfg)
     bdir, cdir = btree / rel, ctree / rel
     if not cdir.exists():
         raise JudgeError(f"{rel} does not exist on the candidate commit")
-    if proj is not None:
-        changed = _changed(repo, base_sha, cand_sha, Path("."))
-        gate = _cell_gate(cfg, btree, ctree, cell, rel)
-        denied = proj.check_changes(gate["scope"], changed, btree, ctree)
-        # Shadowing matters where commands run; default deny already limits what can be added.
-        forbidden = _forbidden([p for p in changed if _under(p, rel)], rel)
-        harness_touched: list[str] = []
-    else:
-        changed = _changed(repo, base_sha, cand_sha, rel)
-        forbidden = _forbidden(changed, rel, list(spec.get("harness", [])))
-        denied = []
-        harness = set(spec.get("harness", [])) | {"target.yaml"}
-        harness_touched = [p for p in changed if str(Path(p).relative_to(rel)) in harness]
-        _overlay(spec, bdir, cdir)
-        gate = _cell_gate(cfg, btree, ctree, cell, rel)
-    parameters, violations = _parameters(declared_parameters(spec, bdir, cdir, btree, gate))
+    changed = _changed(repo, base_sha, cand_sha)
+    gate = _cell_gate(proj, cell, ctree, btree)
+    denied = proj.check_changes(gate["scope"], changed, btree, ctree)
+    # Shadowing matters where commands run; default deny already limits what can be added.
+    forbidden = _forbidden([p for p in changed if _under(p, rel)], rel)
+    parameters, violations = _parameters(gate["parameters"])
     named = _names_private(spec, ctree, changed)
     if named:
         violations = violations + [f"names the scorer's private directory (held-out answers): {', '.join(named)}"]
-    return {"spec": spec, "rel": rel, "cell": gate["cell"], "proj": proj, "subject": subject,
+    return {"spec": spec, "rel": rel, "cell": cell, "proj": proj, "subject": f"cell:{cell}",
             "metrics_spec": metrics_spec, "bdir": bdir, "cdir": cdir, "changed": changed, "gate": gate,
-            "forbidden": forbidden, "denied": denied, "harness_touched": harness_touched,
-            "parameters": parameters, "violations": violations}
+            "forbidden": forbidden, "denied": denied, "parameters": parameters, "violations": violations}
 
 
 def _system_guard(guard: dict, repo: Path, cfg: dict, btree: Path, ctree: Path, timeout: int) -> dict:
     """Measure the system around a judged cell, base against candidate, with every metric a constraint:
     a change that wins locally must not cost the whole (the system's primary metric may regress at
     most max_regression; other metrics keep their own limits). Paired rounds as for the verdict."""
-    spec, grel, _, proj, _ = _target(repo, repo, cfg, guard["target"], btree)
+    spec, grel, _, _ = _target(repo, repo, cfg, guard["target"], btree)
     metrics = _check_spec(spec)
-    _prepare_score(spec, repo, Path(".") if proj else grel)
+    _prepare_score(spec, repo)
     _check_runner(spec, cfg)
     gb, gc = btree / grel, ctree / grel
     if not gc.exists():
         return {**guard, "ok": False, "reason": f"{grel} does not exist on the candidate"}
-    if proj is None:
-        _overlay(spec, gb, gc)
     constraints = {m: {**v, "primary": False,
                        "max_regression": guard["max_regression"] if v.get("primary")
                        else v.get("max_regression", 0.05)} for m, v in metrics.items()}
@@ -754,11 +619,11 @@ def _check_runner(spec: dict, cfg: dict) -> None:
 def _check_spec(spec: dict) -> dict:
     m = spec.get("measure") or {}
     if not m.get("run"):
-        raise JudgeError("target.yaml has no measure.run")
+        raise JudgeError("the cell has no run")
     metrics = m.get("metrics") or {}
     primaries = [k for k, v in metrics.items() if v.get("primary")]
     if len(primaries) != 1:
-        raise JudgeError("target.yaml must mark exactly one metric as primary")
+        raise JudgeError("exactly one metric in `better` must be primary")
     primary = primaries[0]
     observer = m.get("observer") or {}
     if primary.startswith("observed."):
@@ -805,8 +670,8 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
           cases: int = 5, rounds: int = 3, cell: str | None = None) -> dict:
     """A practice run: feedback on a candidate, never a verdict. It is the optimizers' inner evaluator.
 
-    Same rules as the judge (the base's spec and harness laid over the candidate, the forbidden-file
-    and parameter checks, the cell's interface tests, fresh random inputs; scored against `search`
+    Same rules as the judge (the base's morphogen.yaml, default deny, the forbidden-file and
+    setting checks, the cell's interface tests, fresh random inputs; scored against `search`
     answers, not the held-out ones), but it reports what an optimizer or an agent needs to learn
     from: the check's output, each generated case with the base's output and the candidate's where
     they differ, interface test results, and medians of a few paired rounds. Recorded as evidence of
@@ -872,7 +737,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
                 out["timed_output_mismatches"] = sum(1 for b, c in outputs if b != c)
     rec = evidence.append({
         "claim": f"probe of {cand_sha[:12]} against {base_sha[:12]} (practice; not a verdict)",
-        "kind": "probe", "subject": {"system": _target_name(spec, rel), "path": out["target"]},
+        "kind": "probe", "subject": {"system": a["cell"], "path": out["target"]},
         "refs": {"base": base_sha, "candidate": cand_sha}, "parameters": out["parameters"],
         "outcome": {k: v for k, v in out.items() if k in ("forbidden", "parameter_violations", "check", "metrics",
                                                           "timed_output_mismatches", "interfaces")}
@@ -888,11 +753,11 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
     repo = repo_root(root)
     sha = resolve(repo, ref)
     with worktrees(repo, [sha]) as (tree,):
-        spec, rel, _, proj, subject = _target(root, repo, cfg, target, tree)
+        spec, rel, name, _ = _target(root, repo, cfg, target, tree)
+        subject = f"cell:{name}"
         _check_spec(spec)
-        _prepare_score(spec, repo, Path(".") if proj else rel)
+        _prepare_score(spec, repo)
         _check_runner(spec, cfg)
-        name = _target_name(spec, rel)
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
         measured = _rounds(spec, [tree / rel], cfg, timeout, tree / rel, sides=("measured",))
@@ -936,9 +801,9 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         a = _admit(root, repo, cfg, target, cell, base_sha, cand_sha, btree, ctree)
         spec, rel, cell, gate, metrics_spec, bdir, cdir = (a[k] for k in ("spec", "rel", "cell", "gate",
                                                                            "metrics_spec", "bdir", "cdir"))
-        forbidden, denied, harness_touched = a["forbidden"], a["denied"], a["harness_touched"]
+        forbidden, denied = a["forbidden"], a["denied"]
         parameters, param_violations, subject = a["parameters"], a["violations"], a["subject"]
-        name = _target_name(spec, rel) if a["proj"] is None else a["cell"]
+        name = a["cell"]
         interface, trust = _interface(spec)
         timeout = int(spec.get("timeout", 300))
         refused = bool(forbidden or denied or param_violations)  # refused before anything runs
@@ -997,7 +862,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
     if denied:
         reasons.append("changes what the cell may not change: " + "; ".join(denied))
     if forbidden:
-        reasons.append(f"changes files that shadow standard or harness modules, or customise Python: "
+        reasons.append(f"changes files that shadow standard modules or customise Python: "
                        f"{', '.join(forbidden)}")
     reasons += param_violations
     if candidate_fault:
@@ -1021,11 +886,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         if not c["ok"]:
             reasons.append(f"{metric}: gain {c['gain']:+.1%} (95% interval {c['ci95'][0]:+.1%} to "
                            f"{c['ci95'][1]:+.1%}, sign test p={c['sign_test_p']}) does not meet the bar")
-    notes = [f"harness files changed by the candidate were replaced by the base's: {', '.join(harness_touched)}"] \
-        if harness_touched else []
-    if gate["replaced"]:
-        notes.append(f"structure and interface test files changed by the candidate were replaced by the base's: "
-                     f"{', '.join(gate['replaced'])}")
+    notes = []
     if interface == "simulated":
         notes.append(SIMULATED_NOTE.format(what=spec["simulates"]))
     verdict = "pass" if passed else "fail"
@@ -1034,7 +895,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "kind": "verdict",
         "verdict": verdict,
         "subject": {"system": name, "path": subject},
-        "method": "base's spec and harness; forbidden-file check; declared parameters; base's tests; "
+        "method": "base's morphogen.yaml; default deny; forbidden-file check; declared settings; base's tests; "
                   "output equivalence on fresh "
                   "random inputs; paired ABBA runs timed outside the process, each checked for the base's "
                   "output; sign test",

@@ -98,11 +98,11 @@ class OtelThroughTheJudge(unittest.TestCase):
         r = tune(self.p.repo, self.p.cfg, self.p.target, make("hillclimb", trials=12), self.p.evidence,
                  rounds=1, max_trials=12)
         self.assertEqual(r["verdict"], "pass", r.get("note"))
-        self.assertLess(r["best"]["values"]["steps"], 10)
+        self.assertLess(r["best"]["values"]["agent.STEPS"], 10)
 
     def test_a_container_runner_is_refused(self):
         from unittest import mock
-        spec = judge_mod.load_spec(self.p.repo, judge_mod.Path(self.p.target))
+        spec = judge_mod.structure_of(self.p.repo).spec("agent")
         with mock.patch.object(judge_mod, "capabilities", return_value={"network_isolated": True}), \
                 mock.patch.object(judge_mod, "sandbox_mode", return_value="podman"):
             with self.assertRaises(judge_mod.JudgeError) as e:
