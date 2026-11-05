@@ -52,6 +52,16 @@ hypothesis and is never acted on.
 
 Trust classes, pruning and promotion to tests live in the catalog, not the backend.
 
+## Ingestion
+
+Entities arrive through the resolve-first ingestion planned in
+[entity-resolution](../entity-resolution/BRIEF.md#planned-application-resolve-first-ingestion):
+mentions resolved against the catalog's own entities and adopted schemes, each decision an SSSOM
+mapping with its justification and confidence, confirmed decisions kept as aliases, and new
+classes or relations arriving as proposals at `stated` trust. The catalog's vocabulary (its
+schemes, classes and relations) is itself a set of entities, so a model's invented or misremembered
+terms are resolved the same way, against the scheme, instead of entering the catalog.
+
 ## Cells
 
 | Cell | Parameters (owner) |

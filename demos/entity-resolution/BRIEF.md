@@ -63,6 +63,35 @@ about 0.85, 0.79 and 1.00 on these three. Published deep and embedding matchers 
   knowledge graphs), entity matching with large language models (arXiv 2310.11244), pyJedAI.
 - Not yet read: Ditto's own paper and scores.
 
+## Planned application: resolve-first ingestion
+
+Knowledge-graph tools such as graphiti and cognee ingest by asking a model, per chunk, what
+entities and relations it holds, then asking again whether each is already known. That is slow,
+costly, not repeatable, and lets the model invent types and relations. The planned application of
+this resolver is a stage that plugs into them, built for them rather than against them, where the
+model handles only the margin:
+
+1. **Extract loose mentions** (a cheap model call or rules): names, types, relations as written.
+2. **Resolve deterministically, cheapest first:** exact or alias match, lexical similarity,
+   embedding nearest neighbours.
+3. **Only the ambiguous remainder goes to a model,** choosing among the retrieved candidates.
+4. **Record every decision as an SSSOM mapping:** predicate (exact, close, broader, narrower),
+   justification, confidence, tool.
+5. **Confirmed decisions become aliases,** so the same mention resolves deterministically next time.
+6. **New types and relations are proposals,** never silent schema changes.
+
+What exists already (read 2026-11-05, secondary sources): Zep reports graphiti moved to a
+deterministic similarity pass before any model call for deduplication, with short names still
+going to the model; OntoGPT's SPIRES (Bioinformatics 2024) grounds model extractions to existing
+ontologies with lexical grounders. What would be new: decisions that become deterministic as they
+are learned, SSSOM records of why two mentions are one, grounding of types and relations as well
+as entities outside biomedicine, and a resolver Morphogen tunes against held-out answers.
+
+**Measure before building it:** the same corpus through graphiti as it is and through graphiti
+with this stage, and the benchmark pairs above: model calls per document, time, agreement between
+reruns, duplicate entities left, and linking F1 against gold. If the gap is small, it is not
+worth a product.
+
 ## Done when
 
 - Two backends pass the interface test, and the judge can tell their F1 apart on held-out pairs.
