@@ -24,7 +24,7 @@ WORD_MISMATCH = 0.5
 
 # Two words count as the same if their similarity ratio is at least this, so typos still agree
 # (agent, range [0.6, 1.0]).
-TYPO_RATIO = 0.8
+TYPO_RATIO = 0.7000000000000001  # as tuned and judged (2026-11-06); later tuners round floats when writing them
 
 # Abbreviations expanded before comparing (operator: a vocabulary, not a tunable).
 ALIASES = {"ms": "microsoft", "hp": "hewlett packard"}

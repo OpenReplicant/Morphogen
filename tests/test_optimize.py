@@ -28,6 +28,16 @@ def run(opt, n=60):
     return history
 
 
+class Writing(unittest.TestCase):
+    def test_a_float_is_written_without_step_noise(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "s.py").write_text("RATIO = 0.8\n")
+            O.write_parameter(Path(d), {"file": "s.py", "name": "RATIO"}, 0.8 - 0.1)
+            self.assertEqual((Path(d) / "s.py").read_text(), "RATIO = 0.7\n")
+
+
 class Catalog(unittest.TestCase):
     def test_entries_and_availability(self):
         entries = {e["name"]: e for e in O.catalog()}

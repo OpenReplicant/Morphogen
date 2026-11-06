@@ -9,8 +9,8 @@ Plan and build are done for a baseline; optimizing waits for Morphogen's base. S
 | Build: two backends | `overlap` (overlap coefficient) and `tfidf` (TF-IDF cosine); both pass the interface test |
 | Cells | `catalog-info.yaml` (the structure) and `morphogen.yaml` (what may change, how each is judged): backend, blocking, matcher on F1; `speed` (er/text.py) on wall time with the same output |
 | Measure | `bench.py` prints the pairs it finds; `score.py`, from the base, computes F1 against answers outside the repository |
-| Judged | `speed`: passed, 69% faster (below) |
-| Optimize | next: tune `matcher` and `blocking` on F1 |
+| Judged | `speed`: passed, 69% faster; `matcher` tuned: passed, held-out F1 0.422 to 0.428 (below) |
+| Optimize | next: `blocking`, then `backend` |
 
 Run it (Python 3.11 or later, standard library only):
 
@@ -34,6 +34,27 @@ the time was `difflib` in `er/text.py`, comparing words for typos.
 
 Both printed exactly the base's pairs on every run (`same_output`), so F1 cannot have moved. The
 first was refused on a constraint the change made worse, not on the metric it improved.
+
+### Tuning the matcher, and the hole it found in the judge
+
+`tune cell:matcher` (the selector, 20 trials over hill-climb, annealing, grid, random and Optuna,
+probed on the search split) first found `MODEL_MISMATCH` 0.0, `WORD_MISMATCH` 0.75 and `TYPO_RATIO`
+0.6, and the judge passed it: held-out F1 0.422 to 0.481. But with those values the overlap backend
+merged "Office Home and Student 2007" with "Office Professional 2007", which the resolver's
+interface test forbids. The judge had not run that test: it belongs to `api:resolver`, which the
+enclosing system provides, and a cell's gate ran only the interfaces its own scope touches.
+
+The judge now also runs the tests at the boundary of every system enclosing the cell (a red-team
+cheat first; it passed the old judge). Re-judged, that candidate fails on `api:resolver`. Tuned
+again under the corrected judge, 9 of 18 trials broke the resolver's test in their probes; the best
+that kept it passed:
+
+| Setting | Before | After |
+|---|---|---|
+| `TYPO_RATIO` | 0.8 | 0.7 (written `0.7000000000000001` by the tuner's step arithmetic and kept as judged; `tune` now rounds floats when it writes them) |
+
+**Pass:** held-out F1 0.422 to 0.428 (+0.006, just over the cell's bar of 0.005, p = 0.008);
+precision 0.615 to 0.601. A smaller gain than the first, and one that keeps every promise.
 
 ## Baseline before the judge (search split, 2026-11-05)
 
