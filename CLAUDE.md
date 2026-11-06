@@ -47,8 +47,9 @@ candidate. Never edit the installed plugin's directory.
   0.8.0), is on the branch.
 - Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
   judge or runner changes. A/A: 0 of 12 in the cell format.
-- CI is advisory: `judge` runs the candidate's tests (required on main); `base-tests` runs main's
-  tests against the candidate and is not required. Make it required again when rebuild 7 settles.
+- CI: `judge` runs the candidate's tests (required on main); `base-tests` runs main's red team
+  against the candidate (every cheat main refuses must still be refused). It is not required yet;
+  it can be now that it no longer fails on intended changes.
 - Podman, Docker and bubblewrap are installed in the cloud container; only Podman's service runs.
 - Model calls: run them through this session's Claude Code (the user's subscription), never an API
   key. Headless runs and subagents use sonnet: `claude -p --model sonnet`, and `model: sonnet` for
