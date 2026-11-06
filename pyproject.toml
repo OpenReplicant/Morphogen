@@ -16,6 +16,8 @@ dependencies = [
 [project.optional-dependencies]
 # The Optuna adapter (optimize.OptunaTPE). MIT. 5.0.0: September 2026.
 optuna = ["optuna==5.0.0"]
+# The GEPA adapter (optimize.Gepa). MIT, no required dependencies. 0.1.4: July 2026.
+gepa = ["gepa==0.1.4"]
 
 [project.scripts]
 morphogen = "morphogen.cli:main"

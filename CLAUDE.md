@@ -30,8 +30,8 @@ docs/restart/LESSONS.md.
 
 ## Checks before every commit
 ```
-uv run --extra optuna python -m unittest discover -s tests -t . -v
-MORPHOGEN_TEST_SANDBOX=podman uv run --extra optuna python -m unittest discover -s tests -t .   # judge or runner changes
+uv run --extra optuna --extra gepa python -m unittest discover -s tests -t . -v
+MORPHOGEN_TEST_SANDBOX=podman uv run --extra optuna --extra gepa python -m unittest discover -s tests -t .   # judge or runner changes
 claude plugin validate . && claude plugin validate .claude-plugin/plugin.json
 ```
 
@@ -41,15 +41,17 @@ local clone added as a marketplace runs the plugin from the clone, so the judge 
 candidate. Never edit the installed plugin's directory.
 
 ## State (2026-11-05)
-- On main through phase 2 of PLAN.md (#65-#67): the cell format only. Phase 3, Backstage's
-  catalog-info.yaml read as a source, is on the branch.
+- On main through phase 3 of PLAN.md (#65-#68). Phase 4, the optimizer contract, text cells and
+  GEPA, is on the branch.
 - Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
   judge or runner changes. A/A: 0 of 12 in the cell format.
 - CI is advisory: `judge` runs the candidate's tests (required on main); `base-tests` runs main's
   tests against the candidate and is not required. Make it required again when rebuild 7 settles.
 - Podman, Docker and bubblewrap are installed in the cloud container; only Podman's service runs.
-- Model calls: run them through this session's Claude Code (the user's subscription), e.g.
-  `claude -p`, rather than an API key.
+- Model calls: run them through this session's Claude Code (the user's subscription), never an API
+  key. Headless runs and subagents use sonnet: `claude -p --model sonnet`, and `model: sonnet` for
+  subagents. GEPA's reflection does this through `optimize.ClaudeCLI` (no tools, an empty directory).
+  `MORPHOGEN_LIVE_MODEL=1` runs the one live GEPA test.
 
 ## Next
 [PLAN.md](PLAN.md) brings everything into the small-core paradigm (phases 0-6); the items below
@@ -57,8 +59,8 @@ fold into it.
 
 1. Design simplifications left: probe as a mode of the judge. Done: one structure document
    (morphogen.yaml, phases 1-2), one kind of "still works" test (`tests`, `same_as_base`).
-2. Optimizers that escape local optima: random restarts, simulated annealing, a stagnation signal
-   for the selector; later a stepping-stone archive and multi-step candidates.
+2. Optimizers that escape local optima: done (hill-climb restarts, `anneal`, the selector's
+   stagnation signal). Later: a stepping-stone archive and multi-step candidates.
 3. The entity-resolution demo as the first real run: move its F1 into a scorer outside the
    candidate, contract tests for its three untested interfaces, then tune the matcher.
 4. An agent target: Claude Code on a small task set, cells for its skills and prompts, measured by
@@ -66,7 +68,7 @@ fold into it.
    First candidate: the mapper skill itself (`skills/map/SKILL.md`), scored against gold maps of
    small systems held outside the repository, with GEPA as the optimizer (BRIEF, "The mapper as a
    target").
-5. Later: GEPA adapter (text cells), model-based selector policy, choosing scope, learned-state
+5. Later: model-based selector policy, choosing scope, learned-state
    reset (#45), model gateway (#43), the observed structure from traces, a bubblewrap runner.
 
 ## Consolidated (2026-11-05)

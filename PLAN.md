@@ -90,7 +90,7 @@ interfaces:
 
 **Done when** no file in the repository uses `harness`, `check`, `equivalence` or `target.yaml`.
 
-### 3. Sources above: Backstage, level 1 (done on the branch, 2026-11-05)
+### 3. Sources above: Backstage, level 1 (done, #68)
 - Read `catalog-info.yaml` directly, with no Backstage running:
 
   | Backstage | Becomes |
@@ -116,7 +116,7 @@ classifier instead: described half in a catalog, it reaches the same verdicts as
 alone. Red team: a candidate that weakens the catalog (drops an API) for later judgments is refused,
 even when `change` is `**`; it passed the judge before catalog files were made the judge's.
 
-### 4. The optimizer contract, and GEPA
+### 4. The optimizer contract, and GEPA (done on the branch, 2026-11-06)
 - Name the contract in `optimize.py`: `space` (from `change`: numbers, choices, text),
   `evaluate(candidate) -> score, diagnostics` (a probe; the diagnostics are failing tests and the
   scorer's per-case misses), and one `judge` of the best.
@@ -128,6 +128,13 @@ even when `change` is `**`; it passed the judge before catalog files were made t
   signal for the selector.
 
 **Done when** GEPA improves a text cell in a fixture through `tune`, and the judge passes it.
+
+Done: GEPA 0.1.4 (MIT, no required dependencies, an optional extra) drives the search through tune's
+`evaluate`, its reflection runs on `claude -p --model sonnet` with no tools, and on the text fixture
+the judge passed its best (live: "Hello, world! Welcome to the Morphogen project.", +0.33 coverage,
+p = 0.008, two model calls). Red team: proposals outside the space, out of bounds, or not text for a
+text cell are refused before anything is written. Seen live: with tools off, the model once wrote a
+tool call as its answer; it could only land in the cell's own file, where the tests refused it.
 
 ### 5. A fresh start
 - `status` (CLI and MCP): which sources exist, which cells are on the base, what is missing, and

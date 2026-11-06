@@ -27,7 +27,7 @@ jobs:
       - name: Install uv
         run: pipx install uv==0.11.32
       - name: Tests and red team
-        run: uv run --extra optuna python -m unittest discover -s tests -t . -v
+        run: uv run --extra optuna --extra gepa python -m unittest discover -s tests -t . -v
 
   base-tests:
     if: github.event_name == 'pull_request'
@@ -56,4 +56,4 @@ jobs:
       - name: Install uv
         run: pipx install uv==0.11.32
       - name: The base's tests and red team, against the candidate
-        run: uv run --extra optuna python -m unittest discover -s tests -t . -v
+        run: uv run --extra optuna --extra gepa python -m unittest discover -s tests -t . -v

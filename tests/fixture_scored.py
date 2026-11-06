@@ -140,3 +140,57 @@ class StructuredProject(ScoredProject):
     def __init__(self):
         super().__init__(cells=structure_cells(), interfaces=copy.deepcopy(STRUCTURE["interfaces"]),
                          root_files={"contracts/__init__.py": "", "contracts/test_labels.py": CONTRACT_TEST})
+
+
+# --- a text cell: the reply in reply.txt is the whole thing that may change; the scorer counts which
+# held-out words it contains.
+
+REPLY_BENCH = 'print(open("reply.txt").read())\n'
+
+REPLY_SCORE = '''"""The scorer: the share of the held-out words (MORPHOGEN_PRIVATE/words.json) in the run's output."""
+import json, os, sys
+
+words = json.load(open(os.path.join(os.environ["MORPHOGEN_PRIVATE"], "words.json")))
+got = set(sys.stdin.read().lower().split())
+print(json.dumps({"coverage": sum(w in got for w in words) / len(words)}))
+'''
+
+REPLY_TEST = '''import unittest
+
+
+class Reply(unittest.TestCase):
+    def test_it_is_short(self):
+        self.assertLessEqual(len(open("reply.txt").read().split()), 12)
+
+
+if __name__ == "__main__":
+    unittest.main()
+'''
+
+WORDS = ["hello", "world", "morphogen"]
+
+
+class TextProject(Project):
+    """One text cell: `reply.txt` may change (and nothing else); its output is scored against
+    held-out words kept outside the repository."""
+
+    home = "targets/reply"
+    cell = "reply"
+
+    def __init__(self):
+        self.private_dir = Path(tempfile.mkdtemp(prefix="morphogen-private-"))
+        (self.private_dir / "words.json").write_text(json.dumps(WORDS))
+        cell = {"description": "A one-line reply that greets the world and names the project, Morphogen, "
+                               "in at most 12 words.",
+                "dir": "targets/reply", "change": "targets/reply/reply.txt", "run": "python bench.py",
+                "better": {"coverage": {"higher": True, "min": 0.1, "gain": "absolute", "aggregate": "mean"}},
+                "score": "python score.py", "tests": "python -m unittest -q test_reply",
+                "rounds": {"warmup": 0, "repeats": 4, "max_repeats": 8}, "timeout": 60}
+        super().__init__({"reply.txt": "hi there\n", "bench.py": REPLY_BENCH, "score.py": REPLY_SCORE,
+                          "test_reply.py": REPLY_TEST}, sample=None, cells={"reply": cell},
+                         local={"cells": {"reply": {"private": str(self.private_dir),
+                                                    "search": str(self.private_dir)}}})
+
+    def close(self):
+        shutil.rmtree(self.private_dir, ignore_errors=True)
+        super().close()

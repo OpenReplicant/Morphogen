@@ -190,7 +190,9 @@ class CellGate(unittest.TestCase):
             space = space_of(self.p.repo, "classify")
         finally:
             git(self.p.repo, "checkout", "-q", "main")
-        self.assertEqual(sorted(space), ["classify.MARGIN", "classify.THRESHOLD"])
+        self.assertEqual(sorted(k for k, v in space.items() if v["_kind"] != "text"),
+                         ["classify.MARGIN", "classify.THRESHOLD"])
+        self.assertEqual(space["classify.targets/classify/classify.py"]["_kind"], "text")   # the whole file
         self.assertEqual(space["classify.MARGIN"]["_value"], 0)
         cand = self.p.branch_files("cell-params-cand", {"targets/classify/classify.py":
                                                         CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50") + "MARGIN = 1\n"},
