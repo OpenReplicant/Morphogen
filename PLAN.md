@@ -171,8 +171,14 @@ OpenReplicant/Morphogen`, then `/plugin install morphogen@morphogen`.
 ## Later, in the family (not in this plan)
 - ArchiMate exchange files and OCEL 2.0 event logs as sources (business processes as cells,
   judged by replay with `trust: simulated`; PM4Py is AGPL, so an external tool, not a dependency).
-- Backstage levels 2 and 3: the catalog REST API, and a plugin publishing verdicts as Tech Insights
-  facts plus a template that adds a cell.
+- Backstage levels 2 and 3: the catalog REST API (read only as a snapshot whose hash the evidence
+  records), and a plugin publishing verdicts as Tech Insights facts and an entity card (verdicts,
+  trust, evidence age, `change`), plus a Scaffolder template that adds a cell at birth. Also: a
+  coverage overlay on the catalog graph, and drift between the catalog's declared dependencies and
+  the calls seen in traces, reported back to the catalog.
+- Done between phases (2026-11-06): `owner` and `lifecycle` read from the catalog (or written on a
+  cell); each verdict's `gate` (merge or review, by the base's `autonomy`); `AiResource` skills and
+  rules as cells; the last verdict and evidence age in `status`.
 - The online stage: canary after apply; learner cells judged by replay.
 - The UI/UX quorum as a scorer demo.
 - Re-judging past verdicts when the judge gains a rule (as anti-doping retests stored samples): the
@@ -186,3 +192,5 @@ OpenReplicant/Morphogen`, then `/plugin install morphogen@morphogen`.
 2. **The old format** (`target.yaml` plus `cells.yaml`) is removed after phase 2.
 3. **The field is `change`.**
 4. **Phase 3 (Backstage) before phase 4 (GEPA).**
+5. **Autonomy is an option** (2026-11-06): by default a person merges; the operator's `autonomy`
+   (lifecycle to `merge` or `review`) lets an agent merge a pass, read from the base like every rule.
