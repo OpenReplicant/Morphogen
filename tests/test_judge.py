@@ -10,7 +10,7 @@ from pathlib import Path
 from morphogen import documents
 from morphogen import judge as judge_mod
 from morphogen.evidence import Evidence
-from tests.fixture import (CLASSIFY, COMPUTE, FAST, SETTINGS, TARGET, WRONG, GuardedProject,
+from tests.fixture import (CLASSIFY, COMPUTE, FAST, SETTINGS, TARGET, WRONG, GuardedProject, InputsProject,
                            SampleProject, ScoredProject, StructuredProject, git, parameter_project)
 
 
@@ -120,6 +120,20 @@ class Scored(unittest.TestCase):
             with self.assertRaises(judge_mod.JudgeError) as e:
                 q.judge(q.branch("t50", {"classify.py": CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")}))
             self.assertIn("outside the repository", str(e.exception))
+        finally:
+            q.close()
+
+    def test_inputs_outside_the_repository(self):
+        # The workload reads its data from MORPHOGEN_INPUTS (morphogen.local.yaml's `inputs`); the
+        # verdict and the measurement record a digest of what it read.
+        q = InputsProject()
+        try:
+            m = judge_mod.measure(q.repo, q.cfg, q.target, "main", q.evidence)
+            self.assertLess(m["metrics"]["scored.accuracy"], 0.7)
+            r = q.judge(q.branch("t50", {"classify.py": CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")}))
+            self.assertEqual(r["verdict"], "pass", r)
+            digests = {rec.get("inputs") for rec in q.evidence.query(by="judge")}
+            self.assertEqual(digests, {judge_mod.inputs_digest(q.inputs_dir)})
         finally:
             q.close()
 

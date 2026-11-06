@@ -423,6 +423,8 @@ class Project:
             measure.update(c.rounds.model_dump(exclude_none=True))
         if c.score:
             measure["score"] = {"run": c.score, **{k: local[k] for k in ("private", "search") if local.get(k)}}
+        if local.get("inputs"):
+            measure["inputs"] = local["inputs"]
         if observer:
             measure["observer"] = observer
         spec: dict[str, Any] = {"name": name, "measure": measure}

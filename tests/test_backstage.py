@@ -239,10 +239,11 @@ class DemoSplit(unittest.TestCase):
             "matcher": ("er", ["pair-score"], ["similarity"],
                         ["ALIASES", "MODEL_MISMATCH", "STOPWORDS", "THRESHOLD", "TYPO_RATIO", "WORD_MISMATCH"]),
             "backend": ("er", ["similarity"], [], ["BACKEND"]),
-            "clustering": ("er", [], ["pair-score"], [])})
+            "clustering": ("er", [], ["pair-score"], []),
+            "speed": ("matcher", [], [], [])})
         r = s.interfaces["api:default/resolver"]
-        self.assertEqual((r.tests, r.external), (["python -m unittest discover -s tests"], "consumes"))
-        self.assertEqual(s.coverage()["tested"], 1)
+        self.assertEqual((r.tests, r.external), (["python -m unittest discover -s tests -t ."], "consumes"))
+        self.assertEqual(s.coverage()["tested"], 4)
 
 
 if __name__ == "__main__":

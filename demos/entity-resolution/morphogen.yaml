@@ -1,21 +1,35 @@
 # The demo's cells: the structure (components, APIs, nesting) comes from catalog-info.yaml; this file
-# adds what each cell may change and how it is judged. Not judgeable yet: the benchmark data is not
-# committed (its licence names no version), so a checkout of a commit has no inputs, and bench.py
-# computes F1 itself. To judge it: bench.py prints predicted pairs, a score.py from the base computes
-# F1 against held-out gold pairs kept outside the repository (morphogen.local.yaml), and the inputs
-# reach the run from a read-only location. See README.md, "Known gaps".
+# adds what each cell may change and how it is judged.
+#
+# The benchmark data is not committed (its licence names no version). data/fetch.py downloads it and
+# data/split.py writes the records and the two answer sets outside the repository; the uncommitted
+# morphogen.local.yaml names them per cell: `inputs` (the records, read-only to every run),
+# `search` (answers for probes and optimizers) and `private` (held-out answers, for verdicts).
+# bench.py prints the pairs it finds; score.py, from the base, computes F1 against the answers.
 backstage: catalog-info.yaml
+
+judged: &f1
+  run: python bench.py
+  score: python score.py
+  better:
+    f1: {higher: true, min: 0.005, gain: absolute, aggregate: mean}
+    precision: {higher: true, max_regression: 0.10}
+  rounds: {warmup: 0, repeats: 4, max_repeats: 8}   # the score is deterministic; 8 rounds decide it
+  timeout: 300
 
 cells:
   component:er:
-    tests: python -m unittest discover -s tests
+    <<: *f1
+    tests: python -m unittest discover -s tests -t .
 
   component:blocking:
+    <<: *f1
     change:
       - er/settings.py#BLOCK_MAX_DF in 0.01..0.5
       - er/settings.py#BLOCK_LIMIT in 5..200
 
   component:matcher:
+    <<: *f1
     change:
       - er/settings.py#THRESHOLD in 0.5..0.99
       - er/settings.py#MODEL_MISMATCH in 0..1
@@ -24,7 +38,21 @@ cells:
     keep: [er/settings.py#ALIASES, er/settings.py#STOPWORDS]
 
   component:backend:
+    <<: *f1
     change: er/settings.py#BACKEND in [overlap, tfidf]
+
+  # Below Backstage's grain: the text functions the matcher uses, judged on speed. The pairs found
+  # must be exactly the base's (same_output), so F1 cannot move.
+  speed:
+    in: component:matcher
+    description: Tokenising and comparing names (er/text.py). Most of the run is spent here, in difflib.
+    change: er/text.py
+    run: python bench.py
+    tests: python -m unittest discover -s tests -t .
+    better: {wall_seconds: {lower: true, min: 0.10}, max_rss_kb: {lower: true, max_regression: 0.5}}
+    same_output: true
+    rounds: {warmup: 1, repeats: 5, max_repeats: 12}
+    timeout: 300
 
 interfaces:
   api:resolver: {external: consumes}     # used by whatever needs resolution; its test is in the catalog

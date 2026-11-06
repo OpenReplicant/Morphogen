@@ -10,7 +10,7 @@ import unittest
 
 from morphogen import judge as judge_mod
 from tests.fixture import (AGENT, CLASSIFY, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, AgentProject,
-                           GuardedProject,
+                           GuardedProject, InputsProject,
                            SampleProject, ScoredProject, StructuredProject, observed_project, parameter_project)
 
 PATCH_TIMER = '''import time as _t
@@ -341,6 +341,66 @@ class ScoreCheats(unittest.TestCase):
         doc["cells"]["classify"]["better"]["accuracy"]["min"] = -1
         r = self.assertFails("lower-bar", {"morphogen.yaml": self.p.dump(doc), "classify.py": CLASSIFY + "# touched\n"})
         self.assertTrue(any("morphogen.yaml" in x for x in r["reasons"]), r["reasons"])
+
+
+# --- cheats with the inputs: data kept outside the repository (its licence keeps it out of git) and
+# named in morphogen.local.yaml as `inputs`, which every run reads.
+
+POISON_THE_INPUTS = '''import json, os
+_f = os.path.join(os.environ.get("MORPHOGEN_INPUTS", "."), "inputs.json")
+try:
+    _xs = json.load(open(_f))
+    json.dump([x + 40 if x < 50 else x for x in _xs], open(_f, "w"))   # later runs see easier inputs
+except OSError:
+    pass
+THRESHOLD = 10
+
+
+def label(x):
+    return "high" if x >= THRESHOLD else "low"
+'''
+
+
+class InputsCheats(unittest.TestCase):
+    """The inputs are the run's to read, never to change, and never where the answers are."""
+
+    def setUp(self):
+        self.p = InputsProject()
+        self.addCleanup(self.p.close)
+
+    def assertRefused(self, candidate, words):
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.p.judge(candidate)
+        for w in words:
+            self.assertIn(w, str(e.exception))
+
+    def test_inputs_inside_the_repository(self):
+        # A commit could carry its own copy of the inputs, so they must live outside the tree.
+        self.p.inputs_at("targets/classify")
+        self.assertRefused(self.p.branch("t50", {"classify.py": CLASSIFY.replace("= 10", "= 50")}),
+                           ["inputs", "outside the repository"])
+
+    def test_inputs_hold_the_answers(self):
+        # Every run reads the inputs; the held-out answers must not be among them.
+        self.p.inputs_at(str(self.p.private_dir))
+        self.assertRefused(self.p.branch("t50", {"classify.py": CLASSIFY.replace("= 10", "= 50")}),
+                           ["inputs", "held-out"])
+
+    def test_inputs_contain_the_answers(self):
+        self.p.inputs_at(str(self.p.private_dir.parent))
+        self.assertRefused(self.p.branch("t50", {"classify.py": CLASSIFY.replace("= 10", "= 50")}),
+                           ["inputs", "held-out"])
+
+    def test_rewrite_the_inputs(self):
+        # The candidate's run rewrites the inputs so later runs, the base's included, see easier ones.
+        # In a container the inputs are mounted read-only; without one the judge compares a digest of
+        # the inputs before and after the runs and refuses the verdict.
+        try:
+            r = self.p.judge(self.p.branch("poison", {"classify.py": POISON_THE_INPUTS}))
+        except judge_mod.JudgeError as e:
+            self.assertIn("inputs", str(e))
+        else:
+            self.assertEqual(r["verdict"], "fail", r)
 
 
 # --- cheats against the structure. Each makes the cell better on its own target (accuracy rises to

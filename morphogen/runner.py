@@ -105,12 +105,15 @@ def tree_root(cwd: Path) -> Path:
 
 
 def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict | None = None,
-        timeout: int = 300, private: bool = False) -> Result:
+        timeout: int = 300, private: bool = False, inputs: str | None = None) -> Result:
     """Run `cmd` in `cwd`. `private`: for code under test. In a container every run is fresh
     anyway; without one, the run gets its own empty TMPDIR and HOME, removed afterwards, so
-    nothing it writes there reaches the next run."""
+    nothing it writes there reaches the next run. `inputs`: a directory outside the tree the run may
+    read (MORPHOGEN_INPUTS); a container mounts it read-only at /inputs."""
     mode = sandbox_mode(cfg)
     env = {"PYTHONDONTWRITEBYTECODE": "1", **(env or {})}
+    if inputs:
+        env["MORPHOGEN_INPUTS"] = "/inputs" if mode in ("docker", "podman") else str(inputs)
     scratch = None
     if mode in ("docker", "podman"):
         root = tree_root(cwd)
@@ -118,6 +121,8 @@ def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict |
         mount = f"{root}:/w:ro" + (",Z" if mode == "podman" else "")  # Z: SELinux relabel for rootless Podman
         args = [mode, "run", "--rm", "-i", "--network", "none", "--memory", "1g", "--cpus", "1",
                 "-v", mount, "-w", str(inner)]
+        if inputs:
+            args += ["-v", f"{inputs}:/inputs:ro" + (",z" if mode == "podman" else "")]
         for k, v in env.items():
             args += ["-e", f"{k}={v}"]
         args += [cfg.get("sandbox_image", "python:3.12-slim"), "sh", "-c", cmd]

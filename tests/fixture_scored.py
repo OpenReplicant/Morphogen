@@ -76,7 +76,7 @@ class ScoredProject(Project):
     cell = "classify"
 
     def __init__(self, private_inside=False, search=False, cells=None, interfaces=None, root_files=None,
-                 settings=None):
+                 settings=None, files=None, drop=(), local_extra=None):
         self.private_dir = Path(tempfile.mkdtemp(prefix="morphogen-private-"))
         (self.private_dir / "gold.json").write_text(json.dumps(GOLD))
         self.search_dir = None
@@ -85,10 +85,13 @@ class ScoredProject(Project):
             self.search_dir = Path(tempfile.mkdtemp(prefix="morphogen-search-"))
             (self.search_dir / "gold.json").write_text(json.dumps(GOLD))
             local["search"] = str(self.search_dir)
+        extra = files
         files = {"classify.py": CLASSIFY, "bench.py": CLASSIFY_BENCH, "score.py": CLASSIFY_SCORE,
                  "test_classify.py": CLASSIFY_TEST, "inputs.json": json.dumps(INPUTS)}
         if private_inside:
             files["held-out/gold.json"] = json.dumps(GOLD)
+        files = {k: v for k, v in {**files, **(extra or {})}.items() if k not in drop}
+        local.update(local_extra or {})
         super().__init__(files, sample=None, cells=cells or {"classify": copy.deepcopy(CLASSIFY_CELL)},
                          interfaces=interfaces, local={"cells": {"classify": local}}, root_files=root_files,
                          settings=settings)
@@ -99,6 +102,39 @@ class ScoredProject(Project):
         shutil.rmtree(self.private_dir, ignore_errors=True)
         if self.search_dir:
             shutil.rmtree(self.search_dir, ignore_errors=True)
+        super().close()
+
+
+# --- the same classifier with its inputs outside the repository (named in morphogen.local.yaml as
+# `inputs`, read-only to every run), as for data whose licence keeps it out of git.
+
+INPUTS_BENCH = '''"""The workload, reading its inputs from the directory the judge names (MORPHOGEN_INPUTS)."""
+import json, os
+from classify import label
+
+for x in json.load(open(os.path.join(os.environ["MORPHOGEN_INPUTS"], "inputs.json"))):
+    print(label(x))
+'''
+
+
+class InputsProject(ScoredProject):
+    """ScoredProject whose inputs live outside the repository, named in morphogen.local.yaml."""
+
+    def __init__(self):
+        self.inputs_dir = Path(tempfile.mkdtemp(prefix="morphogen-inputs-"))
+        (self.inputs_dir / "inputs.json").write_text(json.dumps(INPUTS))
+        super().__init__(files={"bench.py": INPUTS_BENCH}, drop=("inputs.json",),
+                         local_extra={"inputs": str(self.inputs_dir)})
+
+    def inputs_at(self, where: str):
+        """Say in morphogen.local.yaml that the inputs are somewhere else."""
+        import yaml
+        local = yaml.safe_load((self.repo / "morphogen.local.yaml").read_text())
+        local["cells"]["classify"]["inputs"] = where
+        self.set_local(local)
+
+    def close(self):
+        shutil.rmtree(self.inputs_dir, ignore_errors=True)
         super().close()
 
 
