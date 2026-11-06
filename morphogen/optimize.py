@@ -539,6 +539,10 @@ def make(name: str, **options) -> Optimizer:
 
 
 def write_parameter(tree_dir: Path, p: dict, value: Any) -> None:
+    """Write a setting's value into its file. Floats are rounded to 12 significant digits, so a step
+    sum such as 0.8 - 0.1 is written 0.7, not 0.7000000000000001."""
+    if isinstance(value, float):
+        value = float(f"{value:.12g}")
     f = tree_dir / p["file"]
     text = f.read_text()
     if p.get("name"):

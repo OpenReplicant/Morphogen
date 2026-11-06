@@ -100,7 +100,7 @@ def structure_scope(cell: str, file: str | None = None) -> dict:
     s = _structure(file)
     cells = sorted(s.scope(cell))
     return {"cell": cell, "scope": cells, "touched": s.touched(cells), "boundary": s.boundary(cells),
-            "tests": s.tests_for(cells), "neighbours": s.neighbours(cell)}
+            "tests": s.tests_for_cell(cell), "neighbours": s.neighbours(cell)}
 
 
 @server.tool()

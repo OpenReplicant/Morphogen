@@ -162,8 +162,11 @@ OpenReplicant/Morphogen`, then `/plugin install morphogen@morphogen`.
   Started (2026-11-06): the judge takes `inputs` (data outside the repository, read-only to every
   run, its digest in each verdict), so the demo is judged with its data uncommitted. Baseline in
   Podman: held-out F1 0.422. First verdicts, on the `speed` cell: a 76% speedup refused for 133% more
-  memory, then the bounded version passed (69% faster, +2% memory, the same pairs). Next: tune
-  `matcher` and `blocking` on F1.
+  memory, then the bounded version passed (69% faster, +2% memory, the same pairs). Tuning `matcher`
+  found a hole in the judge: its first pass (F1 0.422 to 0.481) broke the resolver's near-miss test,
+  which belongs to the enclosing system and was not in the matcher's gate. Fixed (a cell's gate now
+  includes the boundary of every system enclosing it; red team first); re-tuned, 9 of 18 trials were
+  refused in probes and the best passed: F1 0.422 to 0.428. Next: `blocking`, then `backend`.
 - The mapper as a target: the map skill tuned by GEPA against gold maps of three or four small
   systems held outside the repository.
 - An agent target measured by the `otel` observer.

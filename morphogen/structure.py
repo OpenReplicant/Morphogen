@@ -210,6 +210,34 @@ class Structure:
                     out.append(t)
         return out
 
+    def ancestors(self, cell: str) -> list[str]:
+        """The cells enclosing this one, innermost first."""
+        self._known(cell)
+        out, c = [], self.cells[cell].parent
+        while c is not None and c in self.cells and c not in out:
+            out.append(c)
+            c = self.cells[c].parent
+        return out
+
+    def gate_interfaces(self, cell: str) -> list[str]:
+        """The interfaces a change inside this cell must keep: every one its scope touches, and every
+        one at the boundary of each system enclosing it (what that system promises or relies on: a
+        change inside it can break those though the cell touches neither)."""
+        out = list(self.touched(self.scope(cell)))
+        for a in self.ancestors(cell):
+            out += [i for i in self.boundary(self.scope(a)) if i not in out]
+        return out
+
+    def tests_for_cell(self, cell: str) -> list[str]:
+        """The tests the judge runs for a change inside this cell (its gate's interfaces)."""
+        seen, out = set(), []
+        for i in self.gate_interfaces(cell):
+            for t in (self.interfaces[i].tests if i in self.interfaces else []):
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
+        return out
+
     def neighbours(self, cell: str) -> list[str]:
         """Cells sharing an interface with this one."""
         self._known(cell)

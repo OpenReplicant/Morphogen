@@ -411,19 +411,19 @@ def cell_of(tree: Path, target: Path) -> str | None:
 
 
 def _cell_gate(proj: Project, cell: str, ctree: Path, btree: Path) -> dict:
-    """What the judged cell's scope brings: the tests of every interface it touches (run from the
-    candidate's root), the settings declared on its cells, and the system guard."""
+    """What the judged cell's scope brings: the tests of every interface it touches, and of every
+    interface at the boundary of each system enclosing it (a change inside a system can break what
+    the system promises or relies on, though the cell itself touches neither), run from the
+    candidate's root; the settings declared on its cells; and the system guard."""
     s = proj.structure()
     scope = s.scope(cell)
-    tests = [{"interface": i, "test": t} for i in s.touched(scope) for t in s.interfaces[i].tests]
+    ancestors = s.ancestors(cell)
+    interfaces = s.gate_interfaces(cell)
+    tests = [{"interface": i, "test": t} for i in interfaces for t in s.interfaces[i].tests]
     parameters = [(f"{c}.{n}", p.model_dump(exclude_none=True), btree, ctree)
                   for c in sorted(scope) for n, p in s.cells[c].parameters.items()]
     guard = None
     if s.cells[cell].guard is not False:
-        ancestors, c = [], s.cells[cell].parent
-        while c is not None and c in s.cells and c not in ancestors:
-            ancestors.append(c)
-            c = s.cells[c].parent
         top = next((a for a in reversed(ancestors) if s.cells[a].measure), None)
         if top is not None:
             opts = s.cells[cell].guard if isinstance(s.cells[cell].guard, dict) else {}

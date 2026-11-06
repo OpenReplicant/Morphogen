@@ -74,7 +74,7 @@ def _cell_report(proj: Project, name: str, local: dict) -> dict:
             problems.append("no `change`: nothing in it may change, so no candidate can pass")
     if not c.better:
         notes.append("no `better`: judged on wall_seconds lower")
-    if not proj.structure().tests_for(sorted(proj.structure().scope(name))) and not c.tests:
+    if not proj.structure().tests_for_cell(name) and not c.tests:
         notes.append("no tests: nothing says what it must keep doing")
     if c.score and not (lc or {}).get("private"):
         notes.append(f"its scorer has no held-out answers named in {LOCAL} (cells: {{{name}: {{private: PATH}}}})")

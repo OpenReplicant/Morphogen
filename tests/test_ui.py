@@ -20,7 +20,8 @@ class Ui(unittest.TestCase):
             cells={"app": {"provides": "labels"},
                    "classify": {"in": "app", "provides": "score", **copy.deepcopy(CLASSIFY_CELL)},
                    "report": {"in": "app", "consumes": "score"}},
-            interfaces={"labels": {"tests": "python -m unittest -q test_classify", "external": "consumes"},
+            interfaces={"labels": {"tests": "cd targets/classify && python -m unittest -q test_classify",
+                                   "external": "consumes"},
                         "score": []})
         judge_mod.measure(cls.p.repo, cls.p.cfg, cls.p.target, "main", cls.p.evidence)
         cls.p.judge(cls.p.branch("t50", {"classify.py": CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")}))
