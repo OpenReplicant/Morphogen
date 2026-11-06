@@ -24,7 +24,8 @@ from .structure import Structure, StructureError
 server = MCPServer(
     name="morphogen",
     instructions=(
-        "Morphogen improves a system at any scope behind a judge the agent cannot edit. morphogen.yaml "
+        "Morphogen improves a system at any scope behind a judge the agent cannot edit. Start with status: "
+        "where the project stands and the next step. morphogen.yaml "
         "says what the cells are, which interfaces join them, which tests guard each, and what each cell "
         "may change (`change`); nothing else may change, and a candidate that touches anything else is "
         "refused. To improve a cell: measure it (target cell:NAME), change it on a branch, commit, then "
@@ -63,6 +64,21 @@ def _structure(file: str | None) -> Structure:
 def _target(target: str) -> tuple[str, str | None]:
     """Passed through: the judge resolves cell:NAME, a cell's name or its dir on the base commit."""
     return target, None
+
+
+@server.tool()
+@_safe
+def status() -> dict:
+    """Where the project stands: its sources (morphogen.yaml, morphogen.local.yaml, Backstage catalog
+    files), each cell on the trunk and whether the judge can judge it, cells drafted but not yet on the
+    trunk, what is missing, its measurements and verdicts, and the next step. Call it first."""
+    from .status import status as status_of
+    p = os.environ.get("MORPHOGEN_PROJECT") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    try:
+        root, cfg = _ctx()
+    except judge_mod.JudgeError:
+        return status_of(Path(p))
+    return status_of(root, cfg, Evidence.for_project(root))
 
 
 @server.tool()

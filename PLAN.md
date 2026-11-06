@@ -116,7 +116,7 @@ classifier instead: described half in a catalog, it reaches the same verdicts as
 alone. Red team: a candidate that weakens the catalog (drops an API) for later judgments is refused,
 even when `change` is `**`; it passed the judge before catalog files were made the judge's.
 
-### 4. The optimizer contract, and GEPA (done on the branch, 2026-11-06)
+### 4. The optimizer contract, and GEPA (done, #69)
 - Name the contract in `optimize.py`: `space` (from `change`: numbers, choices, text),
   `evaluate(candidate) -> score, diagnostics` (a probe; the diagnostics are failing tests and the
   scorer's per-case misses), and one `judge` of the best.
@@ -136,7 +136,7 @@ p = 0.008, two model calls). Red team: proposals outside the space, out of bound
 text cell are refused before anything is written. Seen live: with tools off, the model once wrote a
 tool call as its answer; it could only land in the cell's own file, where the tests refused it.
 
-### 5. A fresh start
+### 5. A fresh start (done on the branch, 2026-11-06)
 - `status` (CLI and MCP): which sources exist, which cells are on the base, what is missing, and
   the next step.
 - The `map` skill writes the new format, and reads `catalog-info.yaml` first.
@@ -144,6 +144,16 @@ tool call as its answer; it could only land in the cell's own file, where the te
 
 **Done when** an empty repository gets from `status` to a judged first cell by following the
 skill.
+
+Done: `status` (CLI and MCP) reports the sources, each cell on the trunk checked with the judge's own
+checks (so it names what the judge would refuse), cells drafted but not on the trunk, the
+measurements and verdicts, and the next step. A test walks an empty directory through each next step
+to a passing verdict. Live, a headless sonnet session given only the plugin and a one-file repository
+called `status`, drafted one cell, merged it (the operator's approval was in the prompt), rewrote
+the code and got a pass (about 95% faster, 18 turns). It skipped two steps the skill asks for:
+calling `status` again after drafting, and measuring before judging. The README's install line used
+a `--marketplace` flag the CLI does not have; it now reads `/plugin marketplace add
+OpenReplicant/Morphogen`, then `/plugin install morphogen@morphogen`.
 
 ### 6. First real runs
 - Entity resolution: one optimizer on `matcher` and one on `blocking`, with held-out F1 (the demo's

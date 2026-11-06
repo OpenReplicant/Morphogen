@@ -11,8 +11,9 @@ judge is the only thing that can say a change is better; you cannot edit how it 
 
 ## 1. Understand what you may change
 
-If the project has no `morphogen.yaml` with `cells`, there is nothing to judge yet: use the `map`
-skill to draft one with the operator first.
+Call `status` first: the cells on the trunk, which the judge can judge (and why not), their
+measurements and verdicts, and the next step. If no cell is ready, there is nothing to judge yet:
+use the `map` skill to draft one with the operator first.
 
 - `structure_check` and `structure_render`: the cells, the interfaces joining them, and which
   interfaces have tests (intent coverage). Errors (gaps, cycles) come before anything else.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "morphogen",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Improve a system at any scope, from one cell to the whole, behind a judge the agent cannot edit: structure, judge, evidence and optimizers over MCP.",
   "author": {
     "name": "OpenReplicant"

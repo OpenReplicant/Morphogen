@@ -9,6 +9,7 @@ docs/restart/LESSONS.md.
   judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
   `otel`), `project.py` (the cell format: morphogen.yaml's cells and interfaces, default deny),
   `backstage.py` (catalog-info.yaml files as a source of cells),
+  `status.py` (where a project stands and the next step),
   `documents.py` (morphogen.yaml's settings, and the target spec a cell compiles to), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
   `morphogen` (improve a cell) and `map` (draft morphogen.yaml's cells).
@@ -36,13 +37,14 @@ claude plugin validate . && claude plugin validate .claude-plugin/plugin.json
 ```
 
 ## Install the judge from GitHub, not from this folder
-`/plugin install morphogen --marketplace OpenReplicant/Morphogen` installs a copy of main. A
+`/plugin marketplace add OpenReplicant/Morphogen`, then `/plugin install morphogen@morphogen`,
+installs a copy of main. A
 local clone added as a marketplace runs the plugin from the clone, so the judge would be the
 candidate. Never edit the installed plugin's directory.
 
 ## State (2026-11-05)
-- On main through phase 3 of PLAN.md (#65-#68). Phase 4, the optimizer contract, text cells and
-  GEPA, is on the branch.
+- On main through phase 4 of PLAN.md (#65-#69). Phase 5, `status` and the fresh start (plugin
+  0.8.0), is on the branch.
 - Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
   judge or runner changes. A/A: 0 of 12 in the cell format.
 - CI is advisory: `judge` runs the candidate's tests (required on main); `base-tests` runs main's
