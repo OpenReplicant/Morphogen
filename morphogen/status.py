@@ -53,7 +53,7 @@ def _cell_report(proj: Project, name: str, local: dict) -> dict:
     out: dict = {"cell": name, "source": proj.sources.get(name, FILE)}
     if not c.run:
         out["ready"] = False
-        out["role"] = "container" if any(x.in_ == name for x in proj.doc.cells.values()) else "part"
+        out["role"] = "container" if any(proj.resolve(x.in_ or "") == name for x in proj.doc.cells.values()) else "part"
         return out
     problems, notes = [], []
     lc = next((v for k, v in (local.get("cells") or {}).items() if proj.resolve(k) == name), None)
@@ -62,15 +62,19 @@ def _cell_report(proj: Project, name: str, local: dict) -> dict:
         judge_mod._check_spec(spec)
     except (ProjectError, judge_mod.JudgeError) as e:
         problems.append(str(e))
+    has_children = any(proj.resolve(x.in_ or "") == name for x in proj.doc.cells.values() if x.in_)
     if not proj.changes[name]:
-        problems.append("no `change`: nothing in it may change, so no candidate can pass")
+        if has_children:
+            notes.append("no `change` of its own: it is the system its cells' changes are guarded against")
+        else:
+            problems.append("no `change`: nothing in it may change, so no candidate can pass")
     if not c.better:
         notes.append("no `better`: judged on wall_seconds lower")
     if not proj.structure().tests_for(sorted(proj.structure().scope(name))) and not c.tests:
         notes.append("no tests: nothing says what it must keep doing")
     if c.score and not (lc or {}).get("private"):
         notes.append(f"its scorer has no held-out answers named in {LOCAL} (cells: {{{name}: {{private: PATH}}}})")
-    out.update(ready=not problems, change=list(c.change) if isinstance(c.change, list) else [c.change])
+    out.update(ready=not problems, change=list(c.change) if isinstance(c.change, list) else [c.change] if c.change else [])
     if problems:
         out["problems"] = problems
     if notes:
@@ -197,7 +201,7 @@ def _next(out: dict, work: Project | None, base: Project | None, catalogs: list[
     unmeasured = [c for c in ready if not c["measurements"] and not c["verdicts"]]
     if unmeasured:
         return f"measure cell:{unmeasured[0]['cell']} on `{trunk}`, to see where it stands"
-    unjudged = [c for c in ready if not c["verdicts"]]
+    unjudged = [c for c in ready if not c["verdicts"] and c.get("change")]
     if unjudged:
         c = unjudged[0]
         return (f"improve cell:{c['cell']}: change it on a branch within its `change`, commit, and judge it; "

@@ -43,8 +43,8 @@ local clone added as a marketplace runs the plugin from the clone, so the judge 
 candidate. Never edit the installed plugin's directory.
 
 ## State (2026-11-05)
-- On main through phase 4 of PLAN.md (#65-#69). Phase 5, `status` and the fresh start (plugin
-  0.8.0), is on the branch.
+- On main through phase 5 of PLAN.md (#65-#70). Phase 6 has started: `inputs` outside the
+  repository, and the entity-resolution demo judged in Podman (see its README).
 - Tests pass (1 container-only case skipped without Podman); run the whole suite in Podman after
   judge or runner changes. A/A: 0 of 12 in the cell format.
 - CI: `judge` runs the candidate's tests (required on main); `base-tests` runs main's red team

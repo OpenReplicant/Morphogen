@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import ast
 import datetime
+import hashlib
 import json
 import math
 import random
@@ -215,9 +216,9 @@ def _forbidden(changed: list[str], rel: Path) -> list[str]:
     return bad
 
 
-def _timed(cmd: str, cwd: Path, cfg: dict, env: dict, timeout: int) -> tuple[dict, str]:
+def _timed(cmd: str, cwd: Path, cfg: dict, env: dict, timeout: int, inputs: str | None = None) -> tuple[dict, str]:
     full = f"python3 -c {shlex.quote(WRAPPER)} {shlex.quote(cmd)}"
-    r = run(full, cwd, cfg, env=env, timeout=timeout, private=True)
+    r = run(full, cwd, cfg, env=env, timeout=timeout, private=True, inputs=inputs)
     lines = r.out.rstrip("\n").splitlines()
     if r.rc != 0 or not lines or not lines[-1].startswith(MARK):
         raise JudgeError(f"the measuring wrapper failed (exit {r.rc}): {r.err.strip()[-400:]}")
@@ -285,10 +286,64 @@ def _score(spec: dict, scorer_dir: Path, env: dict, output: str, timeout: int) -
     return scores
 
 
+def _outside(path: str, repo: Path) -> Path | None:
+    """`path` resolved (relative: to the root), or None when it lies inside the repository."""
+    p = Path(path).expanduser()
+    p = (p if p.is_absolute() else repo / p).resolve()
+    try:
+        p.relative_to(repo.resolve())
+    except ValueError:
+        return p
+    return None
+
+
+def inputs_digest(path: Path) -> str:
+    """A digest of every file under `path`, by relative name and content."""
+    h = hashlib.sha256()
+    for f in sorted(x for x in Path(path).rglob("*") if x.is_file()):
+        h.update(str(f.relative_to(path)).encode() + b"\0")
+        h.update(hashlib.sha256(f.read_bytes()).digest())
+    return h.hexdigest()
+
+
+def _prepare_inputs(spec: dict, repo: Path) -> None:
+    """Resolve the inputs directory (morphogen.local.yaml's `inputs`): data every run may read and none
+    may change, kept outside the repository, as for data whose licence keeps it out of git. It must
+    lie outside the repository (a commit could carry its own copy) and must neither be nor hold nor
+    lie inside the scorer's held-out answers. Its digest is taken now and checked after the runs."""
+    m = spec.get("measure") or {}
+    if not m.get("inputs"):
+        return
+    p = _outside(m["inputs"], repo)
+    if p is None:
+        raise JudgeError("inputs must be outside the repository: a candidate's commit could carry its own copy")
+    if not p.is_dir():
+        raise JudgeError(f"inputs {m['inputs']!r} is not a directory")
+    sc = m.get("score") or {}
+    for key in ("private", "search"):
+        if not sc.get(key):
+            continue
+        q = Path(sc[key]).expanduser()
+        q = (q if q.is_absolute() else repo / q).resolve()
+        if p == q or p in q.parents or q in p.parents:
+            raise JudgeError(f"inputs {str(p)!r} overlap the scorer's held-out answers ({key}): every run reads the "
+                             "inputs, so the answers must be elsewhere")
+    m["inputs"] = str(p)
+    m["inputs_digest"] = inputs_digest(p)
+
+
+def _check_inputs(spec: dict) -> None:
+    m = spec.get("measure") or {}
+    if m.get("inputs") and inputs_digest(Path(m["inputs"])) != m["inputs_digest"]:
+        raise JudgeError(f"the inputs ({m['inputs']}) changed during the runs: no verdict rests on them. Restore "
+                         "them, and run in a container (sandbox: podman), where they are mounted read-only")
+
+
 def _prepare_score(spec: dict, repo: Path, phase: str = "verdict") -> None:
-    """Resolve the scorer's private directory; it must exist and lie outside the repository, where no
+    """Resolve the inputs and the scorer's private directory; it must exist and lie outside the repository, where no
     commit (and so no candidate) can hold or read a copy. Probes score against `search` when it is
     given, so the optimizer's search never sees the held-out answers a verdict is scored on."""
+    _prepare_inputs(spec, repo)
     sc = (spec.get("measure") or {}).get("score") or {}
     if phase == "probe" and sc.get("search"):
         sc["private"] = sc["search"]
@@ -493,6 +548,7 @@ def _rounds(spec: dict, dirs: list[Path], cfg: dict, timeout: int, scorer_dir: P
         while undecided and len(r["samples"][0].get("wall_seconds", [])) < max_repeats:
             one(r["samples"])
             r["comparisons"], undecided = _compare(metrics_spec, *r["samples"])
+    _check_inputs(spec)
     return r
 
 
@@ -520,7 +576,7 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
         if otel:
             env.update(otel.env(run_id))
         start = time.time()
-        stats, out = _timed(spec["measure"]["run"], dirs[i], cfg, env, timeout)
+        stats, out = _timed(spec["measure"]["run"], dirs[i], cfg, env, timeout, spec["measure"].get("inputs"))
         results[i] = _result(out)
         env.update({"MORPHOGEN_RUN_START": f"{start:.6f}", "MORPHOGEN_RUN_END": f"{time.time():.6f}"})
         for k in JUDGE_METRICS:
@@ -775,6 +831,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         "seeds": {"bench": seeds},
         "interface": interface,
         **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
+        **({"inputs": spec["measure"]["inputs_digest"]} if spec["measure"].get("inputs") else {}),
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
         "trust": trust,
@@ -913,6 +970,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "labels": {str(k): str(v) for k, v in (labels or {}).items()},
         "interface": interface,
         **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
+        **({"inputs": spec["measure"]["inputs_digest"]} if spec["measure"].get("inputs") else {}),
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
         "trust": trust,

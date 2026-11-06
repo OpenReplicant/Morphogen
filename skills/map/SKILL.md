@@ -51,7 +51,8 @@ JSON or TOML; `in lo..hi` or `in [a, b]` bounds it. Optional on a cell: `same_as
 (outputs must match the base on generated inputs), `observe: otel`, `guard: false` or `guard:
 {max_regression: 0.05}` (how much the enclosing system may get worse when this cell is judged).
 Held-out answers never go in the repository: the operator names them in the uncommitted
-`morphogen.local.yaml` (`cells: {classify: {private: /path}}`).
+`morphogen.local.yaml` (`cells: {classify: {private: /path}}`). Data the workload reads but that
+cannot be committed goes there too, as `inputs: /path` (read from `MORPHOGEN_INPUTS`).
 
 ## 2. Start with `status`, and smaller than you think
 

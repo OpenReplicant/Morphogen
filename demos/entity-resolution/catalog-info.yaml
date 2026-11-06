@@ -67,7 +67,7 @@ metadata:
   name: resolver
   description: The Resolver protocol (er/base.py)
   annotations:
-    morphogen.dev/tests: python -m unittest discover -s tests
+    morphogen.dev/tests: python -m unittest discover -s tests -t .
 spec:
   type: python
   lifecycle: experimental
@@ -78,16 +78,22 @@ apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: candidates
+  annotations:
+    morphogen.dev/tests: python -m unittest -q tests.test_contracts.Candidates
 spec: {type: python, lifecycle: experimental, owner: operator, definition: Base.candidates}
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: pair-score
+  annotations:
+    morphogen.dev/tests: python -m unittest -q tests.test_contracts.PairScore
 spec: {type: python, lifecycle: experimental, owner: operator, definition: Base.pair}
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: similarity
+  annotations:
+    morphogen.dev/tests: python -m unittest -q tests.test_contracts.Similarity
 spec: {type: python, lifecycle: experimental, owner: operator, definition: er.backends}
