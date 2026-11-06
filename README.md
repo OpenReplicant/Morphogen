@@ -165,7 +165,25 @@ uv run morphogen ui                              # http://127.0.0.1:8765/
 ```
 
 Python 3.11 or later and [uv](https://docs.astral.sh/uv/); pydantic, PyYAML and the MCP SDK (all
-MIT, pinned in `uv.lock`); Optuna 5.0.0 as an optional extra (`uv sync --extra optuna`).
+MIT, pinned in `uv.lock`); Optuna 5.0.0 and GEPA 0.1.4 (both MIT) as optional extras
+(`uv sync --extra optuna --extra gepa`).
+
+### Optimizers and text cells
+
+`tune` hands every optimizer the same three things: a **space** (each bounded setting, as a number
+or a choice, and each whole file a cell's `change` names by path, as text), an **evaluate** it does
+not hold (a probe, whose diagnostics are failing tests, wrong cases and metrics), and **one verdict**
+on its best. Each optimizer sees only the kinds it takes: the numeric ones settings, GEPA text. A
+proposal outside the space, out of bounds, or not text for a text cell is refused before anything is
+written.
+
+```
+uv run morphogen tune cell:reply --optimizer gepa --trials 8
+```
+
+GEPA reflects on each probe's diagnostics with a model, by default `claude -p --model sonnet` on
+your own Claude subscription (no API key), run with no tools and no MCP servers in an empty
+directory, so it can only answer. The cell's `description` is its objective.
 
 ## What is built
 
@@ -176,7 +194,7 @@ MIT, pinned in `uv.lock`); Optuna 5.0.0 as an optional extra (`uv sync --extra o
 | Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules; `probe` gives practice feedback; `measure` records a baseline |
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
 | Observers | `observers.py` | `command` (a command after each run) and `otel` (an OpenTelemetry receiver in the judge that adds up each run's telemetry, such as Claude Code's cost, tokens and tool results) |
-| Optimizers | `optimize.py` | a catalog of grid, random and hill-climb search, an Optuna adapter, and the `selector`, whose bandit policy (primed by earlier verdicts) chooses which proposes next; GEPA and a model-based policy are planned; packages add more through the `morphogen.optimizers` entry point. `tune` probes each proposal and judges the best |
+| Optimizers | `optimize.py` | a catalog behind one contract: grid, random, hill-climb (with `restarts`) and simulated annealing (`anneal`), built in; Optuna and GEPA adapters (optional extras); and the `selector`, whose bandit policy (primed by earlier verdicts, with a stagnation signal) chooses which proposes next. A model-based policy is planned; packages add more through the `morphogen.optimizers` entry point. `tune` checks, writes and probes each proposal and judges the best |
 | Interfaces | `cli.py`, `mcp_server.py`, `ui.py` | the command line, an MCP server with 11 tools, and a local read-only web UI |
 | Plugin | `.claude-plugin/`, `skills/`, `agents/` | the Claude Code plugin around the MCP server |
 
@@ -250,7 +268,7 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
 | System | What it does | Relation to Morphogen | What Morphogen adds around it |
 |---|---|---|---|
 | **Optuna** (MIT) | samples parameter values (TPE and others), ask/tell | fills the optimizer slot (built) | which settings may change and within what bounds; probes as its objective; a verdict on held-out cases |
-| **GEPA** (MIT) | evolves text with model reflection and a Pareto front; you supply the evaluator | will fill the optimizer slot for text cells (planned) | an evaluator out of the candidate's reach (GEPA leaves isolation to you); held-out answers; neighbours' contracts and the system guard |
+| **GEPA** (MIT) | evolves text with model reflection and a Pareto front; you supply the evaluator | fills the optimizer slot for text cells (built) | an evaluator out of the candidate's reach (GEPA leaves isolation to you); held-out answers; neighbours' contracts and the system guard |
 | **OpenEvolve / AlphaEvolve** (Apache-2.0) | evolves marked code blocks against an evaluator | could fill the optimizer slot for code cells | OpenEvolve imports your evaluator into its own process with no sandbox; Morphogen scores outside the candidate, in a container |
 | **AFlow, ADAS, Darwin Gödel Machine** | search over agent workflows, or rewrite whole agents, against benchmarks | research systems with the same aim at the whole-agent scope | the Darwin Gödel Machine reports objective hacking; Morphogen's red team and outside measurement exist for exactly that |
 | **Kayenta, Argo Rollouts** | judge a canary against a baseline on metrics collected outside the code, after deploy | precedents for the judge, one stage later | judging before merge, on candidates from an agent that may cheat, with held-out cases and bounded settings |
@@ -277,8 +295,10 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
 - **Backstage is read from files only:** `$text`, `$json` and `$yaml` substitutions, URL targets and
   the catalog's REST API are not read; relations Morphogen has no use for (owners, lifecycles) are
   ignored.
-- **Not built yet:** the GEPA adapter, a `status` command for fresh starts, the observed structure
-  from traces, and the online stage ([PLAN.md](PLAN.md)).
+- **GEPA's model calls are not sandboxed by the judge:** they run as you, through the Claude CLI,
+  with tools switched off. What the model proposes can only be written into the cell's own files.
+- **Not built yet:** a `status` command for fresh starts, the observed structure from traces, and
+  the online stage ([PLAN.md](PLAN.md)).
 
 ## Layout
 

@@ -8,13 +8,14 @@ held-out cases with full statistics.
 The catalog (`CATALOG`, `catalog()`):
 
 - built in, standard library only: `grid`, `random`, `hillclimb`;
-- adapters to other libraries, available when installed: `optuna` (TPE sampling);
+- built in, for leaving a local optimum: `hillclimb` with `restarts`, and `anneal`;
+- adapters to other libraries, available when installed: `optuna` (TPE sampling) and `gepa`
+  (reflective evolution of text cells, with a model proposing: by default `claude -p --model sonnet`);
 - meta: `selector`, an optimizer whose policy chooses which member proposes next. Its first policy
   is `bandit` (UCB1 on probe gains, optionally primed by earlier verdicts): a fast, system-1 rule.
   A policy is anything with `choose(members, history) -> name`;
-- planned, not built: `gepa` (reflective evolution of anything interpretable as text, using model
-  calls; GEPA's own adapters are modular) and an `llm` selector policy, which could also search
-  for and add optimizers to the catalog.
+- planned, not built: an `llm` selector policy, which could also search for and add optimizers to
+  the catalog.
 
 Other packages add optimizers through the `morphogen.optimizers` entry-point group: each entry
 point names a factory returning an object with `name` and `propose`.
@@ -46,16 +47,23 @@ class Trial:
     gain: float | None           # the probe's median gain on the primary metric; None if refused or failed
     optimizer: str = ""          # which optimizer (or selector member) proposed it
     probe: dict = field(repr=False, default_factory=dict)
+    refused: str = ""            # why tune refused the proposal before writing anything
+    diagnostics: dict = field(repr=False, default_factory=dict)   # what the probe found, for learners
 
 
 class Optimizer(Protocol):
+    """The contract. An optimizer is given a space: each entry is a setting's declaration plus
+    `_kind` (number, choice or text), `_value` (its value on the base) and, for text, `file`. It sees
+    only the kinds it declares in `kinds` (default number and choice). It never holds the evaluator:
+    each proposal is written, committed and probed by tune, and only the best goes to the judge.
+
+    Two styles:
+    - ask/tell: `propose(space, history) -> values | None`, and optionally `observe(trial)`;
+    - driver: `search(space, evaluate, budget)`, calling `evaluate(values) -> Trial` itself (GEPA).
+    """
     name: str
 
-    def propose(self, space: dict[str, dict], history: list[Trial]) -> dict[str, Any] | None:
-        """The next values to try (a subset of the space's parameters), or None when done. Each entry
-        of `space` is the parameter's declaration plus `_value`, its value on the base."""
-
-    # Optional: def observe(self, trial: Trial) -> None, called with each proposal's result.
+    def propose(self, space: dict[str, dict], history: list[Trial]) -> dict[str, Any] | None: ...
 
 
 def _is_int(p: dict) -> bool:
@@ -110,14 +118,28 @@ class RandomSearch:
         return out
 
 
+def _random_point(space, rng: random.Random) -> dict:
+    out = {}
+    for n, p in sorted(space.items()):
+        if p.get("choices") is not None:
+            out[n] = rng.choice(list(p["choices"]))
+        else:
+            lo, hi = p["range"]
+            out[n] = rng.randint(int(lo), int(hi)) if _is_int(p) else rng.uniform(lo, hi)
+    return out
+
+
 class HillClimb:
     """Coordinate ascent from the base's values: step each parameter up and down, move to the best
     improvement, and halve the step when nothing improves, until the step is below `min_step` of the
-    range. Choices step to the neighbouring choice."""
+    range. Choices step to the neighbouring choice. With `restarts`, a climb that has converged
+    starts again from a random point, so one low peak near the base does not end the search."""
     name = "hillclimb"
 
-    def __init__(self, start_step: float = 0.25, min_step: float = 0.02, max_trials: int = 60):
+    def __init__(self, start_step: float = 0.25, min_step: float = 0.02, max_trials: int = 60,
+                 restarts: int = 0, seed: int | None = None):
         self.frac, self.min_frac, self.max_trials = start_step, min_step, max_trials
+        self.start_frac, self.restarts, self.rng, self.restarting = start_step, restarts, random.Random(seed), None
         self.center: dict | None = None
         self.best = 0.0           # probe gains are relative to the base, so the base scores 0
         self.queue: list[dict] = []
@@ -145,7 +167,13 @@ class HillClimb:
         return out
 
     def _settle(self, history):
-        """Move to the best result of the last batch, or shrink the step."""
+        """Move to the best result of the last batch, or shrink the step. After a restart, the new
+        start is the centre whatever it scored: the climb is local from there."""
+        if self.restarting is not None:
+            got = [t.gain for t in history if t.values == self.restarting and t.gain is not None]
+            self.center, self.best = {**self.center, **self.restarting}, (got[-1] if got else -math.inf)
+            self.restarting = None
+            return
         results = [t for t in history if t.gain is not None and t.values in self.batch]
         top = max(results, key=lambda t: t.gain, default=None)
         if top is not None and top.gain > self.best:
@@ -160,14 +188,64 @@ class HillClimb:
             if self.batch:
                 self._settle(history)
                 self.batch = []
-            if self.frac < self.min_frac or self.made >= self.max_trials:
+            if self.made >= self.max_trials:
                 return None
+            if self.frac < self.min_frac:
+                if self.restarts <= 0:
+                    return None
+                self.restarts -= 1
+                self.frac = self.start_frac
+                self.restarting = _random_point(space, self.rng)
+                self.queue, self.batch = [self.restarting], [self.restarting]
+                break
             self.queue = self._neighbours(space)
             self.batch = list(self.queue)
             if not self.queue:
                 return None
         self.made += 1
         return self.queue.pop(0)
+
+
+class Anneal:
+    """Simulated annealing from the base's values: propose a random neighbour (one setting moved by a
+    step that shrinks with the temperature, or a random choice); accept it if it is better, or if it
+    is worse with probability exp(delta / temperature), so early on the search can leave a low peak.
+    The temperature falls geometrically from `t0` to `t1` over `trials`."""
+    name = "anneal"
+
+    def __init__(self, trials: int = 40, seed: int | None = None, t0: float = 0.3, t1: float = 0.005):
+        self.trials, self.rng, self.made = trials, random.Random(seed), 0
+        self.t0, self.cool = t0, (t1 / t0) ** (1 / max(1, trials - 1))
+        self.current: dict | None = None
+        self.gain, self.last = 0.0, None   # the base scores 0
+
+    def _temp(self) -> float:
+        return self.t0 * self.cool ** self.made
+
+    def propose(self, space, history):
+        if self.made >= self.trials:
+            return None
+        if self.current is None:
+            self.current = {n: p["_value"] for n, p in space.items()}
+        n = self.rng.choice(sorted(space))
+        p, v = space[n], self.current[n]
+        if p.get("choices") is not None:
+            new = self.rng.choice([c for c in p["choices"] if c != v] or list(p["choices"]))
+        else:
+            lo, hi = p["range"]
+            width = (hi - lo) * max(self._temp() / self.t0, 0.05)
+            new = min(hi, max(lo, v + self.rng.gauss(0, width)))
+            new = round(new) if _is_int(p) else new
+        self.made += 1
+        self.last = {**self.current, n: new}
+        return self.last
+
+    def observe(self, trial: Trial) -> None:
+        if trial.values != self.last or trial.gain is None:
+            return
+        delta, temp = trial.gain - self.gain, max(self._temp(), 1e-9)
+        if delta >= 0 or self.rng.random() < math.exp(delta / temp):
+            self.current, self.gain = dict(trial.values), trial.gain
 
 
 class OptunaTPE:
@@ -206,6 +284,80 @@ class OptunaTPE:
             self.study.tell(t, trial.gain)
 
 
+# --- GEPA: reflective evolution of text cells, with a model proposing each new text
+
+
+class ClaudeCLI:
+    """A language model for GEPA's reflection, through the Claude Code CLI on the operator's own
+    subscription: `claude -p --model sonnet`, with no tools, no MCP servers and no saved session, run
+    in an empty directory, so the proposer can only answer, never act. `prompt -> text`."""
+
+    SYSTEM = ("You improve one piece of text in someone's system. You have no tools and cannot run or read "
+              "anything: answer from the prompt alone, and put the complete new text in one fenced code block.")
+
+    def __init__(self, model: str = "sonnet", timeout: int = 300, command: str = "claude"):
+        self.model, self.timeout, self.command = model, timeout, command
+        self.total_cost, self.calls = 0.0, 0
+
+    def __call__(self, prompt: str | list[dict]) -> str:
+        if not isinstance(prompt, str):
+            prompt = "\n\n".join(m.get("content", "") if isinstance(m.get("content"), str) else
+                                   json.dumps(m.get("content")) for m in prompt)
+        with tempfile.TemporaryDirectory(prefix="morphogen-lm-") as d:
+            r = subprocess.run([self.command, "-p", "--model", self.model, "--tools", "", "--strict-mcp-config",
+                                "--no-session-persistence", "--output-format", "json", "--system-prompt", self.SYSTEM],
+                               input=prompt, cwd=d, capture_output=True, text=True, timeout=self.timeout)
+        if r.returncode != 0:
+            raise RuntimeError(f"{self.command} -p failed ({r.returncode}): {(r.stderr or r.stdout)[-400:]}")
+        out = json.loads(r.stdout)
+        self.calls += 1
+        self.total_cost += float(out.get("total_cost_usd") or 0.0)
+        if out.get("is_error"):
+            raise RuntimeError(f"{self.command} -p: {out.get('result')}")
+        return out.get("result") or ""
+
+
+class Gepa:
+    """GEPA's optimize_anything over the cell's text (whole files its `change` names): a driver. GEPA
+    asks for each candidate's score through tune's evaluate (a probe it cannot see inside), and the
+    probe's diagnostics (failing tests, per-case misses, metrics) are its side information for
+    reflection. Only the best candidate goes to the judge, as for every optimizer.
+
+    The model GEPA reflects with is `lm` (any `prompt -> text` callable), by default ClaudeCLI with
+    sonnet. Optional: pip install morphogen[gepa] (gepa 0.1.4, MIT)."""
+    name = "gepa"
+    kinds = {"text"}
+
+    def __init__(self, trials: int = 20, seed: int | None = None, lm=None, model: str = "sonnet",
+                 objective: str | None = None):
+        self.trials, self.seed, self.lm = trials, seed or 0, lm or ClaudeCLI(model)
+        self.objective = objective
+
+    def search(self, space: dict[str, dict], evaluate, budget: int) -> None:
+        import gepa.optimize_anything as oa
+        seed = {k: v["_value"] for k, v in space.items()}
+
+        def evaluator(candidate):
+            t = evaluate(dict(candidate), self.name)
+            info = {"gain": t.gain, **t.diagnostics}
+            if t.refused:
+                info["refused"] = t.refused
+            return (t.gain if t.gain is not None else -1.0), info
+
+        files = ", ".join(v["file"] for v in space.values())
+        config = oa.GEPAConfig(
+            engine=oa.EngineConfig(max_metric_calls=min(self.trials, budget) + 1, seed=self.seed, parallel=False,
+                                   use_cloudpickle=False, raise_on_exception=True),
+            reflection=oa.ReflectionConfig(reflection_lm=self.lm),
+            tracking=oa.TrackingConfig())
+        oa.optimize_anything(
+            seed, evaluator=evaluator, config=config,
+            objective=self.objective or "Raise the score: the gain over the original on the cell's primary metric.",
+            background=(f"Each parameter is the whole text of one file ({files}). Every candidate is run and scored "
+                        "outside your view; its tests and its neighbours' contract tests must still pass, or it "
+                        "scores -1 with the reason given. Nothing else in the project can be changed."))
+
+
 # --- the selector: an optimizer that chooses optimizers
 
 
@@ -239,18 +391,35 @@ class Bandit:
 
 class Selector:
     """An optimizer whose policy chooses which member proposes next. Members that run out are dropped;
-    every member sees the whole history, so what one learns the others can use."""
+    every member sees the whole history, so what one learns the others can use. The stagnation
+    signal: after `patience` trials without a new best, the member used least recently proposes next,
+    whatever the policy prefers, so one member stuck on a local peak cannot hold the search."""
     name = "selector"
 
-    def __init__(self, members: list[Optimizer], policy=None, max_trials: int = 30):
+    def __init__(self, members: list[Optimizer], policy=None, max_trials: int = 30, patience: int = 0):
         self.members = {m.name: m for m in members}
         self.policy, self.max_trials, self.made = policy or Bandit(), max_trials, 0
-        self.proposer = ""
+        self.patience, self.proposer = patience, ""
+        self.kinds = set().union(*(_kinds(m) for m in members)) if members else {"number", "choice"}
+
+    def _stagnant(self, history) -> bool:
+        if not self.patience or len(history) < self.patience:
+            return False
+        gains = [t.gain if t.gain is not None else -math.inf for t in history]
+        best_before = max(gains[:-self.patience], default=0.0)
+        return max(gains[-self.patience:]) <= max(best_before, 0.0)
 
     def propose(self, space, history):
         while self.members and self.made < self.max_trials:
-            name = self.policy.choose(list(self.members), history)
-            values = self.members[name].propose(space, history)
+            names = list(self.members)
+            if self._stagnant(history) and len(names) > 1:
+                last = {t.optimizer: i for i, t in enumerate(history)}
+                name = min(names, key=lambda m: last.get(m, -1))
+            else:
+                name = self.policy.choose(names, history)
+            member = self.members[name]
+            mine = {k: v for k, v in space.items() if v.get("_kind", "number") in _kinds(member)}
+            values = member.propose(mine, history) if mine else None
             if values is None:
                 del self.members[name]
                 continue
@@ -293,9 +462,10 @@ class Entry:
     def available(self) -> bool:
         if self.factory is None:
             return False
-        if self.name == "optuna":
+        module = {"optuna": "optuna", "gepa": "gepa"}.get(self.name)
+        if module:
             try:
-                import optuna  # noqa: F401
+                __import__(module)
             except ImportError:
                 return False
         return True
@@ -306,10 +476,10 @@ class Entry:
 
 
 def _selector(trials: int = 20, seed: int | None = None, steps: int = 5, members: list[str] | None = None,
-              prior: dict | None = None, **_) -> Selector:
-    names = members or [n for n in ("hillclimb", "random", "grid", "optuna") if CATALOG[n].available()]
+              prior: dict | None = None, patience: int = 5, **_) -> Selector:
+    names = members or [n for n in ("hillclimb", "anneal", "random", "grid", "optuna") if CATALOG[n].available()]
     built = [make(n, trials=trials, seed=seed, steps=steps) for n in names]
-    return Selector(built, Bandit(prior=prior), max_trials=trials)
+    return Selector(built, Bandit(prior=prior), max_trials=trials, patience=patience)
 
 
 CATALOG: dict[str, Entry] = {
@@ -317,16 +487,23 @@ CATALOG: dict[str, Entry] = {
                   ["numeric", "choices"], [], lambda steps=5, **_: Grid(steps=steps)),
     "random": Entry("random", "built-in", "values drawn at random within ranges and choices",
                     ["numeric", "choices"], [], lambda trials=20, seed=None, **_: RandomSearch(trials, seed)),
-    "hillclimb": Entry("hillclimb", "built-in", "coordinate ascent from the base's values, halving the step",
-                       ["numeric", "choices"], [], lambda trials=20, **_: HillClimb(max_trials=trials)),
+    "hillclimb": Entry("hillclimb", "built-in", "coordinate ascent from the base's values, halving the step; "
+                       "`restarts` climbs again from random points", ["numeric", "choices"], [],
+                       lambda trials=20, restarts=0, seed=None, **_: HillClimb(max_trials=trials, restarts=restarts,
+                                                                               seed=seed)),
+    "anneal": Entry("anneal", "built-in", "simulated annealing from the base's values: accepts some worse "
+                    "moves early, so it can leave a low peak", ["numeric", "choices"], [],
+                    lambda trials=20, seed=None, **_: Anneal(trials, seed)),
     "optuna": Entry("optuna", "adapter", "Optuna's TPE sampler (ask/tell)", ["numeric", "choices"],
                     ["optuna (pip install morphogen[optuna])"],
                     lambda trials=20, seed=None, **_: OptunaTPE(trials, seed)),
     "selector": Entry("selector", "meta", "chooses which optimizer proposes next; policy: bandit "
-                      "(UCB1 on probe gains, primed by earlier verdicts)", ["any its members take"], [], _selector),
-    "gepa": Entry("gepa", "planned", "GEPA: reflective, Pareto-based evolution of anything interpretable as "
-                  "text (prompts, code, configurations), using model calls; its adapters are modular",
-                  ["text"], ["a text cell", "model calls", "the gepa package (MIT)"]),
+                      "(UCB1 on probe gains, primed by earlier verdicts); after `patience` trials without a new "
+                      "best, the least recently used member goes next", ["any its members take"], [], _selector),
+    "gepa": Entry("gepa", "adapter", "GEPA's optimize_anything: reflective, Pareto-based evolution of text "
+                  "(whole files a cell may change: prompts, skills, code), with probe diagnostics as feedback",
+                  ["text"], ["gepa (pip install morphogen[gepa])", "a model: the claude CLI (sonnet) by default"],
+                  lambda trials=20, seed=None, lm=None, model="sonnet", **_: Gepa(trials, seed, lm, model)),
     "selector-llm": Entry("selector-llm", "planned", "a selector policy that asks a model which optimizer to "
                           "try, with more context, and can search for and add catalog entries",
                           ["any"], ["model calls"]),
@@ -386,10 +563,13 @@ def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
 
 
+GLOB = re.compile(r"[*?\[]")
+
+
 def space_of(tree: Path, cell: str) -> dict[str, dict]:
-    """The agent-owned settings with a range or choices on the cells in `cell`'s scope, in the project
-    on `tree` (the base's checkout): what an optimizer may search. Each entry carries `_value` (its
-    value on the base) and `_dir` (where its file path starts, the root)."""
+    """What an optimizer may search in `cell`'s scope, in the project on `tree` (the base's checkout):
+    each bounded setting (`_kind` number or choice, named `cell.NAME`), and each whole file a cell's
+    `change` names by its path (`_kind` text, named `cell.path`), with its content on the base."""
     proj = judge_mod.structure_of(tree)
     s = proj.structure()
     out = {}
@@ -397,80 +577,181 @@ def space_of(tree: Path, cell: str) -> dict[str, dict]:
         for n, p in s.cells[c].parameters.items():
             d = p.model_dump(exclude_none=True)
             if d.get("owner") == "agent" and (d.get("range") is not None or d.get("choices") is not None):
-                out[f"{c}.{n}"] = {**d, "_value": judge_mod._read_parameter(tree, d), "_dir": tree}
+                kind = "choice" if d.get("choices") is not None else "number"
+                out[f"{c}.{n}"] = {**d, "_kind": kind, "_value": judge_mod._read_parameter(tree, d), "_dir": tree}
+        for e in proj.changes.get(c, []):
+            path = e["path"]
+            if "name" in e or "key" in e or GLOB.search(path) or path.endswith("/") or not (tree / path).is_file():
+                continue
+            try:
+                text = (tree / path).read_text()
+            except (OSError, UnicodeDecodeError):
+                continue
+            out[f"{c}.{path}"] = {"file": path, "_kind": "text", "_value": text, "_dir": tree}
+    return out
+
+
+def _kinds(optimizer) -> set[str]:
+    return set(getattr(optimizer, "kinds", None) or {"number", "choice"})
+
+
+def check_proposal(space: dict[str, dict], values: Any) -> str:
+    """Why `values` is not a proposal within `space`, or "" when it is."""
+    if not isinstance(values, dict) or not values:
+        return "a proposal is a non-empty mapping of names in the space to values"
+    for k, v in values.items():
+        p = space.get(k)
+        if p is None:
+            return f"{k!r} is outside the space it was given"
+        if p["_kind"] == "text":
+            if not isinstance(v, str):
+                return f"{k} is text, not {type(v).__name__}"
+        elif p["_kind"] == "choice":
+            if v not in p["choices"]:
+                return f"{k}={v!r} is not one of {p['choices']}"
+        elif isinstance(v, bool) or not isinstance(v, (int, float)) or not (p["range"][0] <= v <= p["range"][1]):
+            return f"{k}={v!r} is outside its range {list(p['range'])}"
+    return ""
+
+
+def diagnostics(pr: dict) -> dict:
+    """What a probe found, in a form a learning optimizer can read (GEPA's side information)."""
+    out: dict = {}
+    for k in ("forbidden", "parameter_violations"):
+        if pr.get(k):
+            out[k] = pr[k]
+    if pr.get("check") and not pr["check"].get("passed", True):
+        out["tests_failed"] = pr["check"].get("output", "")
+    bad = [x for x in pr.get("interfaces", []) if not x["passed"]]
+    if bad:
+        out["interface_tests_failed"] = [{"interface": x["interface"], "output": x.get("output", "")} for x in bad]
+    wrong = [c for c in pr.get("cases", []) if c["status"] != "ok"]
+    if wrong:
+        out["generated_cases_wrong"] = wrong[:5]
+    if pr.get("metrics"):
+        out["metrics"] = pr["metrics"]
+    if pr.get("timed_output_mismatches"):
+        out["timed_output_mismatches"] = pr["timed_output_mismatches"]
+    if pr.get("observer_error"):
+        out["observer_error"] = pr["observer_error"]
     return out
 
 
 def tune(root: Path, cfg: dict, target: str, optimizer: Optimizer, evidence, base: str = "main",
          rounds: int = 2, max_trials: int = 50, cell: str | None = None) -> dict:
-    """Search the cell's bounded settings with `optimizer`; probe every proposal; judge the best."""
+    """Search the cell's space with `optimizer`; probe every proposal; judge the best."""
     repo = judge_mod.repo_root(root)
     base_sha = judge_mod.resolve(repo, base)
     trials: list[Trial] = []
-    seen: set[str] = set()
+    known: dict[str, Trial] = {}
+    primary = ""
     with tempfile.TemporaryDirectory(prefix="morphogen-tune-") as tmp:
         work = Path(tmp) / "w"
         _git(repo, "worktree", "add", "--detach", "--quiet", str(work), base_sha)
         try:
             spec, rel, cell, _ = judge_mod._target(root, repo, cfg, target, work, cell)
             label, subject = cell, f"cell:{cell}"
-            space = space_of(work, cell)
+            full = space_of(work, cell)
+            kinds = _kinds(optimizer)
+            space = {k: v for k, v in full.items() if v["_kind"] in kinds}
             if not space:
-                raise judge_mod.JudgeError("no agent-owned settings with a range or choices to search")
+                raise judge_mod.JudgeError(f"nothing in {subject}'s `change` that {optimizer.name} can search "
+                                           f"(it takes {', '.join(sorted(kinds))})")
             metrics = judge_mod._check_spec(spec)
             primary = next(k for k, v in metrics.items() if v.get("primary"))
-            attempts = 0
-            while len(trials) < max_trials and attempts < 4 * max_trials:
-                attempts += 1
-                values = optimizer.propose({k: {x: y for x, y in v.items() if x != "_dir"} for k, v in space.items()},
-                                           trials)
-                if values is None:
-                    break
-                who = getattr(optimizer, "proposer", "") or optimizer.name
+            view = {k: {x: y for x, y in v.items() if x != "_dir"} for k, v in space.items()}
+            driver = hasattr(optimizer, "search")
+
+            def evaluate(values: dict, who: str | None = None) -> Trial:
+                """Write `values` on a branch from the base, probe it, and record the trial."""
+                who = who or getattr(optimizer, "proposer", "") or optimizer.name
+                why = check_proposal(space, values)
+                if why:
+                    trial = Trial(values if isinstance(values, dict) else {}, "", None, who, refused=why,
+                                  diagnostics={"refused": why})
+                    trials.append(trial)
+                    return trial
                 key = json.dumps(values, sort_keys=True)
-                if key in seen or all(values.get(k) == space[k]["_value"] for k in values):
-                    # Already tried, or the base's own values: report the known result, try nothing new.
-                    old = next((t for t in trials if t.values == values), None)
-                    known = Trial(values, old.branch if old else "", old.gain if old else 0.0, who)
-                    if hasattr(optimizer, "observe"):
-                        optimizer.observe(known)
-                    continue
-                seen.add(key)
+                if key in known:
+                    return Trial(values, known[key].branch, known[key].gain, who, diagnostics=known[key].diagnostics)
+                if all(values[k] == space[k]["_value"] for k in values):
+                    # The base's own values: no gain, nothing to try. A driver (GEPA) learns from the
+                    # feedback, so the base is probed once for it, outside the trial budget.
+                    if driver and "base" not in known:
+                        _git(work, "checkout", "--quiet", "--detach", base_sha)
+                        _git(work, "checkout", "--quiet", "-B", f"morphogen/tune/{_slug(label)}/base")
+                        _git(work, "commit", "--quiet", "--allow-empty", "-m", "the base, for feedback")
+                        pr = judge_mod.probe(repo, cfg, subject, f"morphogen/tune/{_slug(label)}/base", evidence,
+                                             base=base_sha, cases=1, rounds=rounds, cell=cell)
+                        known["base"] = Trial(values, "", 0.0, who, pr, diagnostics=diagnostics(pr))
+                    d = known["base"].diagnostics if "base" in known else {}
+                    return Trial(values, "", 0.0, who, diagnostics=d)
+                if len([x for x in trials if x.branch]) >= max_trials:
+                    return Trial(values, "", None, who, refused="the trial budget is spent")
                 _git(work, "checkout", "--quiet", "--detach", base_sha)
                 for k, v in values.items():
-                    write_parameter(space[k]["_dir"], space[k], v)
-                branch = f"morphogen/tune/{label}/{optimizer.name}-{len(trials) + 1}"
+                    if space[k]["_kind"] == "text":
+                        (work / space[k]["file"]).write_text(v)
+                    else:
+                        write_parameter(space[k]["_dir"], space[k], v)
+                branch = f"morphogen/tune/{_slug(label)}/{optimizer.name}-{len(trials) + 1}"
                 _git(work, "checkout", "--quiet", "-B", branch)
-                _git(work, "commit", "--quiet", "-am", f"tune {label} ({who}): " +
-                     ", ".join(f"{k}={v!r}" for k, v in values.items()))
+                _git(work, "commit", "--quiet", "--allow-empty", "-am", f"tune {label} ({who}): " +
+                     ", ".join(f"{k}={_short(v)}" for k, v in values.items()))
                 pr = judge_mod.probe(repo, cfg, subject, branch, evidence, base=base_sha, cases=1, rounds=rounds,
                                      cell=cell)
                 gain = None if pr.get("forbidden") or pr.get("parameter_violations") or \
                     not (pr.get("check") or {"passed": True}).get("passed", True) or \
                     not all(x["passed"] for x in pr.get("interfaces", [])) \
                     else (pr.get("metrics") or {}).get(primary, {}).get("gain")
-                trial = Trial(values, branch, gain, who, pr)
+                trial = Trial(values, branch, gain, who, pr, diagnostics=diagnostics(pr))
                 trials.append(trial)
-                if hasattr(optimizer, "observe"):
-                    optimizer.observe(trial)
+                known[key] = trial
+                return trial
+
+            if hasattr(optimizer, "search"):
+                if getattr(optimizer, "objective", "") is None and spec.get("description"):
+                    optimizer.objective = spec["description"]   # the operator's statement of intent
+                optimizer.search(view, evaluate, max_trials)
+            else:
+                attempts = 0
+                while len([x for x in trials if x.branch]) < max_trials and attempts < 4 * max_trials:
+                    attempts += 1
+                    values = optimizer.propose(view, trials)
+                    if values is None:
+                        break
+                    trial = evaluate(values)
+                    if hasattr(optimizer, "observe"):
+                        optimizer.observe(trial)
         finally:
             subprocess.run(["git", "worktree", "remove", "--force", str(work)], cwd=repo, capture_output=True)
-    scored = [t for t in trials if t.gain is not None]
+    scored = [t for t in trials if t.gain is not None and t.branch]
     best = max(scored, key=lambda t: t.gain, default=None)
     out = {"target": subject, "optimizer": optimizer.name, "primary": primary,
-           "trials": [{"values": t.values, "branch": t.branch, "probe_gain": t.gain, "optimizer": t.optimizer}
+           "trials": [{"values": {k: _short(v) for k, v in t.values.items()}, "branch": t.branch,
+                       "probe_gain": t.gain, "optimizer": t.optimizer, **({"refused": t.refused} if t.refused else {})}
                       for t in trials]}
     if best is None or best.gain <= 0:
         out["verdict"] = None
         out["note"] = "no proposal improved on the base in probes; nothing sent to the judge"
         return out
-    labels = {"optimizer": optimizer.name, "values": json.dumps(best.values, sort_keys=True)}
+    labels = {"optimizer": optimizer.name, "values": json.dumps({k: _short(v) for k, v in best.values.items()},
+                                                                sort_keys=True)}
     if best.optimizer and best.optimizer != optimizer.name:
         labels["member"] = best.optimizer
     v = judge_mod.judge(repo, cfg, subject, base_sha, best.branch, evidence, labels, cell=cell)
     out.update({"best": {"values": best.values, "branch": best.branch, "probe_gain": best.gain,
                          "optimizer": best.optimizer}, "verdict": v["verdict"], "judge": v})
     return out
+
+
+def _slug(s: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", s).strip("-") or "cell"
+
+
+def _short(v: Any, n: int = 80) -> Any:
+    """Values as recorded: text is cut to `n` characters, everything else is kept."""
+    return v if not isinstance(v, str) or len(v) <= n else v[:n] + f"... ({len(v)} characters)"
 
 
 # Backwards-compatible name: the built-in optimizers by name.
