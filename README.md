@@ -130,11 +130,19 @@ Backstage server, following `Location` targets inside the project:
 | Backstage | Becomes |
 |---|---|
 | `Component`, `System`, `Domain` | a cell, named by its ref: `component:default/classify` |
+| `AiResource` (Backstage 1.51: skills and rules) | a cell, `in` its `system`; a skill named in `change` is a text cell |
+| `owner`, `lifecycle` | the cell's `owner` (who approves its candidates) and `lifecycle` (what `autonomy` keys on) |
 | `subcomponentOf`, `system`, `domain`, `subdomainOf` | `in` |
 | `API` | an interface, named by its ref; its tests from the annotation `morphogen.dev/tests` |
 | `providesApis`, `consumesApis` | `provides`, `consumes` |
 | `dependsOn` | consumes it: provided by that cell, or external (a `Resource`) |
 | annotations `morphogen.dev/change`, `keep`, `run`, `better`, `tests`, `score`, `dir`, `observe` | the cell's fields (one entry per line for lists) |
+
+**Who may merge a pass.** The judge never merges. Each verdict carries a `gate`: the cell's owner
+and lifecycle, and the decision, `review` (a person decides) unless the operator's `autonomy` in
+`morphogen.yaml` lets an agent merge a pass for that lifecycle (`autonomy: {experimental: merge}`).
+The gate is read from the base, so a candidate that relabels its cell `experimental`, or grants
+itself autonomy, is refused like any other edit to the rules.
 
 `morphogen.yaml` then adds what the catalog does not hold, under the same names (`component:classify`
 is enough), and may add cells below Backstage's grain with `in: component:classify`. Where the two
@@ -309,11 +317,12 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
 - **The evidence log** refuses edits through SQLite triggers; whoever can write the file can drop
   them, and the hash chain then shows the edit.
 - **Backstage is read from files only:** `$text`, `$json` and `$yaml` substitutions, URL targets and
-  the catalog's REST API are not read; relations Morphogen has no use for (owners, lifecycles) are
-  ignored.
+  the catalog's REST API are not read. A live catalog could change during a search, so if it is
+  ever read, it will be as a snapshot whose hash the evidence records; verdicts would flow back to
+  it, not rules from it.
 - **GEPA's model calls are not sandboxed by the judge:** they run as you, through the Claude CLI,
   with tools switched off. What the model proposes can only be written into the cell's own files.
-- **Not built yet:** a `status` command for fresh starts, the observed structure from traces, and
+- **Not built yet:** the observed structure from traces, verdicts published back to Backstage, and
   the online stage ([PLAN.md](PLAN.md)).
 
 ## Layout

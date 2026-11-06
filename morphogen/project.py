@@ -88,6 +88,8 @@ class CellDoc(_Strict):
     timeout: int | None = None
     simulates: str | None = None
     requires: list[str] = []
+    owner: str | None = None        # who approves its candidates (a Backstage group or user ref)
+    lifecycle: str | None = None    # experimental, production, ...: what `autonomy` keys on
 
 
 class InterfaceDoc(_Strict):
@@ -98,6 +100,7 @@ class InterfaceDoc(_Strict):
 class ProjectDoc(BaseModel):
     model_config = ConfigDict(extra="allow")   # trunk, sandbox, budget: morphogen.yaml's settings
     backstage: str | list[str] = []
+    autonomy: dict[str, Literal["merge", "review"]] = {}   # lifecycle -> what a pass allows (default review)
     cells: dict[str, CellDoc] = {}
     interfaces: dict[str, str | list[str] | InterfaceDoc] = {}
 
@@ -390,6 +393,14 @@ class Project:
         except bs.CatalogError:
             return name
         return ref if ref in self.doc.cells else name
+
+    def gate(self, name: str, passed: bool) -> dict:
+        """What a verdict on this cell allows, by this project's rules (the base's): `merge` when its
+        lifecycle is one `autonomy` lets an agent merge, `review` (a person decides, the owner when
+        one is named) otherwise, `none` without a pass. The judge never merges; this says who may."""
+        c = self.cell(name)
+        decision = (self.doc.autonomy.get(c.lifecycle or "", "review") if passed else "none")
+        return {"decision": decision, "lifecycle": c.lifecycle, "owner": c.owner}
 
     def structure(self) -> Structure:
         return self._structure

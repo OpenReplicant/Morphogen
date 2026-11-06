@@ -28,7 +28,7 @@ from typing import Any
 
 import yaml
 
-CELL_KINDS = ("component", "system", "domain")
+CELL_KINDS = ("component", "system", "domain", "airesource")
 ANNOTATION = "morphogen.dev/"
 CELL_FIELDS = ("change", "keep", "run", "better", "tests", "score", "dir", "observe")
 LISTED = ("change", "keep", "tests")
@@ -143,14 +143,19 @@ def to_cells(entities: list[dict]) -> tuple[dict, dict, dict[str, str]]:
         parent = {"component": spec.get("subcomponentOf") and parse_ref(spec["subcomponentOf"], "component", ns)
                    or spec.get("system") and parse_ref(spec["system"], "system", ns),
                    "system": spec.get("domain") and parse_ref(spec["domain"], "domain", ns),
-                   "domain": spec.get("subdomainOf") and parse_ref(spec["subdomainOf"], "domain", ns)}[kind]
+                   "domain": spec.get("subdomainOf") and parse_ref(spec["subdomainOf"], "domain", ns),
+                   "airesource": spec.get("system") and parse_ref(spec["system"], "system", ns)}[kind]
         if parent:
             cell["in"] = parent
         if md.get("description"):
             cell["description"] = str(md["description"])
+        if spec.get("owner"):
+            cell["owner"] = parse_ref(str(spec["owner"]), "group", ns)
+        if spec.get("lifecycle"):
+            cell["lifecycle"] = str(spec["lifecycle"])
         prov = [parse_ref(r, "api", ns) for r in spec.get("providesApis") or []]
         cons = [parse_ref(r, "api", ns) for r in spec.get("consumesApis") or []]
-        cons += [parse_ref(r, "component", ns) for r in spec.get("dependsOn") or []]
+        cons += [parse_ref(r, "airesource" if kind == "airesource" else "component", ns) for r in spec.get("dependsOn") or []]
         if prov:
             cell["provides"] = prov
         if cons:

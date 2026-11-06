@@ -87,6 +87,9 @@ class FreshStart(unittest.TestCase):
         self.assertEqual(r["verdict"], "pass", r)
         s = self.now()
         self.assertEqual((s["cells"][0]["verdicts"], s["cells"][0]["passes"]), (1, 1))
+        self.assertEqual(s["cells"][0]["last_verdict"]["verdict"], "pass")
+        self.assertEqual(s["cells"][0]["last_verdict"]["gate"], "review")
+        self.assertLess(s["cells"][0]["evidence_age_days"], 1)
         self.assertIn("every cell on the trunk has a verdict", s["next"])
 
     def test_problems_and_sources(self):

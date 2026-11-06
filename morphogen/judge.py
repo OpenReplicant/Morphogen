@@ -971,6 +971,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "interface": interface,
         **({"simulates": spec["simulates"]} if interface == "simulated" else {}),
         **({"inputs": spec["measure"]["inputs_digest"]} if spec["measure"].get("inputs") else {}),
+        "gate": a["proj"].gate(name, passed),
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
         "trust": trust,
@@ -978,6 +979,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
     })
     return {
         "verdict": verdict,
+        "gate": rec["gate"],
         "target": name,
         "base": base_sha,
         "candidate": cand_sha,

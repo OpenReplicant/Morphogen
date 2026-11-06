@@ -30,7 +30,8 @@ server = MCPServer(
         "may change (`change`); nothing else may change, and a candidate that touches anything else is "
         "refused. To improve a cell: measure it (target cell:NAME), change it on a branch, commit, then "
         "call judge(target, candidate); or call tune(target) to search its bounded settings. probe gives "
-        "practice feedback, never a verdict. Merging is the operator's decision."
+        "practice feedback, never a verdict. Merging is the operator's decision, unless a pass's `gate` "
+        "is `merge` (the operator's `autonomy` for the cell's lifecycle)."
     ),
 )
 
