@@ -108,8 +108,8 @@ def _history(evidence, name: str) -> dict:
         newest = r.get("at") or newest
     if newest:
         try:
-            then = datetime.datetime.strptime(newest, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
-            counts["evidence_age_days"] = round((datetime.datetime.now(datetime.timezone.utc) - then).total_seconds()
+            then = datetime.datetime.strptime(newest, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.UTC)
+            counts["evidence_age_days"] = round((datetime.datetime.now(datetime.UTC) - then).total_seconds()
                                                 / 86400, 1)
         except ValueError:
             pass
