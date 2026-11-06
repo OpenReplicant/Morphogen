@@ -136,7 +136,7 @@ p = 0.008, two model calls). Red team: proposals outside the space, out of bound
 text cell are refused before anything is written. Seen live: with tools off, the model once wrote a
 tool call as its answer; it could only land in the cell's own file, where the tests refused it.
 
-### 5. A fresh start (done on the branch, 2026-11-06)
+### 5. A fresh start (done, #70)
 - `status` (CLI and MCP): which sources exist, which cells are on the base, what is missing, and
   the next step.
 - The `map` skill writes the new format, and reads `catalog-info.yaml` first.
@@ -158,6 +158,12 @@ OpenReplicant/Morphogen`, then `/plugin install morphogen@morphogen`.
 ### 6. First real runs
 - Entity resolution: one optimizer on `matcher` and one on `blocking`, with held-out F1 (the demo's
   own "done when").
+
+  Started (2026-11-06): the judge takes `inputs` (data outside the repository, read-only to every
+  run, its digest in each verdict), so the demo is judged with its data uncommitted. Baseline in
+  Podman: held-out F1 0.422. First verdicts, on the `speed` cell: a 76% speedup refused for 133% more
+  memory, then the bounded version passed (69% faster, +2% memory, the same pairs). Next: tune
+  `matcher` and `blocking` on F1.
 - The mapper as a target: the map skill tuned by GEPA against gold maps of three or four small
   systems held outside the repository.
 - An agent target measured by the `otel` observer.

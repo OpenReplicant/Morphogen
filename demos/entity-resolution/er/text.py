@@ -3,6 +3,7 @@
 import re
 import unicodedata
 from difflib import SequenceMatcher
+from functools import lru_cache
 
 from . import settings
 
@@ -55,14 +56,23 @@ def words(toks: list[str]) -> set[str]:
     return {t for t in toks if t.isalpha() and len(t) >= 3 and t not in settings.STOPWORDS}
 
 
+@lru_cache(maxsize=4096)
+def _close(w: str, o: str, bar: float) -> bool:
+    """SequenceMatcher(None, w, o).ratio() >= bar, checking its cheaper upper bounds first (each is
+    at least ratio(), so the answer is the same) and remembering recent pairs (bounded: an unbounded cache cost 133% more memory)."""
+    m = SequenceMatcher(None, w, o)
+    return m.real_quick_ratio() >= bar and m.quick_ratio() >= bar and m.ratio() >= bar
+
+
 def _same_word(w: str, others: set[str]) -> bool:
     if w in others:
         return True
+    bar = settings.TYPO_RATIO
     for o in others:
         # the ratio is at most 2*min/(len sum): skip pairs that cannot reach the bar (same result, faster)
-        if 2 * min(len(w), len(o)) / (len(w) + len(o)) < settings.TYPO_RATIO:
+        if 2 * min(len(w), len(o)) / (len(w) + len(o)) < bar:
             continue
-        if SequenceMatcher(None, w, o).ratio() >= settings.TYPO_RATIO:
+        if _close(w, o, bar):
             return True
     return False
 
