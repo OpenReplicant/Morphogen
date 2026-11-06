@@ -143,18 +143,30 @@ described this way.
 ## In Claude Code
 
 ```
-/plugin install morphogen --marketplace OpenReplicant/Morphogen
+/plugin marketplace add OpenReplicant/Morphogen
+/plugin install morphogen@morphogen
 ```
 
 Install it from GitHub, not from a local clone: a clone added as a marketplace runs the plugin from
-the clone itself, so the judge would be the candidate you are changing. The plugin brings the MCP
-server, the `morphogen` skill (improve a cell honestly), the `map` skill (draft the cells), and the
-`worker` and `reviewer` agents.
+the clone itself, so the judge would be the candidate you are changing. To move to a newer version,
+`/plugin marketplace update morphogen`, then `/plugin update morphogen@morphogen`, and restart
+Claude Code. The plugin brings the MCP server, the `morphogen` skill (improve a cell honestly), the
+`map` skill (draft the cells), and the `worker` and `reviewer` agents. It needs
+[uv](https://docs.astral.sh/uv/) on the path.
+
+**Starting fresh.** In a git repository, ask Claude to start Morphogen here. The map skill calls
+`status`, which says where the project stands and the next step: no commit yet, no map, a map
+drafted but not on `main`, a cell the judge cannot judge yet (and why), a cell to measure, a cell
+to improve. It reads a Backstage `catalog-info.yaml` if there is one. The first map is one cell,
+the part you want improved, with what may change, how to run it, what "better" means and the tests
+it must keep passing; it reaches `main` by your pull request, and only then does a verdict rest on
+it.
 
 ## From the command line
 
 ```
 uv sync
+uv run morphogen status                         # where the project stands; the next step
 uv run morphogen structure check morphogen.yaml
 uv run morphogen measure cell:classify
 uv run morphogen judge cell:classify my-branch

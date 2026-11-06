@@ -11,7 +11,7 @@
       "name": "morphogen",
       "source": "./",
       "description": "Improve a system at any scope, from one cell to the whole, behind a judge the agent cannot edit.",
-      "version": "0.7.0"
+      "version": "0.8.0"
     }
   ]
 }

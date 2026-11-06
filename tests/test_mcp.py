@@ -19,7 +19,7 @@ TOOLS = {
     "tune": ["target", "optimizer", "steps", "trials", "rounds", "base", "seed"],
     "evidence_query": ["contains", "by", "limit"],
     "evidence_note": ["claim", "source", "trust", "supports", "challenges"], "evidence_verify": [],
-    "optimizers_list": [],
+    "optimizers_list": [], "status": [],
 }
 
 
@@ -61,6 +61,11 @@ class Tools(unittest.TestCase):
         self.assertIn("error", call("evidence_note", {"claim": "docs say so", "trust": "stated"}))
         rec = call("evidence_note", {"claim": "docs say so", "trust": "stated", "source": "https://example.org"})
         self.assertEqual((rec["by"], rec["trust"]), ("agent", "stated"))
+
+    def test_status_through_the_server(self):
+        s = call("status", {})
+        self.assertEqual([c["cell"] for c in s["cells"] if c.get("ready")], ["classify"])
+        self.assertIn("next", s)
 
     def test_errors_come_back_as_results(self):
         self.assertIn("error", call("structure_check", {"file": "missing.yaml"}))

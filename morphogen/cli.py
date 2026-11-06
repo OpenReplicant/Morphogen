@@ -1,5 +1,6 @@
 """Command line.
 
+    morphogen status
     morphogen structure check|scope|render FILE [CELL] [--observed FILE]
     morphogen measure TARGET [--ref main]
     morphogen judge TARGET CANDIDATE [--base main]
@@ -50,6 +51,18 @@ def _union(intended: Structure, observed: Structure) -> Structure:
     for iid, spec in observed.doc.model_dump(exclude_none=True).get("interfaces", {}).items():
         data.setdefault("interfaces", {}).setdefault(iid, spec)
     return Structure.from_dict(data, f"{intended.source} + {observed.source}")
+
+
+def cmd_status(a) -> int:
+    from .status import status
+    start = Path.cwd()
+    try:
+        root = _root()
+    except judge_mod.JudgeError:
+        _print(status(start))
+        return 0
+    _print(status(root, load_config(root), Evidence.for_project(root)))
+    return 0
 
 
 def cmd_structure(a) -> int:
@@ -136,6 +149,9 @@ def cmd_ui(a) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="morphogen", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
+
+    sa = sub.add_parser("status", help="where the project stands: sources, cells on the trunk, what is missing, the next step")
+    sa.set_defaults(fn=cmd_status)
 
     st = sub.add_parser("structure", help="check, scope or render a system structure")
     st.add_argument("action", choices=["check", "scope", "render"])

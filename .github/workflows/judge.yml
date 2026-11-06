@@ -1,9 +1,10 @@
 # Tests every pull request to main. Advisory for now (rebuild 7 is still settling):
 #
 # - `judge` runs the candidate's own tests and red team. It is the check main requires.
-# - `base-tests` runs the BASE's tests against the candidate, so a change cannot quietly weaken
-#   the tests that judge it. It is not required: when it fails, read why. An intended change to
-#   tested behaviour fails it until main carries the updated test.
+# - `base-tests` runs the BASE's red team against the candidate, so a change cannot quietly
+#   weaken the judge: every cheat the base refuses must still be refused. Only the red team, not
+#   the base's whole suite: an intended change to tested behaviour (a new tool, a new field) would
+#   fail the base's other tests every time, and a check that always fails is not read.
 #
 # To make the base's tests binding again, add `base-tests` to main's required checks.
 name: judge
@@ -55,5 +56,5 @@ jobs:
           git status --short
       - name: Install uv
         run: pipx install uv==0.11.32
-      - name: The base's tests and red team, against the candidate
-        run: uv run --extra optuna --extra gepa python -m unittest discover -s tests -t . -v
+      - name: The base's red team, against the candidate
+        run: uv run --extra optuna --extra gepa python -m unittest -v tests.test_redteam

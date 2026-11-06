@@ -53,17 +53,31 @@ JSON or TOML; `in lo..hi` or `in [a, b]` bounds it. Optional on a cell: `same_as
 Held-out answers never go in the repository: the operator names them in the uncommitted
 `morphogen.local.yaml` (`cells: {classify: {private: /path}}`).
 
-## 2. Start smaller than you think
+## 2. Start with `status`, and smaller than you think
+
+Call `status` first (or `morphogen status`). It reports the sources (`morphogen.yaml`,
+`morphogen.local.yaml`, Backstage catalog files), each cell on the trunk and whether the judge can
+judge it, cells drafted but not yet on the trunk, what is missing, and the next step. Follow the
+next step; call it again after each one.
 
 Morphogen needs cells, not a complete map. Measure first; map what earns attention.
 
-- **Nothing here yet** (no `morphogen.yaml`): ask the operator what to improve and how they would
-  know it improved. Draft one cell for that: `change` (as narrow as the job allows), `run`, `better`
-  and `tests`. Stop there unless several parts are in play.
+- **Not a git repository, or no commit on `main`:** the judge reads its rules from a commit. Ask the
+  operator before running `git init` or committing on their behalf.
+- **A Backstage catalog, no `morphogen.yaml`:** do not translate the catalog. Write
+  `morphogen.yaml` with `backstage: [catalog-info.yaml]` and add only what the catalog lacks, for
+  the one part to improve, under its ref (`component:classify` is enough).
+- **Nothing here yet:** ask the operator what to improve and how they would know it improved.
+  Draft one cell for that: `change` (as narrow as the job allows), `run`, `better` and `tests`.
+  Stop there unless several parts are in play.
 - **One cell exists:** add cells around it only when a change could break something outside it, or
   when the operator wants the system around it guarded (give the system a `run`).
 - **A whole system:** the cells you need are the ones a change will touch, their neighbours, and
   the system that contains them (it gets a `run` so the system guard has something to measure).
+
+Before handing over, `status` on your branch must show no problem for the cells you drafted: a
+cell with a `run` and no `change`, or a primary metric the judge cannot measure, is reported there
+exactly as the judge would refuse it.
 
 ## 3. Find what is there, cheapest first
 
@@ -72,7 +86,8 @@ command and its output, or "operator, interview"), and its trust (`stated` for w
 or person says, `inferred` for what you concluded). The map then points at evidence instead of
 asking to be believed.
 
-1. **Read descriptors the project already has.** Translate, do not copy wholesale:
+1. **Read descriptors the project already has,** Backstage's catalog first. Translate, do not copy
+   wholesale:
 
    | Found | Becomes |
    |---|---|
@@ -112,6 +127,8 @@ asking to be believed.
   report the intent coverage (tested interfaces out of all).
 - `structure_scope(cell)` for each cell you expect to be changed: is the boundary what you meant?
 - `structure_render` (Mermaid; with an observed structure, the comparison) for the operator.
+- `morphogen.local.yaml` (held-out paths, the sandbox) goes in `.gitignore`; `status` warns if it
+  is committed or not ignored.
 - Commit the draft on its own branch and give the operator: the rendered map, the coverage, the
   owners and ranges you chose and why, the open questions, and the evidence records behind the
   claims. It reaches main by pull request, by the operator's decision. Until then, `probe` can

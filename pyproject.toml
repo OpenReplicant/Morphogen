@@ -1,6 +1,6 @@
 [project]
 name = "morphogen"
-version = "0.7.0.dev0"
+version = "0.8.0"
 description = "The local morphological drive: improve a system at any scope, behind a judge the improver cannot edit."
 license = "Apache-2.0"
 requires-python = ">=3.11"
