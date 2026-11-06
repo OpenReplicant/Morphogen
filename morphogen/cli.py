@@ -76,7 +76,7 @@ def cmd_structure(a) -> int:
             raise KeyError("scope needs a cell")
         cells = sorted(s.scope(a.cell))
         _print({"cell": a.cell, "scope": cells, "touched": s.touched(cells), "boundary": s.boundary(cells),
-                "tests": s.tests_for(cells), "neighbours": s.neighbours(a.cell)})
+                "tests": s.tests_for_cell(a.cell), "neighbours": s.neighbours(a.cell)})
         return 0
     if a.observed:
         o = Structure.load(a.observed)

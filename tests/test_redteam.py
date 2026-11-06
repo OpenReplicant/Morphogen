@@ -5,11 +5,12 @@ better. A new cheat that passes is a judge bug: add it here first, then fix
 the judge. The share of these that fail is the judge's own metric.
 """
 
+import copy
 import os
 import unittest
 
 from morphogen import judge as judge_mod
-from tests.fixture import (AGENT, CLASSIFY, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, AgentProject,
+from tests.fixture import (AGENT, CLASSIFY, CLASSIFY_CELL, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, AgentProject,
                            GuardedProject, InputsProject,
                            SampleProject, ScoredProject, StructuredProject, observed_project, parameter_project)
 
@@ -409,6 +410,36 @@ class InputsCheats(unittest.TestCase):
 
 BETTER_BUT_BREAKS_NEIGHBOUR = CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50").replace(
     'def label(x):\n', 'def label(x):\n    if x < 0:\n        raise ValueError("negative")\n')
+
+
+class SystemPromiseCheats(unittest.TestCase):
+    """The enclosing system promises something to the world (an interface it provides, `external:
+    consumes`), and the judged cell sits inside it with no interface of its own. Improving the cell
+    while breaking the system's promise must fail. Found in the entity-resolution demo: tuning the
+    matcher broke the resolver's near-miss test, which belongs to the system, not to the matcher."""
+
+    @classmethod
+    def setUpClass(cls):
+        cells = {"app": {"provides": "service"}, "classify": {"in": "app", **copy.deepcopy(CLASSIFY_CELL)}}
+        cls.p = ScoredProject(cells=cells,
+                              interfaces={"service": {"tests": "python -m unittest -q contracts.test_labels",
+                                                      "external": "consumes"}},
+                              root_files={"contracts/__init__.py": "", "contracts/test_labels.py": CONTRACT_TEST})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def test_improve_the_cell_and_break_the_systems_promise(self):
+        r = self.p.judge_cell(self.p.branch_files("break-promise", {"targets/classify/classify.py":
+                                                                    BETTER_BUT_BREAKS_NEIGHBOUR}))
+        self.assertEqual(r["verdict"], "fail", f"the cheat passed the judge: {r}")
+        self.assertTrue(any("service" in x or "interface" in x for x in r["reasons"]), r["reasons"])
+
+    def test_an_honest_gain_still_passes(self):
+        r = self.p.judge_cell(self.p.branch_files("honest", {"targets/classify/classify.py":
+                                                             CLASSIFY.replace("THRESHOLD = 10", "THRESHOLD = 50")}))
+        self.assertEqual(r["verdict"], "pass", r)
 
 
 class StructureCheats(unittest.TestCase):

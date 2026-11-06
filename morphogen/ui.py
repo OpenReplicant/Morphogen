@@ -70,7 +70,7 @@ class Api:
         s = Structure.load(self._structure_file(file))
         cells = sorted(s.scope(cell))
         return {"cell": cell, "scope": cells, "touched": s.touched(cells), "boundary": s.boundary(cells),
-                "tests": s.tests_for(cells), "neighbours": s.neighbours(cell)}
+                "tests": s.tests_for_cell(cell), "neighbours": s.neighbours(cell)}
 
     def evidence(self, limit: int = 100, kind: str | None = None, by: str | None = None,
                  contains: str | None = None) -> list[dict]:
