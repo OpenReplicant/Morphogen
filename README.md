@@ -112,8 +112,11 @@ interfaces:
   `simulates`, `requires`, `description`.
 - **Held-out answers** never go in the repository. The operator names them in an uncommitted
   `morphogen.local.yaml`: `cells: {classify: {private: /outside/the/repo, search: /another}}`.
-  Verdicts score against `private`; probes, and so every optimizer, against `search`. The local file
-  may also set `sandbox` and `budget`.
+  Verdicts score against `private`; probes, and so every optimizer, against `search`. Data the
+  workload reads but that cannot be committed (a licence, its size) is named the same way as
+  `inputs`: every run reads it from `MORPHOGEN_INPUTS`, a container mounts it read-only, and the
+  judge refuses a verdict if it changed during the runs. It must lie outside the repository and
+  away from the answers. The local file may also set `sandbox` and `budget`.
 
 Name a cell to judge as `cell:classify`, `classify`, or its `dir`. A project with nothing yet starts
 with one cell; the `map` skill drafts it with you.
@@ -253,7 +256,8 @@ between trials (#45).
   and never decide a verdict.
 - **Answers are out of reach.** The base's scorer runs in its own process; only it is told where
   the held-out answers are (`MORPHOGEN_PRIVATE`); probes score against `search` instead; a
-  candidate whose files name the private directory is refused.
+  candidate whose files name the private directory is refused. Inputs kept outside the repository
+  are read-only to every run, and their digest is in every verdict.
 - **Settings stay in bounds.** A setting moved outside its range or choices, a kept setting
   changed, or a setting made unreadable refuses the candidate. Every verdict records each
   setting's base and candidate values.
@@ -266,7 +270,7 @@ between trials (#45).
   candidate's tree visible, nothing kept between runs, resource limits. A cell can require them.
 - **Everything is evidence:** every verdict and probe is logged as `trust: measured, by: judge`.
 
-The red team holds the known ways to cheat: 49 of them (`tests/test_redteam.py` and the default-deny
+The red team holds the known ways to cheat: 53 of them (`tests/test_redteam.py` and the default-deny
 cheats in `tests/test_cells.py`), from patching the timer to reading the held-out answers, rigging
 the bench, widening `change` in the candidate's own `morphogen.yaml`, breaking a neighbour's
 contract, winning locally while the system gets slower, or switching telemetry off to look free.
