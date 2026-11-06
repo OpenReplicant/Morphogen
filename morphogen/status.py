@@ -8,6 +8,7 @@ is ready. The next step follows the map skill's order: one cell first, measured,
 
 from __future__ import annotations
 
+import datetime
 import subprocess
 from pathlib import Path
 
@@ -50,7 +51,10 @@ def _load(tree: Path) -> tuple[Project | None, str | None]:
 
 def _cell_report(proj: Project, name: str, local: dict) -> dict:
     c = proj.doc.cells[name]
-    out: dict = {"cell": name, "source": proj.sources.get(name, FILE)}
+    out: dict = {"cell": name, "source": proj.sources.get(name, FILE),
+                 **{k: v for k, v in (("owner", c.owner), ("lifecycle", c.lifecycle)) if v}}
+    if c.lifecycle and proj.doc.autonomy.get(c.lifecycle) == "merge":
+        out["autonomy"] = "merge: an agent may merge a pass"
     if not c.run:
         out["ready"] = False
         out["role"] = "container" if any(proj.resolve(x.in_ or "") == name for x in proj.doc.cells.values()) else "part"
@@ -83,7 +87,10 @@ def _cell_report(proj: Project, name: str, local: dict) -> dict:
 
 
 def _history(evidence, name: str) -> dict:
-    counts = {"measurements": 0, "verdicts": 0, "passes": 0}
+    """The judge's measurements and verdicts on a cell, the last verdict, and how old the newest
+    evidence is (days), so stale evidence shows."""
+    counts: dict = {"measurements": 0, "verdicts": 0, "passes": 0}
+    newest = None
     for r in evidence.dump():
         subj = r.get("subject") or {}
         if r.get("by") != "judge" or name not in (subj.get("system"), (subj.get("path") or "").removeprefix("cell:")):
@@ -93,6 +100,19 @@ def _history(evidence, name: str) -> dict:
         elif r.get("kind") == "verdict":
             counts["verdicts"] += 1
             counts["passes"] += r.get("verdict") == "pass"
+            counts["last_verdict"] = {"verdict": r.get("verdict"), "at": r.get("at"),
+                                      "candidate": (r.get("refs") or {}).get("candidate"),
+                                      **({"gate": r["gate"]["decision"]} if r.get("gate") else {})}
+        else:
+            continue
+        newest = r.get("at") or newest
+    if newest:
+        try:
+            then = datetime.datetime.strptime(newest, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.UTC)
+            counts["evidence_age_days"] = round((datetime.datetime.now(datetime.UTC) - then).total_seconds()
+                                                / 86400, 1)
+        except ValueError:
+            pass
     return counts
 
 

@@ -46,11 +46,16 @@ Rules that keep trials honest:
   refused.
 - A probe is practice, never a verdict. Only a `pass` verdict can be proposed for merging.
 
-## 4. Propose, do not merge
+## 4. Propose; merge only where the gate says so
 
-After a `pass`, ask the `reviewer` agent for an independent review of the diff, then tell the
-operator: the branch, the verdict's gain and interval, the parameter values, and the reviewer's
-concerns. Merging is the operator's decision.
+After a `pass`, ask the `reviewer` agent for an independent review of the diff. Then read the
+verdict's `gate`:
+
+- `review` (the default): tell the operator, or the cell's `owner` when one is named, the branch,
+  the verdict's gain and interval, the parameter values, and the reviewer's concerns. Merging is
+  their decision.
+- `merge`: the operator's `autonomy` lets an agent merge a pass for this cell's lifecycle. Merge
+  it only if the reviewer found nothing that should stop it, and report what you merged.
 
 Record what you learned that the judge did not measure with `evidence_note` (`stated` with a
 source, or `inferred`). `evidence_verify` checks that the log has not been edited.

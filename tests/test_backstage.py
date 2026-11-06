@@ -23,10 +23,10 @@ def entity(kind, name, spec=None, annotations=None):
     return {"apiVersion": "backstage.io/v1alpha1", "kind": kind, "metadata": md, "spec": spec or {}}
 
 
-def catalog(provides=True, consumes=True, change=None):
+def catalog(provides=True, consumes=True, change=None, lifecycle="production"):
     """The classifier's system as the catalog sees it: `app` holds `classify`, which provides the
     labels API that `report` consumes; the API's contract test is an annotation."""
-    classify = {"type": "service", "lifecycle": "production", "owner": "team-a", "system": "app"}
+    classify = {"type": "service", "lifecycle": lifecycle, "owner": "team-a", "system": "app"}
     if provides:
         classify["providesApis"] = ["labels"]
     report = {"type": "service", "lifecycle": "production", "owner": "team-a", "system": "app"}
@@ -221,6 +221,72 @@ class CatalogCheats(unittest.TestCase):
             self.assertIn("change", str(e.exception))
         finally:
             q.close()
+
+
+class Autonomy(unittest.TestCase):
+    """`autonomy` in morphogen.yaml maps a cell's lifecycle to what a pass allows: `merge` (an agent may
+    merge it) or `review` (a person decides; the default). The gate is the base's: owner and lifecycle
+    come from the base's catalog, the policy from the base's morphogen.yaml."""
+
+    def project(self, lifecycle):
+        q = CatalogProject(catalog_text=catalog(lifecycle=lifecycle))
+        doc = q.doc()
+        doc["autonomy"] = {"experimental": "merge"}
+        q.on_main(doc=doc)
+        self.addCleanup(q.close)
+        return q
+
+    def test_the_gate_follows_the_lifecycle(self):
+        for lifecycle, want in (("experimental", "merge"), ("production", "review")):
+            q = self.project(lifecycle)
+            r = q.judge(q.branch("better", {"classify.py": BETTER}), target="cell:classify")
+            self.assertEqual(r["verdict"], "pass", r)
+            self.assertEqual(r["gate"], {"decision": want, "lifecycle": lifecycle, "owner": "group:default/team-a"})
+            self.assertEqual(q.evidence.query(limit=1)[0]["gate"], r["gate"])
+
+    def test_no_gate_without_a_pass(self):
+        q = self.project("experimental")
+        r = q.judge(q.branch("same", {"classify.py": CLASSIFY + "# touched\n"}), target="cell:classify")
+        self.assertEqual(r["verdict"], "fail")
+        self.assertEqual(r["gate"]["decision"], "none")
+
+    def test_relabel_the_cell_experimental_to_be_merged(self):
+        # An honest gain, and the candidate also marks its cell experimental in the catalog so that
+        # its pass would be merged without review. The catalog is the judge's: refused.
+        q = self.project("production")
+        r = q.judge(q.branch("relabel", {"catalog-info.yaml": catalog(lifecycle="experimental"),
+                                         "targets/classify/classify.py": BETTER}, root=True), target="cell:classify")
+        self.assertEqual(r["verdict"], "fail", r)
+        self.assertNotEqual(r["gate"]["decision"], "merge")
+
+    def test_grant_autonomy_in_the_candidates_own_file(self):
+        q = self.project("production")
+        doc = q.doc()
+        doc["autonomy"] = {"production": "merge"}
+        r = q.judge(q.branch("grant", {"morphogen.yaml": q.dump(doc),
+                                       "targets/classify/classify.py": BETTER}, root=True), target="cell:classify")
+        self.assertEqual(r["verdict"], "fail", r)
+        self.assertNotEqual(r["gate"]["decision"], "merge")
+
+
+class AiResources(unittest.TestCase):
+    """Backstage's AiResource kind (skills and rules, v1.51.0): a skill becomes a cell, nested in its
+    system, owned and with a lifecycle, so an agent's skills can be judged as text cells."""
+
+    def test_a_skill_is_a_cell(self):
+        docs = [entity("System", "agents", {"owner": "ai-team"}),
+                entity("AiResource", "map", {"type": "skill", "lifecycle": "experimental", "owner": "ai-team",
+                                             "system": "agents", "dependsOn": ["airesource:default/house-style"]},
+                       {"morphogen.dev/change": "skills/map/SKILL.md", "backstage.io/source-location":
+                        "url:https://example.org/skills/map/SKILL.md"}),
+                entity("AiResource", "house-style", {"type": "rule", "lifecycle": "production", "owner": "ai-team",
+                                                     "category": "quality", "rationale": "one voice"})]
+        cells, ifaces, _ = bs.to_cells([{**d, "_file": "catalog-info.yaml"} for d in docs])
+        m = cells["airesource:default/map"]
+        self.assertEqual((m["in"], m["change"], m["lifecycle"], m["owner"]),
+                         ("system:default/agents", ["skills/map/SKILL.md"], "experimental", "group:default/ai-team"))
+        self.assertEqual(m["consumes"], ["airesource:default/house-style"])
+        self.assertIn("airesource:default/house-style", cells)
 
 
 class DemoSplit(unittest.TestCase):
