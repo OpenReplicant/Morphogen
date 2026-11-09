@@ -142,6 +142,16 @@ def judge(target: str, candidate: str, base: str = "main", labels: dict | None =
 
 @server.tool()
 @_safe
+def judge_change(candidate: str, base: str = "main") -> dict:
+    """Judge a change that claims no improvement, by the base's rules: the cells it belongs to come from
+    the files it changes; it passes when every file belongs to a cell that may change it and the tests of
+    every interface those cells touch, and their own tests, pass on the candidate. Recorded as a verdict."""
+    root, cfg = _ctx()
+    return judge_mod.judge_change(root, cfg, base, candidate, Evidence.for_project(root))
+
+
+@server.tool()
+@_safe
 def tune(target: str, optimizer: str = "selector", steps: int = 5, trials: int = 20, rounds: int = 2,
          base: str = "main", seed: int | None = None) -> dict:
     """Search the cell's bounded settings (`change` entries with a range or choices): probe each proposal

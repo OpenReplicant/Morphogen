@@ -9,7 +9,10 @@ import copy
 import os
 import unittest
 
+import yaml
+
 from morphogen import judge as judge_mod
+from tests.fixture_cells import CellsProject, cells_doc
 from tests.fixture import (AGENT, CLASSIFY, CLASSIFY_CELL, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, AgentProject,
                            GuardedProject, InputsProject,
                            SampleProject, ScoredProject, StructuredProject, observed_project, parameter_project)
@@ -594,6 +597,58 @@ class CellParameterCheats(unittest.TestCase):
         r = self.p.judge_path(self.p.branch_files("limit-6", {"targets/classify/classify.py": better}))
         self.assertEqual(r["verdict"], "fail", f"cheat 'limit-6' passed the judge: {r}")
         self.assertTrue(any("classify.LIMIT" in x for x in r["reasons"]), r["reasons"])
+
+
+
+BROKEN_LABEL = CLASSIFY.replace('return "high" if x >= THRESHOLD else "low"', 'return "medium"') + "LIMIT = 100\n"
+WEAK_CONTRACT = "import unittest\n\n\nclass LabelsContract(unittest.TestCase):\n    def test_nothing(self):\n        pass\n"
+
+
+class ChangeCheats(unittest.TestCase):
+    """A change that claims no improvement (judge_change) is held to the base's rules: each file it changes
+    must belong to a cell that may change it, and the tests of every interface those cells touch must
+    pass. Each cheat breaks the classifier's labels and tries to get past that anyway."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = CellsProject(code=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.p.close()
+
+    def assertRefused(self, name, files, links=None, why=None):
+        r = self.p.change(self.p.branch(name, files, links=links))
+        self.assertEqual(r["verdict"], "fail", f"cheat {name!r} passed the change gate: {r}")
+        if why:
+            self.assertTrue(any(why in x for x in r["reasons"]), r["reasons"])
+        return r
+
+    def test_break_what_a_consumer_relies_on(self):
+        self.assertRefused("broken", {"classify/classify.py": BROKEN_LABEL}, why="interface labels")
+
+    def test_weaken_the_interface_test_too(self):
+        self.assertRefused("weak-contract", {"classify/classify.py": BROKEN_LABEL, "contracts/test_labels.py": WEAK_CONTRACT},
+                           why="contracts/test_labels.py")
+
+    def test_drop_the_interface_tests_from_the_rules(self):
+        doc = cells_doc(code=True)
+        doc["interfaces"]["labels"] = []
+        self.assertRefused("no-tests", {"classify/classify.py": BROKEN_LABEL, "morphogen.yaml": yaml.safe_dump(doc)},
+                           why="morphogen.yaml")
+
+    def test_shadow_unittest_at_the_root(self):
+        self.assertRefused("fake-unittest", {"classify/classify.py": BROKEN_LABEL, "unittest.py": FAKE_UNITTEST},
+                           why="unittest.py")
+
+    def test_change_a_kept_setting(self):
+        self.assertRefused("limit", {"classify/classify.py": CLASSIFY + "LIMIT = 5\n"}, why="LIMIT")
+
+    def test_replace_the_cell_with_a_link(self):
+        self.assertRefused("link", {}, links={"classify/classify.py": "/etc/hostname"}, why="link")
+
+    def test_a_file_no_cell_owns(self):
+        self.assertRefused("readme", {"README.md": "harmless?\n"}, why="no cell may change it")
 
 
 if __name__ == "__main__":

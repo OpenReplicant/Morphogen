@@ -104,6 +104,10 @@ class CellsProject:
     def judge(self, candidate, target=None):
         return judge_mod.judge(self.repo, self.cfg, target or self.target, "main", candidate, self.evidence)
 
+    def change(self, candidate):
+        """A change that claims no improvement, judged by the base's rules (judge.judge_change)."""
+        return judge_mod.judge_change(self.repo, self.cfg, "main", candidate, self.evidence)
+
     def close(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
         shutil.rmtree(self.private_dir, ignore_errors=True)
