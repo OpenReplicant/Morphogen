@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLS = {
     "structure_check": ["file"], "structure_scope": ["cell", "file"], "structure_render": ["file"],
     "measure": ["target", "ref"], "probe": ["target", "candidate", "base", "cases", "rounds"],
-    "judge": ["target", "candidate", "base", "labels"],
+    "judge": ["target", "candidate", "base", "labels"], "judge_change": ["candidate", "base"],
     "tune": ["target", "optimizer", "steps", "trials", "rounds", "base", "seed"],
     "evidence_query": ["contains", "by", "limit"],
     "evidence_note": ["claim", "source", "trust", "supports", "challenges"], "evidence_verify": [],

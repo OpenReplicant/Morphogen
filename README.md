@@ -121,6 +121,15 @@ interfaces:
 Name a cell to judge as `cell:classify`, `classify`, or its `dir`. A project with nothing yet starts
 with one cell; the `map` skill drafts it with you.
 
+**A change that claims no improvement** (a fix, a new part, a refactor) has no measure to judge, but
+it can still break what other parts rely on. `morphogen change BRANCH` judges it by the base's rules
+without a target: the cells it belongs to come from the files it changes (each cell whose `change`
+covers a file), every changed file must belong to one (default deny, so the rules and files no cell
+claims never change), and the cells' own tests, with the tests of every interface their scopes touch
+or their enclosing systems' boundaries cross, must pass on the candidate. That is the blast radius,
+computed from the structure rather than declared. The result is recorded as a verdict on the change,
+with the same `gate` (who may merge it) as any other.
+
 ### Backstage above it
 
 A project that already keeps Backstage's `catalog-info.yaml` files need not restate its structure.
@@ -181,6 +190,7 @@ uv run morphogen status                         # where the project stands; the 
 uv run morphogen structure check morphogen.yaml
 uv run morphogen measure cell:classify
 uv run morphogen judge cell:classify my-branch
+uv run morphogen change my-branch                # a change that claims no improvement: its cells' tests
 uv run morphogen tune cell:classify              # the selector chooses optimizers
 uv run morphogen optimizers                      # the catalog
 uv run morphogen evidence --verify
@@ -214,7 +224,7 @@ directory, so it can only answer. The cell's `description` is its objective.
 |---|---|---|
 | Cell format | `project.py`, `backstage.py` | parses `morphogen.yaml` and any Backstage catalog files it names; compiles them to a structure and, per cell, the spec the judge runs; default deny |
 | Structure | `structure.py`, `render.py` | cells in a containment tree, interfaces as hyperedges with their tests; checks, scopes, computed boundaries, intent coverage, intended against observed, a Mermaid diagram |
-| Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules; `probe` gives practice feedback; `measure` records a baseline |
+| Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules; `judge_change` holds a change with no measure to the tests of what it touches; `probe` gives practice feedback; `measure` records a baseline |
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
 | Observers | `observers.py` | `command` (a command after each run) and `otel` (an OpenTelemetry receiver in the judge that adds up each run's telemetry, such as Claude Code's cost, tokens and tool results) |
 | Optimizers | `optimize.py` | a catalog behind one contract: grid, random, hill-climb (with `restarts`) and simulated annealing (`anneal`), built in; Optuna and GEPA adapters (optional extras); and the `selector`, whose bandit policy (primed by earlier verdicts, with a stagnation signal) chooses which proposes next. A model-based policy is planned; packages add more through the `morphogen.optimizers` entry point. `tune` checks, writes and probes each proposal and judges the best |

@@ -103,6 +103,13 @@ def cmd_judge(a) -> int:
     return 0 if r["verdict"] == "pass" else 1
 
 
+def cmd_change(a) -> int:
+    root = _root()
+    r = judge_mod.judge_change(root, load_config(root), a.base, a.candidate, Evidence.for_project(root))
+    _print(r)
+    return 0 if r["verdict"] == "pass" else 1
+
+
 def cmd_tune(a) -> int:
     root = _root()
     cfg = load_config(root)
@@ -170,6 +177,12 @@ def main(argv: list[str] | None = None) -> int:
     ju.add_argument("candidate")
     ju.add_argument("--base", default="main")
     ju.set_defaults(fn=cmd_judge)
+
+    ch = sub.add_parser("change", help="judge a change that claims no improvement: the cells its files belong "
+                        "to, default deny, and the tests of every interface those cells touch, by the base's rules")
+    ch.add_argument("candidate")
+    ch.add_argument("--base", default="main")
+    ch.set_defaults(fn=cmd_change)
 
     tu = sub.add_parser("tune", help="search a cell's bounded settings; judge the best")
     tu.add_argument("target")

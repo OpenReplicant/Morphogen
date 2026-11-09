@@ -55,7 +55,7 @@ import yaml
 
 from .observers import ObserverError, OtelObserver
 from .runner import capabilities, missing, run, sandbox_mode
-from .project import FILE as PROJECT_FILE, Project, ProjectError
+from .project import FILE as PROJECT_FILE, Project, ProjectError, _listed
 
 INTERFACES = ("direct", "simulated")
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
@@ -842,6 +842,87 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
     if interface == "simulated":
         out["note"] = SIMULATED_NOTE.format(what=spec["simulates"])
     return out
+
+
+def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, timeout: int = 300) -> dict:
+    """Judge a change that claims no improvement, by the base's rules: no target and no measure. The cells
+    it belongs to come from the files it changes (each cell whose `change` covers the file). It passes when
+    every changed file belongs to a cell that may change it (default deny: the rules, and files no cell
+    claims, never change), it shadows no standard module, its settings stay within their bounds, and the
+    tests of every interface those cells' scopes touch (and those at the boundary of each system around
+    them), with the cells' own tests, pass on the candidate. Recorded as a verdict on the change."""
+    repo = repo_root(root)
+    base_sha, cand_sha = resolve(repo, base), resolve(repo, candidate)
+    with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
+        proj = structure_of(btree)
+        changed = _changed(repo, base_sha, cand_sha)
+        if not changed:
+            raise JudgeError(f"{candidate} changes nothing against {base}")
+        files = {p: sorted(c for c in proj.doc.cells if proj.allows([c], p)) for p in changed}
+        cells = sorted({c for owners in files.values() for c in owners})
+        denied = proj.check_changes(cells, changed, btree, ctree)
+        denied = [d if files.get(d.split(":", 1)[0]) else f"{d.split(':', 1)[0]}: no cell may change it"
+                  if d.endswith("outside what the cell may change") else d for d in denied]
+        forbidden = _forbidden(changed, Path("."))
+        gates = [_cell_gate(proj, c, ctree, btree) for c in cells]
+        parameters, violations = _parameters([x for g in gates for x in g["parameters"]])
+        refused = bool(denied or forbidden or violations)
+        tests, seen = [], set()
+        for c in cells:
+            for t in _listed(proj.cell(c).tests):
+                if ("cell", c, t) not in seen:
+                    seen.add(("cell", c, t))
+                    tests.append({"cell": c, "test": t, "dir": ctree / proj.dir(c)})
+        for g in gates:
+            for t in g["tests"]:
+                if t["test"] not in seen:
+                    seen.add(t["test"])
+                    tests.append({**t, "dir": ctree})
+        results = []
+        if not refused:
+            for t in tests:
+                r = run(t["test"], t["dir"], cfg, timeout=timeout, private=True)
+                results.append({k: v for k, v in t.items() if k != "dir"} | {"passed": r.rc == 0}
+                               | ({} if r.rc == 0 else {"output": _clip(r.err or r.out, 600)}))
+    passed = not refused and all(x["passed"] for x in results)
+    reasons = []
+    if denied:
+        reasons.append("changes what no cell in its scope may change: " + "; ".join(denied))
+    if forbidden:
+        reasons.append(f"changes files that shadow standard modules or customise Python: {', '.join(forbidden)}")
+    reasons += violations
+    for x in results:
+        if not x["passed"]:
+            what = f"interface {x['interface']}" if x.get("interface") else f"cell {x['cell']}"
+            reasons.append(f"{what}: its test fails on the candidate ({x['test']})")
+    decisions = [proj.gate(c, passed)["decision"] for c in cells] or ["none"]
+    gate = {"decision": "none" if not passed else "merge" if all(d == "merge" for d in decisions) else "review",
+            "cells": {c: proj.gate(c, passed) for c in cells}}
+    verdict = "pass" if passed else "fail"
+    rec = evidence.append({
+        "claim": f"change {cand_sha[:12]} against {base_sha[:12]} keeps what {', '.join(cells) or 'nothing'} "
+                 f"promise{'s' if len(cells) == 1 else ''}" if passed else
+                 f"change {cand_sha[:12]} against {base_sha[:12]} is refused",
+        "kind": "verdict",
+        "verdict": verdict,
+        "subject": {"system": ", ".join(cells), "path": "change"},
+        "method": "base's morphogen.yaml; cells from the changed files; default deny; forbidden-file check; "
+                  "declared settings; each cell's tests and the tests of every interface its scope touches "
+                  "or its enclosing systems' boundaries cross, from the base, run on the candidate",
+        "outcome": {"files": files, "denied": denied, "forbidden": forbidden, "parameter_violations": violations,
+                    "tests": results},
+        "refs": {"base": base_sha, "candidate": cand_sha},
+        "parameters": parameters,
+        "cells": cells,
+        "gate": gate,
+        "sandbox": sandbox_mode(cfg),
+        "runner": capabilities(cfg),
+        "trust": "measured",
+        "by": "judge",
+    })
+    return {"verdict": verdict, "gate": gate, "base": base_sha, "candidate": cand_sha, "cells": cells,
+            "files": files, "tests": results, "parameters": parameters, "reasons": reasons,
+            "sandbox": rec["sandbox"], "evidence_seq": rec["seq"]}
 
 
 def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
