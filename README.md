@@ -125,6 +125,13 @@ interfaces:
   services, reached by name on a network with nothing else on it. The verdict records the names, one
   digest of the values and each image's id, never a value; a run that prints a secret value is refused
   (`morphogen/serve.py`).
+- **Model calls are counted at the gateway, not by the candidate.** `gateway: {container: my-gateway,
+  port: 8080, meter: /outside/meter}` names the operator's running gateway and a meter. Each run's
+  network then holds the gateway too (as `gateway`, at `MORPHOGEN_GATEWAY`), and nothing past it. The
+  meter runs outside the candidate: `meter open RUN_ID` prints `{"env": {...}}` (the key the run calls
+  with), `meter close RUN_ID` prints that run's counts from the gateway's own record (`{"calls": 3,
+  "tokens": 120, "cost": 0.0}`). They are `metered.*` metrics a cell's `better` can name, primary
+  included; what a run prints about its own calls stays `reported.*` and decides nothing.
 
 Name a cell to judge as `cell:classify`, `classify`, or its `dir`. A project with nothing yet starts
 with one cell; the `map` skill drafts it with you.
@@ -223,6 +230,7 @@ local:                          # optional: replaces morphogen.local.yaml
   cells: {classify: {private: /outside/answers, search: /outside/search, inputs: /outside/data}}
   env: {file: /outside/run.env, pass: [DATABASE_URL]}
   services: {db: {image: docker.io/library/postgres:17.6, env: [POSTGRES_PASSWORD]}}
+  gateway: {container: my-gateway, port: 8080, meter: /outside/meter}
 ```
 
 The rules (cells, interfaces, tests, and the settings in `morphogen.yaml`) still come from the base commit:
@@ -315,6 +323,10 @@ between trials (#45).
   secret value, as it is or in base64, hex or reversed, is refused before its output is kept. Services
   start from a fixed image id, fresh for each run, on an internal network: no route to the host or
   the internet, and nothing one run writes there reaches the next.
+- **Model calls are counted where the candidate cannot reach.** With a gateway named, a run's only route
+  out is the gateway; a call around it has nowhere to go, and a call with a key of the candidate's own is
+  the gateway's to refuse. Each run's calls, tokens and cost come from the operator's meter reading the
+  gateway's record; the key the meter gives a run is scanned for in its output like any secret.
 - **The judge's own settings are the base's too.** The sandbox, its image and the budget come from
   `morphogen.yaml` as committed on the base, with only the operator's `morphogen.local.yaml` (or a
   request's `local`) over them, never from the working copy; each verdict records them and where each

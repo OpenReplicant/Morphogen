@@ -197,7 +197,7 @@ and end with the suite passing locally and in Podman, and an A/A check.
   digest in the verdict, the same for base and candidate. Red team first: a candidate that prints a
   setting's value into its output, writes to a named service's state that the next round reads, or
   reaches a service it was not given, is refused or cannot.
-- **7c. Model calls counted outside the candidate** (closes #43). The operator names a model gateway;
+- **7c. Model calls counted outside the candidate** (done: `gateway` and its meter in `morphogen/serve.py`, `metered.*` metrics, MeteredCheats). The operator names a model gateway;
   a judged run reaches models only through it (the sandbox's network allows that one address); the
   gateway's own log, read outside the candidate, gives calls, tokens and cost per round as measured
   metrics, beside `otel`. Agent cells can then run in a sandbox instead of `sandbox: none`. Red team

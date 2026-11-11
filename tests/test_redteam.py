@@ -830,6 +830,118 @@ class ServedCheats(unittest.TestCase):
             self.assertIn(f"{h} no", out)
 
 
+@unittest.skipUnless(CONTAINER, "a gateway is reached only from a container (MORPHOGEN_TEST_SANDBOX=podman)")
+class MeteredCheats(unittest.TestCase):
+    """Model calls are counted outside the candidate (PLAN.md 7c): a judged run reaches models only through the
+    gateway the operator names, and the operator's meter reads that gateway's record of the run's calls. A
+    candidate that calls around the gateway, uses a key of its own, reports its own counts, or prints the key
+    it was given, cannot move a verdict."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.fixture_gateway import FakeGateway
+        cls.gw = FakeGateway()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.gw.close()
+
+    def setUp(self):
+        self.p = CellsProject(code=True)
+        doc = yaml.safe_load((self.p.repo / "morphogen.local.yaml").read_text())
+        doc.update(self.gw.local())
+        (self.p.repo / "morphogen.local.yaml").write_text(yaml.safe_dump(doc))
+        self.p.cfg = load_config(self.p.repo)
+
+    def tearDown(self):
+        self.p.close()
+
+    def metered(self, code):
+        from tests.fixture_gateway import CALL
+        return run_metered(self.p, CALL + code)
+
+    def test_call_around_the_gateway(self):
+        out, metered = self.metered(
+            "import socket\ncall(); call()\n"
+            "for h, port in (('1.1.1.1', 443), ('openrouter.ai', 443), ('host.containers.internal', 8080)):\n"
+            "    try:\n        socket.create_connection((h, port), 3).close(); print(h, 'reached')\n"
+            "    except OSError:\n        print(h, 'no')\n")
+        for h in ("1.1.1.1", "openrouter.ai", "host.containers.internal"):
+            self.assertIn(f"{h} no", out)
+        self.assertEqual(metered.get("calls"), 2, metered)
+
+    def test_call_with_a_key_of_its_own(self):
+        out, metered = self.metered(
+            "import urllib.error\ntry:\n    call('mine-0123456789')\n    print('answered')\n"
+            "except urllib.error.HTTPError as e:\n    print('refused', e.code)\n")
+        self.assertIn("refused 401", out)
+        self.assertEqual(metered.get("calls"), 0, metered)
+
+    def test_print_the_key_it_was_given(self):
+        from tests.fixture_gateway import KEY
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.metered("import os\nprint(os.environ['GW_KEY'])\n")
+        self.assertNotIn(KEY, str(e.exception))
+
+    def test_report_its_own_counts(self):
+        """The base calls three times a run; the candidate too, and prints that it made none."""
+        from tests.fixture_gateway import CALL
+        doc = cells_doc(code=True)
+        doc["cells"]["classify"]["better"] = "metered.calls lower"
+        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+        self.p.write("classify/classify.py", CLASSIFY + "LIMIT = 100\n" + CALL + "for _ in range(3):\n    call()\n")
+        git(self.p.repo, "commit", "-qam", "base: three calls a run, calls metered")
+        self.p.cfg = load_config(self.p.repo)
+        cand = self.p.branch("liar", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n" + CALL +
+                                      "for _ in range(3):\n    call()\n"
+                                      "import json\nprint(json.dumps({'calls': 0, 'tokens': 0}))\n"})
+        r = self.p.judge(cand)
+        self.assertEqual(r["verdict"], "fail", r.get("reasons"))
+
+
+@unittest.skipIf(CONTAINER, "without a container there is no gateway to reach")
+class MeteredWithoutAContainer(unittest.TestCase):
+    def test_a_gateway_needs_a_container(self):
+        p = CellsProject(code=True)
+        try:
+            doc = yaml.safe_load((p.repo / "morphogen.local.yaml").read_text())
+            doc["gateway"] = {"container": "some-gateway", "port": 8080, "meter": "true"}
+            (p.repo / "morphogen.local.yaml").write_text(yaml.safe_dump(doc))
+            p.cfg = load_config(p.repo)
+            with self.assertRaises(judge_mod.JudgeError) as e:
+                p.change(p.branch("honest", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n# same\n"}))
+            self.assertIn("container", str(e.exception))
+        finally:
+            p.close()
+
+    def test_a_metered_metric_needs_a_gateway(self):
+        p = CellsProject(code=True)
+        try:
+            doc = cells_doc(code=True)
+            doc["cells"]["classify"]["better"] = "metered.calls lower"
+            p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+            git(p.repo, "commit", "-qam", "calls metered")
+            p.cfg = load_config(p.repo)
+            with self.assertRaises(judge_mod.JudgeError) as e:
+                p.judge(p.branch("honest", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n# same\n"}))
+            self.assertIn("gateway", str(e.exception))
+        finally:
+            p.close()
+
+
+def run_metered(p, code):
+    """One run as the judge makes it, with the project's gateway: (its output, what the meter counted)."""
+    from morphogen import serve
+    from morphogen.documents import rules_config
+    from morphogen.runner import run
+    cfg = rules_config(p.repo, judge_mod.resolve(p.repo, "main"), p.cfg)
+    serve.prepare(cfg, p.repo)
+    r = run(f"python -c {shlex.quote(code)}", p.repo, cfg, timeout=120, private=True)
+    if r.rc != 0:
+        raise AssertionError(r.err[-600:])
+    return r.out, r.metered
+
+
 def run_served(p, code):
     """One run as the judge makes it, with the project's served settings (morphogen.local.yaml)."""
     from morphogen import serve

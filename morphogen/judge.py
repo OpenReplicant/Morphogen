@@ -226,6 +226,7 @@ def _timed(cmd: str, cwd: Path, cfg: dict, env: dict, timeout: int, inputs: str 
     stats = json.loads(lines[-1][len(MARK):])
     if stats["rc"] != 0:
         raise JudgeError(f"benchmark failed (exit {stats['rc']}): {r.err.strip()[-400:]}")
+    stats["metered"] = r.metered
     return stats, "\n".join(lines[:-1])
 
 
@@ -582,6 +583,8 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
         env.update({"MORPHOGEN_RUN_START": f"{start:.6f}", "MORPHOGEN_RUN_END": f"{time.time():.6f}"})
         for k in JUDGE_METRICS:
             samples[i].setdefault(k, []).append(float(stats[k]))
+        for k, v in (stats.get("metered") or {}).items():   # counted by the operator's meter, outside the run
+            samples[i].setdefault(f"metered.{k}", []).append(v)
         for k, v in _reported(out).items():
             samples[i].setdefault(f"reported.{k}", []).append(v)
         for k, v in _observe(spec, observer_dir or dirs[i], cfg, env, timeout).items():
@@ -667,8 +670,12 @@ def _check_runner(spec: dict, cfg: dict) -> None:
     obs = (spec.get("measure") or {}).get("observer") or {}
     if obs.get("type") == "otel" and capabilities(cfg).get("network_isolated"):
         raise JudgeError("an otel observer needs the run to reach the judge's receiver, and this runner has no "
-                         f"network ({sandbox_mode(cfg)}); targets that are agents run with sandbox: none until a "
-                         "model gateway can carry their traffic (#43)")
+                         f"network ({sandbox_mode(cfg)}); an agent's model calls can be counted at the gateway "
+                         "instead (morphogen.local.yaml's gateway, metered.* metrics), or it runs with sandbox: none")
+    metered = [k for k in ((spec.get("measure") or {}).get("metrics") or {}) if k.startswith("metered.")]
+    if metered and not (cfg.get("served") and cfg["served"].gateway):
+        raise JudgeError(f"the cell measures {', '.join(metered)}, counted at the model gateway, but no gateway "
+                         "is named (morphogen.local.yaml's gateway: its container and meter)")
     gaps = missing(cfg, spec.get("requires") or [])
     if gaps:
         raise JudgeError(f"this target requires {', '.join(gaps)}, which the {sandbox_mode(cfg)} runner does not "
@@ -689,14 +696,16 @@ def _check_spec(spec: dict) -> dict:
         if observer.get("collected") != "outside":
             raise JudgeError("an observed metric can be primary only if the observer's data is collected outside "
                              "the code under test (measure.observer.collected: outside)")
+    elif primary.startswith("metered."):
+        pass   # counted by the operator's meter from the gateway's own record; _check_runner checks there is one
     elif primary.startswith("scored."):
         if not (m.get("score") or {}).get("run"):
             raise JudgeError("a scored metric can be primary only with a scorer (measure.score.run), "
                              "which reads each run's output outside the candidate")
     elif primary not in JUDGE_METRICS:
         raise JudgeError(f"the primary metric must be measured by the judge ({', '.join(JUDGE_METRICS)}), "
-                         "observed outside the code under test (observed.*), or scored outside the "
-                         "candidate (scored.*)")
+                         "observed outside the code under test (observed.*), scored outside the "
+                         "candidate (scored.*), or counted at the model gateway (metered.*)")
     return metrics
 
 

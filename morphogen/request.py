@@ -17,6 +17,7 @@ what runs are served: env values and services).
       cells: {classify: {private: /outside/answers, search: /outside/search, inputs: /outside/data}}
       env: {file: /outside/run.env, pass: [DATABASE_URL]}            # serve.py
       services: {db: {image: docker.io/library/postgres:17.6, env: [POSTGRES_PASSWORD]}}
+      gateway: {container: my-gateway, port: 8080, meter: /outside/meter}   # model calls counted outside
 
 Rules the judge enforces before anything runs: the request is a file outside the repository (a candidate
 commit, or the working copy, could otherwise write it); it may not carry rules (any key not above is
@@ -56,6 +57,7 @@ class Local(_Strict):
     cells: dict[str, CellLocal] = {}
     env: dict[str, Any] | None = None             # serve.py checks these when the judge prepares the runs
     services: dict[str, dict[str, Any]] | None = None
+    gateway: dict[str, Any] | None = None
 
 
 class Request(_Strict):
