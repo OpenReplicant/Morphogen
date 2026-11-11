@@ -12,8 +12,9 @@ import unittest
 import yaml
 
 from morphogen import judge as judge_mod
+from morphogen.documents import load_config
 from tests.fixture_cells import CellsProject, cells_doc
-from tests.fixture import (AGENT, CLASSIFY, CLASSIFY_CELL, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, AgentProject,
+from tests.fixture import (AGENT, git, CLASSIFY, CLASSIFY_CELL, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, AgentProject,
                            GuardedProject, InputsProject,
                            SampleProject, ScoredProject, StructuredProject, observed_project, parameter_project)
 
@@ -649,6 +650,55 @@ class ChangeCheats(unittest.TestCase):
 
     def test_a_file_no_cell_owns(self):
         self.assertRefused("readme", {"README.md": "harmless?\n"}, why="no cell may change it")
+
+
+class SettingsCheats(unittest.TestCase):
+    """The judge's settings (sandbox, sandbox_image, budget) are rules too: they come from the base commit's
+    morphogen.yaml, with only the operator's uncommitted morphogen.local.yaml laid over them. An agent that
+    edits the working copy of morphogen.yaml without committing, then calls the judge from that checkout
+    (the CLI and the MCP server read the project root), must change nothing."""
+
+    def setUp(self):
+        self.p = CellsProject(code=True)
+
+    def tearDown(self):
+        self.p.close()
+
+    def edit_working_copy(self, **settings):
+        doc = yaml.safe_load((self.p.repo / "morphogen.yaml").read_text())
+        doc.update(settings)
+        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))   # not committed
+        self.p.cfg = load_config(self.p.repo)                                 # as the CLI and MCP read it
+
+    def test_raise_the_trial_budget_in_the_working_copy(self):
+        doc = cells_doc(code=True)
+        doc["budget"] = {"trials_per_day": 1}
+        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+        git(self.p.repo, "commit", "-qam", "base: one trial a day")
+        self.p.evidence.append({"kind": "verdict", "by": "judge", "verdict": "fail", "claim": "today's trial", "trust": "measured"})
+        self.edit_working_copy(budget={"trials_per_day": 100})
+        cand = self.p.branch("honest", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n# same\n"})
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.p.judge(cand)
+        self.assertIn("budget", str(e.exception))
+
+    def test_swap_the_sandbox_in_the_working_copy(self):
+        self.edit_working_copy(sandbox="none", sandbox_image="attacker/python:latest")
+        r = self.p.change(self.p.branch("honest", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n# same\n"}))
+        rec = self.p.evidence.dump()[-1]
+        base = cells_doc(code=True)
+        self.assertEqual(rec.get("settings", {}).get("sandbox"), base["sandbox"], rec.get("settings"))
+        self.assertEqual(rec.get("settings", {}).get("sandbox_image"), "python:3.12-slim", rec.get("settings"))
+        self.assertEqual(r.get("settings", {}).get("sandbox_image"), "python:3.12-slim", r.get("settings"))
+
+    def test_the_operators_local_file_still_decides_what_it_may(self):
+        (self.p.repo / "morphogen.local.yaml").write_text(yaml.safe_dump(
+            {**yaml.safe_load((self.p.repo / "morphogen.local.yaml").read_text()), "sandbox_image": "python:3.13-slim"}))
+        self.p.cfg = load_config(self.p.repo)
+        self.p.change(self.p.branch("honest-2", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n# same\n"}))
+        rec = self.p.evidence.dump()[-1]
+        self.assertEqual(rec["settings"]["sandbox_image"], "python:3.13-slim", rec.get("settings"))
+        self.assertEqual(rec["settings_from"]["sandbox_image"], "morphogen.local.yaml", rec.get("settings_from"))
 
 
 if __name__ == "__main__":
