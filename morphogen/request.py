@@ -2,7 +2,8 @@
 
 The rules (cells, interfaces, tests, settings) always come from the base commit. A request names only what
 is the caller's or the operator's: which repository, which commits, what to judge, labels, and the local
-settings that morphogen.local.yaml holds otherwise (held-out answer paths, inputs, the sandbox, the budget).
+settings that morphogen.local.yaml holds otherwise (held-out answer paths, inputs, the sandbox, the budget, and
+what runs are served: env values and services).
 
     morphogen: request/v1
     kind: judge                      # judge | change | probe | measure
@@ -14,6 +15,8 @@ settings that morphogen.local.yaml holds otherwise (held-out answer paths, input
     local:                           # optional; when given, it replaces morphogen.local.yaml
       sandbox: podman
       cells: {classify: {private: /outside/answers, search: /outside/search, inputs: /outside/data}}
+      env: {file: /outside/run.env, pass: [DATABASE_URL]}            # serve.py
+      services: {db: {image: docker.io/library/postgres:17.6, env: [POSTGRES_PASSWORD]}}
 
 Rules the judge enforces before anything runs: the request is a file outside the repository (a candidate
 commit, or the working copy, could otherwise write it); it may not carry rules (any key not above is
@@ -25,12 +28,12 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from .documents import DocumentError, LOCAL_SETTINGS, rules_config, validate
+from .documents import DocumentError, LOCAL_SERVED, LOCAL_SETTINGS, rules_config, validate
 from .evidence import canonical
 
 VERSION = "request/v1"
@@ -51,6 +54,8 @@ class Local(_Strict):
     sandbox_image: str | None = None
     budget: dict[str, int] | None = None
     cells: dict[str, CellLocal] = {}
+    env: dict[str, Any] | None = None             # serve.py checks these when the judge prepares the runs
+    services: dict[str, dict[str, Any]] | None = None
 
 
 class Request(_Strict):
@@ -121,7 +126,8 @@ def config(req: Request, cfg: dict) -> dict:
     local = req.local.model_dump(exclude_none=True)
     out = dict(cfg)
     out["local"] = {"cells": {k: v for k, v in (local.get("cells") or {}).items()},
-                    "settings": {k: local[k] for k in LOCAL_SETTINGS if k in local}, "from": "request"}
+                    "settings": {k: local[k] for k in LOCAL_SETTINGS if k in local}, "from": "request",
+                    **{k: local[k] for k in LOCAL_SERVED if local.get(k)}}
     validate("config", {k: v for k, v in out.items() if k not in ("local", "settings_from")})
     return out
 

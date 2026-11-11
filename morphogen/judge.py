@@ -54,6 +54,8 @@ import yaml
 
 
 from .observers import ObserverError, OtelObserver
+from . import serve
+from .errors import JudgeError
 from .runner import capabilities, missing, run, sandbox_mode
 from .project import FILE as PROJECT_FILE, Project, ProjectError, _listed
 from .documents import rules_config, settings_of
@@ -85,8 +87,6 @@ class CandidateFault(Exception):
     or impossible values): the candidate is refused, not the judgment."""
 
 
-class JudgeError(Exception):
-    pass
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -741,6 +741,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
     base_sha = resolve(repo, base or cfg.get("trunk", "main"))
     cand_sha = resolve(repo, candidate)
     cfg = rules_config(repo, base_sha, cfg)
+    serve.prepare(cfg, repo)
     limit = int((cfg.get("budget") or {}).get("probes_per_day", 0) or 0)
     if limit and _trials_today(evidence, "probe") >= limit:
         raise JudgeError(f"the probe budget for today ({limit}) is spent; the operator can raise "
@@ -795,6 +796,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
                                                         for b, c in zip(samples[0][m], samples[1][m])), 4)}
                     for m, ms in metrics_spec.items() if m in samples[0] and m in samples[1]}
                 out["timed_output_mismatches"] = sum(1 for b, c in outputs if b != c)
+    serve.check(cfg)
     rec = evidence.append({
         "claim": f"probe of {cand_sha[:12]} against {base_sha[:12]} (practice; not a verdict)",
         "kind": "probe", "subject": {"system": a["cell"], "path": out["target"]},
@@ -802,7 +804,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         "outcome": {k: v for k, v in out.items() if k in ("forbidden", "parameter_violations", "check", "metrics",
                                                           "timed_output_mismatches", "interfaces")}
         | {"cases": [{k: c[k] for k in ("seed", "status")} for c in out.get("cases", [])]},
-        "sandbox": sandbox_mode(cfg), "settings": settings_of(cfg), "settings_from": cfg["settings_from"],
+        "sandbox": sandbox_mode(cfg), "settings": settings_of(cfg), "settings_from": cfg["settings_from"], **serve.record(cfg),
         **({"request": request} if request else {}),
         "trust": "measured", "by": "judge",
     })
@@ -815,6 +817,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence, request: dic
     repo = repo_root(root)
     sha = resolve(repo, ref)
     cfg = rules_config(repo, sha, cfg)
+    serve.prepare(cfg, repo)
     with worktrees(repo, [sha]) as (tree,):
         spec, rel, name, _ = _target(root, repo, cfg, target, tree)
         subject = f"cell:{name}"
@@ -826,6 +829,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence, request: dic
         measured = _rounds(spec, [tree / rel], cfg, timeout, tree / rel, sides=("measured",))
         seeds, samples = measured["seeds"], measured["samples"]
     metrics = {k: statistics.median(v) for k, v in samples[0].items()}
+    serve.check(cfg)
     rec = evidence.append({
         "claim": f"{name} at {sha[:12]} measures {json.dumps({k: round(v, 6) for k, v in metrics.items()}, sort_keys=True)}",
         "kind": "measurement",
@@ -840,7 +844,7 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence, request: dic
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
         "settings": settings_of(cfg),
-        "settings_from": cfg["settings_from"],
+        "settings_from": cfg["settings_from"], **serve.record(cfg),
         **({"request": request} if request else {}),
         "trust": trust,
         "by": "judge",
@@ -863,6 +867,7 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
     repo = repo_root(root)
     base_sha, cand_sha = resolve(repo, base), resolve(repo, candidate)
     cfg = rules_config(repo, base_sha, cfg)
+    serve.prepare(cfg, repo)
     with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
         proj = structure_of(btree)
         changed = _changed(repo, base_sha, cand_sha)
@@ -909,6 +914,7 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
     gate = {"decision": "none" if not passed else "merge" if all(d == "merge" for d in decisions) else "review",
             "cells": {c: proj.gate(c, passed) for c in cells}}
     verdict = "pass" if passed else "fail"
+    serve.check(cfg)
     rec = evidence.append({
         "claim": f"change {cand_sha[:12]} against {base_sha[:12]} keeps what {', '.join(cells) or 'nothing'} "
                  f"promise{'s' if len(cells) == 1 else ''}" if passed else
@@ -928,7 +934,7 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
         "settings": settings_of(cfg),
-        "settings_from": cfg["settings_from"],
+        "settings_from": cfg["settings_from"], **serve.record(cfg),
         **({"request": request} if request else {}),
         "trust": "measured",
         "by": "judge",
@@ -947,6 +953,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
     repo = repo_root(root)
     base_sha, cand_sha = resolve(repo, base), resolve(repo, candidate)
     cfg = rules_config(repo, base_sha, cfg)
+    serve.prepare(cfg, repo)
     limit = int((cfg.get("budget") or {}).get("trials_per_day", 0) or 0)
     if limit and _trials_today(evidence) >= limit:
         raise JudgeError(f"the trial budget for today ({limit}) is spent; the operator can raise "
@@ -1044,6 +1051,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
     if interface == "simulated":
         notes.append(SIMULATED_NOTE.format(what=spec["simulates"]))
     verdict = "pass" if passed else "fail"
+    serve.check(cfg)
     rec = evidence.append({
         "claim": f"{name}: {cand_sha[:12]} is {'better than' if passed else 'not better than'} {base_sha[:12]}",
         "kind": "verdict",
@@ -1070,7 +1078,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
         "settings": settings_of(cfg),
-        "settings_from": cfg["settings_from"],
+        "settings_from": cfg["settings_from"], **serve.record(cfg),
         **({"request": request} if request else {}),
         "trust": trust,
         "by": "judge",

@@ -6,8 +6,13 @@ the judge. The share of these that fail is the judge's own metric.
 """
 
 import copy
+import json
 import os
+import shlex
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
 
 import yaml
 
@@ -699,6 +704,146 @@ class SettingsCheats(unittest.TestCase):
         rec = self.p.evidence.dump()[-1]
         self.assertEqual(rec["settings"]["sandbox_image"], "python:3.13-slim", rec.get("settings"))
         self.assertEqual(rec["settings_from"]["sandbox_image"], "morphogen.local.yaml", rec.get("settings_from"))
+
+
+
+SECRET = "s3cret-value-0123456789"
+CONTAINER = os.environ.get("MORPHOGEN_TEST_SANDBOX", "none") in ("podman", "docker")
+
+
+class ServedCheats(unittest.TestCase):
+    """What a judged run is given beyond its tree (PLAN.md 7b): values from an env file outside the
+    repository, and services started for it. The operator names both in morphogen.local.yaml. A candidate
+    that prints a value, reads one it was not given, changes the file during the runs, leaves state in a
+    service for a later run, or reaches past the services it was given, is refused or cannot."""
+
+    def setUp(self):
+        self.p = CellsProject(code=True)
+        self.outside = Path(tempfile.mkdtemp(prefix="morphogen-env-"))
+        self.env = self.outside / "run.env"
+        self.env.write_text(f"TOKEN={SECRET}\nOTHER=not-given-0123456789\nPORT=5432\n")
+
+    def tearDown(self):
+        self.p.close()
+        shutil.rmtree(self.outside, ignore_errors=True)
+
+    def serve(self, **local):
+        doc = yaml.safe_load((self.p.repo / "morphogen.local.yaml").read_text())
+        doc.update(local)
+        (self.p.repo / "morphogen.local.yaml").write_text(yaml.safe_dump(doc))
+        self.p.cfg = load_config(self.p.repo)
+
+    def cheat(self, name, code):
+        return self.p.branch(name, {"classify/classify.py": CLASSIFY + "LIMIT = 100\n" + code})
+
+    def assertNoValue(self, *values):
+        log = json.dumps(self.p.evidence.dump())
+        for v in values:
+            self.assertNotIn(v, log)
+
+    def test_print_a_value_it_was_given(self):
+        self.serve(env={"file": str(self.env), "pass": ["TOKEN"]})
+        cand = self.cheat("print", "import os\nprint(os.environ['TOKEN'])\n")
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.p.change(cand)
+        self.assertIn("TOKEN", str(e.exception))
+        self.assertNotIn(SECRET, str(e.exception))
+        self.assertNoValue(SECRET)
+
+    def test_print_it_encoded(self):
+        self.serve(env={"file": str(self.env), "pass": ["TOKEN"]})
+        for i, how in enumerate(("base64.b64encode(t.encode()).decode()", "t.encode().hex()", "t[::-1]")):
+            cand = self.cheat(f"encoded-{i}", f"import base64, os, sys\nt = os.environ['TOKEN']\nsys.stderr.write({how})\n")
+            with self.assertRaises(judge_mod.JudgeError, msg=how):
+                self.p.change(cand)
+        self.assertNoValue(SECRET)
+
+    def test_fail_with_the_value_in_the_message(self):
+        self.serve(env={"file": str(self.env), "pass": ["TOKEN"]})
+        cand = self.cheat("message", "import os\nraise SystemExit('bad token ' + os.environ['TOKEN'])\n")
+        with self.assertRaises(judge_mod.JudgeError):
+            self.p.change(cand)
+        self.assertNoValue(SECRET)
+
+    def test_read_a_value_it_was_not_given(self):
+        self.serve(env={"file": str(self.env), "pass": ["TOKEN"]})
+        cand = self.cheat("other", "import os\nassert 'OTHER' not in os.environ, 'saw OTHER'\nassert os.environ['TOKEN']\n")
+        self.assertEqual(self.p.change(cand)["verdict"], "pass")
+        self.assertNoValue("not-given-0123456789", SECRET)
+
+    def test_change_the_file_during_the_runs(self):
+        self.serve(env={"file": str(self.env), "pass": ["TOKEN"]}, sandbox="none")
+        cand = self.cheat("rewrite", f"open({str(self.env)!r}, 'a').write('TOKEN=mine-0123456789\\n')\n")
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.p.change(cand)
+        self.assertIn("changed during the runs", str(e.exception))
+
+    def test_keep_the_values_in_a_committed_file(self):
+        self.p.write("run.env", self.env.read_text())
+        git(self.p.repo, "add", "run.env")
+        git(self.p.repo, "commit", "-qm", "values in git")
+        self.serve(env={"file": str(self.p.repo / "run.env"), "pass": ["TOKEN"]})
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.p.change(self.cheat("honest", "# same\n"))
+        self.assertIn("tracked", str(e.exception))
+
+    def test_take_a_name_the_judge_sets(self):
+        for name in ("PATH", "MORPHOGEN_PRIVATE", "PYTHONPATH"):
+            self.env.write_text(f"{name}=/evil-0123456789\n")
+            self.serve(env={"file": str(self.env), "pass": [name]})
+            with self.assertRaises(judge_mod.JudgeError, msg=name):
+                self.p.change(self.cheat(f"name-{name}", "# same\n"))
+
+    def test_a_short_value_must_be_called_public(self):
+        self.serve(env={"file": str(self.env), "pass": ["PORT"]})
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.p.change(self.cheat("short", "# same\n"))
+        self.assertIn("public", str(e.exception))
+        self.serve(env={"file": str(self.env), "pass": ["PORT"], "public": ["PORT"]})
+        self.assertEqual(self.p.change(self.cheat("short-ok", "import os\nprint(os.environ['PORT'])\n"))["verdict"], "pass")
+
+    def test_services_without_a_container(self):
+        self.serve(services={"kv": {"image": "python:3.12-slim", "ready": "true"}}, sandbox="none")
+        with self.assertRaises(judge_mod.JudgeError) as e:
+            self.p.change(self.cheat("svc-none", "# same\n"))
+        self.assertIn("container", str(e.exception))
+
+    @unittest.skipUnless(CONTAINER, "services run only in a container (MORPHOGEN_TEST_SANDBOX=podman)")
+    def test_leave_state_in_a_service_for_the_next_run(self):
+        from tests.fixture_served import KV, kv_service
+        self.serve(services={"kv": kv_service()})
+        first = run_served(self.p, KV + "print(kv('get marker')); kv('set marker left')\n")
+        second = run_served(self.p, KV + "print(kv('get marker'))\n")
+        self.assertEqual(first.strip(), "none")
+        self.assertEqual(second.strip(), "none", "a later run read what an earlier one left in the service")
+
+    @unittest.skipUnless(CONTAINER, "services run only in a container (MORPHOGEN_TEST_SANDBOX=podman)")
+    def test_reach_past_the_services_it_was_given(self):
+        from tests.fixture_served import kv_service
+        self.serve(services={"kv": kv_service()})
+        out = run_served(self.p, "import socket\n"
+                         "for h, port in (('kv', 7000), ('host.containers.internal', 22), ('1.1.1.1', 53), ('example.com', 80)):\n"
+                         "    try:\n        socket.create_connection((h, port), 3).close(); print(h, 'reached')\n"
+                         "    except OSError:\n        print(h, 'no')\n")
+        self.assertIn("kv reached", out)
+        for h in ("host.containers.internal", "1.1.1.1", "example.com"):
+            self.assertIn(f"{h} no", out)
+
+
+def run_served(p, code):
+    """One run as the judge makes it, with the project's served settings (morphogen.local.yaml)."""
+    from morphogen import serve
+    from morphogen.documents import rules_config
+    from morphogen.runner import run
+    cfg = rules_config(p.repo, judge_mod.resolve(p.repo, "main"), p.cfg)
+    serve.prepare(cfg, p.repo)
+    try:
+        r = run(f"python -c {shlex.quote(code)}", p.repo, cfg, timeout=120, private=True)
+    finally:
+        serve.check(cfg)
+    if r.rc != 0:
+        raise AssertionError(r.err[-600:])
+    return r.out
 
 
 if __name__ == "__main__":

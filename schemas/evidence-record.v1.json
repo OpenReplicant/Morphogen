@@ -67,6 +67,104 @@
       ],
       "title": "RequestRef",
       "type": "object"
+    },
+    "Served": {
+      "additionalProperties": true,
+      "properties": {
+        "env": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServedEnv"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "services": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/ServedService"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Services"
+        }
+      },
+      "title": "Served",
+      "type": "object"
+    },
+    "ServedEnv": {
+      "additionalProperties": true,
+      "properties": {
+        "digest": {
+          "description": "SHA-256 of the canonical JSON of every served name and value",
+          "maxLength": 64,
+          "minLength": 64,
+          "title": "Digest",
+          "type": "string"
+        },
+        "pass": {
+          "description": "the names every run got as environment variables",
+          "items": {
+            "type": "string"
+          },
+          "title": "Pass",
+          "type": "array"
+        },
+        "public": {
+          "description": "the names whose values were not scanned for in the runs' output",
+          "items": {
+            "type": "string"
+          },
+          "title": "Public",
+          "type": "array"
+        }
+      },
+      "required": [
+        "pass",
+        "public",
+        "digest"
+      ],
+      "title": "ServedEnv",
+      "type": "object"
+    },
+    "ServedService": {
+      "additionalProperties": true,
+      "properties": {
+        "env": {
+          "description": "the names the service got",
+          "items": {
+            "type": "string"
+          },
+          "title": "Env",
+          "type": "array"
+        },
+        "id": {
+          "description": "the image's id, resolved once; every run's service started from it",
+          "title": "Id",
+          "type": "string"
+        },
+        "image": {
+          "description": "the image as the operator named it",
+          "title": "Image",
+          "type": "string"
+        }
+      },
+      "required": [
+        "image",
+        "id",
+        "env"
+      ],
+      "title": "ServedService",
+      "type": "object"
     }
   },
   "$id": "https://github.com/OpenReplicant/Morphogen/blob/main/schemas/evidence-record.v1.json",
@@ -188,6 +286,18 @@
       "minimum": 1,
       "title": "Seq",
       "type": "integer"
+    },
+    "served": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Served"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "what the runs were given beyond their tree (morphogen.local.yaml's env and services); names, a digest and image ids, never a value"
     },
     "settings": {
       "anyOf": [

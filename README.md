@@ -117,6 +117,14 @@ interfaces:
   `inputs`: every run reads it from `MORPHOGEN_INPUTS`, a container mounts it read-only, and the
   judge refuses a verdict if it changed during the runs. It must lie outside the repository and
   away from the answers. The local file may also set `sandbox` and `budget`.
+- **Services and settings a run needs** (a database, values from an env file) are the operator's too,
+  named in the same file:
+  `env: {file: /outside/run.env, pass: [DATABASE_URL], public: [DB_PORT]}` and
+  `services: {db: {image: docker.io/library/postgres:17.6, env: [POSTGRES_PASSWORD], ready: pg_isready}}`.
+  Every run gets the `pass` values as environment variables; in a container each run gets its own fresh
+  services, reached by name on a network with nothing else on it. The verdict records the names, one
+  digest of the values and each image's id, never a value; a run that prints a secret value is refused
+  (`morphogen/serve.py`).
 
 Name a cell to judge as `cell:classify`, `classify`, or its `dir`. A project with nothing yet starts
 with one cell; the `map` skill drafts it with you.
@@ -213,6 +221,8 @@ labels: {optimizer: grid}       # recorded, never decide
 local:                          # optional: replaces morphogen.local.yaml
   sandbox: podman
   cells: {classify: {private: /outside/answers, search: /outside/search, inputs: /outside/data}}
+  env: {file: /outside/run.env, pass: [DATABASE_URL]}
+  services: {db: {image: docker.io/library/postgres:17.6, env: [POSTGRES_PASSWORD]}}
 ```
 
 The rules (cells, interfaces, tests, and the settings in `morphogen.yaml`) still come from the base commit:
@@ -300,6 +310,11 @@ between trials (#45).
   the held-out answers are (`MORPHOGEN_PRIVATE`); probes score against `search` instead; a
   candidate whose files name the private directory is refused. Inputs kept outside the repository
   are read-only to every run, and their digest is in every verdict.
+- **Values and services do not leak or carry over.** Env values come from a file outside the commits
+  (refused if git tracks it), read once and checked again after the runs; a run whose output holds a
+  secret value, as it is or in base64, hex or reversed, is refused before its output is kept. Services
+  start from a fixed image id, fresh for each run, on an internal network: no route to the host or
+  the internet, and nothing one run writes there reaches the next.
 - **The judge's own settings are the base's too.** The sandbox, its image and the budget come from
   `morphogen.yaml` as committed on the base, with only the operator's `morphogen.local.yaml` (or a
   request's `local`) over them, never from the working copy; each verdict records them and where each

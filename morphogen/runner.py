@@ -28,8 +28,11 @@ import shutil
 import subprocess
 import tempfile
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
+
+from .errors import JudgeError
 
 GUARANTEES = ("network_isolated", "read_only_tree", "private_paths_hidden", "fresh_state", "resource_limits")
 CONTAINER_CAPS = {**{g: True for g in GUARANTEES}, "timing": "stable"}
@@ -109,27 +112,43 @@ def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict |
     """Run `cmd` in `cwd`. `private`: for code under test. In a container every run is fresh
     anyway; without one, the run gets its own empty TMPDIR and HOME, removed afterwards, so
     nothing it writes there reaches the next run. `inputs`: a directory outside the tree the run may
-    read (MORPHOGEN_INPUTS); a container mounts it read-only at /inputs."""
+    read (MORPHOGEN_INPUTS); a container mounts it read-only at /inputs. What the operator serves
+    (cfg["served"], serve.py: env values and services) is given to the run, and a run whose output
+    holds a secret value is refused (JudgeError) before any of its output leaves here."""
     mode = sandbox_mode(cfg)
     env = {"PYTHONDONTWRITEBYTECODE": "1", **(env or {})}
+    served = cfg.get("served")
     if inputs:
         env["MORPHOGEN_INPUTS"] = "/inputs" if mode in ("docker", "podman") else str(inputs)
+    with (served.session(mode) if served and mode in ("docker", "podman") else nullcontext((None, None))) as (net, env_file):
+        r = _run(cmd, cwd, cfg, mode, stdin, env, timeout, private, inputs, served, net, env_file)
+    if served:
+        leaked = served.leaks(r.out, r.err)
+        if leaked:
+            raise JudgeError(f"a run printed the value of {', '.join(leaked)} (as it is or encoded): refused, and "
+                             "none of its output is kept")
+    return r
+
+
+def _run(cmd, cwd, cfg, mode, stdin, env, timeout, private, inputs, served, net, env_file) -> Result:
     scratch = None
     if mode in ("docker", "podman"):
         root = tree_root(cwd)
         inner = Path("/w") / Path(cwd).resolve().relative_to(root)
         mount = f"{root}:/w:ro" + (",Z" if mode == "podman" else "")  # Z: SELinux relabel for rootless Podman
-        args = [mode, "run", "--rm", "-i", "--network", "none", "--memory", "1g", "--cpus", "1",
+        args = [mode, "run", "--rm", "-i", "--network", net or "none", "--memory", "1g", "--cpus", "1",
                 "-v", mount, "-w", str(inner)]
         if inputs:
             args += ["-v", f"{inputs}:/inputs:ro" + (",z" if mode == "podman" else "")]
+        if env_file:
+            args += ["--env-file", str(env_file)]   # served values: never on a command line
         for k, v in env.items():
             args += ["-e", f"{k}={v}"]
         args += [cfg.get("sandbox_image", "python:3.12-slim"), "sh", "-c", cmd]
         full_env = None
     else:
         args = ["sh", "-c", cmd]
-        full_env = {**os.environ, **env}
+        full_env = {**os.environ, **(served.passed if served else {}), **env}
         if private:
             scratch = Path(tempfile.mkdtemp(prefix="morphogen-run-"))
             (scratch / "tmp").mkdir()

@@ -6,7 +6,7 @@ docs/restart/LESSONS.md.
 ## Layout
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
-  judge), `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
+  judge), `serve.py` (the env values and services a run is given), `errors.py`, `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
   `otel`), `project.py` (the cell format: morphogen.yaml's cells and interfaces, default deny),
   `backstage.py` (catalog-info.yaml files as a source of cells),
   `status.py` (where a project stands and the next step),
