@@ -726,7 +726,7 @@ def _clip_pair(expected: str, got: str, n: int = 300) -> tuple[str, str]:
 
 
 def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: str | None = None,
-          cases: int = 5, rounds: int = 3, cell: str | None = None) -> dict:
+          cases: int = 5, rounds: int = 3, cell: str | None = None, request: dict | None = None) -> dict:
     """A practice run: feedback on a candidate, never a verdict. It is the optimizers' inner evaluator.
 
     Same rules as the judge (the base's morphogen.yaml, default deny, the forbidden-file and
@@ -803,6 +803,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
                                                           "timed_output_mismatches", "interfaces")}
         | {"cases": [{k: c[k] for k in ("seed", "status")} for c in out.get("cases", [])]},
         "sandbox": sandbox_mode(cfg), "settings": settings_of(cfg), "settings_from": cfg["settings_from"],
+        **({"request": request} if request else {}),
         "trust": "measured", "by": "judge",
     })
     out["evidence_seq"] = rec["seq"]
@@ -810,7 +811,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
     return out
 
 
-def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
+def measure(root: Path, cfg: dict, target: str, ref: str, evidence, request: dict | None = None) -> dict:
     repo = repo_root(root)
     sha = resolve(repo, ref)
     cfg = rules_config(repo, sha, cfg)
@@ -838,6 +839,9 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
         **({"inputs": spec["measure"]["inputs_digest"]} if spec["measure"].get("inputs") else {}),
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
+        "settings": settings_of(cfg),
+        "settings_from": cfg["settings_from"],
+        **({"request": request} if request else {}),
         "trust": trust,
         "by": "judge",
     })
@@ -848,7 +852,8 @@ def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
     return out
 
 
-def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, timeout: int = 300) -> dict:
+def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, timeout: int = 300,
+                 request: dict | None = None) -> dict:
     """Judge a change that claims no improvement, by the base's rules: no target and no measure. The cells
     it belongs to come from the files it changes (each cell whose `change` covers the file). It passes when
     every changed file belongs to a cell that may change it (default deny: the rules, and files no cell
@@ -924,6 +929,7 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
         "runner": capabilities(cfg),
         "settings": settings_of(cfg),
         "settings_from": cfg["settings_from"],
+        **({"request": request} if request else {}),
         "trust": "measured",
         "by": "judge",
     })
@@ -933,7 +939,7 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
 
 
 def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
-          labels: dict | None = None, cell: str | None = None) -> dict:
+          labels: dict | None = None, cell: str | None = None, request: dict | None = None) -> dict:
     """Score `candidate` against `base` by the base's rules. For a cell (named, or found because the base's
     structure says it measures `target`), also the tests of every interface the cell's scope touches,
     its parameters in the base's structure, and the system guard.
@@ -1065,6 +1071,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "runner": capabilities(cfg),
         "settings": settings_of(cfg),
         "settings_from": cfg["settings_from"],
+        **({"request": request} if request else {}),
         "trust": trust,
         "by": "judge",
     })

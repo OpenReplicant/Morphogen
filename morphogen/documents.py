@@ -167,7 +167,8 @@ def rules_config(repo: Path, sha: str, cfg: dict) -> dict:
     local = (cfg.get("local") or {}).get("settings") or {}
     out = validate("config", {**base, **local}, f"{sha[:12]}:morphogen.yaml + morphogen.local.yaml")
     out["local"] = cfg.get("local") or {"cells": {}, "settings": {}}
-    out["settings_from"] = {k: ("morphogen.local.yaml" if k in local else "base" if k in (data or {}) else "default")
+    where = (cfg.get("local") or {}).get("from") or "morphogen.local.yaml"
+    out["settings_from"] = {k: (where if k in local else "base" if k in (data or {}) else "default")
                             for k in JUDGE_SETTINGS}
     return out
 
