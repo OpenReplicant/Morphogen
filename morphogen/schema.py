@@ -62,9 +62,17 @@ class ServedService(_Open):
     env: list[str] = Field(description="the names the service got")
 
 
+class ServedGateway(_Open):
+    container: str = Field(description="the operator's gateway container, joined to each run's network as `gateway`")
+    image_id: str = Field(description="that container's image id")
+    port: int
+    meter: str = Field(min_length=64, max_length=64, description="SHA-256 of the meter command that counted each run's calls")
+
+
 class Served(_Open):
     env: ServedEnv | None = None
     services: dict[str, ServedService] | None = None
+    gateway: ServedGateway | None = None
 
 
 class Verdict(Record):

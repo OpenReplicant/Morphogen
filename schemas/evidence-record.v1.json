@@ -82,6 +82,17 @@
           ],
           "default": null
         },
+        "gateway": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServedGateway"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "services": {
           "anyOf": [
             {
@@ -134,6 +145,40 @@
         "digest"
       ],
       "title": "ServedEnv",
+      "type": "object"
+    },
+    "ServedGateway": {
+      "additionalProperties": true,
+      "properties": {
+        "container": {
+          "description": "the operator's gateway container, joined to each run's network as `gateway`",
+          "title": "Container",
+          "type": "string"
+        },
+        "image_id": {
+          "description": "that container's image id",
+          "title": "Image Id",
+          "type": "string"
+        },
+        "meter": {
+          "description": "SHA-256 of the meter command that counted each run's calls",
+          "maxLength": 64,
+          "minLength": 64,
+          "title": "Meter",
+          "type": "string"
+        },
+        "port": {
+          "title": "Port",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "container",
+        "image_id",
+        "port",
+        "meter"
+      ],
+      "title": "ServedGateway",
       "type": "object"
     },
     "ServedService": {

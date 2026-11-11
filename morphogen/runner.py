@@ -29,7 +29,7 @@ import subprocess
 import tempfile
 import time
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .errors import JudgeError
@@ -91,6 +91,7 @@ class Result:
     out: str
     err: str
     seconds: float
+    metered: dict = field(default_factory=dict)   # the operator's meter's count of the run's model calls (serve.py)
 
 
 _ROOTS: dict[str, Path] = {}
@@ -113,17 +114,21 @@ def run(cmd: str, cwd: Path, cfg: dict, *, stdin: str | None = None, env: dict |
     anyway; without one, the run gets its own empty TMPDIR and HOME, removed afterwards, so
     nothing it writes there reaches the next run. `inputs`: a directory outside the tree the run may
     read (MORPHOGEN_INPUTS); a container mounts it read-only at /inputs. What the operator serves
-    (cfg["served"], serve.py: env values and services) is given to the run, and a run whose output
-    holds a secret value is refused (JudgeError) before any of its output leaves here."""
+    (cfg["served"], serve.py: env values, services, the model gateway and its meter) is given to the run,
+    a run whose output holds a secret value is refused (JudgeError) before any of its output leaves here,
+    and the meter's count of the run's model calls comes back as Result.metered."""
     mode = sandbox_mode(cfg)
     env = {"PYTHONDONTWRITEBYTECODE": "1", **(env or {})}
     served = cfg.get("served")
     if inputs:
         env["MORPHOGEN_INPUTS"] = "/inputs" if mode in ("docker", "podman") else str(inputs)
-    with (served.session(mode) if served and mode in ("docker", "podman") else nullcontext((None, None))) as (net, env_file):
-        r = _run(cmd, cwd, cfg, mode, stdin, env, timeout, private, inputs, served, net, env_file)
+    with (served.session(mode) if served and mode in ("docker", "podman") else nullcontext()) as ses:
+        r = _run(cmd, cwd, cfg, mode, stdin, env, timeout, private, inputs, served,
+                 ses.network if ses else None, ses.env_file if ses else None)
+    if ses:
+        r.metered = ses.metered
     if served:
-        leaked = served.leaks(r.out, r.err)
+        leaked = served.leaks(r.out, r.err, extra=ses.secrets if ses else None)
         if leaked:
             raise JudgeError(f"a run printed the value of {', '.join(leaked)} (as it is or encoded): refused, and "
                              "none of its output is kept")

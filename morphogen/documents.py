@@ -135,7 +135,7 @@ def load(kind: str, path: Path) -> dict:
 def load_config(root: Path) -> dict:
     """morphogen.yaml at the project root, or the defaults, with the operator's morphogen.local.yaml
     (uncommitted) laid over it: `sandbox`, `sandbox_image` and `budget` override, and `cells` (held-out
-    answer paths per cell: `private`, `search`), `env` and `services` (serve.py) are kept under `local`."""
+    answer paths per cell: `private`, `search`), `env`, `services` and `gateway` (serve.py) are kept under `local`."""
     from .project import local_config
     f = Path(root) / "morphogen.yaml"
     cfg = load("config", f) if f.exists() else validate("config", {})
@@ -150,7 +150,7 @@ def load_config(root: Path) -> dict:
 
 
 LOCAL_SETTINGS = ("sandbox", "sandbox_image", "budget")
-LOCAL_SERVED = ("env", "services")   # what runs are given beyond their tree (serve.py); only ever the operator's
+LOCAL_SERVED = ("env", "services", "gateway")   # what runs are given beyond their tree (serve.py); only ever the operator's
 JUDGE_SETTINGS = ("trunk", "sandbox", "sandbox_image", "budget")
 
 
