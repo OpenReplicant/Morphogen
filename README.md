@@ -191,11 +191,35 @@ uv run morphogen structure check morphogen.yaml
 uv run morphogen measure cell:classify
 uv run morphogen judge cell:classify my-branch
 uv run morphogen change my-branch                # a change that claims no improvement: its cells' tests
+uv run morphogen request /outside/request.yaml   # one document: what to judge, and the operator's settings
 uv run morphogen tune cell:classify              # the selector chooses optimizers
 uv run morphogen optimizers                      # the catalog
 uv run morphogen evidence --verify
 uv run morphogen ui                              # http://127.0.0.1:8765/
 ```
+
+### A request: one document in, one verdict out
+
+A system that calls the judge can say everything it passes in one file, kept outside the repository:
+
+```yaml
+morphogen: request/v1
+kind: judge                     # judge | change | probe | measure
+project: /path/to/the/repository
+base: main
+candidate: my-branch
+target: cell:classify
+labels: {optimizer: grid}       # recorded, never decide
+local:                          # optional: replaces morphogen.local.yaml
+  sandbox: podman
+  cells: {classify: {private: /outside/answers, search: /outside/search, inputs: /outside/data}}
+```
+
+The rules (cells, interfaces, tests, and the settings in `morphogen.yaml`) still come from the base commit:
+a request that carries any, or sits inside the repository, is refused. The verdict records the request's
+digest. Each record in the evidence log follows a published schema,
+[`schemas/evidence-record.v1.json`](schemas/evidence-record.v1.json) (generated from `morphogen/schema.py`,
+which also says how to verify the hash chain without Morphogen's code).
 
 Python 3.11 or later and [uv](https://docs.astral.sh/uv/); pydantic, PyYAML and the MCP SDK (all
 MIT, pinned in `uv.lock`); Optuna 5.0.0 and GEPA 0.1.4 (both MIT) as optional extras
@@ -276,6 +300,10 @@ between trials (#45).
   the held-out answers are (`MORPHOGEN_PRIVATE`); probes score against `search` instead; a
   candidate whose files name the private directory is refused. Inputs kept outside the repository
   are read-only to every run, and their digest is in every verdict.
+- **The judge's own settings are the base's too.** The sandbox, its image and the budget come from
+  `morphogen.yaml` as committed on the base, with only the operator's `morphogen.local.yaml` (or a
+  request's `local`) over them, never from the working copy; each verdict records them and where each
+  came from.
 - **Settings stay in bounds.** A setting moved outside its range or choices, a kept setting
   changed, or a setting made unreadable refuses the candidate. Every verdict records each
   setting's base and candidate values.
@@ -288,10 +316,11 @@ between trials (#45).
   candidate's tree visible, nothing kept between runs, resource limits. A cell can require them.
 - **Everything is evidence:** every verdict and probe is logged as `trust: measured, by: judge`.
 
-The red team holds the known ways to cheat: 53 of them (`tests/test_redteam.py` and the default-deny
+The red team holds the known ways to cheat: 61 of them (`tests/test_redteam.py` and the default-deny
 cheats in `tests/test_cells.py`), from patching the timer to reading the held-out answers, rigging
 the bench, widening `change` in the candidate's own `morphogen.yaml`, breaking a neighbour's
-contract, winning locally while the system gets slower, or switching telemetry off to look free.
+contract, winning locally while the system gets slower, switching telemetry off to look free, raising
+the budget in an uncommitted working copy, or carrying rules in a request.
 Every one must fail; a new one goes there first. The whole suite also runs with every trial in
 Podman (`MORPHOGEN_TEST_SANDBOX=podman`), where the container-only cheats run too.
 

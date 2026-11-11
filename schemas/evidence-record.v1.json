@@ -1,0 +1,268 @@
+{
+  "$defs": {
+    "Gate": {
+      "additionalProperties": true,
+      "properties": {
+        "decision": {
+          "description": "who may merge a pass: merge (an agent may), review (a person merges), or none",
+          "title": "Decision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision"
+      ],
+      "title": "Gate",
+      "type": "object"
+    },
+    "Refs": {
+      "additionalProperties": true,
+      "properties": {
+        "base": {
+          "description": "the base commit, in full",
+          "title": "Base",
+          "type": "string"
+        },
+        "candidate": {
+          "description": "the candidate commit, in full",
+          "title": "Candidate",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base",
+        "candidate"
+      ],
+      "title": "Refs",
+      "type": "object"
+    },
+    "RequestRef": {
+      "additionalProperties": true,
+      "properties": {
+        "digest": {
+          "description": "SHA-256 of the request's canonical JSON",
+          "title": "Digest",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "judge",
+            "change",
+            "probe",
+            "measure"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "description": "the request format, e.g. request/v1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "digest",
+        "version",
+        "kind"
+      ],
+      "title": "RequestRef",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/OpenReplicant/Morphogen/blob/main/schemas/evidence-record.v1.json",
+  "additionalProperties": true,
+  "description": "The log (evidence.py): each record is a JSON object stored as its canonical JSON (keys sorted, separators\n\",\" and \":\", UTF-8 not escaped). `hash` is the SHA-256 of the canonical JSON of the record without `hash`;\n`prev` is the previous record's `hash` (\"0\" * 64 for the first); `seq` counts from 1. A reader verifies the\nchain by recomputing each hash in `seq` order. Fields not listed here may appear; a reader keeps them.",
+  "properties": {
+    "at": {
+      "description": "UTC, ISO 8601 to the second, e.g. 2026-11-11T14:47:02Z",
+      "title": "At",
+      "type": "string"
+    },
+    "by": {
+      "description": "who wrote it; only `judge` writes measured or simulated records",
+      "title": "By",
+      "type": "string"
+    },
+    "claim": {
+      "title": "Claim",
+      "type": "string"
+    },
+    "gate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Gate"
+        },
+        {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      ],
+      "title": "Gate"
+    },
+    "hash": {
+      "maxLength": 64,
+      "minLength": 64,
+      "title": "Hash",
+      "type": "string"
+    },
+    "kind": {
+      "const": "verdict",
+      "title": "Kind",
+      "type": "string"
+    },
+    "labels": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the caller's labels; never decide the verdict",
+      "title": "Labels"
+    },
+    "method": {
+      "title": "Method",
+      "type": "string"
+    },
+    "outcome": {
+      "additionalProperties": true,
+      "description": "what was measured and checked; its keys depend on the method",
+      "title": "Outcome",
+      "type": "object"
+    },
+    "parameters": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "items": {},
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parameters"
+    },
+    "prev": {
+      "maxLength": 64,
+      "minLength": 64,
+      "title": "Prev",
+      "type": "string"
+    },
+    "refs": {
+      "$ref": "#/$defs/Refs"
+    },
+    "request": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequestRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "runner": {
+      "additionalProperties": true,
+      "description": "the guarantees that runner gives",
+      "title": "Runner",
+      "type": "object"
+    },
+    "sandbox": {
+      "description": "the runner the judge used: none, podman or docker",
+      "title": "Sandbox",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 1,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "settings": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the judge's settings for this run (trunk, sandbox, sandbox_image, budget)",
+      "title": "Settings"
+    },
+    "settings_from": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "per setting: base (the base commit's morphogen.yaml), morphogen.local.yaml, request, or default",
+      "title": "Settings From"
+    },
+    "subject": {
+      "additionalProperties": true,
+      "description": "system: the cell or cells; path: cell:NAME, or change",
+      "title": "Subject",
+      "type": "object"
+    },
+    "trust": {
+      "enum": [
+        "measured",
+        "simulated",
+        "stated",
+        "inferred",
+        "asserted"
+      ],
+      "title": "Trust",
+      "type": "string"
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "fail"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "required": [
+    "seq",
+    "at",
+    "prev",
+    "hash",
+    "claim",
+    "by",
+    "trust",
+    "kind",
+    "verdict",
+    "subject",
+    "method",
+    "outcome",
+    "refs",
+    "gate",
+    "sandbox",
+    "runner"
+  ],
+  "title": "A verdict in Morphogen's evidence log (evidence-record/v1)",
+  "type": "object"
+}

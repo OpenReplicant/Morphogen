@@ -4,6 +4,7 @@
     morphogen structure check|scope|render FILE [CELL] [--observed FILE]
     morphogen measure TARGET [--ref main]
     morphogen judge TARGET CANDIDATE [--base main]
+    morphogen request FILE          # one document: what to judge, and the operator's local settings
     morphogen tune TARGET [--optimizer NAME] [--steps N] [--trials N]
     morphogen optimizers
     morphogen evidence [--verify] [--limit N] [--by judge]
@@ -110,6 +111,13 @@ def cmd_change(a) -> int:
     return 0 if r["verdict"] == "pass" else 1
 
 
+def cmd_request(a) -> int:
+    from .request import run as run_request
+    r = run_request(Path(a.file))
+    _print(r)
+    return 0 if r.get("verdict", "pass") == "pass" else 1
+
+
 def cmd_tune(a) -> int:
     root = _root()
     cfg = load_config(root)
@@ -183,6 +191,11 @@ def main(argv: list[str] | None = None) -> int:
     ch.add_argument("candidate")
     ch.add_argument("--base", default="main")
     ch.set_defaults(fn=cmd_change)
+
+    rq = sub.add_parser("request", help="do what a request file asks (judge, change, probe or measure): the rules "
+                        "from the base commit, the local settings from the request; the verdict records its digest")
+    rq.add_argument("file", help="a request/v1 document, outside the repository")
+    rq.set_defaults(fn=cmd_request)
 
     tu = sub.add_parser("tune", help="search a cell's bounded settings; judge the best")
     tu.add_argument("target")
