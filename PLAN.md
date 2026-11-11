@@ -171,6 +171,65 @@ OpenReplicant/Morphogen`, then `/plugin install morphogen@morphogen`.
   systems held outside the repository.
 - An agent target measured by the `otel` observer.
 
+### 7. The judge alone, proven, before it is published
+Why: Morphogen has grown a map of its own (intended against observed, coverage, a view, `status`, the
+map skill) while the first system to call it from outside, Substrate, keeps its map, drift and evidence
+in its own store and exports `catalog-info.yaml` only so Morphogen can read it back. Substrate has the
+cells declared and the verdict reader built, and no change of its has been judged yet: its tests need a
+database, settings and a tools container that a judge's worktree does not have. The value claims in
+BRIEF.md (the gate; the selector choosing scope and optimizer) have not been tested. This phase keeps
+the core, makes it callable by any system, and runs the test that says whether the rest stays.
+
+Each item is one pull request; the ones that change the judge start with their cheats in the red team
+and end with the suite passing locally and in Podman, and an A/A check.
+
+- **7a. One request in, one verdict out.** The judge's input, written down as one document: the base
+  and candidate commits, the cells and interfaces (from `morphogen.yaml`, `catalog-info.yaml`, or a
+  request file a caller writes from its own store), `inputs`, and the local settings. Its output: the
+  verdict record, with a published, versioned schema (the evidence log's canonical JSON and hash
+  chain included), so a caller verifies a log without copying Morphogen's code.
+  Red team first: a request's rules must be the base's. A request built from the candidate's tree, or
+  one whose cells widen what the base's own structure says (when the base has one), is refused; the
+  request's digest goes in the verdict.
+- **7b. Judge a system where it runs.** A caller's tests may need services and settings: a database, a
+  tools container, values from an env file. The operator names them in `morphogen.local.yaml`, as
+  `inputs` are named today: read-only, outside the repository, their names (never their values) and a
+  digest in the verdict, the same for base and candidate. Red team first: a candidate that prints a
+  setting's value into its output, writes to a named service's state that the next round reads, or
+  reaches a service it was not given, is refused or cannot.
+- **7c. Model calls counted outside the candidate** (closes #43). The operator names a model gateway;
+  a judged run reaches models only through it (the sandbox's network allows that one address); the
+  gateway's own log, read outside the candidate, gives calls, tokens and cost per round as measured
+  metrics, beside `otel`. Agent cells can then run in a sandbox instead of `sandbox: none`. Red team
+  first: a candidate that calls a model around the gateway, or one that reports its own token counts,
+  must not move a verdict. Which models and providers a judged target may use is the operator's
+  setting; Morphogen's own development keeps running models through Claude Code on the operator's
+  subscription.
+- **7d. The core, and the rest as adapters.** The core: the cell loader and default deny, the
+  structure's scopes, boundaries and gate tests, the judge and runner, the system guard, the evidence
+  log and the optimizer contract. Adapters, each optional and outside the judge's imports: Backstage
+  as a source, intended against observed (`compare`), coverage, the Mermaid view and the web UI,
+  `status`, the `map` skill. A test checks that `judge.py`, `runner.py` and `project.py` import no
+  adapter. BRIEF.md's "family" table says the mapper, builder and deploy are any caller's.
+- **7e. Prove it.** The three arms in BRIEF.md ("Value claims and how to test them") on entity
+  resolution, the same budget each: an optimizer with its own evaluator (A), behind the gate (B), the
+  gate plus the selector choosing scope and optimizer (C). Report held-out F1 and the cheats that got
+  through, per arm, with the noise from an A/A check. If C does not beat B, the selector is cut from
+  the core (BRIEF.md already says so). Beside it, one change from an outside caller judged with
+  `morphogen change` through 7a and 7b (Substrate's are ready).
+- **7f. Ready to show.** README's opening says what the core is and what is an adapter; CLAUDE.md's
+  state is current; issues #43 to #49 are closed or rewritten for this build; the stale branches
+  (`first-iteration`, `rebuild-5`, `rebuild-6`, and merged work branches) are deleted or tagged; the
+  demos that are not the judge's own (`catalog`, `cognitive-model`) move to their own repositories or
+  out. Then the plugin version, and publicity.
+
+**Done when** a system outside this repository has a change judged through one request, with its
+services and model calls counted from outside; the core imports no adapter; and the three-arm result is
+in the README, whichever way it went.
+
+**The operator's decisions in this phase:** whether the adapters stay in this repository as optional
+extras or leave it (7d); where the two demos go (7f); and what 7e's result means for the selector.
+
 ## Later, in the family (not in this plan)
 - ArchiMate exchange files and OCEL 2.0 event logs as sources (business processes as cells,
   judged by replay with `trust: simulated`; PM4Py is AGPL, so an external tool, not a dependency).

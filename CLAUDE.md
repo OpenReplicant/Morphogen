@@ -57,8 +57,9 @@ candidate. Never edit the installed plugin's directory.
   `MORPHOGEN_LIVE_MODEL=1` runs the one live GEPA test.
 
 ## Next
-[PLAN.md](PLAN.md) brings everything into the small-core paradigm (phases 0-6); the items below
-fold into it.
+[PLAN.md](PLAN.md) brings everything into the small-core paradigm (phases 0-6), and phase 7 makes the
+judge callable by any system and tests the value claims before it is published; the items below fold
+into it.
 
 1. Design simplifications left: probe as a mode of the judge. Done: one structure document
    (morphogen.yaml, phases 1-2), one kind of "still works" test (`tests`, `same_as_base`).
