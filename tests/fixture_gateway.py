@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 ENGINE = os.environ.get("MORPHOGEN_TEST_SANDBOX", "none")
-KEY = "judge-key-0123456789abcdef"
+KEY = "judge-key-0123456789abcdef"   # a made-up key for the fake gateway  # gitleaks:allow
 
 SERVER = r'''
 import json, os, time
