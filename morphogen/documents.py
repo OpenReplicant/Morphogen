@@ -140,9 +140,38 @@ def load_config(root: Path) -> dict:
     f = Path(root) / "morphogen.yaml"
     cfg = load("config", f) if f.exists() else validate("config", {})
     local = local_config(root)
-    for k in ("sandbox", "sandbox_image", "budget"):
+    for k in LOCAL_SETTINGS:
         if k in local:
             cfg[k] = local[k]
     cfg = validate("config", cfg, f)
-    cfg["local"] = {"cells": local.get("cells") or {}}
+    cfg["local"] = {"cells": local.get("cells") or {}, "settings": {k: local[k] for k in LOCAL_SETTINGS if k in local}}
     return cfg
+
+
+LOCAL_SETTINGS = ("sandbox", "sandbox_image", "budget")
+JUDGE_SETTINGS = ("trunk", "sandbox", "sandbox_image", "budget")
+
+
+def rules_config(repo: Path, sha: str, cfg: dict) -> dict:
+    """The settings a judged run uses: morphogen.yaml as committed at `sha` (the base), with the operator's
+    morphogen.local.yaml laid over it, never the working copy. `cfg` is load_config's result; what it read
+    from the local file is kept (cfg["local"]), what it read from the working copy is dropped. The result
+    says where each setting came from (`settings_from`)."""
+    import subprocess
+    r = subprocess.run(["git", "show", f"{sha}:morphogen.yaml"], cwd=repo, capture_output=True, text=True)
+    try:
+        data = yaml.safe_load(r.stdout) if r.returncode == 0 else {}
+    except yaml.YAMLError as e:
+        raise DocumentError(f"{sha[:12]}:morphogen.yaml", [f"not valid YAML: {e}"]) from None
+    base = validate("config", {k: v for k, v in (data or {}).items() if k in JUDGE_SETTINGS}, f"{sha[:12]}:morphogen.yaml")
+    local = (cfg.get("local") or {}).get("settings") or {}
+    out = validate("config", {**base, **local}, f"{sha[:12]}:morphogen.yaml + morphogen.local.yaml")
+    out["local"] = cfg.get("local") or {"cells": {}, "settings": {}}
+    out["settings_from"] = {k: ("morphogen.local.yaml" if k in local else "base" if k in (data or {}) else "default")
+                            for k in JUDGE_SETTINGS}
+    return out
+
+
+def settings_of(cfg: dict) -> dict:
+    """The judge's settings, as a verdict records them."""
+    return {k: cfg[k] for k in JUDGE_SETTINGS if k in cfg}

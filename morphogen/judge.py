@@ -56,6 +56,7 @@ import yaml
 from .observers import ObserverError, OtelObserver
 from .runner import capabilities, missing, run, sandbox_mode
 from .project import FILE as PROJECT_FILE, Project, ProjectError, _listed
+from .documents import rules_config, settings_of
 
 INTERFACES = ("direct", "simulated")
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
@@ -736,13 +737,14 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
     kind `probe`; it cannot be proposed for merging, and it does not count against
     budget.trials_per_day (budget.probes_per_day caps it instead).
     """
+    repo = repo_root(root)
+    base_sha = resolve(repo, base or cfg.get("trunk", "main"))
+    cand_sha = resolve(repo, candidate)
+    cfg = rules_config(repo, base_sha, cfg)
     limit = int((cfg.get("budget") or {}).get("probes_per_day", 0) or 0)
     if limit and _trials_today(evidence, "probe") >= limit:
         raise JudgeError(f"the probe budget for today ({limit}) is spent; the operator can raise "
                          "budget.probes_per_day in morphogen.yaml")
-    repo = repo_root(root)
-    base_sha = resolve(repo, base or cfg.get("trunk", "main"))
-    cand_sha = resolve(repo, candidate)
     with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
         a = _admit(root, repo, cfg, target, cell, base_sha, cand_sha, btree, ctree, "probe")
         spec, rel, gate, metrics_spec, bdir, cdir = (a[k] for k in ("spec", "rel", "gate", "metrics_spec",
@@ -800,7 +802,8 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
         "outcome": {k: v for k, v in out.items() if k in ("forbidden", "parameter_violations", "check", "metrics",
                                                           "timed_output_mismatches", "interfaces")}
         | {"cases": [{k: c[k] for k in ("seed", "status")} for c in out.get("cases", [])]},
-        "sandbox": sandbox_mode(cfg), "trust": "measured", "by": "judge",
+        "sandbox": sandbox_mode(cfg), "settings": settings_of(cfg), "settings_from": cfg["settings_from"],
+        "trust": "measured", "by": "judge",
     })
     out["evidence_seq"] = rec["seq"]
     out["note"] = "practice only: only judge() can produce a verdict, and only a verdict can be proposed for merging"
@@ -810,6 +813,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
 def measure(root: Path, cfg: dict, target: str, ref: str, evidence) -> dict:
     repo = repo_root(root)
     sha = resolve(repo, ref)
+    cfg = rules_config(repo, sha, cfg)
     with worktrees(repo, [sha]) as (tree,):
         spec, rel, name, _ = _target(root, repo, cfg, target, tree)
         subject = f"cell:{name}"
@@ -853,6 +857,7 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
     them), with the cells' own tests, pass on the candidate. Recorded as a verdict on the change."""
     repo = repo_root(root)
     base_sha, cand_sha = resolve(repo, base), resolve(repo, candidate)
+    cfg = rules_config(repo, base_sha, cfg)
     with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
         proj = structure_of(btree)
         changed = _changed(repo, base_sha, cand_sha)
@@ -917,12 +922,14 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
         "gate": gate,
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
+        "settings": settings_of(cfg),
+        "settings_from": cfg["settings_from"],
         "trust": "measured",
         "by": "judge",
     })
     return {"verdict": verdict, "gate": gate, "base": base_sha, "candidate": cand_sha, "cells": cells,
             "files": files, "tests": results, "parameters": parameters, "reasons": reasons,
-            "sandbox": rec["sandbox"], "evidence_seq": rec["seq"]}
+            "sandbox": rec["sandbox"], "settings": rec["settings"], "evidence_seq": rec["seq"]}
 
 
 def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidence,
@@ -931,12 +938,13 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
     structure says it measures `target`), also the tests of every interface the cell's scope touches,
     its parameters in the base's structure, and the system guard.
     `labels` (optimizer, member, values, approach) are recorded with the verdict and never affect it."""
+    repo = repo_root(root)
+    base_sha, cand_sha = resolve(repo, base), resolve(repo, candidate)
+    cfg = rules_config(repo, base_sha, cfg)
     limit = int((cfg.get("budget") or {}).get("trials_per_day", 0) or 0)
     if limit and _trials_today(evidence) >= limit:
         raise JudgeError(f"the trial budget for today ({limit}) is spent; the operator can raise "
                          "budget.trials_per_day in morphogen.yaml")
-    repo = repo_root(root)
-    base_sha, cand_sha = resolve(repo, base), resolve(repo, candidate)
     with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
         a = _admit(root, repo, cfg, target, cell, base_sha, cand_sha, btree, ctree)
         spec, rel, cell, gate, metrics_spec, bdir, cdir = (a[k] for k in ("spec", "rel", "cell", "gate",
@@ -1055,6 +1063,8 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "gate": a["proj"].gate(name, passed),
         "sandbox": sandbox_mode(cfg),
         "runner": capabilities(cfg),
+        "settings": settings_of(cfg),
+        "settings_from": cfg["settings_from"],
         "trust": trust,
         "by": "judge",
     })
@@ -1076,5 +1086,6 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "interface": interface,
         "trust": trust,
         "sandbox": rec["sandbox"],
+        "settings": rec["settings"],
         "evidence_seq": rec["seq"],
     }
