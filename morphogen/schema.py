@@ -50,6 +50,23 @@ class Record(_Open):
     kind: str | None = Field(None, description="verdict, probe, measurement, or a caller's own kind")
 
 
+class ServedEnv(_Open):
+    pass_: list[str] = Field(alias="pass", description="the names every run got as environment variables")
+    public: list[str] = Field(description="the names whose values were not scanned for in the runs' output")
+    digest: str = Field(min_length=64, max_length=64, description="SHA-256 of the canonical JSON of every served name and value")
+
+
+class ServedService(_Open):
+    image: str = Field(description="the image as the operator named it")
+    id: str = Field(description="the image's id, resolved once; every run's service started from it")
+    env: list[str] = Field(description="the names the service got")
+
+
+class Served(_Open):
+    env: ServedEnv | None = None
+    services: dict[str, ServedService] | None = None
+
+
 class Verdict(Record):
     """A record of kind `verdict`: the judge's answer on a candidate against a base."""
     kind: Literal["verdict"]
@@ -64,6 +81,7 @@ class Verdict(Record):
     settings: dict[str, Any] | None = Field(None, description="the judge's settings for this run (trunk, sandbox, sandbox_image, budget)")
     settings_from: dict[str, str] | None = Field(None, description="per setting: base (the base commit's morphogen.yaml), morphogen.local.yaml, request, or default")
     request: RequestRef | None = None
+    served: Served | None = Field(None, description="what the runs were given beyond their tree (morphogen.local.yaml's env and services); names, a digest and image ids, never a value")
     parameters: dict[str, Any] | list[Any] | None = None
     labels: dict[str, str] | None = Field(None, description="the caller's labels; never decide the verdict")
 

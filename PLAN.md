@@ -191,7 +191,7 @@ and end with the suite passing locally and in Podman, and an A/A check.
   Red team first: a request's rules must be the base's. A request built from the candidate's tree, or
   one whose cells widen what the base's own structure says (when the base has one), is refused; the
   request's digest goes in the verdict.
-- **7b. Judge a system where it runs.** A caller's tests may need services and settings: a database, a
+- **7b. Judge a system where it runs** (done: `morphogen/serve.py`, ServedCheats). A caller's tests may need services and settings: a database, a
   tools container, values from an env file. The operator names them in `morphogen.local.yaml`, as
   `inputs` are named today: read-only, outside the repository, their names (never their values) and a
   digest in the verdict, the same for base and candidate. Red team first: a candidate that prints a
