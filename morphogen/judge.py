@@ -629,6 +629,15 @@ def _paired(bs: list[float], cs: list[float], lower: bool, n: int = 2000, absolu
             "ci95": (draws[int(0.025 * n)], draws[int(0.975 * n) - 1])}
 
 
+def _recorded(metrics_spec: dict, bs: dict, cs: dict) -> dict:
+    """For the record only: each side's median of what the judge measured (its own timings, the meter's counts,
+    the observer's and the scorer's numbers) and `better` does not name. Nothing here is compared or decides.
+    What the measured code printed about itself (reported.*) is left out: a verdict keeps no number a candidate
+    wrote."""
+    return {k: {"base": statistics.median(bs[k]), "candidate": statistics.median(cs[k])}
+            for k in sorted(bs) if k not in metrics_spec and not k.startswith("reported.") and bs[k] and cs.get(k)}
+
+
 def _compare(metrics_spec: dict, bs: dict, cs: dict, alpha: float = 0.01) -> tuple[dict, bool]:
     """Per-metric comparison over paired rounds, and whether more rounds could change the verdict.
 
@@ -1007,6 +1016,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         equivalent = mismatches == 0 and failures == 0
 
         comparisons, perf_ok, bench_seeds, outputs, timed_mismatches, system = {}, False, [], [], 0, None
+        recorded: dict = {}
         candidate_fault = None
         if check_ok and equivalent and not refused:
             m = spec["measure"]
@@ -1016,6 +1026,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
             except CandidateFault as e:
                 candidate_fault = str(e)
             comparisons, outputs, bench_seeds = rounds["comparisons"], rounds["outputs"], rounds["seeds"]
+            recorded = _recorded(metrics_spec, *rounds["samples"])
             # The timed runs must produce what the base produces on the same input. Otherwise code
             # that can tell a timed run from a checked one (an environment variable, argv, the caller)
             # could do less work only when timed. Opt out only for workloads whose output varies.
@@ -1074,7 +1085,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
                     "check": check_ok, "interfaces": interface_results, "system": system,
                     "generated_inputs": len(eq_seeds),
                     "wrong": mismatches, "failed": failures, "timed_output_mismatches": timed_mismatches,
-                    "metrics": comparisons},
+                    "metrics": comparisons, "recorded": recorded},
         "refs": {"base": base_sha, "candidate": cand_sha},
         "parameters": parameters,
         **({"cell": cell, "scope": gate["scope"]} if cell else {}),
