@@ -131,7 +131,10 @@ interfaces:
   meter runs outside the candidate: `meter open RUN_ID` prints `{"env": {...}}` (the key the run calls
   with), `meter close RUN_ID` prints that run's counts from the gateway's own record (`{"calls": 3,
   "tokens": 120, "cost": 0.0}`). They are `metered.*` metrics a cell's `better` can name, primary
-  included; what a run prints about its own calls stays `reported.*` and decides nothing.
+  included; what a run prints about its own calls stays `reported.*` and decides nothing. A number the
+  judge measured that `better` does not name (the meter's other counts, the judge's own timings) is kept in the
+  verdict as `outcome.recorded`, each side's median, for the record: it decides nothing, and no `reported.*`
+  number is kept there.
 
 Name a cell to judge as `cell:classify`, `classify`, or its `dir`. A project with nothing yet starts
 with one cell; the `map` skill drafts it with you.

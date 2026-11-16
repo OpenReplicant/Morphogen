@@ -898,6 +898,62 @@ class MeteredCheats(unittest.TestCase):
         r = self.p.judge(cand)
         self.assertEqual(r["verdict"], "fail", r.get("reasons"))
 
+    def test_report_its_own_counts_into_the_record(self):
+        """`better` names the calls; the tokens are kept for the record. The candidate makes one call where the
+        base makes three, and prints that it used no tokens: the record keeps the meter's tokens, not its own."""
+        from tests.fixture_gateway import CALL
+        doc = cells_doc(code=True)
+        doc["cells"]["classify"]["better"] = "metered.calls lower"
+        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+        self.p.write("classify/classify.py", CLASSIFY + "LIMIT = 100\n" + CALL + "for _ in range(3):\n    call()\n")
+        git(self.p.repo, "commit", "-qam", "base: three calls a run, calls metered")
+        self.p.cfg = load_config(self.p.repo)
+        cand = self.p.branch("fewer-and-a-story", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n" + CALL +
+                                                   "call()\nimport json\n"
+                                                   "print(json.dumps({'tokens': 0, 'metered.tokens': 0}))\n"})
+        r = self.p.judge(cand)
+        self.assertEqual(r["verdict"], "pass", r.get("reasons"))
+        recorded = self.p.evidence.dump()[-1]["outcome"]["recorded"]
+        self.assertEqual(recorded["metered.tokens"], {"base": 30, "candidate": 10}, recorded)
+        self.assertNotIn("metered.calls", recorded)      # named in `better`: it is in outcome.metrics
+        self.assertFalse([k for k in recorded if k.startswith("reported.")], recorded)
+
+
+class RecordedCheats(unittest.TestCase):
+    """What the judge measured and `better` does not name is kept in the verdict for the record
+    (outcome.recorded). It decides nothing, and what a candidate prints about itself never gets there."""
+
+    STORY = ("import atexit as _a, json as _j\n"
+             "_a.register(lambda: print(_j.dumps({'accuracy': 1.0, 'scored.accuracy': 1.0, 'wall_seconds': 0, "
+             "'cpu_seconds': 0, 'max_rss_kb': 1})))\n")
+
+    def setUp(self):
+        self.p = CellsProject(code=True)
+
+    def tearDown(self):
+        self.p.close()
+
+    def test_print_better_numbers_and_change_nothing(self):
+        r = self.p.judge(self.p.branch("story", {"classify/classify.py": CLASSIFY + "LIMIT = 100\n" + self.STORY}))
+        self.assertEqual(r["verdict"], "fail", r.get("reasons"))
+        recorded = self.p.evidence.dump()[-1]["outcome"].get("recorded") or {}
+        self.assertFalse([k for k in recorded if k.startswith("reported.")], recorded)
+
+    def test_the_record_keeps_the_judges_numbers_not_the_candidates(self):
+        from tests.fixture_scored import CLASSIFY as scored
+        better = scored.replace("THRESHOLD = 10", "THRESHOLD = 50").replace('return "high" if x >= THRESHOLD else "low"',
+                                'return "low" if x < THRESHOLD else "high"') + "LIMIT = 100\n"
+        r = self.p.judge(self.p.branch("code-and-a-story", {"classify/classify.py": better + self.STORY}))
+        self.assertEqual(r["verdict"], "pass", r.get("reasons"))
+        rec = self.p.evidence.dump()[-1]
+        recorded = rec["outcome"]["recorded"]
+        self.assertFalse([k for k in recorded if k.startswith("reported.")], recorded)
+        self.assertFalse(set(recorded) & set(rec["outcome"]["metrics"]), recorded)
+        for k in ("wall_seconds", "cpu_seconds", "max_rss_kb"):
+            self.assertEqual(set(recorded[k]), {"base", "candidate"}, recorded)
+        self.assertGreater(recorded["wall_seconds"]["candidate"], 0, recorded)   # it printed 0
+        self.assertGreater(recorded["max_rss_kb"]["candidate"], 1, recorded)     # it printed 1
+
 
 @unittest.skipIf(CONTAINER, "without a container there is no gateway to reach")
 class MeteredWithoutAContainer(unittest.TestCase):
