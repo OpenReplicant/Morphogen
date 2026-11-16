@@ -112,7 +112,12 @@ interfaces:
   `simulates`, `requires`, `description`.
 - **Held-out answers** never go in the repository. The operator names them in an uncommitted
   `morphogen.local.yaml`: `cells: {classify: {private: /outside/the/repo, search: /another}}`.
-  Verdicts score against `private`; probes, and so every optimizer, against `search`. Data the
+  Verdicts score against `private`; probes, and so every optimizer, against `search`. A scorer
+  should also print `cases_seen` (the cases it found in the run's output) and `cases_expected` (the
+  answers it holds) beside its metrics: when they differ the judge refuses a candidate's run, and
+  refuses to judge at all when the base's run is the short one. A workload whose last line of output
+  is a JSON line loses that line (it is kept as what the run reports about itself, not passed to the
+  scorer), so end the workload on a closing line. Data the
   workload reads but that cannot be committed (a licence, its size) is named the same way as
   `inputs`: every run reads it from `MORPHOGEN_INPUTS`, a container mounts it read-only, and the
   judge refuses a verdict if it changed during the runs. It must lie outside the repository and

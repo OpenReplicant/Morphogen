@@ -63,6 +63,9 @@ from .documents import rules_config, settings_of
 INTERFACES = ("direct", "simulated")
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
 MARK = "__MORPHOGEN_JUDGE__"
+# What a scorer may say about its own coverage: how many cases it found in the run's output, and how
+# many it holds answers for. They are a check, never a metric.
+COUNTS = ("cases_seen", "cases_expected")
 FORBIDDEN_MODULES = set(sys.stdlib_module_names) | {"sitecustomize", "usercustomize"}
 
 # Runs the measured command as a child process and reports its resource usage.
@@ -80,6 +83,10 @@ sys.stdout.write(o.read().decode(errors="replace")); sys.stderr.write(e.read().d
 sys.stdout.write("\n__MORPHOGEN_JUDGE__" + json.dumps({"rc": p.returncode, "wall_seconds": wall,
     "cpu_seconds": ru.ru_utime + ru.ru_stime, "max_rss_kb": ru.ru_maxrss}) + "\n")
 """
+
+
+class ShortRun(Exception):
+    """The scorer saw fewer (or more) cases in a run's output than it holds answers for."""
 
 
 class CandidateFault(Exception):
@@ -282,9 +289,13 @@ def _score(spec: dict, scorer_dir: Path, env: dict, output: str, timeout: int) -
     r = run(sc["run"], scorer_dir, {"sandbox": "none"}, stdin=output, env=env, timeout=timeout)
     if r.rc != 0:
         raise JudgeError(f"the scorer failed (exit {r.rc}): {r.err.strip()[-400:]}")
-    scores = {f"scored.{k}": v for k, v in _reported(r.out).items()}
+    reported = _reported(r.out)
+    counts = {k: reported.pop(k) for k in COUNTS if k in reported}
+    scores = {f"scored.{k}": v for k, v in reported.items()}
     if not scores:
         raise JudgeError("the scorer printed no metrics (one JSON object of numbers on its last line)")
+    if len(counts) == 2 and counts["cases_seen"] != counts["cases_expected"]:
+        raise ShortRun(f"the scorer saw {counts['cases_seen']:g} of {counts['cases_expected']:g} cases")
     return scores
 
 
@@ -598,7 +609,17 @@ def _one_round(spec: dict, dirs: list[Path], cfg: dict, seed: int, timeout: int,
                 raise JudgeError(f"observer, on the {side}'s run: {e}") from None
             for k, v in observed.items():
                 samples[i].setdefault(f"observed.{k}", []).append(v)
-        for k, v in _score(spec, observer_dir or dirs[i], env, results[i], timeout).items():
+        try:
+            scored = _score(spec, observer_dir or dirs[i], env, results[i], timeout)
+        except ShortRun as e:
+            # A score over part of the cases is not the score: the candidate's own short run is its
+            # fault; the base's is the harness's (a workload that loses a case), and nothing is judged.
+            if side == "candidate":
+                raise CandidateFault(f"{e} on the candidate's run: a score over part of the cases is "
+                                     "not compared") from None
+            raise JudgeError(f"{e} on the base's run: fix the workload or the scorer on the base "
+                             "before judging against it") from None
+        for k, v in scored.items():
             samples[i].setdefault(k, []).append(v)
     if outputs is not None:
         outputs.append(results)
