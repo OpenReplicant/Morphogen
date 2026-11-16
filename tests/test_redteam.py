@@ -299,6 +299,65 @@ def label(x):
 '''
 
 
+# A scorer that divides by the answers it was given, not by the answers it holds, and says how many of
+# each there were. A run that prints only the cases it is sure of then looks perfect.
+SCORE_WHAT_IT_SAW = '''import json, os, sys
+
+gold = json.load(open(os.path.join(os.environ["MORPHOGEN_PRIVATE"], "gold.json")))
+got = sys.stdin.read().splitlines()
+right = sum(1 for g, x in zip(gold, got) if g == x)
+print(json.dumps({"accuracy": right / max(len(got), 1), "cases_seen": len(got), "cases_expected": len(gold)}))
+'''
+
+STOP_BEFORE_THE_HARD_CASES = '''import os, sys
+THRESHOLD = 10
+
+
+def label(x):
+    if x >= THRESHOLD:  # everything from here on it would get wrong: end the run, cleanly
+        sys.stdout.flush()
+        os._exit(0)
+    return "low"
+'''
+
+
+class ShortRuns(unittest.TestCase):
+    """The scorer saw fewer cases than it holds answers for."""
+
+    def setUp(self):
+        self.p = ScoredProject(files={"score.py": SCORE_WHAT_IT_SAW})
+
+    def tearDown(self):
+        self.p.close()
+
+    def test_answer_only_the_easy_cases(self):
+        r = self.p.judge(self.p.branch("easy-only", {f"{self.p.home}/classify.py": STOP_BEFORE_THE_HARD_CASES},
+                                       root=True))
+        self.assertEqual(r["verdict"], "fail", f"a run that skipped its hard cases passed the judge: {r}")
+        self.assertTrue(any("4 of 34" in x for x in r["reasons"]), r["reasons"])
+
+    def test_a_base_that_loses_a_case_is_not_judged_against(self):
+        # the workload's last line is a JSON line, which the judge keeps as what the run reports about
+        # itself and does not pass to the scorer: the last case is lost on both sides alike
+        lossy = ('import json\nfrom classify import label\n'
+                 'for x in json.load(open("inputs.json")):\n    print(json.dumps({"label": label(x)}))\n')
+        p = ScoredProject(files={"score.py": SCORE_WHAT_IT_SAW, "bench.py": lossy})
+        try:
+            with self.assertRaises(judge_mod.JudgeError) as e:
+                p.judge(p.branch("better", {f"{p.home}/classify.py": CLASSIFY.replace("= 10", "= 50")}, root=True))
+            self.assertIn("33 of 34", str(e.exception))
+            self.assertIn("base", str(e.exception))
+        finally:
+            p.close()
+
+    def test_a_full_run_is_still_judged(self):
+        # the counts are a check, not a metric: they are not in the verdict's samples
+        r = self.p.judge(self.p.branch("better", {f"{self.p.home}/classify.py": CLASSIFY.replace("= 10", "= 50")},
+                                       root=True))
+        self.assertEqual(r["verdict"], "pass", r)
+        self.assertNotIn("cases_seen", json.dumps(r))
+
+
 class ScoreCheats(unittest.TestCase):
     """The candidate keeps a bad threshold and tries to look accurate."""
 
