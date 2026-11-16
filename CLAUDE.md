@@ -10,7 +10,7 @@ docs/restart/LESSONS.md.
   `otel`), `project.py` (the cell format: morphogen.yaml's cells and interfaces, default deny),
   `backstage.py` (catalog-info.yaml files as a source of cells),
   `status.py` (where a project stands and the next step),
-  `documents.py` (morphogen.yaml's settings, and the target spec a cell compiles to), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
+  `documents.py` (morphogen.yaml's settings, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
   `morphogen` (improve a cell) and `map` (draft morphogen.yaml's cells).
 - `tests/`: the core's tests and red team; fixture projects in `tests/fixture*.py`, the timed

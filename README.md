@@ -314,6 +314,39 @@ Until a model gateway exists, agent cells run with `sandbox: none` (the model ne
 an `otel` observer is refused in a container), and an agent's learned state is not yet reset
 between trials (#45).
 
+## A judge the author cannot reach
+
+When a coding agent writes the candidates, the held-out answers must be out of the agent's reach, not
+only the candidate's. On one machine that means a second Unix user, the judge, whose home the author
+cannot read:
+
+```
+/var/lib/morphogen-judge/          # mode 700
+  venv/                            # Morphogen, installed from GitHub main: not the author's copy
+  projects/myproject/              # the judge's own clone; verdicts go into its evidence log
+  requests/myproject.yaml          # a request with no candidate: project, base, target, private paths
+  private/myproject/               # the held-out answers
+```
+
+The author may run one thing as that user, through a `sudoers` rule that needs no password, and
+hands the candidate over as a git bundle:
+
+```
+git bundle create - my-branch ^main | sudo -u morphogen-judge /usr/local/bin/morphogen-intake myproject
+```
+
+`morphogen-intake` is a two-line script owned by root that runs `morphogen intake judge NAME` from
+the judge's install. The author gives a name and a bundle and gets the verdict. It never names a
+path, a base or a rule; the bundle lands outside the judge's branches, and nothing of it stays.
+
+The base branch of the judge's clone moves only with `morphogen intake advance NAME`, which reads
+the new base as a bundle the same way and only goes forward. Leave it out of the `sudoers` rule, so
+it takes the owner's password: an author who could move the base could commit weaker rules, call
+that commit the base and be judged by them.
+
+Rootless Podman keeps images and containers per user, so the judge needs the sandbox image, any
+service images and its own model gateway in its own store.
+
 ## What the judge guarantees
 
 - **The rules are the base's.** `morphogen.yaml` and everything a cell's `change` does not name come
@@ -376,6 +409,10 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
 
 ## Limits
 
+- **An agent on your machine runs as you.** A container keeps the held-out answers from the candidate's
+  code, not from the agent that wrote it: that agent can read `morphogen.local.yaml` and open the
+  directory it names. Cases the agent must not see belong to another user or another machine; see
+  "A judge the author cannot reach".
 - **Without a container, code runs as you.** It can read any file you can: naming the private
   directory is refused, but an obfuscated path gets through. In Podman it fails, since only the
   candidate's tree is mounted. `sandbox: auto` picks Podman, then Docker, then none; a cell can

@@ -118,6 +118,17 @@ def cmd_request(a) -> int:
     return 0 if r.get("verdict", "pass") == "pass" else 1
 
 
+def cmd_intake(a) -> int:
+    from . import intake
+    home = Path(a.home) if a.home else Path.home()
+    if a.action == "advance":
+        _print(intake.advance(home, a.name, sys.stdin.buffer))
+        return 0
+    r = intake.judge(home, a.name, sys.stdin.buffer)
+    _print(r)
+    return 0 if r.get("verdict", "pass") == "pass" else 1
+
+
 def cmd_tune(a) -> int:
     root = _root()
     cfg = load_config(root)
@@ -196,6 +207,13 @@ def main(argv: list[str] | None = None) -> int:
                         "from the base commit, the local settings from the request; the verdict records its digest")
     rq.add_argument("file", help="a request/v1 document, outside the repository")
     rq.set_defaults(fn=cmd_request)
+
+    it = sub.add_parser("intake", help="the judge held by another user: judge the candidate bundled on standard "
+                        "input by a request that user keeps, or (the owner's) advance its base")
+    it.add_argument("action", choices=["judge", "advance"])
+    it.add_argument("name", help="the request's name: HOME/requests/NAME.yaml on the judge's side")
+    it.add_argument("--home", help="the judge's home (default: the home of the user running this)")
+    it.set_defaults(fn=cmd_intake)
 
     tu = sub.add_parser("tune", help="search a cell's bounded settings; judge the best")
     tu.add_argument("target")
