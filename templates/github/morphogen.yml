@@ -1,0 +1,11 @@
+# Copy to .github/workflows/morphogen.yml on your default branch. Pin both refs to the same commit.
+name: morphogen
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+permissions: {}
+jobs:
+  judge:
+    uses: openreplicant/morphogen/.github/workflows/judge.yml@JUDGE_SHA
+    permissions: {contents: read, statuses: write, id-token: write}
+    with: {judge-ref: JUDGE_SHA, cases-repo: OWNER/CASES, module: your_module}

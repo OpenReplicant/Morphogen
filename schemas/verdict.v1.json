@@ -73,9 +73,9 @@
           "minimum": 0
         },
         "served": {
-          "description": "Verdicts this case set has served, this one included.",
+          "description": "Verdicts this case set has served, this one included. 0 when the change was refused before any case was served.",
           "type": "integer",
-          "minimum": 1
+          "minimum": 0
         },
         "stale": {
           "type": "boolean"

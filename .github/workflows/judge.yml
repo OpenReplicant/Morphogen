@@ -1,0 +1,244 @@
+# The Morphogen judge for GitHub Actions, as a reusable workflow. A consumer calls it from its own
+# `pull_request_target` workflow (templates/github/morphogen.yml), so every job's definition is the
+# base's: a pull request cannot edit what judges it. The candidate's code runs only in the `run` job,
+# inside one `--network none` container per case; that job holds no secrets. `admit` and `score`
+# hold the secrets (through the `morphogen-judge` environment) and never run the candidate.
+name: morphogen-judge
+on:
+  workflow_call:
+    inputs:
+      judge-ref:
+        description: The Morphogen commit to judge with. Must equal the commit in the caller's `uses:` line.
+        required: true
+        type: string
+      cases-repo:
+        description: owner/name of the private repository holding the held-out case sets.
+        required: true
+        type: string
+      module:
+        description: The Python module the sandbox runs (`python -I -m`-style, from the checkout's root).
+        required: true
+        type: string
+      sandbox-image:
+        description: The image each case runs in, pinned by digest.
+        required: false
+        type: string
+        default: python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+      case-timeout:
+        required: false
+        type: number
+        default: 60
+      signing:
+        description: "`key`: a cosign key pair held in the environment. `keyless`: the workflow's OIDC identity, logged in the public Sigstore transparency log."
+        required: false
+        type: string
+        default: key
+
+permissions: {}
+
+concurrency:
+  group: morphogen-judge-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PR: ${{ github.event.pull_request.number }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  BASE_REF: ${{ github.event.pull_request.base.ref }}
+
+jobs:
+  admit:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-24.04
+    environment: morphogen-judge
+    permissions:
+      contents: read
+    outputs:
+      admitted: ${{ steps.admit.outputs.admitted }}
+      base: ${{ steps.fetch.outputs.base }}
+    steps:
+      - name: Get the judge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: openreplicant/morphogen
+          ref: ${{ inputs.judge-ref }}
+          path: .judge
+          persist-credentials: false
+      - name: Install the judge (a venv; hash-locked wheels only)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mg"
+          "$RUNNER_TEMP/mg/bin/pip" install --quiet --only-binary=:all: --require-hashes -r .judge/requirements.lock
+          echo "$RUNNER_TEMP/mg/bin" >> "$GITHUB_PATH"
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/.judge" >> "$GITHUB_ENV"
+      - id: fetch
+        name: Fetch base and candidate as git objects (the candidate is never checked out)
+        env:
+          GIT_TOKEN: ${{ github.token }}
+        run: >-
+          python3 -m judge.ci fetch --server "$GITHUB_SERVER_URL" --repo "$GITHUB_REPOSITORY" --pr "$PR"
+          --base-ref "$BASE_REF" --head-sha "$HEAD_SHA" --trees base --admit --token-env GIT_TOKEN --workdir w
+      - id: admit
+        name: Admit
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if python3 -m judge.admit --repo w/repo --base refs/mg/base --head refs/mg/head \
+               --policy w/base/.morphogen/policy.json --card-out admission.json; then
+            echo "admitted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "admitted=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Hand the run its inputs, never the answers
+        env:
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
+          CASES_REPO: ${{ inputs.cases-repo }}
+        run: |
+          mkdir cases && git -C cases init -q
+          git -C cases -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)" \
+            fetch -q --depth 1 "$GITHUB_SERVER_URL/$CASES_REPO.git" HEAD
+          git -C cases checkout -q FETCH_HEAD
+          python3 -m judge.ci inputs --cases-dir cases --admission admission.json --out inputs.jsonl
+          rm -rf cases
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: admission
+          path: |
+            admission.json
+            inputs.jsonl
+          retention-days: 1
+
+  run:
+    needs: admit
+    if: needs.admit.outputs.admitted == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: admission
+          path: in
+      - name: Get the judge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: openreplicant/morphogen
+          ref: ${{ inputs.judge-ref }}
+          path: .judge
+          persist-credentials: false
+      - name: Install the judge (a venv; hash-locked wheels only)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mg"
+          "$RUNNER_TEMP/mg/bin/pip" install --quiet --only-binary=:all: --require-hashes -r .judge/requirements.lock
+          echo "$RUNNER_TEMP/mg/bin" >> "$GITHUB_PATH"
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/.judge" >> "$GITHUB_ENV"
+      - name: Fetch both trees as files (no hooks, no .git)
+        env:
+          GIT_TOKEN: ${{ github.token }}
+          BASE: ${{ needs.admit.outputs.base }}
+        run: >-
+          python3 -m judge.ci fetch --server "$GITHUB_SERVER_URL" --repo "$GITHUB_REPOSITORY" --pr "$PR"
+          --base-ref "$BASE_REF" --head-sha "$HEAD_SHA" --expect-base "$BASE" --token-env GIT_TOKEN --workdir w
+      - name: Pull the sandbox image (the candidate's containers get no network)
+        env:
+          IMAGE: ${{ inputs.sandbox-image }}
+        run: docker pull --quiet "$IMAGE"
+      - name: Run the base, then the candidate, one sandbox container per case
+        env:
+          IMAGE: ${{ inputs.sandbox-image }}
+          MODULE: ${{ inputs.module }}
+          CASE_TIMEOUT: ${{ inputs.case-timeout }}
+        run: |
+          mkdir out
+          for side in base candidate; do
+            python3 -m judge.run --checkout "w/$side" --inputs in/inputs.jsonl --image "$IMAGE" --module "$MODULE" \
+              --label "$side" --out "out/$side.jsonl" --timeout "$CASE_TIMEOUT"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: runs
+          path: out
+          retention-days: 1
+
+  score:
+    needs: [admit, run]
+    if: always() && needs.admit.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: morphogen-judge
+    permissions:
+      contents: read
+      statuses: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          path: art
+      - name: Get the judge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: openreplicant/morphogen
+          ref: ${{ inputs.judge-ref }}
+          path: .judge
+          persist-credentials: false
+      - name: Install the judge (a venv; hash-locked wheels only)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mg"
+          "$RUNNER_TEMP/mg/bin/pip" install --quiet --only-binary=:all: --require-hashes -r .judge/requirements.lock
+          echo "$RUNNER_TEMP/mg/bin" >> "$GITHUB_PATH"
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/.judge" >> "$GITHUB_ENV"
+      - name: Fetch the base as files
+        env:
+          GIT_TOKEN: ${{ github.token }}
+          BASE: ${{ needs.admit.outputs.base }}
+        run: >-
+          python3 -m judge.ci fetch --server "$GITHUB_SERVER_URL" --repo "$GITHUB_REPOSITORY" --pr "$PR"
+          --base-ref "$BASE_REF" --head-sha "$HEAD_SHA" --expect-base "$BASE" --trees base --token-env GIT_TOKEN --workdir w
+      - id: claim
+        name: Fetch the held-out cases and claim this verdict's place in the count
+        env:
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
+          CASES_REPO: ${{ inputs.cases-repo }}
+        run: |
+          git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)" \
+            clone -q "$GITHUB_SERVER_URL/$CASES_REPO.git" cases
+          python3 -m judge.ci claim --cases-dir cases --admission art/admission/admission.json --token-env CASES_TOKEN \
+            --branch "$(git -C cases symbolic-ref --short HEAD)"
+      - name: Score
+        env:
+          BASE: ${{ needs.admit.outputs.base }}
+          SERVED: ${{ steps.claim.outputs.served }}
+        run: |
+          mkdir -p art/runs
+          python3 -m judge.score --base-checkout w/base --cases-dir cases --base-run art/runs/base.jsonl \
+            --candidate-run art/runs/candidate.jsonl --admission art/admission/admission.json --served "$SERVED" \
+            --repository "$GITHUB_REPOSITORY" --pull-request "$PR" --base-sha "$BASE" --head-sha "$HEAD_SHA" \
+            --out verdict.json
+          rm -rf cases
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+        with:
+          cosign-release: v3.1.4
+      - name: Sign
+        env:
+          SIGNING: ${{ inputs.signing }}
+          COSIGN_KEY: ${{ secrets.MORPHOGEN_COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.MORPHOGEN_COSIGN_PASSWORD }}
+        run: |
+          if [ "$SIGNING" = keyless ]; then
+            cosign sign-blob --yes --bundle verdict.sigstore.json verdict.json
+          else
+            umask 077 && printf '%s' "$COSIGN_KEY" > "$RUNNER_TEMP/k"
+            echo '{"mediaType":"application/vnd.dev.sigstore.signingconfig.v0.2+json","rekorTlogConfig":{},"tsaConfig":{}}' > "$RUNNER_TEMP/sc.json"
+            cosign sign-blob --yes --key "$RUNNER_TEMP/k" --signing-config "$RUNNER_TEMP/sc.json" --bundle verdict.sigstore.json verdict.json
+            rm -f "$RUNNER_TEMP/k"
+          fi
+      - name: Post the verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m judge.ci post --api "$GITHUB_API_URL" --repo "$GITHUB_REPOSITORY" --verdict verdict.json \
+            --token-env GH_TOKEN --target-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          python3 -m judge.ci summary --verdict verdict.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: verdict
+          path: |
+            verdict.json
+            verdict.sigstore.json

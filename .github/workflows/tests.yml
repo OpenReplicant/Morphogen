@@ -1,0 +1,33 @@
+# This repository's own CI: the unit tests, and the judge's steps end to end on a GitHub-hosted
+# runner (Docker sandbox, scoring, cosign), with no forge features and no secrets.
+name: tests
+on:
+  push:
+    branches: [main, "rebuild-*"]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: {persist-credentials: false}
+      - run: |
+          python3 -m venv "$RUNNER_TEMP/mg"
+          "$RUNNER_TEMP/mg/bin/pip" install --quiet --only-binary=:all: --require-hashes -r requirements.lock
+          "$RUNNER_TEMP/mg/bin/pip" install --quiet "pytest==9.1.1"
+          PYTHONPATH=. "$RUNNER_TEMP/mg/bin/python" -m pytest -q
+  pipeline:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: {persist-credentials: false}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+        with: {cosign-release: v3.1.4}
+      - run: docker pull --quiet python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+      - run: |
+          python3 -m venv "$RUNNER_TEMP/mg"
+          "$RUNNER_TEMP/mg/bin/pip" install --quiet --only-binary=:all: --require-hashes -r requirements.lock
+          PYTHONPATH=. "$RUNNER_TEMP/mg/bin/python" e2e/smoke.py \
+            --image python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 | tee "$GITHUB_STEP_SUMMARY"

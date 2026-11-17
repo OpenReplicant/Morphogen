@@ -68,7 +68,7 @@ def measure(run, cases, score):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-checkout", required=True, type=Path)
-    ap.add_argument("--cases", required=True, type=Path, help="held-out cases.jsonl: id, input, answer")
+    ap.add_argument("--cases-dir", required=True, type=Path, help="held-out case sets: <set>/cases.jsonl")
     ap.add_argument("--base-run", required=True, type=Path)
     ap.add_argument("--candidate-run", required=True, type=Path)
     ap.add_argument("--admission", required=True, type=Path)
@@ -82,11 +82,12 @@ def main(argv=None):
     policy = schemas.check("policy", schemas.loads_strict((a.base_checkout / ".morphogen/policy.json").read_text()))
     adm = json.loads(a.admission.read_text())
     card = adm["card"] or {}
-    cases = read_cases(a.cases)
+    refused = adm["refused"] or not card
+    cases = {} if refused else read_cases(a.cases_dir / card["cases"]["set"] / "cases.jsonl")
     score = runpy.run_path(str(a.base_checkout / ".morphogen/scorer.py"))["score"]
     common = dict(repository=a.repository, base=a.base_sha, candidate=a.head_sha, judge=a.base_sha, card=card,
                   policy=policy, case_ids=list(cases), served=a.served, pull_request=a.pull_request)
-    if adm["refused"] or not card:
+    if refused:
         v = verdict.decide(**common, measured={"base": {}, "candidate": {}}, admission=adm["refused"] or ["no card"])
     else:
         bk, bo, _ = measure(read_run(a.base_run), cases, score)
