@@ -70,8 +70,9 @@ def main():
     api("POST", "/user/repos", {"name": "toy-cases", "private": True, "default_branch": "main"})
     cases = make_cases()
     with tempfile.TemporaryDirectory() as d:
-        Path(d, "cases.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases))
-        Path(d, "served").write_text("0\n")
+        Path(d, "topwords-heldout").mkdir()
+        Path(d, "topwords-heldout/cases.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases))
+        Path(d, "topwords-heldout/served").write_text("0\n")
         push_tree(d, "owner", "toy-cases")
     api("POST", "/user/repos", {"name": "toy", "private": False, "default_branch": "main"})
     push_tree(HERE / "toy", "owner", "toy")
