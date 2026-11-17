@@ -1,0 +1,124 @@
+"""Admission: refuse a change before anything runs unless its card fits the base's policy and every
+changed path lies inside both scopes and outside everything protected.
+
+The policy is read from the protected base, never from the change. The changed paths come from git
+(`git diff --raw -z --no-renames base...head`), never from the change's own account of itself.
+"""
+
+import re
+import subprocess
+
+from . import schemas
+
+# Protected whatever the policy says: the forge's workflow files, the judge's own home, git's own
+# control files, and the files the Python interpreter runs on its own at start-up.
+ALWAYS_PROTECTED = (
+    ".github/**", ".gitea/**", ".forgejo/**", ".woodpecker/**", ".woodpecker.yml", ".woodpecker.yaml",
+    ".morphogen/**", ".gitattributes", "**/.gitattributes", ".gitmodules", "**/sitecustomize.py",
+    "**/usercustomize.py", "**/*.pth",
+)
+LINK, SUBMODULE = "120000", "160000"
+
+
+def _glob_re(glob):
+    out, i = [], 0
+    while i < len(glob):
+        if glob.startswith("**/", i):
+            out.append("(?:[^/]+/)*"); i += 3
+        elif glob.startswith("**", i):
+            out.append(".*"); i += 2
+        elif glob[i] == "*":
+            out.append("[^/]*"); i += 1
+        elif glob[i] == "?":
+            out.append("[^/]"); i += 1
+        else:
+            out.append(re.escape(glob[i])); i += 1
+    return re.compile("".join(out) + r"\Z")
+
+
+def matches(path, globs):
+    return any(_glob_re(g).match(path) for g in globs)
+
+
+def changes(repo, base, head):
+    """Changed paths between the merge base of `base` and `head`, as git records them."""
+    raw = subprocess.run(["git", "-C", str(repo), "diff", "--raw", "-z", "--no-renames", "--no-ext-diff",
+                          f"{base}...{head}"], check=True, capture_output=True).stdout.decode("utf-8", "surrogateescape")
+    fields, out = raw.split("\0"), []
+    for meta, path in zip(fields[0::2], fields[1::2]):
+        if not meta:
+            continue
+        _, new_mode, _, _, status = meta[1:].split(" ")
+        out.append({"path": path, "mode": new_mode, "status": status[0]})
+    return out
+
+
+def check_card(card, policy):
+    """Reasons the card does not fit the policy (empty when it does)."""
+    reasons = schemas.errors("card", card)
+    if reasons:
+        return ["card: " + r for r in reasons]
+    sets = policy["case_sets"]
+    name = card["cases"]["set"]
+    if name not in sets:
+        return [f"card names case set {name!r}, which the policy does not list"]
+    rules = sets[name]
+    kpis = {k["name"]: k for k in card["kpis"]}
+    if len(kpis) != len(card["kpis"]):
+        reasons.append("card lists a KPI twice")
+    required = {k["name"]: k for k in rules["required_kpis"]}
+    allowed = {k["name"]: k["source"] for k in rules.get("allowed_kpis", [])}
+    for n, want in required.items():
+        got = kpis.get(n)
+        if got is None:
+            reasons.append(f"card drops required KPI {n!r}")
+            continue
+        for field in ("source", "direction"):
+            if got[field] != want[field]:
+                reasons.append(f"KPI {n!r}: {field} is {got[field]!r}, policy says {want[field]!r}")
+        if want["role"] == "decide" and got["role"] != "decide":
+            reasons.append(f"KPI {n!r}: policy makes it decide, card makes it {got['role']!r}")
+        if got["role"] == "decide" and got["floor"] < want["floor"] and want["role"] == "decide":
+            reasons.append(f"KPI {n!r}: floor {got['floor']} is below the policy's {want['floor']}")
+        if got["role"] == "bound" and got["floor"] > want["floor"]:
+            reasons.append(f"KPI {n!r}: tolerance {got['floor']} is looser than the policy's {want['floor']}")
+    for n, got in kpis.items():
+        if n in required:
+            continue
+        if allowed.get(n) != got["source"]:
+            reasons.append(f"KPI {n!r} with source {got['source']!r} is not one the policy allows")
+    if not any(k["role"] == "decide" for k in card["kpis"]):
+        reasons.append("card has no deciding KPI")
+    for host in card.get("network", []):
+        if host not in policy.get("network", []):
+            reasons.append(f"card grants network host {host!r}, which the policy does not allow")
+    return reasons
+
+
+def check_paths(card, policy, changed):
+    reasons = []
+    protected = list(ALWAYS_PROTECTED) + list(policy["protected"])
+    if not changed:
+        reasons.append("the change changes nothing")
+    for c in changed:
+        p = c["path"]
+        if c["mode"] == LINK:
+            reasons.append(f"{p}: is a symbolic link")
+        elif c["mode"] == SUBMODULE:
+            reasons.append(f"{p}: is a submodule")
+        if matches(p, protected):
+            reasons.append(f"{p}: is protected")
+        elif not matches(p, card["scope"]):
+            reasons.append(f"{p}: is outside the card's scope")
+        elif not matches(p, policy["scope"]):
+            reasons.append(f"{p}: is outside the policy's scope")
+    return reasons
+
+
+def admit(card, policy, changed):
+    """Return the reasons to refuse; an empty list admits the change."""
+    schemas.check("policy", policy)
+    reasons = check_card(card, policy)
+    if reasons:
+        return reasons
+    return check_paths(card, policy, changed)

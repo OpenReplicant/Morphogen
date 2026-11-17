@@ -1,0 +1,11 @@
+{
+  "card": "morphogen.card/v1",
+  "intent": "Count words case-insensitively so top_words matches the reference on mixed-case text.",
+  "scope": ["topwords/**.py"],
+  "cases": {"set": "topwords-heldout", "version": "1"},
+  "kpis": [
+    {"name": "accuracy", "source": "scorer", "direction": "higher", "floor": 0.0, "role": "decide"},
+    {"name": "wall_seconds", "source": "runner", "direction": "lower", "floor": 0.5, "role": "bound"}
+  ],
+  "tests": {"must_pass": ["easy-*"], "must_not_change": []}
+}

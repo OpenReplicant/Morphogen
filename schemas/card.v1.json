@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://morphogen.dev/schemas/card.v1.json",
+  "title": "Morphogen card, version 1",
+  "description": "What a change is for, what it may touch, and what it must hold to. The author writes it; the judge checks it against the policy on the protected base, which it can only make stricter. It names held-out cases by reference and never carries them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["card", "intent", "scope", "cases", "kpis"],
+  "properties": {
+    "card": {"const": "morphogen.card/v1"},
+    "intent": {
+      "description": "One sentence a person can check against the diff.",
+      "type": "string", "minLength": 10, "maxLength": 300, "pattern": "^[^\\n]*$"
+    },
+    "scope": {
+      "description": "Repository-relative glob patterns for the paths the change may add, modify or delete. '*' matches within one path segment, '**' across segments.",
+      "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/glob"}
+    },
+    "cases": {
+      "description": "A reference to a held-out case set the base's policy lists. Never the cases.",
+      "type": "object", "additionalProperties": false, "required": ["set"],
+      "properties": {
+        "set": {"$ref": "#/$defs/name"},
+        "version": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9._-]+$"}
+      }
+    },
+    "kpis": {
+      "type": "array", "minItems": 1, "maxItems": 16,
+      "items": {"$ref": "#/$defs/kpi"}
+    },
+    "tests": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "must_pass": {
+          "description": "Case ids (or id prefixes ending in '*') the candidate must get right.",
+          "type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/selector"}
+        },
+        "must_not_change": {
+          "description": "Case ids (or id prefixes ending in '*') where the candidate's output must equal the base's.",
+          "type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/selector"}
+        }
+      }
+    },
+    "network": {
+      "description": "Hosts the untrusted run may reach. Empty or absent means no network. Each must be allowed by the policy.",
+      "type": "array", "maxItems": 16, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"}
+    }
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"},
+    "glob": {
+      "type": "string", "minLength": 1, "maxLength": 200,
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))(?!.*\\\\)[^\\s]+$"
+    },
+    "selector": {"type": "string", "pattern": "^[A-Za-z0-9_.:/-]+\\*?$", "maxLength": 128},
+    "kpi": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "source", "direction", "floor", "role"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"},
+        "source": {
+          "description": "Who measures it. 'scorer': the trusted job scores the candidate's outputs against held-out answers. 'runner': the harness outside the candidate's container (wall time, CPU, memory). 'meter': the model gateway's record. There is no value for numbers the candidate reports.",
+          "enum": ["scorer", "runner", "meter"]
+        },
+        "direction": {"enum": ["higher", "lower"]},
+        "floor": {
+          "description": "For a deciding KPI: the smallest mean per-case improvement over the base, in the KPI's own units, that counts (>= 0). For a bounding KPI: the largest mean per-case worsening tolerated (>= 0).",
+          "type": "number", "minimum": 0
+        },
+        "role": {"enum": ["decide", "bound"]}
+      }
+    }
+  }
+}

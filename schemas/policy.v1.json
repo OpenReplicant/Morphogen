@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://morphogen.dev/schemas/policy.v1.json",
+  "title": "Morphogen policy, version 1",
+  "description": "The owner's rules, read only from the protected base branch. A card may narrow them, never widen them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policy", "scope", "protected", "case_sets", "alpha"],
+  "properties": {
+    "policy": {"const": "morphogen.policy/v1"},
+    "scope": {
+      "description": "Globs a card's scope must lie within.",
+      "type": "array", "minItems": 1, "items": {"$ref": "card.v1.json#/$defs/glob"}
+    },
+    "protected": {
+      "description": "Globs no change may touch, whatever its card says (the judge, its rules, its workflows, its tests).",
+      "type": "array", "minItems": 1, "items": {"$ref": "card.v1.json#/$defs/glob"}
+    },
+    "case_sets": {
+      "type": "object", "minProperties": 1,
+      "propertyNames": {"$ref": "card.v1.json#/$defs/name"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["required_kpis"],
+        "properties": {
+          "required_kpis": {
+            "description": "KPIs every card on this set must carry, with the loosest floor allowed.",
+            "type": "array", "items": {"$ref": "card.v1.json#/$defs/kpi"}
+          },
+          "allowed_kpis": {
+            "description": "Further KPIs a card may add (name and source). Absent: only the required ones.",
+            "type": "array", "items": {
+              "type": "object", "additionalProperties": false, "required": ["name", "source"],
+              "properties": {"name": {"$ref": "card.v1.json#/$defs/name"}, "source": {"enum": ["scorer", "runner", "meter"]}}
+            }
+          },
+          "stale_after": {"description": "Verdicts served before the set is flagged stale.", "type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "network": {"type": "array", "items": {"type": "string"}},
+    "alpha": {"description": "One-sided significance level for each deciding KPI.", "type": "number", "exclusiveMinimum": 0, "maximum": 0.2}
+  }
+}

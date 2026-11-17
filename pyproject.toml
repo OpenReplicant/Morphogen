@@ -1,0 +1,26 @@
+[project]
+name = "morphogen-judge"
+version = "8.0.0.dev0"
+description = "A judge for changes, built from standard CI parts: card in, signed verdict out."
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+  # Schema checks. MIT. 4.26.0: 2026-01-07 (PyPI).
+  "jsonschema==4.26.0",
+  # jsonschema's $ref resolution. MIT. 0.37.0 (PyPI).
+  "referencing==0.37.0",
+]
+
+[project.optional-dependencies]
+# MIT. 9.1.1: 2026-06-19 (PyPI); 9.2.0 (2026-10-27) not yet needed.
+test = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["judge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

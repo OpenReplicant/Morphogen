@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://morphogen.dev/schemas/verdict.v1.json",
+  "title": "Morphogen verdict, version 1",
+  "description": "What the trusted job decided about one candidate against one base, from its own measurements only. The signature travels beside it (a Sigstore bundle over these exact bytes), not inside it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "repository",
+    "base",
+    "candidate",
+    "card_sha256",
+    "policy_sha256",
+    "judge",
+    "cases",
+    "alpha",
+    "kpis",
+    "decision",
+    "reason",
+    "issued_at",
+    "seed"
+  ],
+  "properties": {
+    "verdict": {
+      "const": "morphogen.verdict/v1"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "pull_request": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "base": {
+      "$ref": "#/$defs/sha"
+    },
+    "candidate": {
+      "$ref": "#/$defs/sha"
+    },
+    "card_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "policy_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "judge": {
+      "description": "The commit of the base the judge's code and rules were read from.",
+      "$ref": "#/$defs/sha"
+    },
+    "cases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "set",
+        "version",
+        "expected",
+        "served",
+        "stale"
+      ],
+      "properties": {
+        "set": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "expected": {
+          "description": "Cases in the held-out set.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "served": {
+          "description": "Verdicts this case set has served, this one included.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "stale": {
+          "type": "boolean"
+        }
+      }
+    },
+    "alpha": {
+      "type": "number"
+    },
+    "kpis": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/kpi_result"
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "must_pass",
+        "must_not_change"
+      ],
+      "properties": {
+        "must_pass": {
+          "$ref": "#/$defs/test_result"
+        },
+        "must_not_change": {
+          "$ref": "#/$defs/test_result"
+        }
+      }
+    },
+    "reported": {
+      "description": "Numbers the candidate printed about itself. Recorded as reported; they never decide.",
+      "type": "object"
+    },
+    "decision": {
+      "description": "pass: the candidate may merge. refuse: it may not. stop: the judge could not judge (the base's run was short, or the judge failed); not the candidate's fault, and not a pass.",
+      "enum": [
+        "pass",
+        "refuse",
+        "stop"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "seed": {
+      "description": "The judge's own seed for the bootstrap, drawn by the trusted job, recorded so the verdict can be recomputed.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seen",
+        "mean"
+      ],
+      "properties": {
+        "seen": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "kpi_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "direction",
+        "role",
+        "floor",
+        "expected",
+        "base",
+        "candidate",
+        "paired",
+        "effect",
+        "interval",
+        "p_value",
+        "mde",
+        "method",
+        "result"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "scorer",
+            "runner",
+            "meter"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "higher",
+            "lower"
+          ]
+        },
+        "role": {
+          "enum": [
+            "decide",
+            "bound"
+          ]
+        },
+        "floor": {
+          "type": "number",
+          "minimum": 0
+        },
+        "expected": {
+          "description": "Cases the scorer should have seen in each run.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "base": {
+          "$ref": "#/$defs/summary"
+        },
+        "candidate": {
+          "$ref": "#/$defs/summary"
+        },
+        "paired": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "n",
+            "better",
+            "worse",
+            "tied"
+          ],
+          "properties": {
+            "n": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "better": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "worse": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tied": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "effect": {
+          "description": "Mean per-case improvement of candidate over base, signed so that positive is better.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "interval": {
+          "description": "One-sided lower confidence bound on the effect at 1 - alpha, and the upper bound at the same level.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "p_value": {
+          "description": "One-sided exact sign test, H0: the candidate is no better per case.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mde": {
+          "description": "Stated from the case count before the runs: the smallest share of cases that must improve, with none worse, for the sign test to reject at alpha. For a 0/1 KPI this is the smallest detectable improvement in its own units.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "method": {
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "refuse",
+            "stop"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "test_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checked",
+        "failed"
+      ],
+      "properties": {
+        "checked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50
+        }
+      }
+    }
+  }
+}

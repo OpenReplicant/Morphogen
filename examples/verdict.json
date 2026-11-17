@@ -1,0 +1,98 @@
+{
+  "verdict": "morphogen.verdict/v1",
+  "repository": "owner/toy",
+  "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "candidate": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "card_sha256": "c03bbc1a789d2e58096ee3b36fa474e5e4b31e2a2829e5dd68673ea7e2cca541",
+  "policy_sha256": "66edef8b44a3aca4476749b731b30361d8f68025bd0c893b3ba72ac6fdf3d9c0",
+  "judge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "cases": {
+    "set": "topwords-heldout",
+    "version": "1",
+    "expected": 20,
+    "served": 1,
+    "stale": false
+  },
+  "alpha": 0.05,
+  "seed": 7,
+  "kpis": [
+    {
+      "name": "accuracy",
+      "source": "scorer",
+      "direction": "higher",
+      "role": "decide",
+      "floor": 0.0,
+      "expected": 20,
+      "base": {
+        "seen": 20,
+        "mean": 0.5
+      },
+      "candidate": {
+        "seen": 20,
+        "mean": 1.0
+      },
+      "paired": {
+        "n": 20,
+        "better": 10,
+        "worse": 0,
+        "tied": 10
+      },
+      "effect": 0.5,
+      "interval": [
+        0.3,
+        0.7
+      ],
+      "p_value": 0.0009765625,
+      "mde": 0.25,
+      "method": "exact one-sided sign test; paired bootstrap (10000 resamples) one-sided bounds",
+      "result": "pass",
+      "reason": "better: p=0.0009766, mean improvement 0.5"
+    },
+    {
+      "name": "wall_seconds",
+      "source": "runner",
+      "direction": "lower",
+      "role": "bound",
+      "floor": 0.5,
+      "expected": 20,
+      "base": {
+        "seen": 20,
+        "mean": 0.02
+      },
+      "candidate": {
+        "seen": 20,
+        "mean": 0.02
+      },
+      "paired": {
+        "n": 20,
+        "better": 0,
+        "worse": 0,
+        "tied": 20
+      },
+      "effect": 0.0,
+      "interval": [
+        0.0,
+        0.0
+      ],
+      "p_value": 1.0,
+      "mde": 0.25,
+      "method": "exact one-sided sign test; paired bootstrap (10000 resamples) one-sided bounds",
+      "result": "pass",
+      "reason": "within tolerance: lower bound 0 >= -0.5"
+    }
+  ],
+  "reported": {},
+  "issued_at": "2026-11-17T00:00:00Z",
+  "tests": {
+    "must_pass": {
+      "checked": 10,
+      "failed": []
+    },
+    "must_not_change": {
+      "checked": 0,
+      "failed": []
+    }
+  },
+  "decision": "pass",
+  "reason": "accuracy: better: p=0.0009766, mean improvement 0.5; wall_seconds: within tolerance: lower bound 0 >= -0.5"
+}
