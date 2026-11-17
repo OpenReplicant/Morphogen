@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       cases-repo:
-        description: owner/name of the repository holding the held-out case sets. Empty means this repository.
+        description: owner/name of the repository holding the held-out case sets (MORPHOGEN_CASES_TOKEN must read and write it). Empty means this repository.
         required: false
         type: string
         default: ""
@@ -184,7 +184,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: morphogen-judge
     permissions:
-      contents: write  # only to count served verdicts when the case store is this repository
+      contents: read
       statuses: write
       id-token: write
     steps:
