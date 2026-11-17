@@ -1,0 +1,37 @@
+{
+  "policy": "morphogen.policy/v1",
+  "scope": [
+    "dogfood/topwords/**"
+  ],
+  "protected": [
+    "dogfood/README.md",
+    "dogfood/make_cases.py",
+    "morphogen/**",
+    "tests/**",
+    "pyproject.toml",
+    "uv.lock"
+  ],
+  "case_sets": {
+    "topwords-heldout": {
+      "required_kpis": [
+        {
+          "name": "accuracy",
+          "source": "scorer",
+          "direction": "higher",
+          "floor": 0.0,
+          "role": "decide"
+        },
+        {
+          "name": "wall_seconds",
+          "source": "runner",
+          "direction": "lower",
+          "floor": 0.5,
+          "role": "bound"
+        }
+      ],
+      "stale_after": 200
+    }
+  },
+  "network": [],
+  "alpha": 0.05
+}

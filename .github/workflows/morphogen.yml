@@ -1,0 +1,13 @@
+# Dogfood: the rebuild-8 judge (pinned by commit) judges pull requests that touch the toy in dogfood/.
+# Definition from the base branch (pull_request_target), so a pull request cannot change it.
+name: morphogen
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    paths: ["dogfood/**", ".morphogen/**"]
+permissions: {}
+jobs:
+  judge:
+    uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@cd26caeb3bf8b4ffb470d486b3889d10f7e5136c
+    permissions: {contents: read, statuses: write, id-token: write}
+    with: {judge-ref: cd26caeb3bf8b4ffb470d486b3889d10f7e5136c, cases-repo: OpenReplicant/morphogen-judge, subdir: dogfood, module: topwords}
