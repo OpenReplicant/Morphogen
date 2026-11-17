@@ -3,3 +3,4 @@ wheels/
 .env
 cosign
 judge.pub
+redteam-results.json

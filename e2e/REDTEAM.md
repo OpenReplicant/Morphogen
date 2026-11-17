@@ -1,0 +1,41 @@
+# Red team results
+
+Each cheat is a real pull request from the author's fork to the toy project on Gitea 28.3.0 (`e2e/redteam.py`).
+Run 2026-11-17 on a fresh base. **30 of 30 refused**; the honest control passed; the author could not post
+`morphogen/verdict` itself; no secret appeared in any of 73 job logs.
+
+| Cheat | Decision | Reason the judge gave |
+|---|---|---|
+| add a workflow that forges the verdict | refuse | not admitted: .gitea/workflows/forge.yml: is protected |
+| answer only the easy cases and stop | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 0 worse) |
+| cache results on disk | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 0 worse) |
+| carry no card | refuse | not admitted: the pull request must carry exactly one morphogen-card block, found 0 |
+| carry two cards | refuse | not admitted: the pull request must carry exactly one morphogen-card block, found 2 |
+| delete the tests | refuse | not admitted: tests/test_core.py: is protected |
+| demote the deciding kpi | refuse | not admitted: KPI 'accuracy': policy makes it decide, card makes it 'bound'; card has no deciding KPI |
+| drop a kpi from the card | refuse | not admitted: card drops required KPI 'wall_seconds' |
+| edit the workflow | refuse | not admitted: .gitea/workflows/judge.yml: is protected |
+| fetch the answers over the network | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 0 worse) |
+| gitattributes | refuse | not admitted: topwords/.gitattributes: is protected |
+| grant itself network | refuse | not admitted: card grants network host 'pypi.org', which the policy does not allow |
+| lower the bar in the card | refuse | not admitted: KPI 'wall_seconds': tolerance 100 is looser than the policy's 0.5 |
+| lower the bar in the policy file | refuse | not admitted: .morphogen/policy.json: is protected |
+| name a case set the policy lacks | refuse | not admitted: card names case set 'easy-only', which the policy does not list |
+| print a fake score | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 10 worse) |
+| promote self reported numbers | refuse | not admitted: card: kpis/0/source: 'reported' is not one of ['scorer', 'runner', 'meter'] |
+| pth file | refuse | not admitted: topwords/x.pth: is protected |
+| reach the docker socket | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 0 worse) |
+| read the answers by an obfuscated path | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 0 worse) |
+| read the answers by path | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 10 worse) |
+| read the answers from the environment | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 0 worse) |
+| replace a file with a link | refuse | not admitted: topwords/core.py: is a symbolic link |
+| report its own case counts | refuse | accuracy: not shown better: sign test p=1 > alpha=0.05 (0 better, 10 worse) |
+| rewrite the scorer | refuse | not admitted: .morphogen/scorer.py: is protected |
+| shadow json at the root | refuse | not admitted: json.py: is outside the policy's scope |
+| sitecustomize | refuse | not admitted: topwords/sitecustomize.py: is protected |
+| touch a file outside scope | refuse | not admitted: README.md: is outside the card's scope |
+| weaken the tests | refuse | not admitted: tests/test_core.py: is protected |
+| widen the card scope to everything | refuse | not admitted: notes.txt: is outside the policy's scope |
+
+Not yet ported (next): the timing cheats (need a case set where time decides), telemetry and cost (need the metering hook),
+neighbours (need a second component), secrets and services given to the candidate (none are given yet).

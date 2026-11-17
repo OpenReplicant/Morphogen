@@ -110,15 +110,21 @@ jobs:
           set -eu
           auth="Authorization: token $CASES_TOKEN"
           git -c http.extraHeader="$auth" clone -q "$SERVER/$CASES_REPO.git" cases
-          served=$(( $(cat cases/served 2>/dev/null || echo 0) + 1 ))
+          # Claim this verdict's place in the case set's count before scoring; concurrent judges retry.
+          for attempt in $(seq 1 20); do
+            git -C cases -c http.extraHeader="$auth" fetch -q origin main && git -C cases reset -q --hard FETCH_HEAD
+            served=$(( $(cat cases/served 2>/dev/null || echo 0) + 1 ))
+            echo "$served" > cases/served
+            git -C cases -c user.name=judge -c user.email=judge@invalid commit -qam "served $served"
+            if git -C cases -c http.extraHeader="$auth" push -q origin HEAD:main 2>/dev/null; then break; fi
+            served=""; sleep $(( RANDOM % 3 + 1 ))
+          done
+          test -n "$served"
           mkdir -p art/runs
           python -m judge.score --base-checkout base --cases cases/cases.jsonl \
             --base-run art/runs/base.jsonl --candidate-run art/runs/candidate.jsonl \
             --admission art/admission/admission.json --served "$served" --repository "$REPO" \
             --pull-request "$PR" --base-sha "$BASE" --head-sha "$HEAD_SHA" --out verdict.json
-          echo "$served" > cases/served
-          git -C cases -c user.name=judge -c user.email=judge@invalid commit -qam "served $served"
-          git -C cases -c http.extraHeader="$auth" push -q origin HEAD
           printf '%s' "$COSIGN_KEY" > /tmp/k && chmod 600 /tmp/k
           echo '{"mediaType":"application/vnd.dev.sigstore.signingconfig.v0.2+json","rekorTlogConfig":{},"tsaConfig":{}}' > /tmp/sc.json
           cosign sign-blob --yes --key /tmp/k --signing-config /tmp/sc.json --bundle verdict.sigstore.json verdict.json

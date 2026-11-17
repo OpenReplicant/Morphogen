@@ -82,7 +82,8 @@ def verify(verdict_bytes, bundle):
 
 
 def job_logs(run_id):
-    return {j["name"]: log("owner", "toy", j["id"]) for j in jobs("owner", "toy", run_id) if j["status"] == "completed"}
+    return {j["name"]: log("owner", "toy", j["id"]) for j in jobs("owner", "toy", run_id)
+            if j["status"] == "completed" and j.get("conclusion") != "skipped"}
 
 
 def try_merge(pr_number, user="owner"):
