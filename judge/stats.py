@@ -65,10 +65,12 @@ def judge_kpi(kpi, expected_ids, base, cand, alpha, rng):
         "effect": None, "interval": None, "p_value": None, "mde": mde(expected, alpha),
         "method": f"exact one-sided sign test; paired bootstrap ({BOOTSTRAP} resamples) one-sided bounds",
     }
-    if len(c) < expected:
-        return {**out, "result": "refuse", "reason": f"candidate's run gave {len(c)} of {expected} cases"}
+    # The base runs first and the candidate cannot touch its run, so a short base run is the judge's
+    # failure (stop), checked first; a short candidate run is the candidate's (refuse).
     if len(b) < expected:
         return {**out, "result": "stop", "reason": f"base's run gave {len(b)} of {expected} cases; judgment stops"}
+    if len(c) < expected:
+        return {**out, "result": "refuse", "reason": f"candidate's run gave {len(c)} of {expected} cases"}
     if expected == 0:
         return {**out, "result": "stop", "reason": "the case set is empty"}
     d = [sign * (c[i] - b[i]) for i in expected_ids]

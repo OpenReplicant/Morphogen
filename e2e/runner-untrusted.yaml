@@ -1,0 +1,10 @@
+log: {level: info}
+runner: {capacity: 1, timeout: 30m, fetch_timeout: 5s, fetch_interval: 2s}
+container:
+  network: mg-forge
+  privileged: false
+  # The untrusted job starts the sandbox containers through the host's Docker; the candidate's own
+  # containers get no socket and no network.
+  valid_volumes: ["/var/run/docker.sock"]
+  options: "-v /var/run/docker.sock:/var/run/docker.sock"
+  force_pull: false

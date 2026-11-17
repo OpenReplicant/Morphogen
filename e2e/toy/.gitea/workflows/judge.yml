@@ -1,0 +1,135 @@
+# The judge. Triggered by pull_request_target, so this definition is always the base's (measured:
+# DECISIONS.md row 8). The candidate's code runs only in the `run` job, inside sandbox containers;
+# the `admit` and `score` jobs hold the secrets and never run it.
+name: judge
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+env:
+  SERVER: ${{ github.server_url }}
+  REPO: ${{ github.repository }}
+  PR: ${{ github.event.pull_request.number }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  BASE_REF: ${{ github.event.pull_request.base.ref }}
+  CASES_REPO: owner/toy-cases
+  SANDBOX_IMAGE: python:3.13-slim
+  MODULE: topwords
+
+jobs:
+  admit:
+    runs-on: trusted
+    outputs:
+      admitted: ${{ steps.admit.outputs.admitted }}
+      base: ${{ steps.fetch.outputs.base }}
+    steps:
+      - id: fetch
+        name: Fetch base and candidate as git objects (no checkout of the candidate)
+        run: |
+          git init -q repo && cd repo
+          git fetch -q --no-tags "$SERVER/$REPO.git" "refs/heads/$BASE_REF:refs/mg/base" "refs/pull/$PR/head:refs/mg/head"
+          test "$(git rev-parse refs/mg/head)" = "$HEAD_SHA"
+          echo "base=$(git rev-parse refs/mg/base)" >> "$GITHUB_OUTPUT"
+          mkdir ../base && git archive refs/mg/base | tar -x -C ../base
+      - id: admit
+        name: Admit
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if python -m judge.admit --repo repo --base refs/mg/base --head refs/mg/head \
+               --policy base/.morphogen/policy.json --card-out admission.json; then
+            echo "admitted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "admitted=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Hand the run its inputs, never the answers
+        env:
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
+        run: |
+          git -c http.extraHeader="Authorization: token $CASES_TOKEN" clone -q --depth 1 "$SERVER/$CASES_REPO.git" cases
+          python - <<'PY'
+          import json, random
+          rows = [json.loads(l) for l in open("cases/cases.jsonl") if l.strip()]
+          random.SystemRandom().shuffle(rows)
+          with open("inputs.jsonl", "w") as f:
+              for r in rows:
+                  f.write(json.dumps({"id": r["id"], "input": r["input"]}) + "\n")
+          PY
+          rm -rf cases
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with: {name: admission, path: "admission.json\ninputs.jsonl", retention-days: 1}
+
+  run:
+    needs: admit
+    if: needs.admit.outputs.admitted == 'true'
+    runs-on: untrusted
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with: {name: admission, path: in}
+      - name: Fetch both trees as files (no hooks, no .git)
+        env:
+          BASE: ${{ needs.admit.outputs.base }}
+        run: |
+          git init -q repo && cd repo
+          git fetch -q --no-tags "$SERVER/$REPO.git" "refs/heads/$BASE_REF:refs/mg/base" "refs/pull/$PR/head:refs/mg/head"
+          test "$(git rev-parse refs/mg/head)" = "$HEAD_SHA" && test "$(git rev-parse refs/mg/base)" = "$BASE"
+          mkdir ../base ../candidate
+          git archive refs/mg/base | tar -x -C ../base
+          git archive refs/mg/head | tar -x -C ../candidate
+      - name: Run the base, then the candidate, in sandbox containers
+        run: |
+          mkdir out
+          python -m judge.run --checkout base --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" --module "$MODULE" --label base --out out/base.jsonl
+          python -m judge.run --checkout candidate --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" --module "$MODULE" --label candidate --out out/candidate.jsonl
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with: {name: runs, path: out, retention-days: 1}
+
+  score:
+    needs: [admit, run]
+    if: always() && needs.admit.result == 'success'
+    runs-on: trusted
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with: {path: art}
+      - name: Fetch the base as files
+        env:
+          BASE: ${{ needs.admit.outputs.base }}
+        run: |
+          git init -q repo && cd repo
+          git fetch -q --no-tags "$SERVER/$REPO.git" "$BASE_REF:refs/mg/base"
+          test "$(git rev-parse refs/mg/base)" = "$BASE"
+          mkdir ../base && git archive refs/mg/base | tar -x -C ../base
+      - name: Score, sign, count, post
+        env:
+          BASE: ${{ needs.admit.outputs.base }}
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
+          STATUS_TOKEN: ${{ secrets.MORPHOGEN_STATUS_TOKEN }}
+          COSIGN_KEY: ${{ secrets.MORPHOGEN_COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.MORPHOGEN_COSIGN_PASSWORD }}
+        run: |
+          set -eu
+          auth="Authorization: token $CASES_TOKEN"
+          git -c http.extraHeader="$auth" clone -q "$SERVER/$CASES_REPO.git" cases
+          served=$(( $(cat cases/served 2>/dev/null || echo 0) + 1 ))
+          mkdir -p art/runs
+          python -m judge.score --base-checkout base --cases cases/cases.jsonl \
+            --base-run art/runs/base.jsonl --candidate-run art/runs/candidate.jsonl \
+            --admission art/admission/admission.json --served "$served" --repository "$REPO" \
+            --pull-request "$PR" --base-sha "$BASE" --head-sha "$HEAD_SHA" --out verdict.json
+          echo "$served" > cases/served
+          git -C cases -c user.name=judge -c user.email=judge@invalid commit -qam "served $served"
+          git -C cases -c http.extraHeader="$auth" push -q origin HEAD
+          printf '%s' "$COSIGN_KEY" > /tmp/k && chmod 600 /tmp/k
+          echo '{"mediaType":"application/vnd.dev.sigstore.signingconfig.v0.2+json","rekorTlogConfig":{},"tsaConfig":{}}' > /tmp/sc.json
+          cosign sign-blob --yes --key /tmp/k --signing-config /tmp/sc.json --bundle verdict.sigstore.json verdict.json
+          rm -f /tmp/k
+          decision=$(jq -r .decision verdict.json)
+          reason=$(jq -r .reason verdict.json | cut -c1-120)
+          state=failure; [ "$decision" = pass ] && state=success
+          jq -n --arg s "$state" --arg d "$decision: $reason" --arg u "$SERVER/$REPO/actions/runs/${{ github.run_number }}" \
+            '{state:$s, context:"morphogen/verdict", description:$d, target_url:$u}' |
+          curl -fsS -o /dev/null -X POST -H "Authorization: token $STATUS_TOKEN" -H 'Content-Type: application/json' \
+            -d @- "$SERVER/api/v1/repos/$REPO/statuses/$HEAD_SHA"
+          jq . verdict.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with: {name: verdict, path: "verdict.json\nverdict.sigstore.json"}

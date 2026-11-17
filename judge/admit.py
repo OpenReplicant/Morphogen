@@ -122,3 +122,44 @@ def admit(card, policy, changed):
     if reasons:
         return reasons
     return check_paths(card, policy, changed)
+
+
+CARD_FENCE = re.compile(r"```morphogen-card[ \t]*\r?\n(.*?)\r?\n```", re.S)
+
+
+def card_from_body(body):
+    """The card is the one ```morphogen-card fenced block in the pull request's description."""
+    found = CARD_FENCE.findall(body or "")
+    if len(found) != 1:
+        raise schemas.Invalid(f"the pull request must carry exactly one morphogen-card block, found {len(found)}")
+    return schemas.loads_strict(found[0])
+
+
+def main(argv=None):
+    import argparse
+    import json
+    import os
+    import sys
+    from pathlib import Path
+    ap = argparse.ArgumentParser(description="Admit a change or refuse it, before anything runs.")
+    ap.add_argument("--repo", required=True, type=Path)
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--head", required=True)
+    ap.add_argument("--policy", required=True, type=Path, help="read from the base checkout")
+    ap.add_argument("--body-env", default="PR_BODY", help="environment variable holding the PR description")
+    ap.add_argument("--card-out", required=True, type=Path)
+    a = ap.parse_args(argv)
+    policy = schemas.check("policy", schemas.loads_strict(a.policy.read_text()))
+    try:
+        card = card_from_body(os.environ.get(a.body_env, ""))
+    except (schemas.Invalid, ValueError) as e:
+        card, reasons = None, [str(e)]
+    else:
+        reasons = admit(card, policy, changes(a.repo, a.base, a.head))
+    a.card_out.write_text(json.dumps({"card": card, "refused": reasons}, indent=2))
+    print(json.dumps({"admitted": not reasons, "reasons": reasons}, indent=2))
+    return 1 if reasons else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

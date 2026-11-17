@@ -1,0 +1,44 @@
+# A self-hosted forge for the end-to-end test: Gitea and two Gitea Runners, one per trust level.
+name: mg
+networks:
+  forge: {name: mg-forge}
+services:
+  gitea:
+    image: gitea/gitea:28.3.0
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__ROOT_URL: http://gitea:3000/
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__actions__ENABLED: "true"
+      GITEA__actions__DEFAULT_ACTIONS_URL: self
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__repository__DEFAULT_BRANCH: main
+    ports: ["127.0.0.1:3000:3000"]
+    networks: [forge]
+  runner-untrusted:
+    image: gitea/runner:5.3.0
+    depends_on: [gitea]
+    environment:
+      CONFIG_FILE: /config.yaml
+      GITEA_INSTANCE_URL: http://gitea:3000
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${UNTRUSTED_TOKEN}
+      GITEA_RUNNER_NAME: untrusted
+      GITEA_RUNNER_LABELS: untrusted:docker://morphogen/job:1
+    volumes:
+      - ./runner-untrusted.yaml:/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [forge]
+  runner-trusted:
+    image: gitea/runner:5.3.0
+    depends_on: [gitea]
+    environment:
+      CONFIG_FILE: /config.yaml
+      GITEA_INSTANCE_URL: http://gitea:3000
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${TRUSTED_TOKEN}
+      GITEA_RUNNER_NAME: trusted
+      GITEA_RUNNER_LABELS: trusted:docker://morphogen/job:1
+    volumes:
+      - ./runner-trusted.yaml:/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [forge]
