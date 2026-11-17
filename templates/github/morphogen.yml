@@ -8,4 +8,5 @@ jobs:
   judge:
     uses: openreplicant/morphogen/.github/workflows/judge.yml@JUDGE_SHA
     permissions: {contents: read, statuses: write, id-token: write}
+    secrets: inherit
     with: {judge-ref: JUDGE_SHA, cases-repo: OWNER/CASES, module: your_module}

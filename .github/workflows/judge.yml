@@ -48,6 +48,19 @@ on:
         required: false
         type: string
         default: keyless
+    # Callers pass these with `secrets: inherit` (set them on the morphogen-judge environment or the
+    # repository). Only `admit` and `score` read them.
+    secrets:
+      MORPHOGEN_CASES_TOKEN:
+        description: Reads (and, for the served count, writes) the case repository. Needed unless the store is this repository.
+        required: false
+      MORPHOGEN_CASES_KEY:
+        description: Opens sealed case sets (`cases-sealed`).
+        required: false
+      MORPHOGEN_COSIGN_KEY:
+        required: false
+      MORPHOGEN_COSIGN_PASSWORD:
+        required: false
 
 permissions: {}
 
@@ -104,12 +117,20 @@ jobs:
           fi
       - name: Hand the run its inputs, never the answers
         env:
-          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN || github.token }}
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
+          REPO_TOKEN: ${{ github.token }}
           CASES_KEY: ${{ secrets.MORPHOGEN_CASES_KEY }}
           CASES_REPO: ${{ inputs.cases-repo || github.repository }}
           CASES_BRANCH: ${{ inputs.cases-branch }}
           SEALED: ${{ inputs.cases-sealed }}
         run: |
+          # The workflow's own token only ever reaches this repository; another store needs the case token.
+          if [ -z "$CASES_TOKEN" ]; then
+            if [ "$CASES_REPO" != "$GITHUB_REPOSITORY" ]; then
+              echo "::error::MORPHOGEN_CASES_TOKEN is not available to this job; the caller must pass secrets (secrets: inherit)"; exit 1
+            fi
+            CASES_TOKEN="$REPO_TOKEN"
+          fi
           git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)" \
             clone -q --depth 1 --single-branch --branch "$CASES_BRANCH" "$GITHUB_SERVER_URL/$CASES_REPO.git" cases
           plain=cases
@@ -214,12 +235,20 @@ jobs:
       - id: claim
         name: Fetch the held-out cases and claim this verdict's place in the count
         env:
-          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN || github.token }}
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
+          REPO_TOKEN: ${{ github.token }}
           CASES_KEY: ${{ secrets.MORPHOGEN_CASES_KEY }}
           CASES_REPO: ${{ inputs.cases-repo || github.repository }}
           CASES_BRANCH: ${{ inputs.cases-branch }}
           SEALED: ${{ inputs.cases-sealed }}
         run: |
+          # The workflow's own token only ever reaches this repository; another store needs the case token.
+          if [ -z "$CASES_TOKEN" ]; then
+            if [ "$CASES_REPO" != "$GITHUB_REPOSITORY" ]; then
+              echo "::error::MORPHOGEN_CASES_TOKEN is not available to this job; the caller must pass secrets (secrets: inherit)"; exit 1
+            fi
+            CASES_TOKEN="$REPO_TOKEN"
+          fi
           git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)" \
             clone -q --single-branch --branch "$CASES_BRANCH" "$GITHUB_SERVER_URL/$CASES_REPO.git" cases
           if [ "$SEALED" = true ]; then
@@ -227,6 +256,7 @@ jobs:
           else
             ln -s cases plain
           fi
+          export CASES_TOKEN
           python3 -m judge.ci claim --cases-dir cases --admission art/admission/admission.json --token-env CASES_TOKEN \
             --branch "$CASES_BRANCH"
       - name: Score
