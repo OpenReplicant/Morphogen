@@ -1,5 +1,5 @@
 log: {level: info}
-runner: {capacity: 1, timeout: 30m, fetch_timeout: 5s, fetch_interval: 2s}
+runner: {capacity: 4, timeout: 30m, fetch_timeout: 5s, fetch_interval: 2s}
 container:
   network: mg-forge
   privileged: false

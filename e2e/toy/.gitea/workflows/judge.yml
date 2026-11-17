@@ -79,8 +79,8 @@ jobs:
       - name: Run the base, then the candidate, in sandbox containers
         run: |
           mkdir out
-          python -m judge.run --checkout base --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" --module "$MODULE" --label base --out out/base.jsonl
-          python -m judge.run --checkout candidate --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" --module "$MODULE" --label candidate --out out/candidate.jsonl
+          python -m judge.run --checkout base --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" --module "$MODULE" --label base --out out/base.jsonl --timeout 5
+          python -m judge.run --checkout candidate --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" --module "$MODULE" --label candidate --out out/candidate.jsonl --timeout 5
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with: {name: runs, path: out, retention-days: 1}
 
