@@ -15,8 +15,13 @@ on:
         description: owner/name of the private repository holding the held-out case sets.
         required: true
         type: string
+      subdir:
+        description: The directory, relative to the repository root, that the sandbox runs the module from.
+        required: false
+        type: string
+        default: "."
       module:
-        description: The Python module the sandbox runs (`python -I -m`-style, from the checkout's root).
+        description: The Python module the sandbox runs (`python -I -m`-style, from `subdir`).
         required: true
         type: string
       sandbox-image:
@@ -32,7 +37,7 @@ on:
         description: "`key`: a cosign key pair held in the environment. `keyless`: the workflow's OIDC identity, logged in the public Sigstore transparency log."
         required: false
         type: string
-        default: key
+        default: keyless
 
 permissions: {}
 
@@ -145,11 +150,13 @@ jobs:
         env:
           IMAGE: ${{ inputs.sandbox-image }}
           MODULE: ${{ inputs.module }}
+          SUBDIR: ${{ inputs.subdir }}
           CASE_TIMEOUT: ${{ inputs.case-timeout }}
         run: |
+          case "/$SUBDIR/" in */../*|//*) echo "bad subdir"; exit 1;; esac
           mkdir out
           for side in base candidate; do
-            python3 -m judge.run --checkout "w/$side" --inputs in/inputs.jsonl --image "$IMAGE" --module "$MODULE" \
+            python3 -m judge.run --checkout "w/$side/$SUBDIR" --inputs in/inputs.jsonl --image "$IMAGE" --module "$MODULE" \
               --label "$side" --out "out/$side.jsonl" --timeout "$CASE_TIMEOUT"
           done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
