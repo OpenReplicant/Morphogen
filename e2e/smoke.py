@@ -84,8 +84,15 @@ def main():
     cases = work / "cases" / "topwords-heldout"
     cases.mkdir(parents=True)
     (cases / "cases.jsonl").write_text("".join(json.dumps(c) + "\n" for c in make_cases()))
-    honest = judge(work, "honest", FIX, work / "cases", a.cosign, a.image)
-    cheat = judge(work, "cheat", CHEAT, work / "cases", a.cosign, a.image)
+    # Seal the case set and open it again, as a public case store does (judge/custody.py).
+    env = {**os.environ, "CASES_KEY": os.urandom(24).hex()}
+    for action in ("seal", "open"):
+        src, dst = ("cases", "sealed") if action == "seal" else ("opened", "sealed")
+        subprocess.run([sys.executable, "-m", "judge.custody", action, "--key-env", "CASES_KEY",
+                        "--plain", str(work / src), "--sealed", str(work / dst)], env=env, check=True)
+    assert (work / "opened/topwords-heldout/cases.jsonl").read_bytes() == (cases / "cases.jsonl").read_bytes()
+    honest = judge(work, "honest", FIX, work / "opened", a.cosign, a.image)
+    cheat = judge(work, "cheat", CHEAT, work / "opened", a.cosign, a.image)
     print(json.dumps({"honest": honest["decision"], "cheat": cheat["decision"]}))
     ok = honest["decision"] == "pass" and cheat["decision"] == "refuse"
     print("SMOKE", "OK" if ok else "FAILED")

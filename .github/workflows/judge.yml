@@ -12,9 +12,19 @@ on:
         required: true
         type: string
       cases-repo:
-        description: owner/name of the private repository holding the held-out case sets.
-        required: true
+        description: owner/name of the repository holding the held-out case sets. Empty means this repository.
+        required: false
         type: string
+        default: ""
+      cases-branch:
+        required: false
+        type: string
+        default: main
+      cases-sealed:
+        description: The case sets are sealed (judge/custody.py) under the MORPHOGEN_CASES_KEY secret, so the store may be public.
+        required: false
+        type: boolean
+        default: false
       subdir:
         description: The directory, relative to the repository root, that the sandbox runs the module from.
         required: false
@@ -94,15 +104,18 @@ jobs:
           fi
       - name: Hand the run its inputs, never the answers
         env:
-          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
-          CASES_REPO: ${{ inputs.cases-repo }}
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN || github.token }}
+          CASES_KEY: ${{ secrets.MORPHOGEN_CASES_KEY }}
+          CASES_REPO: ${{ inputs.cases-repo || github.repository }}
+          CASES_BRANCH: ${{ inputs.cases-branch }}
+          SEALED: ${{ inputs.cases-sealed }}
         run: |
-          mkdir cases && git -C cases init -q
-          git -C cases -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)" \
-            fetch -q --depth 1 "$GITHUB_SERVER_URL/$CASES_REPO.git" HEAD
-          git -C cases checkout -q FETCH_HEAD
-          python3 -m judge.ci inputs --cases-dir cases --admission admission.json --out inputs.jsonl
-          rm -rf cases
+          git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)" \
+            clone -q --depth 1 --single-branch --branch "$CASES_BRANCH" "$GITHUB_SERVER_URL/$CASES_REPO.git" cases
+          plain=cases
+          if [ "$SEALED" = true ]; then python3 -m judge.custody open --key-env CASES_KEY --sealed cases --plain plain; plain=plain; fi
+          python3 -m judge.ci inputs --cases-dir "$plain" --admission admission.json --out inputs.jsonl
+          rm -rf cases plain
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: admission
@@ -171,7 +184,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: morphogen-judge
     permissions:
-      contents: read
+      contents: write  # only to count served verdicts when the case store is this repository
       statuses: write
       id-token: write
     steps:
@@ -201,24 +214,32 @@ jobs:
       - id: claim
         name: Fetch the held-out cases and claim this verdict's place in the count
         env:
-          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
-          CASES_REPO: ${{ inputs.cases-repo }}
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN || github.token }}
+          CASES_KEY: ${{ secrets.MORPHOGEN_CASES_KEY }}
+          CASES_REPO: ${{ inputs.cases-repo || github.repository }}
+          CASES_BRANCH: ${{ inputs.cases-branch }}
+          SEALED: ${{ inputs.cases-sealed }}
         run: |
           git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)" \
-            clone -q "$GITHUB_SERVER_URL/$CASES_REPO.git" cases
+            clone -q --single-branch --branch "$CASES_BRANCH" "$GITHUB_SERVER_URL/$CASES_REPO.git" cases
+          if [ "$SEALED" = true ]; then
+            python3 -m judge.custody open --key-env CASES_KEY --sealed cases --plain plain
+          else
+            ln -s cases plain
+          fi
           python3 -m judge.ci claim --cases-dir cases --admission art/admission/admission.json --token-env CASES_TOKEN \
-            --branch "$(git -C cases symbolic-ref --short HEAD)"
+            --branch "$CASES_BRANCH"
       - name: Score
         env:
           BASE: ${{ needs.admit.outputs.base }}
           SERVED: ${{ steps.claim.outputs.served }}
         run: |
           mkdir -p art/runs
-          python3 -m judge.score --base-checkout w/base --cases-dir cases --base-run art/runs/base.jsonl \
+          python3 -m judge.score --base-checkout w/base --cases-dir plain --base-run art/runs/base.jsonl \
             --candidate-run art/runs/candidate.jsonl --admission art/admission/admission.json --served "$SERVED" \
             --repository "$GITHUB_REPOSITORY" --pull-request "$PR" --base-sha "$BASE" --head-sha "$HEAD_SHA" \
             --out verdict.json
-          rm -rf cases
+          rm -rf cases plain
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
         with:
           cosign-release: v3.1.4

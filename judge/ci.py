@@ -105,7 +105,7 @@ def claim(a):
         _output("set", "")
         return
     for attempt in range(a.attempts):
-        _git(cases, "fetch", "-q", "origin", "HEAD", auth=auth)
+        _git(cases, "fetch", "-q", "origin", a.branch, auth=auth)
         _git(cases, "reset", "-q", "--hard", "FETCH_HEAD")
         counter = cases / name / "served"
         served = int(counter.read_text().strip() or 0) + 1 if counter.exists() else 1
