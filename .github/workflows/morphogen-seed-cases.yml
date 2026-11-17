@@ -1,0 +1,30 @@
+# One-off: create the dogfood's held-out case set in the private repository OpenReplicant/morphogen-judge.
+# The cases are generated from fresh randomness inside this run, so they exist only there.
+# Needs MORPHOGEN_CASES_TOKEN (environment morphogen-judge). Refuses to overwrite an existing set.
+# Run by hand: Actions -> morphogen-seed-cases -> Run workflow.
+name: morphogen-seed-cases
+on: workflow_dispatch
+permissions: {}
+jobs:
+  seed:
+    runs-on: ubuntu-24.04
+    environment: morphogen-judge
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: {persist-credentials: false}
+      - env:
+          CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
+        run: |
+          set -eu
+          auth="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$CASES_TOKEN" | base64 -w0)"
+          git -c "$auth" clone -q https://github.com/OpenReplicant/morphogen-judge.git cases
+          if [ -e cases/topwords-heldout/cases.jsonl ]; then echo "case set exists; not overwriting"; exit 1; fi
+          SEED="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
+            python3 dogfood/make_cases.py --seed-env SEED --out cases/topwords-heldout
+          cd cases
+          git checkout -q -B main
+          git add -A
+          git -c user.name=morphogen-judge -c user.email=judge@invalid commit -qm "topwords-heldout: 30 cases"
+          git -c "$auth" push -q origin main
+          echo "case set pushed"
