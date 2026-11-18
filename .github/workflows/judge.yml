@@ -300,3 +300,22 @@ jobs:
           path: |
             verdict.json
             verdict.sigstore.json
+
+  report:
+    # When the judge itself fails, say so on the commit: a `stop`, never a pass, and never silence.
+    needs: [admit, run, score]
+    if: always() && github.event_name == 'pull_request_target' && needs.score.result != 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTS: "admit=${{ needs.admit.result }} run=${{ needs.run.result }} score=${{ needs.score.result }}"
+        run: |
+          body=$(jq -n --arg d "stop: the judge failed ($RESULTS); no verdict" \
+            --arg u "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{state:"failure", context:"morphogen/verdict", description:$d[0:138], target_url:$u}')
+          curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -d "$body" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA"
+          echo "posted morphogen/verdict=failure (stop: $RESULTS)"
