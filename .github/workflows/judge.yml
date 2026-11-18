@@ -43,6 +43,11 @@ on:
         required: false
         type: number
         default: 60
+      verdict-poster:
+        description: "Who posts `morphogen/verdict`. `actions`: the workflow token (anyone with write access can post the same status). `app`: a GitHub App only the judge holds the key of; require the status from that app in the ruleset."
+        required: false
+        type: string
+        default: actions
       signing:
         description: "`key`: a cosign key pair held in the environment. `keyless`: the workflow's OIDC identity, logged in the public Sigstore transparency log."
         required: false
@@ -60,6 +65,12 @@ on:
       MORPHOGEN_COSIGN_KEY:
         required: false
       MORPHOGEN_COSIGN_PASSWORD:
+        required: false
+      MORPHOGEN_APP_CLIENT_ID:
+        description: "The judge's GitHub App client ID (with verdict-poster app)."
+        required: false
+      MORPHOGEN_APP_KEY:
+        description: "The judge's GitHub App private key (with verdict-poster app)."
         required: false
 
 permissions: {}
@@ -295,10 +306,20 @@ jobs:
             cosign sign-blob --yes --key "$RUNNER_TEMP/k" --signing-config "$RUNNER_TEMP/sc.json" --bundle verdict.sigstore.json verdict.json
             rm -f "$RUNNER_TEMP/k"
           fi
+      - id: app
+        name: Get the judge's GitHub App token (statuses only)
+        if: inputs.verdict-poster == 'app'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
+        with:
+          client-id: ${{ secrets.MORPHOGEN_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MORPHOGEN_APP_KEY }}
+          permission-statuses: write
       - name: Post the verdict
         env:
-          GH_TOKEN: ${{ github.token }}
+          POSTER: ${{ inputs.verdict-poster }}
+          GH_TOKEN: ${{ inputs.verdict-poster == 'app' && steps.app.outputs.token || github.token }}
         run: |
+          case "$POSTER" in app|actions) ;; *) echo "::error::verdict-poster must be app or actions"; exit 1;; esac
           python3 -m judge.ci post --api "$GITHUB_API_URL" --repo "$GITHUB_REPOSITORY" --verdict verdict.json \
             --token-env GH_TOKEN --target-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           python3 -m judge.ci summary --verdict verdict.json
@@ -314,11 +335,20 @@ jobs:
     needs: [admit, run, score]
     if: always() && github.event_name == 'pull_request_target' && needs.score.result != 'success'
     runs-on: ubuntu-24.04
+    environment: morphogen-judge
     permissions:
       statuses: write
     steps:
+      - id: app
+        if: inputs.verdict-poster == 'app'
+        continue-on-error: true  # a stop may be posted by either token: it can only block a merge
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
+        with:
+          client-id: ${{ secrets.MORPHOGEN_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MORPHOGEN_APP_KEY }}
+          permission-statuses: write
       - env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
           RESULTS: "admit=${{ needs.admit.result }} run=${{ needs.run.result }} score=${{ needs.score.result }}"
         run: |
           body=$(jq -n --arg d "stop: the judge failed ($RESULTS); no verdict" \

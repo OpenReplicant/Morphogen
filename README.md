@@ -20,4 +20,5 @@ pull request + card ──► admit ──► run untrusted ──► score trus
 pip install -e '.[test]' && pytest -q          # schemas, admission, statistics, A/A
 ```
 
-See `e2e/README.md` for the end-to-end run.
+**Documentation: [`docs/`](docs/README.md)**: how it works, setting up on GitHub or Gitea, cards and
+verdicts, statistics, and security (threat model, red-team results, known limits).
