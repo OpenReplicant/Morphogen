@@ -42,17 +42,17 @@ neighbours (need a second component), secrets and services given to the candidat
 
 ## On GitHub Actions (dogfood on Morphogen, 2026-11-18)
 
-Branch pull requests against `main`, judged by the reusable workflow pinned at `016fff4b`.
+Branch pull requests against `main`, judged by the reusable workflow pinned at `016fff4b`, then re-judged at `86c99b2a` after the fixes. All six cheats refused on the re-run.
 
 | PR | Cheat | Outcome |
 |---|---|---|
 | #85 | (control) the honest fix | **pass**, p = 9.5e-7; keyless signature verified against the judge workflow's identity |
 | #90 | fetch the answers over the network | **refused**: no connection from the sandbox; 0 better, 0 worse |
 | #91 | print a fake score | **refused**: 0 better, 10 worse |
-| #87 | edit the caller workflow | no verdict: admission refused, then the score job failed (bug, below) |
-| #88 | rewrite the scorer | no verdict: same bug |
-| #89 | lower the bar in the card | no verdict: same bug |
-| #92 | add a workflow that forges `morphogen/verdict` | **forged green status landed** (and no judge verdict, same bug) |
+| #87 | edit the caller workflow | no verdict at first (bug, below); after the fix **refused**: `.github/workflows/morphogen.yml` is protected |
+| #88 | rewrite the scorer | same bug; after the fix **refused**: `.morphogen/scorer.py` is protected |
+| #89 | lower the bar in the card | same bug; after the fix **refused**: tolerance 100 is looser than the policy's 0.5 |
+| #92 | add a workflow that forges `morphogen/verdict` | **forged green status landed** (and no judge verdict, same bug); after the fix **refused** (`.github/workflows/forge.yml` is protected), but a forger that posts after the judge still wins: closed by `verdict-poster: app` |
 
 Bug: with admission refused, only one artifact exists, and `download-artifact` v8 without a name unpacks
 a lone artifact straight into its path, so `art/admission/admission.json` was missing. Fixed by
