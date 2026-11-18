@@ -24,8 +24,8 @@ No private repository? Seal the case sets and keep them in any branch: see `judg
 
 ## 3. A fine-grained token for the case repository
 
-Settings → Developer settings → Fine-grained tokens → Generate new token. Resource owner: your
-organisation. Repository access: only the case repository. Permissions: **Contents: read and write**
+Settings → Developer settings → Fine-grained tokens → Generate new token. Resource owner: the
+account that owns the case repository. Repository access: only the case repository. Permissions: **Contents: read and write**
 (write is for the served count). Nothing else.
 
 ## 4. The judge's GitHub App
@@ -34,7 +34,11 @@ This is what makes the `morphogen/verdict` status impossible to forge. Without i
 a workflow in your repository (including a pull request from a branch, not a fork) can post the same
 status after the judge (measured: [security](security.md#a-forged-status)).
 
-1. Organisation settings → Developer settings → GitHub Apps → **New GitHub App**.
+1. Create the app under **the account that owns the repository**: for a personal account, your
+   Settings → Developer settings → GitHub Apps; for an organisation, the organisation's Settings →
+   Developer settings → GitHub Apps. Then **New GitHub App**. An app made *Only on this account*
+   under a different account cannot be installed on your repository; if that happened, move it with
+   the app's Advanced → Transfer ownership.
    - Name: e.g. `Morphogen Judge` (must be unique on GitHub). Homepage URL: your repository.
    - Webhook: **untick Active**.
    - Repository permissions: **Commit statuses: Read and write**. Leave everything else at *No access*.
