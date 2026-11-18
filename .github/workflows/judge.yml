@@ -95,6 +95,7 @@ jobs:
       admitted: ${{ steps.admit.outputs.admitted }}
       judged: ${{ steps.admit.outputs.judged }}
       base: ${{ steps.fetch.outputs.base }}
+      inputs-artifact: ${{ steps.up-inputs.outputs.artifact-id }}
     steps:
       - name: Get the judge
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -156,9 +157,16 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: admission
-          path: |
-            admission.json
-            inputs.jsonl
+          path: admission.json
+          retention-days: 1
+      # The held-out inputs travel alone, so the score job can delete them as soon as the run is over:
+      # anyone who can read the repository can download a run's artifacts.
+      - id: up-inputs
+        if: steps.admit.outputs.judged == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: inputs
+          path: inputs.jsonl
           retention-days: 1
 
   run:
@@ -167,10 +175,12 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    outputs:
+      runs-artifact: ${{ steps.up-runs.outputs.artifact-id }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
-          name: admission
+          name: inputs
           path: in
       - name: Get the judge
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -209,7 +219,8 @@ jobs:
             python3 -m judge.run --checkout "w/$side/$SUBDIR" --inputs in/inputs.jsonl --image "$IMAGE" --module "$MODULE" \
               --label "$side" --out "out/$side.jsonl" --timeout "$CASE_TIMEOUT"
           done
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+      - id: up-runs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: runs
           path: out
@@ -224,6 +235,7 @@ jobs:
       contents: read
       statuses: write
       id-token: write
+      actions: write  # only to delete this run's inputs and run records
     steps:
       # By name: with a single artifact (admission refused, run skipped), an unnamed download lands
       # its files directly in `path`, so the layout would depend on what ran.
@@ -236,6 +248,21 @@ jobs:
         with:
           name: runs
           path: art/runs
+      - name: Delete the held-out inputs and the run records from the run (the outputs echo the inputs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IDS: ${{ needs.admit.outputs.inputs-artifact }} ${{ needs.run.outputs.runs-artifact }}
+        run: |
+          # Fails the job (and so the verdict becomes a stop) if the case data cannot be removed.
+          for id in $IDS; do
+            for try in 1 2 3; do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$id")
+              case "$code" in 204|404) echo "artifact $id removed ($code)"; continue 2;; esac
+              sleep $((try * 3))
+            done
+            echo "::error::could not delete artifact $id (HTTP $code); the caller must grant actions: write"; exit 1
+          done
       - name: Get the judge
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -344,7 +371,24 @@ jobs:
     environment: morphogen-judge
     permissions:
       statuses: write
+      actions: write  # only to delete this run's inputs and run records
     steps:
+      - name: Delete the held-out inputs and the run records, if the score job did not
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IDS: ${{ needs.admit.outputs.inputs-artifact }} ${{ needs.run.outputs.runs-artifact }}
+        run: |
+          # Fails the job (and so the verdict becomes a stop) if the case data cannot be removed.
+          for id in $IDS; do
+            for try in 1 2 3; do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$id")
+              case "$code" in 204|404) echo "artifact $id removed ($code)"; continue 2;; esac
+              sleep $((try * 3))
+            done
+            echo "::error::could not delete artifact $id (HTTP $code); the caller must grant actions: write"; exit 1
+          done
       - id: app
         if: inputs.verdict-poster == 'app'
         continue-on-error: true  # a stop may be posted by either token: it can only block a merge

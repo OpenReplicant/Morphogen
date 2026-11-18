@@ -76,10 +76,13 @@ permissions: {}
 jobs:
   judge:
     uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@JUDGE_SHA
-    permissions: {contents: read, statuses: write, id-token: write}
+    permissions: {contents: read, statuses: write, id-token: write, actions: write}
     secrets: inherit
     with: {judge-ref: JUDGE_SHA, cases-repo: OWNER/CASES, module: your_module, verdict-poster: app}
 ```
+
+`actions: write` lets the trusted score job delete the run's held-out inputs and run records as soon as it
+has read them; without it the judge posts a `stop`.
 
 | Input | Default | Meaning |
 |---|---|---|
