@@ -141,6 +141,8 @@ def post(a):
 def summary(a):
     v = json.loads(Path(a.verdict).read_text())
     icon = {"pass": "PASS", "refuse": "REFUSED", "stop": "STOPPED"}[v["decision"]]
+    if v.get("judged") is False:
+        icon += " (not judged)"
     lines = [f"## Morphogen verdict: {icon}", "", v["reason"], "",
              f"Candidate `{v['candidate'][:12]}` against base `{v['base'][:12]}`; case set "
              f"`{v['cases']['set'] or '-'}` ({v['cases']['expected']} cases, served {v['cases']['served']} verdicts"

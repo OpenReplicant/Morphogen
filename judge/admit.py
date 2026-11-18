@@ -1,5 +1,6 @@
 """Admission: refuse a change before anything runs unless its card fits the base's policy and every
-changed path lies inside both scopes and outside everything protected.
+changed path lies inside both scopes and outside everything protected. A change that touches nothing
+in the policy's scope is not judged (see `triage`).
 
 The policy is read from the protected base, never from the change. The changed paths come from git
 (`git diff --raw -z --no-renames base...head`), never from the change's own account of itself.
@@ -115,6 +116,30 @@ def check_paths(card, policy, changed):
     return reasons
 
 
+def triage(policy, changed):
+    """Is the change judged, and if not, may it pass unjudged? Returns (judged, reasons).
+
+    A change is judged when any changed path lies in the policy's scope (a move out of the scope
+    counts: without renames it is a deletion inside it). Any other change passes unjudged, unless it
+    touches what the judge relies on (its workflows, its rules, the protected paths, the files the
+    interpreter runs by itself) or is a link or submodule: those are refused, because the judge never
+    passes a change to its own ground; a person reviews and merges them.
+    """
+    if any(matches(c["path"], policy["scope"]) for c in changed):
+        return True, []
+    protected = list(ALWAYS_PROTECTED) + list(policy["protected"])
+    reasons = []
+    for c in changed:
+        p = c["path"]
+        if c["mode"] in (LINK, SUBMODULE):
+            reasons.append(f"{p}: is a {'symbolic link' if c['mode'] == LINK else 'submodule'}")
+        elif matches(p, protected):
+            reasons.append(f"{p}: is protected")
+    if reasons:
+        reasons[0] = "not judged, and it touches what the judge relies on, which is a person's to merge: " + reasons[0]
+    return False, reasons
+
+
 def admit(card, policy, changed):
     """Return the reasons to refuse; an empty list admits the change."""
     schemas.check("policy", policy)
@@ -150,14 +175,18 @@ def main(argv=None):
     ap.add_argument("--card-out", required=True, type=Path)
     a = ap.parse_args(argv)
     policy = schemas.check("policy", schemas.loads_strict(a.policy.read_text()))
-    try:
-        card = card_from_body(os.environ.get(a.body_env, ""))
-    except (schemas.Invalid, ValueError) as e:
-        card, reasons = None, [str(e)]
-    else:
-        reasons = admit(card, policy, changes(a.repo, a.base, a.head))
-    a.card_out.write_text(json.dumps({"card": card, "refused": reasons}, indent=2))
-    print(json.dumps({"admitted": not reasons, "reasons": reasons}, indent=2))
+    changed = changes(a.repo, a.base, a.head)
+    judged, reasons = triage(policy, changed)
+    card = None
+    if judged:
+        try:
+            card = card_from_body(os.environ.get(a.body_env, ""))
+        except (schemas.Invalid, ValueError) as e:
+            reasons = [str(e)]
+        else:
+            reasons = admit(card, policy, changed)
+    a.card_out.write_text(json.dumps({"card": card, "refused": reasons, "judged": judged}, indent=2))
+    print(json.dumps({"judged": judged, "admitted": not reasons, "reasons": reasons}, indent=2))
     return 1 if reasons else 0
 
 

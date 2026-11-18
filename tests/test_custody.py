@@ -15,7 +15,7 @@ def test_round_trip_and_refusals(tmp_path, monkeypatch):
     monkeypatch.setenv("K", KEY)
     custody.main(["seal", "--key-env", "K", "--plain", str(plain), "--sealed", str(sealed)])
     blob = (sealed / "set-a/cases.jsonl.sealed").read_bytes()
-    assert b"answer" not in blob and b"c1" not in blob
+    assert b'"answer"' not in blob and b'"c1"' not in blob  # quoted: base64 never holds quotes
     custody.main(["open", "--key-env", "K", "--plain", str(back), "--sealed", str(sealed)])
     assert (back / "set-a/cases.jsonl").read_bytes() == rows
     with pytest.raises(SystemExit, match="authentication"):                      # wrong key

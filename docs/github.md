@@ -104,9 +104,21 @@ Settings → Rules → Rulesets → **New branch ruleset**, targeting your defau
   lands on.
 - Block force pushes.
 
-Every pull request to that branch now needs a passing verdict from the judge. If some pull requests
-should not be judged (Morphogen's own dogfood judges only `dogfood/**`), do not require the check
-branch-wide, or the others will wait forever.
+- **Bypass list**: add *Repository admin* (or your maintainers' role), "For pull requests only". This is
+  how a person merges a change the judge refuses to decide on (see below).
+
+Every pull request to that branch now needs a passing verdict from the app. The caller has no `paths`
+filter, so the judge sees every pull request and decides which kind it is:
+
+| The change touches | Verdict |
+|---|---|
+| anything in the policy's `scope` | **judged**: needs a card, and passes only on the measurements |
+| nothing in the scope, and nothing the judge relies on | **pass (not judged)**: signed, `"judged": false`, nothing run |
+| nothing in the scope, but a workflow, `.morphogen/`, a `protected` path, a link or a submodule | **refuse**: the judge never passes a change to its own ground; a person reviews it and merges by bypass |
+
+So put in `scope` or `protected` everything the judged code depends on: a change elsewhere passes
+unjudged. A forged `morphogen/verdict` from any other workflow does not satisfy the rule, because its
+source is not the app.
 
 ## 8. Who may author
 

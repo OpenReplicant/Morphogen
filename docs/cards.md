@@ -48,6 +48,12 @@ A **deciding** KPI must improve: `floor` is the smallest mean per-case improveme
  "alpha": 0.05}
 ```
 
+`scope` also decides **whether a change is judged at all**: a pull request that touches nothing in it
+gets a signed pass with `"judged": false` and nothing run, unless it touches a workflow, `.morphogen/`, a
+`protected` path, a link or a submodule, which is refused for a person to merge
+([github](github.md#7-the-merge-gate)). So everything the judged code depends on belongs in `scope` or
+`protected`.
+
 A card is refused if it drops a required KPI, changes its source or direction, demotes a deciding KPI,
 sets a lower floor or a looser bound, adds a KPI the policy does not allow, names a case set the
 policy does not list, or grants a host the policy does not allow.

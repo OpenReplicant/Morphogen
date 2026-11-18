@@ -107,6 +107,10 @@
         }
       }
     },
+    "judged": {
+      "description": "false when the change touched nothing in the policy's scope, so nothing was measured: a pass then means only that the change is outside what the judge judges. Absent means true.",
+      "type": "boolean"
+    },
     "reported": {
       "description": "Numbers the candidate printed about itself. Recorded as reported; they never decide.",
       "type": "object"

@@ -13,7 +13,10 @@ pull request + card ─► admit ─► run (untrusted) ─► score (trusted) �
    branch and checks the card against it (a card may make the bar stricter, never looser) and every
    changed path against both scopes and the protected list. Paths come from `git diff`, never from the
    change's own account. Symbolic links, submodules, workflow files, the judge's own files, and files
-   the Python interpreter runs at start-up are always refused. A refused change is never run.
+   the Python interpreter runs at start-up are always refused. A refused change is never run. A change
+   that touches nothing in the policy's scope is **not judged**: it gets a signed pass marked
+   `"judged": false`, unless it touches the judge's own ground (workflows, rules, protected paths),
+   which the judge refuses and leaves to a person.
 3. **Run, untrusted.** The base and the candidate each run on every held-out case's *input* (never its
    answer), one fresh container per case: no network, read-only filesystem, no capabilities, an
    unprivileged user, CPU, memory and process limits. Input on stdin, output on stdout. Wall time comes

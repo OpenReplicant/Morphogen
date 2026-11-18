@@ -13,10 +13,11 @@ def _select(ids, selectors):
 
 
 def decide(*, repository, base, candidate, judge, card, policy, case_ids, served, measured,
-           outputs=None, correct=None, reported=None, pull_request=None, seed=None, admission=()):
+           outputs=None, correct=None, reported=None, pull_request=None, seed=None, admission=(), judged=True):
     """measured: {"base": {kpi: {case: value}}, "candidate": {...}}, all measured by the judge.
     outputs: {"base": {case: output}, "candidate": {...}} for must_not_change; correct: {case: bool}
-    for the candidate, for must_pass. admission: reasons admission gave, if any."""
+    for the candidate, for must_pass. admission: reasons admission gave, if any. judged=False: the
+    change touched nothing in the policy's scope, so nothing was measured (see admit.triage)."""
     seed = stats.new_rng().getrandbits(63) if seed is None else seed
     rng = stats.new_rng(seed)
     alpha = policy["alpha"]
@@ -32,6 +33,11 @@ def decide(*, repository, base, candidate, judge, card, policy, case_ids, served
     }
     if pull_request is not None:
         v["pull_request"] = pull_request
+    if not judged:
+        v["judged"] = False
+        if not admission:
+            return schemas.check("verdict", {**v, "decision": "pass", "reason":
+                                 "not judged: the change touches nothing in the policy's scope; nothing was measured"})
     if admission:
         return schemas.check("verdict", {**v, "decision": "refuse", "reason": "not admitted: " + "; ".join(admission)})
     for k in card["kpis"]:

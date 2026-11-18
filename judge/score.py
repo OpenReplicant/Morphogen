@@ -82,12 +82,15 @@ def main(argv=None):
     policy = schemas.check("policy", schemas.loads_strict((a.base_checkout / ".morphogen/policy.json").read_text()))
     adm = json.loads(a.admission.read_text())
     card = adm["card"] or {}
+    judged = adm.get("judged", True)
     refused = adm["refused"] or not card
     cases = {} if refused else read_cases(a.cases_dir / card["cases"]["set"] / "cases.jsonl")
     score = runpy.run_path(str(a.base_checkout / ".morphogen/scorer.py"))["score"]
     common = dict(repository=a.repository, base=a.base_sha, candidate=a.head_sha, judge=a.base_sha, card=card,
                   policy=policy, case_ids=list(cases), served=a.served, pull_request=a.pull_request)
-    if refused:
+    if not judged:
+        v = verdict.decide(**common, measured={"base": {}, "candidate": {}}, admission=adm["refused"], judged=False)
+    elif refused:
         v = verdict.decide(**common, measured={"base": {}, "candidate": {}}, admission=adm["refused"] or ["no card"])
     else:
         bk, bo, _ = measure(read_run(a.base_run), cases, score)

@@ -61,6 +61,9 @@ an error that names it.
 - **Inputs leak after use.** The run job needs the held-out *inputs* (never the answers); they travel as
   an artifact that anyone who can read the repository may download for a day. The served count and
   `stale_after` bound how long a case set is used. A future version can delete the artifact once read.
+- **Unjudged passes trust the policy's lists.** A change outside `scope` and `protected` passes without
+  being run. If the judged code imports something listed in neither, a change to it alters the judged
+  system unmeasured. The owner must list dependencies in one or the other.
 - **Every pull request costs a judgement.** Anyone can open a pull request and so spend a served count.
 - **Docker on the runner host.** On self-hosted runners the untrusted job starts the sandboxes through
   the host's Docker; the candidate's own containers have no socket, but a container escape would reach

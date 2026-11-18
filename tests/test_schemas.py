@@ -73,3 +73,24 @@ def test_example_verdict_is_what_the_judge_writes():
     v["issued_at"] = "2026-11-17T00:00:00Z"
     expected = json.loads((ROOT / "examples/verdict.json").read_text())
     assert v == expected
+
+
+COMMON = dict(repository="o/r", base="a" * 40, candidate="b" * 40, judge="a" * 40, card={}, policy=POLICY,
+              case_ids=[], served=0, measured={"base": {}, "candidate": {}})
+
+
+def test_an_unjudged_pass_says_so():
+    v = verdict.decide(**COMMON, judged=False)
+    assert v["decision"] == "pass" and v["judged"] is False and v["kpis"] == []
+    assert v["reason"].startswith("not judged")
+
+
+def test_an_unjudged_change_to_the_judges_ground_is_refused():
+    v = verdict.decide(**COMMON, judged=False, admission=["not judged, ...: .github/workflows/x.yml: is protected"])
+    assert v["decision"] == "refuse" and v["judged"] is False
+
+
+def test_a_judged_verdict_without_the_field_is_still_valid():
+    v = verdict.decide(**COMMON, admission=["no card"])
+    assert "judged" not in v
+    schemas.check("verdict", {**v, "judged": True})

@@ -93,6 +93,7 @@ jobs:
       contents: read
     outputs:
       admitted: ${{ steps.admit.outputs.admitted }}
+      judged: ${{ steps.admit.outputs.judged }}
       base: ${{ steps.fetch.outputs.base }}
     steps:
       - name: Get the judge
@@ -120,13 +121,17 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
+          # A change that touches nothing in the policy's scope is not judged: no run, no cases, and a
+          # signed "pass (not judged)", unless it touches what the judge relies on (then refused).
           if python3 -m judge.admit --repo w/repo --base refs/mg/base --head refs/mg/head \
                --policy w/base/.morphogen/policy.json --card-out admission.json; then
             echo "admitted=true" >> "$GITHUB_OUTPUT"
           else
             echo "admitted=false" >> "$GITHUB_OUTPUT"
           fi
+          echo "judged=$(jq -r '.judged' admission.json)" >> "$GITHUB_OUTPUT"
       - name: Hand the run its inputs, never the answers
+        if: steps.admit.outputs.judged == 'true'
         env:
           CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
           REPO_TOKEN: ${{ github.token }}
@@ -158,7 +163,7 @@ jobs:
 
   run:
     needs: admit
-    if: needs.admit.outputs.admitted == 'true'
+    if: needs.admit.outputs.admitted == 'true' && needs.admit.outputs.judged == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -253,6 +258,7 @@ jobs:
           --base-ref "$BASE_REF" --head-sha "$HEAD_SHA" --expect-base "$BASE" --trees base --token-env GIT_TOKEN --workdir w
       - id: claim
         name: Fetch the held-out cases and claim this verdict's place in the count
+        if: needs.admit.outputs.judged == 'true'
         env:
           CASES_TOKEN: ${{ secrets.MORPHOGEN_CASES_TOKEN }}
           REPO_TOKEN: ${{ github.token }}
@@ -285,7 +291,7 @@ jobs:
         run: |
           mkdir -p art/runs
           python3 -m judge.score --base-checkout w/base --cases-dir plain --base-run art/runs/base.jsonl \
-            --candidate-run art/runs/candidate.jsonl --admission art/admission/admission.json --served "$SERVED" \
+            --candidate-run art/runs/candidate.jsonl --admission art/admission/admission.json --served "${SERVED:-0}" \
             --repository "$GITHUB_REPOSITORY" --pull-request "$PR" --base-sha "$BASE" --head-sha "$HEAD_SHA" \
             --out verdict.json
           rm -rf cases plain
