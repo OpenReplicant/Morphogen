@@ -1,14 +1,15 @@
-# Dogfood: the rebuild-8 judge (pinned by commit) judges pull requests that touch the toy in dogfood/.
-# Definition from the base branch (pull_request_target), so a pull request cannot change it.
+# Dogfood: the rebuild-8 judge (pinned by commit) sees every pull request to main. Those touching the
+# toy in dogfood/topwords are judged; the rest get a signed "pass (not judged)", or a refusal if they
+# touch the judge's own ground (workflows, .morphogen/, protected paths), which a person then merges
+# by the ruleset's bypass. Definition from the base branch (pull_request_target).
 name: morphogen
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited]
-    paths: ["dogfood/**", ".morphogen/**"]
 permissions: {}
 jobs:
   judge:
-    uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@016fff4bca294c8896fe0abdff068bb507231cff
-    permissions: {contents: read, statuses: write, id-token: write}
+    uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@21b347f669b243e01fbd7aabd8c16af1b57fed6c
+    permissions: {contents: read, statuses: write, id-token: write, actions: write}
     secrets: inherit
-    with: {judge-ref: 016fff4bca294c8896fe0abdff068bb507231cff, cases-repo: OpenReplicant/morphogen-judge, subdir: dogfood, module: topwords}
+    with: {judge-ref: 21b347f669b243e01fbd7aabd8c16af1b57fed6c, cases-repo: OpenReplicant/morphogen-judge, subdir: dogfood, module: topwords, verdict-poster: app}
