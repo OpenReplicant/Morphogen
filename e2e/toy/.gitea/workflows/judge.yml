@@ -59,13 +59,10 @@ jobs:
         run: >-
           python -m judge.ci fetch --server "$GITHUB_SERVER_URL" --repo "$GITHUB_REPOSITORY" --pr "$PR"
           --base-ref "$BASE_REF" --head-sha "$HEAD_SHA" --expect-base "$BASE" --workdir w
-      - name: Run the base, then the candidate, in sandbox containers
+      - name: Run base and candidate in pairs, in sandbox containers
         run: |
-          mkdir out
-          for side in base candidate; do
-            python -m judge.run --checkout "w/$side" --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" --module "$MODULE" \
-              --label "$side" --out "out/$side.jsonl" --timeout 5
-          done
+          python -m judge.run --base w/base --candidate w/candidate --inputs in/inputs.jsonl --image "$SANDBOX_IMAGE" \
+            --module "$MODULE" --out-dir out --timeout 5
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with: {name: runs, path: out, retention-days: 1}
 

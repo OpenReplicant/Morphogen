@@ -53,10 +53,9 @@ def judge(work, name, edit, cases, cosign, image):
                          str(w / "base/.morphogen/policy.json"), "--card-out", str(w / "admission.json")], env=env, check=True)
     subprocess.run(py + ["judge.ci", "inputs", "--cases-dir", str(cases), "--admission", str(w / "admission.json"),
                          "--out", str(w / "inputs.jsonl")], check=True)
-    for side in ("base", "candidate"):
-        subprocess.run(py + ["judge.run", "--checkout", str(w / side), "--inputs", str(w / "inputs.jsonl"), "--image", image,
-                             "--module", "topwords", "--label", side, "--out", str(w / f"{side}.jsonl"), "--timeout", "10"],
-                       check=True)
+    subprocess.run(py + ["judge.run", "--base", str(w / "base"), "--candidate", str(w / "candidate"), "--inputs",
+                         str(w / "inputs.jsonl"), "--image", image, "--module", "topwords", "--out-dir", str(w),
+                         "--timeout", "10"], check=True)
     subprocess.run(py + ["judge.score", "--base-checkout", str(w / "base"), "--cases-dir", str(cases), "--base-run",
                          str(w / "base.jsonl"), "--candidate-run", str(w / "candidate.jsonl"), "--admission",
                          str(w / "admission.json"), "--served", "1", "--repository", "local/toy", "--base-sha", base,

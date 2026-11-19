@@ -206,7 +206,7 @@ jobs:
         env:
           IMAGE: ${{ inputs.sandbox-image }}
         run: docker pull --quiet "$IMAGE"
-      - name: Run the base, then the candidate, one sandbox container per case
+      - name: Run base and candidate in pairs, one sandbox container per case, the order in each pair by coin flip
         env:
           IMAGE: ${{ inputs.sandbox-image }}
           MODULE: ${{ inputs.module }}
@@ -214,11 +214,8 @@ jobs:
           CASE_TIMEOUT: ${{ inputs.case-timeout }}
         run: |
           case "/$SUBDIR/" in */../*|//*) echo "bad subdir"; exit 1;; esac
-          mkdir out
-          for side in base candidate; do
-            python3 -m judge.run --checkout "w/$side/$SUBDIR" --inputs in/inputs.jsonl --image "$IMAGE" --module "$MODULE" \
-              --label "$side" --out "out/$side.jsonl" --timeout "$CASE_TIMEOUT"
-          done
+          python3 -m judge.run --base "w/base/$SUBDIR" --candidate "w/candidate/$SUBDIR" --inputs in/inputs.jsonl \
+            --image "$IMAGE" --module "$MODULE" --out-dir out --timeout "$CASE_TIMEOUT"
       - id: up-runs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:

@@ -91,6 +91,26 @@ judge's own metric. Port the cases from `main`'s `tests/test_redteam.py`, re-exp
 - **CI itself:** edit the workflow in the change; run the candidate in the trusted job; read secrets from an
   untrusted job; trigger the trusted job on the candidate's definition.
 
+## The adversary (the direction after the quickstart)
+
+Where an optimizer such as GEPA uses a model to improve an artifact, Morphogen uses a model to try to
+fail the improvement. The adversary has no stake in a pass; it gains only by finding valid cases where
+the candidate is worse than the base, and every real regression it finds makes the held-out store
+better. It is a client of the judge, like an optimizer, and its findings are evidence only once the
+judge has run and measured them. Keep it honest:
+
+- **It never sees the held-out cases or answers.** It reads the card and the diff, as data. The diff is
+  the author's text and may try to talk to it; that can only make it find less, never pass a change.
+- **Its expected answers come from outside it:** the base's own behaviour where the card says nothing
+  should change, a reference, or a property the judge can check. A case counts only if the base gets it
+  right.
+- **It can only veto.** The fixed held-out set, with its stated statistics, decides a pass. A case the
+  adversary chose after seeing the candidate is a hypothesis: for deterministic programs one confirmed
+  regression is enough; for stochastic ones it is confirmed on fresh draws the adversary did not choose.
+- **A/A:** on identical code it must find nothing; record how often it does.
+- **What it finds joins the held-out store**, through custody, so case sets renew instead of going stale.
+- Its model calls go through the metering hook, and it holds no secrets.
+
 ## Rules
 
 - **Look it up, then pin it.** Read a tool's current docs before designing around it. Pin exact versions,
@@ -128,3 +148,4 @@ the judge accepts as evidence, spending money, publishing. Use plain words.
 6. Case custody and staleness; the metering hook.
 7. A quickstart: "an agent, a case set, is this pull request better" in ten lines, and a verdict a customer can
    read.
+8. The adversary (above): first on the toy, with its own A/A and red team, then on a consumer.
