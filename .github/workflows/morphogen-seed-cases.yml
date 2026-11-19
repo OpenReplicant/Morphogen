@@ -1,3 +1,4 @@
+# test: a workflow-only change, which the judge should refuse for a person to merge
 # One-off: create the dogfood's held-out case set in the private repository OpenReplicant/morphogen-judge.
 # The cases are generated from fresh randomness inside this run, so they exist only there.
 # Needs MORPHOGEN_CASES_TOKEN (environment morphogen-judge). Refuses to overwrite an existing set.
