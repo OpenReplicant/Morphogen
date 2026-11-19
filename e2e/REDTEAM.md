@@ -61,3 +61,12 @@ judge must always write its verdict; the `report` job (stop on judge failure) cl
 
 #92 confirms the documented limit: a branch pull request's own `pull_request` workflow may request
 `statuses: write` and post any status, after the judge's. A fork's token is read-only, so it cannot.
+
+### With the ruleset (2026-11-19, judge `21b347f`)
+
+| PR | change | result |
+|---|---|---|
+| #92 | forge `morphogen/verdict` from the pull request's own workflow, after the judge | judge **refused**; the forged green landed on the commit but the pull request stays **blocked**: the ruleset counts only the app's status |
+| #96 | docs only (not judged) | **pass (not judged)** by the app; mergeable |
+| #97 | one workflow file only (not judged) | **refused**: the judge's own ground is a person's to merge |
+
