@@ -444,3 +444,5 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
     skills/, agents/ the Claude Code skills and agents
     demos/           projects Morphogen can build and drive (the core never imports from them)
     BRIEF.md         the design;  PLAN.md  the way there
+
+<!-- test: a docs-only change, which the judge should pass as not judged -->
