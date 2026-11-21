@@ -1,10 +1,12 @@
 # Dogfood: the rebuild-8 judge (pinned by commit) sees every pull request to main. Those touching the
 # toy in dogfood/topwords are judged; the rest get a signed "pass (not judged)", or a refusal if they
 # touch the judge's own ground (workflows, .morphogen/, protected paths), which a person then merges
-# by the ruleset's bypass. Definition from the base branch (pull_request_target).
+# by the ruleset's bypass. GitHub takes a pull_request_target workflow from the default branch whatever
+# the pull request's base, so `branches` keeps this caller to pull requests into main.
 name: morphogen
 on:
   pull_request_target:
+    branches: [main]
     types: [opened, synchronize, reopened, edited]
 permissions: {}
 jobs:
