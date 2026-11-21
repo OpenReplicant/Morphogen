@@ -11,6 +11,9 @@ dependencies = [
   "referencing==0.37.0",
 ]
 
+[project.scripts]
+morphogen = "judge.local:main"
+
 [project.optional-dependencies]
 # MIT. 9.1.1: 2026-06-19 (PyPI); 9.2.0 (2026-10-27) not yet needed.
 test = ["pytest==9.1.1"]
