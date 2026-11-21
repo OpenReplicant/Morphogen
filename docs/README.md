@@ -15,6 +15,7 @@ plus a few small custom pieces: the card and verdict documents, admission, stati
 | [Set up on Gitea](gitea.md) | judge pull requests on a self-hosted forge |
 | [Cards, policies and verdicts](cards.md) | write a card, set a policy, read a verdict |
 | [The verdict](verdict.md) | read verdicts in another program: the output shape, a contract |
+| [Upgrading](upgrading.md) | move a caller to a newer judge commit: required edits and checks |
 | [Statistics](statistics.md) | know exactly when a candidate passes |
 | [Security](security.md) | see the threat model, what the red team found, and the known limits |
 
