@@ -6,20 +6,37 @@ For a repository whose `.github/workflows/morphogen.yml` calls Morphogen's reusa
 
 ## 1. Required edits to `morphogen.yml`
 
-Change all three, or every judged pull request ends in `stop`:
+Make these edits. Without the new pin and `actions: write`, every judged pull request ends in `stop`:
 
 ```yaml
+on:
+  pull_request_target:
+    branches: [main]  # your default branch
+    types: [opened, synchronize, reopened, edited]
+jobs:
+  judge:
     uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@b921c9b34970d5896cf8e2f1ecd436cf53788444
     permissions: {contents: read, statuses: write, id-token: write, actions: write}
     with:
       judge-ref: b921c9b34970d5896cf8e2f1ecd436cf53788444
 ```
 
-`actions: write` is new: the trusted score job uses it to delete the run's held-out inputs and run
+`branches` is new: GitHub takes a `pull_request_target` workflow from the default branch whatever the pull
+request's base, so without it the caller also fires for pull requests into other branches and posts `stop`
+on them. `actions: write` is new: the trusted score job uses it to delete the run's held-out inputs and run
 records as soon as it has scored them.
 
 This file is a workflow, so the judge refuses the pull request that changes it. The owner merges it with
 the ruleset's bypass.
+
+## 1b. Allow the trigger (public repositories, before 2026-12-02)
+
+From 2026-12-02 GitHub blocks `pull_request_target` by default in public repositories unless an Actions
+policy allows it. Without the policy no verdict is posted, and with the merge gate nothing merges. The
+repository owner adds it once: Settings → Actions → Policies → New actions policy; enforcement **Active**;
+target workflows: include path `.github/workflows/morphogen.yml`; tick **Restrict events** only, allowing
+`pull_request_target`; leave **Restrict actors** and **Require lockfile** off. Details in
+[`github.md`](github.md#6-the-caller-workflow).
 
 ## 2. Check the case sets (before or with the repin)
 
@@ -84,7 +101,8 @@ On the first judged pull request:
 1. The score job's log shows `artifact … removed (204)` twice.
 2. The run's artifact list shows only `admission` and `verdict`.
 3. The `morphogen/verdict` status is posted by the judge's app, and the summary opens with plain words.
-4. `verdict.json` has a `cpu_seconds` entry only if the policy or card asks for it, and `wall_seconds`
+4. Settings → Actions → Policies → Policy insights shows the run as allowed.
+5. `verdict.json` has a `cpu_seconds` entry only if the policy or card asks for it, and `wall_seconds`
    values are on the new, smaller scale.
 
 If any of these fails, delete the run's artifacts by hand and report it to Morphogen.

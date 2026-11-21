@@ -2,6 +2,7 @@
 name: morphogen
 on:
   pull_request_target:
+    branches: [main]  # your default branch
     types: [opened, synchronize, reopened, edited]
 permissions: {}
 jobs:

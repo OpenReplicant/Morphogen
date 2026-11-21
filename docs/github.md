@@ -71,6 +71,7 @@ replacing `JUDGE_SHA` in both places with the same Morphogen commit, and the cas
 name: morphogen
 on:
   pull_request_target:
+    branches: [main]  # your default branch
     types: [opened, synchronize, reopened, edited]
 permissions: {}
 jobs:
@@ -83,6 +84,20 @@ jobs:
 
 `actions: write` lets the trusted score job delete the run's held-out inputs and run records as soon as it
 has read them; without it the judge posts a `stop`.
+
+`branches` must name your default branch. GitHub takes a `pull_request_target` workflow from the default
+branch whatever the pull request's base, so without the filter this caller also fires for pull requests
+into other branches, judges them against a base with no policy, and posts `stop`.
+
+**Allow the trigger (public repositories, required from 2026-12-02).** GitHub blocks
+`pull_request_target` by default in public repositories unless an Actions policy allows it. Without one,
+no verdict is posted, and with the merge gate nothing can merge. In the repository: Settings → Actions →
+Policies → New actions policy. Name it, for example `morphogen judge: allow pull_request_target`;
+enforcement **Active**; target workflows: include path `.github/workflows/morphogen.yml`; tick **Restrict
+events** only and allow `pull_request_target`. Leave **Restrict actors** off (the judge must run for
+anyone's pull request, forks included) and **Require lockfile** off. After the next judged run, Policy
+insights on the same page should show it as allowed; if not, add an include for the reusable workflow's
+path as well.
 
 | Input | Default | Meaning |
 |---|---|---|
