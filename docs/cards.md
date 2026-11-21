@@ -63,6 +63,8 @@ Next to the policy, `.morphogen/scorer.py` defines `score(input, answer, output)
 
 ## The verdict (written by the judge)
 
+The full shape, field by field, is the contract in [verdict](verdict.md); this section is a summary.
+
 A JSON document attached to the judge's run as the `verdict` artifact, with a Sigstore bundle beside
 it. Its main fields:
 

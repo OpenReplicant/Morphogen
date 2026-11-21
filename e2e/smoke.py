@@ -75,7 +75,7 @@ def judge(work, name, edit, cases, cosign, image):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cosign", default=shutil.which("cosign") or str(HERE / "cosign"))
-    ap.add_argument("--image", default="python:3.13-slim")
+    ap.add_argument("--image", default="python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90")
     ap.add_argument("--workdir")
     a = ap.parse_args()
     work = Path(a.workdir or tempfile.mkdtemp())

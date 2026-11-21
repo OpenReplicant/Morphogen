@@ -12,13 +12,12 @@ import argparse
 import base64
 import json
 import os
-import random
-import re
 import subprocess
 import sys
-import time
 import urllib.request
 from pathlib import Path
+
+from . import store
 
 CONTEXT = "morphogen/verdict"
 
@@ -76,52 +75,28 @@ def _card_set(admission):
     adm = json.loads(Path(admission).read_text())
     if adm.get("refused") or not adm.get("card"):
         return None
-    name = adm["card"]["cases"]["set"]
-    if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,63}", name):  # admission already checked; belt and braces
-        sys.exit(f"bad case set name {name!r}")
-    return name
+    return store.check_name(adm["card"]["cases"]["set"])  # admission already checked; belt and braces
 
 
 def inputs(a):
     name = _card_set(a.admission)
-    rows = []
-    if name:
-        for line in (Path(a.cases_dir) / name / "cases.jsonl").read_text().splitlines():
-            if line.strip():
-                r = json.loads(line)
-                rows.append({"id": r["id"], "input": r["input"]})
-    random.SystemRandom().shuffle(rows)  # the order carries nothing the candidate could use
+    rows = store.inputs(store.DirStore(a.cases_dir), name) if name else []
     Path(a.out).write_text("".join(json.dumps(r) + "\n" for r in rows))
     print(f"{len(rows)} inputs for case set {name!r}")
 
 
 def claim(a):
-    """Count this verdict against its case set: fetch, increment, commit, push; retry on a lost race."""
+    """Count this verdict against its case set, in the case store (a git clone at --cases-dir)."""
     name = _card_set(a.admission)
-    auth = _auth(a.token_env)
-    cases = Path(a.cases_dir)
     if name is None:
         _output("served", 0)
         _output("set", "")
         return
-    for attempt in range(a.attempts):
-        _git(cases, "fetch", "-q", "origin", a.branch, auth=auth)
-        _git(cases, "reset", "-q", "--hard", "FETCH_HEAD")
-        counter = cases / name / "served"
-        served = int(counter.read_text().strip() or 0) + 1 if counter.exists() else 1
-        counter.write_text(f"{served}\n")
-        _git(cases, "add", str(counter.relative_to(cases)))
-        _git(cases, "-c", "user.name=morphogen-judge", "-c", "user.email=judge@invalid", "commit", "-qm",
-             f"{name}: served {served}")
-        try:
-            _git(cases, "push", "-q", "origin", "HEAD:refs/heads/" + a.branch, auth=auth)
-        except subprocess.CalledProcessError:
-            time.sleep(random.uniform(0.5, 3))
-            continue
-        _output("served", served)
-        _output("set", name)
-        return
-    sys.exit("could not claim a served count")
+    url = _git(a.cases_dir, "remote", "get-url", "origin")
+    served = store.GitStore(url, branch=a.branch, workdir=a.cases_dir, auth=_auth(a.token_env),
+                            attempts=a.attempts).claim(name)
+    _output("served", served)
+    _output("set", name)
 
 
 def post(a):
@@ -138,12 +113,46 @@ def post(a):
         print(f"posted {CONTEXT}={state} ({r.status})")
 
 
+def _num(x):
+    return "-" if x is None else f"{x:.3g}"
+
+
+def plain(v):
+    """The verdict in plain words, for a person who has not read the docs."""
+    if v.get("judged") is False:
+        if v["decision"] == "pass":
+            return ["**Not judged.** The change touches nothing the judge measures, so it passes without a test."]
+        return ["**Refused, for a person to decide.** " + v["reason"]]
+    head = {"pass": "**Better.** The change may merge.", "refuse": "**Not shown better.** The change may not merge.",
+            "stop": "**No judgment.** The judge could not judge this change; this is not the change's fault."}
+    out = [head[v["decision"]], ""]
+    if not v["kpis"]:
+        return out + [v["reason"]]
+    for k in v["kpis"]:
+        p, unit = k["paired"], {"lower": "lower is better", "higher": "higher is better"}[k["direction"]]
+        line = (f"- **{k['name']}** ({unit}): {_num(k['base']['mean'])} before, {_num(k['candidate']['mean'])} after. "
+                f"Better on {p['better']} of {p['n']} cases, worse on {p['worse']}, the same on {p['tied']}. ")
+        if k["role"] == "decide":
+            pv = k["p_value"]
+            if pv is not None:
+                odds = "less than once in a million" if pv < 1e-6 else f"with probability {pv:.2g}"
+                line += f"If the change were no better, a result this good would happen {odds} (the bar is {v['alpha']}). "
+        else:
+            line += f"It must not be worse by more than {k['floor']:g}. "
+        line += {"pass": "Met.", "refuse": "Not met.", "stop": "Could not be measured."}[k["result"]]
+        out.append(line)
+    c = v["cases"]
+    out += ["", f"Measured by the judge on {c['expected']} held-out cases the change never saw "
+                f"(set `{c['set']}`, {c['served']} verdict{'' if c['served'] == 1 else 's'} so far{', now stale' if c['stale'] else ''})."]
+    return out
+
+
 def summary(a):
     v = json.loads(Path(a.verdict).read_text())
     icon = {"pass": "PASS", "refuse": "REFUSED", "stop": "STOPPED"}[v["decision"]]
     if v.get("judged") is False:
         icon += " (not judged)"
-    lines = [f"## Morphogen verdict: {icon}", "", v["reason"], "",
+    lines = [f"## Morphogen verdict: {icon}", "", *plain(v), "", "### Details", "", v["reason"], "",
              f"Candidate `{v['candidate'][:12]}` against base `{v['base'][:12]}`; case set "
              f"`{v['cases']['set'] or '-'}` ({v['cases']['expected']} cases, served {v['cases']['served']} verdicts"
              f"{', STALE' if v['cases']['stale'] else ''}); alpha {v['alpha']}.", ""]

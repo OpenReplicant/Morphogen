@@ -214,8 +214,11 @@ jobs:
           CASE_TIMEOUT: ${{ inputs.case-timeout }}
         run: |
           case "/$SUBDIR/" in */../*|//*) echo "bad subdir"; exit 1;; esac
+          # The measurer is the base's: its own harness if it has one, else the judge's (rail 1).
+          set --
+          if [ -f w/base/.morphogen/harness.py ]; then set -- --harness w/base/.morphogen/harness.py; fi
           python3 -m judge.run --base "w/base/$SUBDIR" --candidate "w/candidate/$SUBDIR" --inputs in/inputs.jsonl \
-            --image "$IMAGE" --module "$MODULE" --out-dir out --timeout "$CASE_TIMEOUT"
+            --image "$IMAGE" --module "$MODULE" --out-dir out --timeout "$CASE_TIMEOUT" "$@"
       - id: up-runs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:

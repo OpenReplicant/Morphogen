@@ -72,4 +72,9 @@ an error that names it.
   the host's Docker; the candidate's own containers have no socket, but a container escape would reach
   the host. Rootless Podman would close this.
 - **The merge queue** is not wired on GitHub yet; "require branches to be up to date" stands in.
-- **Timing cheats** (patched timers, slowing the base with noisy neighbours) are not yet in the red team.
+- **Timing, partly covered.** Measured and fixed: the judge's own run order made identical code look
+  faster (pairs with a coin-flip order now); container start-up dominated wall time (the base's harness
+  now times the program itself). Tested: a fake record printed by the program, a patched clock in its own
+  process, writing to the harness through `/proc`, a detached grandchild, killing the harness
+  (`tests/test_harness.py`). Not yet: doing less work only when timed, memoising within a case, sniffing
+  the sandbox. The sandbox's fresh read-only container per case bounds caching across cases.

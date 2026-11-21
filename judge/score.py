@@ -15,7 +15,7 @@ from pathlib import Path
 
 from . import schemas, verdict
 
-RUNNER_KPIS = {"wall_seconds"}
+RUNNER_KPIS = {"wall_seconds", "cpu_seconds"}  # measured by the base's harness, never the program
 
 
 def read_cases(path):
@@ -38,7 +38,7 @@ def read_run(path):
         try:
             r = schemas.loads_strict(line)
             cid = r["id"]
-            float(r["wall_seconds"]), int(r["exit"])
+            float(r["wall_seconds"]), float(r["cpu_seconds"]), int(r["exit"])
         except (ValueError, KeyError, TypeError):
             continue
         if cid in recs:
@@ -61,7 +61,8 @@ def measure(run, cases, score):
         for k, v in s.items():
             if k != "correct":
                 kpis.setdefault(k, {})[cid] = float(v)
-        kpis.setdefault("wall_seconds", {})[cid] = float(r["wall_seconds"])
+        for k in RUNNER_KPIS:
+            kpis.setdefault(k, {})[cid] = float(r[k])
     return kpis, outputs, correct
 
 

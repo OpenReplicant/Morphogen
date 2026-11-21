@@ -1,0 +1,6 @@
+{"card": "morphogen.card/v1",
+ "intent": "Write 4, 9, 40, 90, 400 and 900 the subtractive way (IV, IX, XL, XC, CD, CM).",
+ "scope": ["roman/core.py"],
+ "cases": {"set": "roman"},
+ "kpis": [{"name": "accuracy", "source": "scorer", "direction": "higher", "floor": 0.0, "role": "decide"},
+          {"name": "cpu_seconds", "source": "runner", "direction": "lower", "floor": 0.5, "role": "bound"}]}
