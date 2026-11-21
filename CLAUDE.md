@@ -91,7 +91,7 @@ judge's own metric. Port the cases from `main`'s `tests/test_redteam.py`, re-exp
 - **CI itself:** edit the workflow in the change; run the candidate in the trusted job; read secrets from an
   untrusted job; trigger the trusted job on the candidate's definition.
 
-## The adversary (the direction after the quickstart)
+## The adversary (after the quickstart and a real optimizer)
 
 Where an optimizer such as GEPA uses a model to improve an artifact, Morphogen uses a model to try to
 fail the improvement. The adversary has no stake in a pass; it gains only by finding valid cases where
@@ -131,6 +131,30 @@ judge has run and measured them. Keep it honest:
   verdict out.
 - **Changes reach `main` by pull request.** Before merging, check that GitHub shows the head you pushed.
 - **Decisions** go in `DECISIONS.md` as new rows (append-only: supersede, never edit).
+- **A change to the policy is its own pull request**, never in the pull request of the work it judges.
+
+## Rails (the owner's, 2026-11-21)
+
+- **The measurer and the measured run apart.** Whatever produces the record that is scored (the harness,
+  the environment, the clock) is the base's code and runs outside the candidate's process; the candidate
+  talks to it across a process boundary and can never write that record. Time is measured per case by
+  that harness around the candidate's work, not as wall time around a container. This is a requirement
+  on any judge, not a detail of this CI: state it so another implementation could meet it.
+- **Case sets renew.** No set serves forever: each has a generator or another source of fresh cases, and
+  reaching its staleness limit starts a renewal, not only a flag. Where cases are stored sits behind an
+  interface (fetch, claim a verdict's place, replace); a git repository is one store, not the only one,
+  so a store that enforces "the author cannot read the cases" by itself can take its place.
+- **The verdict is a contract.** Its shape is written in one place (`schemas/verdict.v1.json`, explained
+  in `docs/verdict.md`): every field, its type, and what each KPI measurement carries. Readers outside this
+  repository depend on it, so any change to it is a breaking change: a new schema version, and a matching
+  change in those readers, agreed before it lands.
+- **Judge the judge with a real optimizer.** The red team's score also counts cheats found by a real model
+  optimizing against the toy, reported separately from the hand-written ones. Use Haiku subagents or
+  OpenRouter `:free` models, never paid models.
+- **A setup budget.** Track the minutes from nothing to a first verdict on a new repository; growth there
+  is a cost, to be justified like any other.
+- **No more hardening of the CI without a red-team finding.** Effort goes to whether the judgment tells a
+  better change from a worse one: cases, statistics, measurement.
 
 ## Working with the owner
 
@@ -148,4 +172,5 @@ the judge accepts as evidence, spending money, publishing. Use plain words.
 6. Case custody and staleness; the metering hook.
 7. A quickstart: "an agent, a case set, is this pull request better" in ten lines, and a verdict a customer can
    read.
-8. The adversary (above): first on the toy, with its own A/A and red team, then on a consumer.
+8. A real optimizer against the toy (the rails): its cheats, reported apart from the hand-written ones.
+9. The adversary (above): first on the toy, with its own A/A and red team, then on a consumer.
