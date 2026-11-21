@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 /scratch/
+# Local e2e outputs: forge tokens, the downloaded cosign binary, wheels, keys, results.
+/e2e/.env
+/e2e/cosign
+/e2e/judge.pub
+/e2e/wheels/
+/e2e/redteam-results.json
