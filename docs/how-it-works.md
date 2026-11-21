@@ -19,8 +19,11 @@ pull request + card ─► admit ─► run (untrusted) ─► score (trusted) �
    which the judge refuses and leaves to a person.
 3. **Run, untrusted.** The base and the candidate each run on every held-out case's *input* (never its
    answer), one fresh container per case: no network, read-only filesystem, no capabilities, an
-   unprivileged user, CPU, memory and process limits. Input on stdin, output on stdout. Wall time comes
-   from Docker's own record of when the container started and stopped. This job holds no secrets.
+   unprivileged user, CPU, memory and process limits. Each case runs as a pair, base and candidate back
+   to back, the order by coin flip. Inside the container, the **base's harness** runs the program as a
+   child process (input on its stdin, output from its stdout), times it with its own clock (wall time
+   and the kernel's count of CPU time), and writes the one record that is scored; the program cannot
+   write that record or reach the harness. This job holds no secrets.
 4. **Score, trusted.** A second job, defined only on the base, fetches the held-out answers, scores
    both runs' outputs with the base's scorer, compares candidate against base case by case, and writes
    a **verdict**: pass, refuse or stop. It signs the verdict (Sigstore), attaches it to the run, and
