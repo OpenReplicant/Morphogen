@@ -9,7 +9,7 @@ on:
 permissions: {}
 jobs:
   judge:
-    uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@21b347f669b243e01fbd7aabd8c16af1b57fed6c
+    uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@b921c9b34970d5896cf8e2f1ecd436cf53788444
     permissions: {contents: read, statuses: write, id-token: write, actions: write}
     secrets: inherit
-    with: {judge-ref: 21b347f669b243e01fbd7aabd8c16af1b57fed6c, cases-repo: OpenReplicant/morphogen-judge, subdir: dogfood, module: topwords, verdict-poster: app}
+    with: {judge-ref: b921c9b34970d5896cf8e2f1ecd436cf53788444, cases-repo: OpenReplicant/morphogen-judge, subdir: dogfood, module: topwords, verdict-poster: app}
