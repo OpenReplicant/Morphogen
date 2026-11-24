@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OpenReplicant/Morphogen/schemas/morphogen-spec.v0.json",
+  "title": "spec.morphogen (DRAFT, v0)",
+  "description": "DRAFT. Morphogen's own fields on a Backstage catalog entity, under the one key `spec.morphogen`. Phase 1 of the kit publishes this schema; nothing reads these fields yet (phase 2 loads them). The cell fields are those a cell in morphogen.yaml accepts today (morphogen/project.py, CellDoc), so a cell moves unchanged. What Backstage already holds is not repeated: a cell's `in` is the entity's subcomponentOf or system, `provides` and `consumes` are providesApis and consumesApis, `owner` and `lifecycle` are the entity's own. Use the Option fields on a Component with spec.lifecycle: candidate, the Cell fields on the entity a cell judges, the ApiTests fields on an API entity and the SystemSettings fields on the System entity. The fields are flat under `spec.morphogen`: the schema is the four definitions together, so one entity may carry the fields of more than one (a candidate that is also judged, say), and a field none of them defines is refused.",
+  "type": "object",
+  "$defs": {
+    "StringOrList": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "Option": {
+      "description": "An option for a role: carried by a Component with `spec.lifecycle: candidate`.",
+      "type": "object",
+      "properties": {
+        "fills": {
+          "$ref": "#/$defs/StringOrList",
+          "description": "Entity ref(s) of the part or role this could fill, as `[kind:][namespace/]name`."
+        },
+        "parameters": {
+          "type": "object",
+          "description": "A JSON Schema of the option's adjustable settings (what a tuner may move, with its bounds)."
+        },
+        "licence": {
+          "type": "string",
+          "description": "An SPDX identifier where there is one, else the licence's name."
+        },
+        "docs": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "path": {
+              "type": "string",
+              "description": "Where the fetched markdown docs are, relative to the project root. Absent until fetched."
+            }
+          },
+          "additionalProperties": false
+        },
+        "evaluation": {
+          "type": "object",
+          "description": "How it was measured against the need.",
+          "properties": {
+            "need": {
+              "type": "string"
+            },
+            "method": {
+              "type": "string",
+              "description": "The trial: cases, command, where its output is kept."
+            },
+            "result": {
+              "type": "string"
+            },
+            "evidence": {
+              "$ref": "#/$defs/StringOrList"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "Cell": {
+      "description": "A cell's rules, on the entity it judges. The fields of CellDoc in morphogen/project.py, less those Backstage holds (in, provides, consumes, owner, lifecycle). Commands run in `dir`, relative to the project root.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "The cell's objective in words; GEPA's reflection reads it."
+        },
+        "dir": {
+          "type": "string",
+          "default": "."
+        },
+        "change": {
+          "$ref": "#/$defs/StringOrList",
+          "description": "What may change: a path or glob, or a setting `path#NAME` / `path:dotted.key`, optionally `in lo..hi` or `in [a, b]`. Nothing else may."
+        },
+        "keep": {
+          "$ref": "#/$defs/StringOrList",
+          "description": "Settings held fixed inside a file `change` opens."
+        },
+        "run": {
+          "type": "string",
+          "description": "The workload."
+        },
+        "better": {
+          "description": "`metric higher|lower`, comma-separated for constraints after the primary; or {metric: higher|lower|{higher|lower, min, max_regression, gain, aggregate, primary}}.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ]
+        },
+        "tests": {
+          "$ref": "#/$defs/StringOrList",
+          "description": "Commands that must pass; a failure refuses."
+        },
+        "score": {
+          "type": "string",
+          "description": "Scores each run's output, from the base."
+        },
+        "observe": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "`otel`, or a command or observer object collected outside the run."
+        },
+        "same_as_base": {
+          "type": "object",
+          "properties": {
+            "gen": {
+              "type": "string"
+            },
+            "run": {
+              "type": "string"
+            },
+            "cases": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "gen",
+            "run"
+          ],
+          "additionalProperties": false
+        },
+        "same_output": {
+          "type": "boolean"
+        },
+        "guard": {
+          "description": "false turns the system guard off; {max_regression: 0.1} sets how much the enclosing system may get worse.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            }
+          ]
+        },
+        "rounds": {
+          "type": "object",
+          "properties": {
+            "warmup": {
+              "type": "integer"
+            },
+            "repeats": {
+              "type": "integer"
+            },
+            "max_repeats": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Seconds."
+        },
+        "simulates": {
+          "type": "string"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "network_isolated",
+              "read_only_tree",
+              "private_paths_hidden",
+              "fresh_state",
+              "resource_limits"
+            ]
+          },
+          "description": "Guarantees the runner must provide for the cell to be judged at all."
+        }
+      }
+    },
+    "ApiTests": {
+      "description": "On an API entity: the tests of the interface it names, run from the project root (InterfaceDoc in morphogen/project.py).",
+      "type": "object",
+      "properties": {
+        "tests": {
+          "$ref": "#/$defs/StringOrList"
+        },
+        "external": {
+          "enum": [
+            "consumes",
+            "provides"
+          ],
+          "description": "consumes: the system offers it; provides: the system relies on it."
+        }
+      }
+    },
+    "SystemSettings": {
+      "description": "On the System entity: the judge's settings (Config in morphogen/documents.py, today the top level of morphogen.yaml) and defaults cells inherit, which replace YAML anchors.",
+      "type": "object",
+      "properties": {
+        "trunk": {
+          "type": "string",
+          "default": "main"
+        },
+        "sandbox": {
+          "enum": [
+            "auto",
+            "podman",
+            "docker",
+            "none"
+          ],
+          "default": "auto"
+        },
+        "sandbox_image": {
+          "type": "string",
+          "default": "python:3.12-slim"
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "trials_per_day": {
+              "type": "integer"
+            },
+            "probes_per_day": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": true
+        },
+        "autonomy": {
+          "type": "object",
+          "description": "lifecycle -> what a pass allows (default review).",
+          "additionalProperties": {
+            "enum": [
+              "merge",
+              "review"
+            ]
+          }
+        },
+        "defaults": {
+          "$ref": "#/$defs/Cell",
+          "description": "Fields a cell in this system inherits where it does not set them."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/$defs/Option"
+    },
+    {
+      "$ref": "#/$defs/Cell"
+    },
+    {
+      "$ref": "#/$defs/ApiTests"
+    },
+    {
+      "$ref": "#/$defs/SystemSettings"
+    }
+  ],
+  "unevaluatedProperties": false
+}

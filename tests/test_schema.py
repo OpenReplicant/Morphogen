@@ -33,3 +33,14 @@ class Schema(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpecSchema(unittest.TestCase):
+    """schemas/morphogen-spec.v0.json (a draft) carries the fields a cell accepts today, so phase 2 can load them."""
+
+    def test_the_cell_fields_are_those_morphogen_yaml_accepts(self):
+        from morphogen.project import CellDoc
+        spec = json.loads((HERE / "schemas/morphogen-spec.v0.json").read_text())
+        held_by_backstage = {"in", "provides", "consumes", "owner", "lifecycle"}
+        accepted = {(f.alias or n) for n, f in CellDoc.model_fields.items()} - held_by_backstage
+        self.assertEqual(set(spec["$defs"]["Cell"]["properties"]), accepted)
