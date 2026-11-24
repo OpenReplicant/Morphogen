@@ -17,6 +17,12 @@ may touch it. Everything below about the judge, the cell and the optimizers is u
 cell format moves from `morphogen.yaml` onto the entities (draft: `schemas/morphogen-spec.v0.json`); until then
 `morphogen.yaml` is what the judge reads.
 
+**Where it sits.** The Knowledge Kernel is an optional layer above the kit: it ingests the same Backstage files when
+someone wants indexing, search or graph traversal, and the kit never requires it. Substrate is the default
+distribution that installs Morphogen's plugin, like any user. MetaSoar's System 1 skills convention (MetaSoar pull
+request #11: policies, observers and cases in a skill folder, each a Morphogen cell) is a planned consumer of the
+judge. The way there is the kit section of [PLAN.md](PLAN.md).
+
 **The core** is what nothing else provides:
 
 - a judge the improver cannot edit: the rules come from the base commit, the measurements are

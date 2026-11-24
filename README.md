@@ -20,6 +20,12 @@ plug into it. [BRIEF.md](BRIEF.md) is the design (its first section is
 the one-page version) and [PLAN.md](PLAN.md) the way there; this file is the case for Morphogen and
 how to use what is built.
 
+**Where it sits.** The Knowledge Kernel is an optional layer above the kit: it ingests the same Backstage files for
+indexing, search and graph traversal, and the kit never requires it. Substrate is the default distribution (a
+configured harness, the kernel and a default stack) and installs Morphogen's plugin like any user. MetaSoar's
+System 1 skills convention (policies, observers and cases in a skill folder, each a Morphogen cell) is a planned
+consumer of the judge. The way there is [PLAN.md](PLAN.md).
+
 ## Why a judge, on top of optimizers
 
 **An optimizer is only as honest as its evaluator.** It maximises whatever score it is given. Give a

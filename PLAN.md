@@ -1,5 +1,38 @@
 # Plan: Morphogen small, with everything above it plugged in
 
+> **Since 2026-11-24 Morphogen is the kit** (Substrate's S-209): map a system, research and catalogue the options
+> for each role, and optimise behind the judge, on files only, on any harness. The judge below is still the core.
+> The kit's phases, K1 to K4, are the next section; phases 0 to 7 after it are the judge's, and stay as written.
+
+## The kit: the way there
+
+Everything committed becomes a Backstage catalog entity; Morphogen's own fields go under one key,
+`spec.morphogen` ([schemas/morphogen-spec.v0.json](schemas/morphogen-spec.v0.json), a draft). An option for a role
+is a `Component` with `spec.lifecycle: candidate`; a cell's rules go on the entity it judges; sub-grain cells are
+`Component`s nested with `subcomponentOf`; an interface's tests go on its `API`; settings and shared defaults go on
+the `System`. `morphogen.local.yaml` stays as it is.
+
+- **K1, skills and schema (this pull request, #102).** README, BRIEF and the skills say what Morphogen is now; the
+  `map` skill is merged with Substrate's and writes entity files; new `catalog` and `research` skills; the draft
+  schema. No code behaviour changes; `morphogen.yaml` still works. Open check before K2: that Backstage's `API` and
+  `System` kinds leave `spec` open the way `Component` does.
+- **K2, cells into entities.** Load `spec.morphogen` from the catalog files; check a cell's settings against its
+  option's parameter schema; default deny covers every catalog file the judge reads (a red-team test across files
+  first); `morphogen.yaml` is removed with **no back-compatibility**, since only our own projects use it (Substrate,
+  the demos), and they are moved by hand. Decide whether `lifecycle: candidate` entities are skipped as cells.
+- **K3, documentation as files.** A documentation MCP server that turns web documentation into markdown files,
+  chosen with the `research` skill (a local one first: a hosted one sends what is looked up off the machine). Its
+  output is a folder of markdown beside the catalog, named in each option's `docs.path`.
+- **K4, packaging per harness.** The core Python package (schemas, judge, adapters, CLI, MCP server); the skills as
+  plain Agent Skills any harness that reads `SKILL.md` can load, naming MCP tools by the server's own names; and a
+  thin package per harness (the Claude Code plugin first, each other written when a user needs it).
+
+**Where it sits.** The kernel (the Knowledge Kernel) is an optional layer above the kit: when someone wants indexing,
+search or graph traversal, the kernel ingests the same Backstage files. The kit never requires it. Substrate is the
+default distribution (a configured harness, the kernel's modules and a default stack) and installs Morphogen's plugin
+like any user. **A planned consumer of the judge:** MetaSoar's System 1 skills convention (MetaSoar pull request #11:
+policies, observers and cases in a skill folder, each a Morphogen cell).
+
 Morphogen keeps the part nothing else provides: a judge the improver cannot edit, the "still
 works" gate, the system guard and the evidence log. Everything else is a source it reads or a slot
 it fills:
