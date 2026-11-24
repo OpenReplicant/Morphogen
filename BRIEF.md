@@ -8,6 +8,21 @@ what it taught. Issue numbers (#43, #45) refer to this repository's history.
 
 ## Morphogen in one page
 
+**What it is now: the kit, with the judge at its core.** Morphogen maps a system, researches and catalogues the
+options for each role, and optimises behind its judge, on files only, on any harness. The map, the options and
+(in phase 2) the cells are all Backstage catalog entities, with Morphogen's own fields under one namespaced key,
+`spec.morphogen`; documentation is fetched into markdown files. The judge stays the core and stays independent:
+the skills that write the map and the catalog write what the judge reads from the base commit, and no candidate
+may touch it. Everything below about the judge, the cell and the optimizers is unchanged. **Coming, phase 2:** the
+cell format moves from `morphogen.yaml` onto the entities (draft: `schemas/morphogen-spec.v0.json`); until then
+`morphogen.yaml` is what the judge reads.
+
+**Where it sits.** The Knowledge Kernel is an optional layer above the kit: it ingests the same Backstage files when
+someone wants indexing, search or graph traversal, and the kit never requires it. Substrate is the default
+distribution that installs Morphogen's plugin, like any user. MetaSoar's System 1 skills convention (MetaSoar pull
+request #11: policies, observers and cases in a skill folder, each a Morphogen cell) is a planned consumer of the
+judge. The way there is the kit section of [PLAN.md](PLAN.md).
+
 **The core** is what nothing else provides:
 
 - a judge the improver cannot edit: the rules come from the base commit, the measurements are
@@ -44,7 +59,7 @@ hold (`evaluate(candidate) -> score, diagnostics`, which is a probe), and one ve
 judge on their best. Grid, random, hill-climb, Optuna, GEPA, or a quorum of models used as a
 scorer all fit it.
 
-**The family** around it, each judged the same way: the mapper (a skill that drafts the map), the
+**The family** around it, each judged the same way: the mapper, cataloguer and researcher (skills that draft the map and the options for each role), the
 builder (ordinary Claude Code, making red tests green), domain modules (skills, an ontology,
 resolver settings and log parsers, bundled) around a shared knowledge base joined by the entity
 resolver, and deployment, whose canary stage is the online half of the gate.

@@ -11,8 +11,10 @@ docs/restart/LESSONS.md.
   `backstage.py` (catalog-info.yaml files as a source of cells),
   `status.py` (where a project stands and the next step),
   `documents.py` (morphogen.yaml's settings, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
-- `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills:
-  `morphogen` (improve a cell) and `map` (draft morphogen.yaml's cells).
+- `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills (the kit):
+  `morphogen` (improve a cell), `map` (take a system apart into Backstage entity files and draft cells),
+  `catalog` and `research` (options for a role, as `lifecycle: candidate` Components). `schemas/morphogen-spec.v0.json`
+  is the draft of the `spec.morphogen` fields; phase 2 loads them, morphogen.yaml still works until then.
 - `tests/`: the core's tests and red team; fixture projects in `tests/fixture*.py`, the timed
   sample's files in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.

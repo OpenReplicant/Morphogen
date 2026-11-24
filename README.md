@@ -1,15 +1,30 @@
 # Morphogen
 
-**A judge for self-improving systems.** Point any optimizer or coding agent at part of a system (a
-prompt, a setting, a function, a skill, a service) and Morphogen decides whether the change is
-really better: by rules taken from the last approved version, with measurements taken outside the
-code, on cases the optimizer never saw, without breaking a neighbour or making the whole system
-worse. Every verdict goes into a log that cannot be quietly edited.
+**A kit for improving a system, with a judge at its core.** Morphogen **maps** a system (what it is made of, the
+role each part plays, the interfaces that make parts interchangeable), **researches and catalogues** the options
+for each role, and **optimises** behind a judge: point any optimizer or coding agent at part of the system (a
+prompt, a setting, a function, a skill, a service) and the judge decides whether the change is really better, by
+rules taken from the last approved version, with measurements taken outside the code, on cases the optimizer
+never saw, without breaking a neighbour or making the whole system worse. Every verdict goes into a log that
+cannot be quietly edited.
 
-Morphogen does not propose changes. Optimizers do that, and they plug into it. Tools that describe
-a system, such as Backstage, sit above it. [BRIEF.md](BRIEF.md) is the design (its first section is
+It works on files only, on any harness that reads Agent Skills: the map and the catalog are Backstage catalog
+entity files in your repository (no database, no server), the documentation of an option is markdown files, and
+the judge is a Python package with an MCP server. The Claude Code plugin is the first packaging; other
+harnesses get a thin manifest over the same core and skills.
+
+**The judge stays the core, and stays independent.** The mapping and cataloguing skills write the map and the
+catalog, which the judge reads from the base commit and no candidate may touch: what an optimizer may edit is
+still only what a cell's `change` names. Morphogen does not propose changes itself; optimizers do that, and they
+plug into it. [BRIEF.md](BRIEF.md) is the design (its first section is
 the one-page version) and [PLAN.md](PLAN.md) the way there; this file is the case for Morphogen and
 how to use what is built.
+
+**Where it sits.** The Knowledge Kernel is an optional layer above the kit: it ingests the same Backstage files for
+indexing, search and graph traversal, and the kit never requires it. Substrate is the default distribution (a
+configured harness, the kernel and a default stack) and installs Morphogen's plugin like any user. MetaSoar's
+System 1 skills convention (policies, observers and cases in a skill folder, each a Morphogen cell) is a planned
+consumer of the judge. The way there is [PLAN.md](PLAN.md).
 
 ## Why a judge, on top of optimizers
 
@@ -77,6 +92,14 @@ re-judging past verdicts when the judge gains a rule, to flag passes that only p
 hole it closes.
 
 ## The cell format
+
+> **Coming, phase 2.** The cell format below is today's. The kit moves every committed artifact into Backstage
+> catalog entities: a cell's rules go on the entity it judges under one namespaced key, `spec.morphogen`; an
+> option for a role is a `Component` with `spec.lifecycle: candidate`; sub-grain cells are `Component`s nested
+> with `subcomponentOf`; an interface's tests go on its `API` entity; the project's settings and shared defaults go
+> on the `System` entity. The fields are drafted in [`schemas/morphogen-spec.v0.json`](schemas/morphogen-spec.v0.json)
+> and carried over unchanged from what a cell accepts below. `morphogen.local.yaml` stays as it is. Until phase 2
+> lands, `morphogen.yaml` is what the judge reads, and this reference is current.
 
 One `morphogen.yaml` at the project's root:
 
@@ -193,8 +216,9 @@ described this way.
 Install it from GitHub, not from a local clone: a clone added as a marketplace runs the plugin from
 the clone itself, so the judge would be the candidate you are changing. To move to a newer version,
 `/plugin marketplace update morphogen`, then `/plugin update morphogen@morphogen`, and restart
-Claude Code. The plugin brings the MCP server, the `morphogen` skill (improve a cell honestly), the
-`map` skill (draft the cells), and the `worker` and `reviewer` agents. It needs
+Claude Code. The plugin brings the MCP server, four skills (`map`: take a system apart into Backstage entity files with
+evidence and draft its cells; `catalog`: find options for a role; `research`: choose one from the catalogs;
+`morphogen`: improve a cell honestly), and the `worker` and `reviewer` agents. It needs
 [uv](https://docs.astral.sh/uv/) on the path.
 
 **Starting fresh.** In a git repository, ask Claude to start Morphogen here. The map skill calls
@@ -279,7 +303,8 @@ directory, so it can only answer. The cell's `description` is its objective.
 | Observers | `observers.py` | `command` (a command after each run) and `otel` (an OpenTelemetry receiver in the judge that adds up each run's telemetry, such as Claude Code's cost, tokens and tool results) |
 | Optimizers | `optimize.py` | a catalog behind one contract: grid, random, hill-climb (with `restarts`) and simulated annealing (`anneal`), built in; Optuna and GEPA adapters (optional extras); and the `selector`, whose bandit policy (primed by earlier verdicts, with a stagnation signal) chooses which proposes next. A model-based policy is planned; packages add more through the `morphogen.optimizers` entry point. `tune` checks, writes and probes each proposal and judges the best |
 | Interfaces | `cli.py`, `mcp_server.py`, `ui.py` | the command line, an MCP server with 11 tools, and a local read-only web UI |
-| Plugin | `.claude-plugin/`, `skills/`, `agents/` | the Claude Code plugin around the MCP server |
+| Plugin | `.claude-plugin/`, `skills/`, `agents/` | the Claude Code plugin around the MCP server; the skills (`map`, `catalog`, `research`, `morphogen`) are plain Agent Skills any harness can load |
+| Schemas | `schemas/` | the evidence record (v1); the `spec.morphogen` fields of the catalog entities (draft, phase 1; not read yet) |
 
 ### The system guard
 
@@ -441,6 +466,7 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
     morphogen/       the core, its CLI, MCP server and web UI
     tests/           its tests and red team; fixture projects in tests/fixture*.py
     .claude-plugin/  the plugin and marketplace manifests
-    skills/, agents/ the Claude Code skills and agents
+    skills/, agents/ the skills (Agent Skills format) and Claude Code agents
+    schemas/         published JSON Schemas (evidence record; spec.morphogen, a draft)
     demos/           projects Morphogen can build and drive (the core never imports from them)
     BRIEF.md         the design;  PLAN.md  the way there
