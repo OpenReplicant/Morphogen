@@ -1,0 +1,102 @@
+# The steps a job goes through (material/process.md), as parts of the firm. Each says which team does it, the
+# tools it uses (dependsOn) and the interfaces it hands work on by (consumesApis, providesApis).
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: survey
+  description: A designer measures the room with a tape and a laser and sketches it on paper.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/process.md:L7 | "Owen or Priya visits, measures with a tape and a laser, sketches the room on paper, takes photos"
+      stated | material/interview.md:L40 | "Owen and Priya measure with a tape and a laser and a pencil, and every so often a"
+      stated | analysis/baseline.txt:L17 | "jobs_with_remakes	6/50"
+spec: {type: process-step, lifecycle: production, owner: group:default/design-sales, system: fernhill, providesApis: [room-survey]}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: design
+  description: The designer draws the kitchen in SketchUp from the survey; two or three rounds with the customer.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/process.md:L9 | "Back in the office the designer draws the kitchen in SketchUp. Two or three rounds with the"
+spec:
+  type: process-step
+  lifecycle: production
+  owner: group:default/design-sales
+  system: fernhill
+  consumesApis: [room-survey]
+  providesApis: [job-spec]
+  dependsOn: [resource:default/sketchup]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: quote
+  description: >-
+    The designer types the job's four inputs into the quote calculator, writes the quote in Word and emails it.
+    Median 9 days from survey to quote; 17% inside the handbook's 5 days; the win rate falls from 0.80 (0-5 days)
+    to 0.00 (15 days or more).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/process.md:L11 | "The designer counts cabinets and worktop metres off the drawing and types them into the quote"
+      stated | material/process.md:L13 | "Aim: quote within 5 working days of the survey."
+      stated | analysis/baseline.txt:L4 | "quote_days_median	9"
+      stated | analysis/baseline.txt:L9 | "win_rate_quote_15_plus_days	0.00	n=16"
+      stated | material/interview.md:L16 | "And I'm sure we lose jobs because we're slow to quote."
+spec:
+  type: process-step
+  lifecycle: production
+  owner: group:default/design-sales
+  system: fernhill
+  consumesApis: [job-spec]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: orders
+  description: Dee orders carcasses, hardware and worktops by email, retyped from the quote; quartz is booked after fitting.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/process.md:L19 | "Order details are retyped from the quote."
+spec:
+  type: process-step
+  lifecycle: production
+  owner: group:default/office
+  system: fernhill
+  consumesApis: [job-spec]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: fit
+  description: >-
+    A fitting pair fits the kitchen in the week the whiteboard gives it; quartz is templated, then fitted about ten
+    days later. 48% of completed jobs started later than first planned (median slip 5.5 days when they did).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/process.md:L21 | "Their week is on the whiteboard and in a WhatsApp group."
+      stated | material/interview.md:L38 | "Twice this year two pairs turned up at the same house and one job had"
+      stated | analysis/baseline.txt:L19 | "fit_slipped_share	0.48"
+spec:
+  type: process-step
+  lifecycle: production
+  owner: group:default/fitting
+  system: fernhill
+  consumesApis: [fitting-schedule]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: final-invoice
+  description: Dee raises the 60% balance in Xero once told the job is signed off; median 12.5 days after the fit ends.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/process.md:L24 | "60% balance, raised by Dee in Xero when the lead fitter tells her the job is signed off."
+      stated | analysis/baseline.txt:L21 | "invoice_days_median	12.5"
+spec:
+  type: process-step
+  lifecycle: production
+  owner: group:default/office
+  system: fernhill
+  dependsOn: [resource:default/xero]

@@ -1,0 +1,53 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: directors
+  description: Sian Hollis (managing director) and Mark Hollis (workshop and fitting). They decide on changes.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/overview.md:L21 | "Sian Hollis (managing director), Mark Hollis (workshop and fitting)"
+      stated | material/interview.md:L33 | "Me, with Mark for anything in the workshop or fitting. Dee runs the office and she should have a say on"
+spec: {type: team, children: []}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: office
+  description: Dee Grant (office manager), and a bookkeeper two days a month. Diary, orders, invoices.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/overview.md:L22 | "Dee Grant (office manager: diary, orders, invoices); a bookkeeper two days a month, not on staff"
+spec: {type: team, children: []}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: design-sales
+  description: Owen and Priya. Survey, design, quote and follow-up; there is no separate surveyor.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/overview.md:L23 | "Owen and Priya: survey, design, quote, follow-up"
+      stated | material/overview.md:L26 | "surveys are done by the designers"
+spec: {type: team, children: []}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: workshop
+  description: Two people making doors and frames and assembling cabinets. Not to be changed (the operator).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/overview.md:L24 | "doors, frames, assembly, finishing"
+      stated | material/interview.md:L26 | "The workshop. We make our own doors and that's why people come to us."
+spec: {type: team, children: []}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: fitting
+  description: Two fitting pairs, on their own Android phones.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/overview.md:L25 | "two fitting pairs"
+      stated | material/tools.md:L16 | "fitters use their own Android phones"
+spec: {type: team, children: []}

@@ -1,0 +1,130 @@
+# Options for the role `job-scheduling` (catalog/tools.yaml), found 2026-11-24 (the catalog skill).
+# The need, written before looking: (1) `fitting-schedule`: each job's fitting pair, address, days, quartz
+# template date and parts, across multi-day jobs; (2) the fitters read it on their own Android phones; (3)
+# `xero-invoices`: a signed-off job's final invoice reaches Xero without retyping; (4) no server to run; (5) "a few
+# hundred pounds a month if it pays for itself", for about 9 people (2 directors, 1 office, 2 designers, 4 fitters).
+# Measured by: fitting starts that slip (48% now), double-bookings (two this year, the operator), days from sign-off
+# to final invoice (median 12.5 now). Ruled out: anything self-hosted (need 4; material/tools.md:L21).
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: xero-invoices
+  description: A job's invoice raised in, or synced to, Xero (Standard), with its payments back. The firm's accounts stay in Xero.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/tools.md:L12 | "| Accounts | Xero (Standard) | Dee, bookkeeper | deposits and final invoices; supplier bills |"
+spec: {type: service, lifecycle: production, owner: group:default/office, system: fernhill, definition: "https://developer.xero.com/documentation/api/accounting/invoices"}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: fergus
+  description: Fergus, UK job management for trades (SaaS). Per user, from £45 a month on Pro.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | https://fergus.com/uk/ | "Month-to-month per user, priced, so you add or remove users as the crew changes."
+      stated | https://fergus.com/uk/pricing/ | "Timesheet Users" "From £12 per month"
+      stated | https://fergus.com/uk/ | "The Fergus mobile app works seamlessly across Apple iOS and Android."
+      stated | https://fergus.com/uk/ | "Fergus talks to Xero and QuickBooks, syncing contacts, invoices and payments automatically"
+      stated | https://fergus.com/uk/ | "See what your team has on and easily assign jobs with the customisable calendar."
+spec:
+  type: service
+  lifecycle: candidate
+  owner: group:default/directors
+  system: fernhill
+  providesApis: [xero-invoices]
+  morphogen:
+    fills: component:default/job-scheduling
+    licence: proprietary (SaaS subscription)
+    docs: {url: "https://fergus.com/uk/"}
+    evaluation:
+      need: the four needs in this file's header, and the three measures
+      method: >-
+        not run. Planned: a free trial; replay three past months of fitting weeks from jobs.csv (fit_planned_start,
+        fit_start, fit_end, worktop_material) with the four pairs, and check multi-day bookings, the quartz template
+        visit and the Xero invoice on sign-off. Cost: 5 full users at £45 plus 4 fitters, either full (£405 a month)
+        or as timesheet users from £12 (£273), if a timesheet user can see the schedule; the docs do not say.
+      result: not measured
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: tradify
+  description: Tradify, job management for trades (SaaS). Per user, Pro £37 a month on the Xero App Store listing.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | https://www.tradifyhq.com/pd/job_management_software_uk_v2 | "Tradify costs per user, per month."
+      stated | https://apps.xero.com/uk/app/tradify | "GBP 37.00 /month (billed monthly)"
+      stated | https://www.tradifyhq.com/pd/job_management_software_uk_v2 | "Yes! You can use Tradify on desktop, Android, and iOS devices."
+      stated | https://apps.xero.com/uk/app/tradify | "Automatically update your invoices, payments and credit notes between Xero and Tradify with 2-way sync."
+      stated | https://www.tradifyhq.com/pd/job_management_software_uk_v2 | "Our scheduling feature allows you to plan ahead with three different web views"
+spec:
+  type: service
+  lifecycle: candidate
+  owner: group:default/directors
+  system: fernhill
+  providesApis: [xero-invoices]
+  morphogen:
+    fills: component:default/job-scheduling
+    licence: proprietary (SaaS subscription)
+    docs: {url: "https://www.tradifyhq.com/pd/job_management_software_uk_v2"}
+    evaluation:
+      need: the four needs in this file's header, and the three measures
+      method: >-
+        not run. Planned: the same replay as fergus, in its 14-day trial. Cost: 9 users at £37 (Pro), £333 a month;
+        the App Store page does not say per user, Tradify's own page does. SMS is extra.
+      result: not measured
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: servicem8
+  description: ServiceM8, job management (SaaS). A flat monthly fee by job volume with unlimited users; built for iOS first.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | https://www.servicem8.com/uk/ | "Unlimited Users"
+      stated | https://www.servicem8.com/uk/ | "Optimised for Apple, Now Available for Android"
+      stated | https://www.servicem8.com/uk/xero-integration | "Payments received on the job automatically sync to Xero, and payments received in Xero sync back to ServiceM8."
+      stated | https://www.servicem8.com/uk/xero-integration | "Raise invoices in Xero from your iPhone, iPad or Online in two taps, ready to be reconciled."
+      stated | https://www.servicem8.com/uk/xero-integration | "Schedule jobs on the go. Changes automatically notify staff."
+spec:
+  type: service
+  lifecycle: candidate
+  owner: group:default/directors
+  system: fernhill
+  providesApis: [xero-invoices]
+  morphogen:
+    fills: component:default/job-scheduling
+    licence: proprietary (SaaS subscription)
+    docs: {url: "https://www.servicem8.com/uk/"}
+    evaluation:
+      need: the four needs in this file's header, and the three measures
+      method: >-
+        not run. Planned: the same replay, on its free plan or Starter. Cost: £25 (Starter) or £59 (Growing) a month,
+        whatever the number of users; which plan depends on its job count per month (about 30 kitchens a year, each
+        several visits), not stated on the page read. To check first: whether the Android app gives fitters what they
+        need (third-party reviews call it limited).
+      result: not measured
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: shared-calendar
+  description: >-
+    A Google Calendar per fitting pair in the Google Workspace the firm already pays for, with the quartz template
+    visit as its own event; the cheapest change, no Xero link.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/tools.md:L7 | "| Email, calendar, files | Google Workspace (Business Starter, 5 accounts) | office, designers, directors | survey bookings in a shared calendar |"
+spec:
+  type: service
+  lifecycle: candidate
+  owner: group:default/directors
+  system: fernhill
+  morphogen:
+    fills: component:default/job-scheduling
+    licence: proprietary (already subscribed)
+    evaluation:
+      need: the four needs in this file's header; it does not meet need 3 (no Xero link)
+      method: not run; the fitters have no Workspace accounts (5 accounts, none of them fitters), so they would need 4 more or shared calendars
+      result: not measured

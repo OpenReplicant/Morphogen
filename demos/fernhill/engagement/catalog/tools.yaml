@@ -1,0 +1,65 @@
+# The tools, and the roles they play. A role is named so that another tool could play it.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: job-scheduling
+  description: >-
+    The role: who fits which job, where and when, with the quartz templating visit, readable by the fitters on their
+    own Android phones. Played today by the workshop whiteboard and WhatsApp.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/tools.md:L13 | "a whiteboard in the workshop, and photos of it"
+      stated | material/interview.md:L27 | "Whatever we do has to work on their"
+spec: {type: role, lifecycle: production, owner: group:default/directors, system: fernhill, providesApis: [fitting-schedule, xero-invoices]}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: whiteboard
+  description: The workshop whiteboard (and photos of it, and one WhatsApp group per fitting pair). Fills job-scheduling.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/tools.md:L13 | "| Workshop and fitting plan | a whiteboard in the workshop, and photos of it | Mark, fitters, Dee | |"
+spec:
+  type: tool
+  lifecycle: production
+  owner: group:default/directors
+  system: fernhill
+  providesApis: [fitting-schedule]
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: fitting-schedule
+  description: >-
+    For each job: the fitting pair, the address, the days, the quartz template date and the parts due. Inferred
+    from the process and the interview; to confirm with Mark.
+spec: {type: process, lifecycle: production, owner: group:default/directors, system: fernhill, definition: "material/process.md steps 6, 8 and 9"}
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: room-survey
+  description: A room's measurements, sketch and photos, as the designer brings them back.
+spec: {type: process, lifecycle: production, owner: group:default/design-sales, system: fernhill, definition: "material/process.md step 2"}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: xero
+  description: Xero (Standard). Deposits, final invoices, supplier bills coded to jobs since January 2025.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/tools.md:L12 | "| Accounts | Xero (Standard) | Dee, bookkeeper | deposits and final invoices; supplier bills |"
+      stated | material/jobs.md:L18 | "supplier bills coded to the job in Xero (the bookkeeper has done this since January 2025)"
+spec: {type: service, owner: group:default/office, system: fernhill}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: sketchup
+  description: SketchUp Pro, two seats; drawings by hand, no cutting lists.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/tools.md:L10 | "| Design | SketchUp Pro (2 seats) | designers | drawings by hand; no cutting lists |"
+spec: {type: service, owner: group:default/design-sales, system: fernhill}
