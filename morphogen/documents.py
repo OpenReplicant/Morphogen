@@ -1,6 +1,6 @@
 """The documents people write and git versions, and the one way they are read.
 
-`morphogen.yaml`'s settings (trunk, sandbox, budget), and the target spec a cell compiles to (how
+The project's settings (trunk, sandbox, budget: `spec.morphogen` on its System, see project.py), and the target spec a cell compiles to (how
 the judge scores it; see project.py for the cell format the operator writes). Each has a schema;
 `load` reads a file, checks it and returns plain data, or raises DocumentError naming the file and
 every problem. Schemas check structure and types; what a value means is checked where it is used,
@@ -27,7 +27,7 @@ class _Doc(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-# morphogen.yaml
+# the project's settings
 
 class Budget(_Doc):
     trials_per_day: int | None = None
@@ -133,17 +133,23 @@ def load(kind: str, path: Path) -> dict:
 
 
 def load_config(root: Path) -> dict:
-    """morphogen.yaml at the project root, or the defaults, with the operator's morphogen.local.yaml
-    (uncommitted) laid over it: `sandbox`, `sandbox_image` and `budget` override, and `cells` (held-out
-    answer paths per cell: `private`, `search`), `env`, `services` and `gateway` (serve.py) are kept under `local`."""
-    from .project import local_config
-    f = Path(root) / "morphogen.yaml"
-    cfg = load("config", f) if f.exists() else validate("config", {})
+    """The project's settings from the System's `spec.morphogen` in the working copy's catalog (or the
+    defaults), with the operator's morphogen.local.yaml (uncommitted) laid over them: `sandbox`,
+    `sandbox_image` and `budget` override, and `cells` (held-out answer paths per cell: `private`,
+    `search`), `env`, `services` and `gateway` (serve.py) are kept under `local`. A catalog that does not
+    read gives the defaults here; `status` reports why."""
+    from .backstage import fs_reader
+    from .project import FILE, ProjectError, local_config, settings_at
+    try:
+        base = settings_at(fs_reader(root))
+    except ProjectError:
+        base = {}
     local = local_config(root)
+    cfg = validate("config", {k: v for k, v in base.items() if k in JUDGE_SETTINGS}, FILE)
     for k in LOCAL_SETTINGS:
         if k in local:
             cfg[k] = local[k]
-    cfg = validate("config", cfg, f)
+    cfg = validate("config", cfg, FILE)
     cfg["local"] = {"cells": local.get("cells") or {}, "settings": {k: local[k] for k in LOCAL_SETTINGS if k in local},
                     **{k: local[k] for k in LOCAL_SERVED if local.get(k)}}
     return cfg
@@ -155,22 +161,22 @@ JUDGE_SETTINGS = ("trunk", "sandbox", "sandbox_image", "budget")
 
 
 def rules_config(repo: Path, sha: str, cfg: dict) -> dict:
-    """The settings a judged run uses: morphogen.yaml as committed at `sha` (the base), with the operator's
-    morphogen.local.yaml laid over it, never the working copy. `cfg` is load_config's result; what it read
-    from the local file is kept (cfg["local"]), what it read from the working copy is dropped. The result
-    says where each setting came from (`settings_from`)."""
-    import subprocess
-    r = subprocess.run(["git", "show", f"{sha}:morphogen.yaml"], cwd=repo, capture_output=True, text=True)
+    """The settings a judged run uses: the System's settings in the catalog as committed at `sha` (the
+    base), with the operator's morphogen.local.yaml laid over them, never the working copy. `cfg` is
+    load_config's result; what it read from the local file is kept (cfg["local"]), what it read from the
+    working copy is dropped. The result says where each setting came from (`settings_from`)."""
+    from .project import FILE, ProjectError, git_reader, settings_at
+    where_base = f"{sha[:12]}:{FILE}"
     try:
-        data = yaml.safe_load(r.stdout) if r.returncode == 0 else {}
-    except yaml.YAMLError as e:
-        raise DocumentError(f"{sha[:12]}:morphogen.yaml", [f"not valid YAML: {e}"]) from None
-    base = validate("config", {k: v for k, v in (data or {}).items() if k in JUDGE_SETTINGS}, f"{sha[:12]}:morphogen.yaml")
+        data = settings_at(git_reader(repo, sha))
+    except ProjectError as e:
+        raise DocumentError(where_base, [str(e)]) from None
+    base = validate("config", {k: v for k, v in data.items() if k in JUDGE_SETTINGS}, where_base)
     local = (cfg.get("local") or {}).get("settings") or {}
-    out = validate("config", {**base, **local}, f"{sha[:12]}:morphogen.yaml + morphogen.local.yaml")
+    out = validate("config", {**base, **local}, f"{where_base} + morphogen.local.yaml")
     out["local"] = cfg.get("local") or {"cells": {}, "settings": {}}
     where = (cfg.get("local") or {}).get("from") or "morphogen.local.yaml"
-    out["settings_from"] = {k: (where if k in local else "base" if k in (data or {}) else "default")
+    out["settings_from"] = {k: (where if k in local else "base" if k in data else "default")
                             for k in JUDGE_SETTINGS}
     return out
 
