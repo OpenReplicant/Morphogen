@@ -1,0 +1,25 @@
+# Fernhill Kitchens (made up), mapped for an engagement: the firm as a System, its teams, the steps a job goes
+# through, the tools behind them and the roles they play. Claims cite the firm's material (material/, kept out of
+# the repository) or the baselines computed from it (analysis/baseline.txt).
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: fernhill
+  description: Fernhill Kitchens, an 11-person kitchen design, build and fit firm. Made up for Morphogen's demo engagement.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/overview.md:L6 | "founded in 2009 by Sian Hollis, a joiner, and we have grown to 11 people"
+      stated | material/overview.md:L30 | "Turnover about £400,000; about 30 kitchens fitted."
+      stated | material/interview.md:L8 | "We're busier than we've ever been and the bank balance doesn't"
+spec:
+  owner: group:default/directors
+  lifecycle: production
+  morphogen:
+    defaults: {rounds: {warmup: 0, repeats: 4, max_repeats: 8}, timeout: 60}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: fernhill-map
+spec:
+  targets: [./catalog/teams.yaml, ./catalog/process.yaml, ./catalog/tools.yaml, ./catalog/quote.yaml, ./catalog/scheduling.yaml]

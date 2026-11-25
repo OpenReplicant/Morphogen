@@ -1,0 +1,4 @@
+material/
+morphogen.local.yaml
+.morphogen/
+__pycache__/

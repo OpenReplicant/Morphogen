@@ -1,0 +1,23 @@
+flowchart LR
+  subgraph c_fernhill["fernhill"]
+    c_design["design"]
+    c_final_invoice["final-invoice"]
+    c_fit["fit"]
+    c_orders["orders"]
+    c_quote["quote"]
+    c_quote_calculator["quote-calculator"]
+    c_survey["survey"]
+    c_whiteboard["whiteboard"]
+  end
+  outside(["outside"])
+  c_whiteboard -->|"fitting-schedule"| c_fit
+  i_job_spec(("job-spec"))
+  c_design --> i_job_spec
+  c_quote_calculator --> i_job_spec
+  i_job_spec --> c_orders
+  i_job_spec --> c_quote
+  outside -->|"resource:sketchup"| c_design
+  outside -->|"resource:xero"| c_final_invoice
+  c_survey -->|"room-survey"| c_design
+  classDef absence stroke-dasharray: 5 5,opacity:0.6
+  classDef divergence stroke:#d33,stroke-width:2px

@@ -1,0 +1,22 @@
+jobs	121	rows in jobs.csv
+won/lost/pending	52/62/7	outcome
+win_rate	0.46	won / (won + lost)
+quote_days_median	9	quote_sent_date - survey_date, calendar days, all jobs
+quote_days_within_5	0.17	share of quotes sent within 5 days of the survey
+win_rate_quote_0_5_days	0.80	n=20
+win_rate_quote_6_9_days	0.57	n=44
+win_rate_quote_10_14_days	0.32	n=34
+win_rate_quote_15_plus_days	0.00	n=16
+lost_to_quicker_quote	15	lost_reason, of lost jobs
+completed_with_costs	50	rows with actual_materials
+markup_on_cost_median	0.163	(quoted_price - actual cost) / actual cost; intended 0.35
+jobs_at_a_loss	2	actual cost above quoted_price
+quoted_cost_error_median	-0.138	(quoted_price/1.35 - actual cost) / actual cost
+jobs_cost_underestimated	50/50	actual cost above the calculator's cost
+margin_shortfall_gbp	83576	intended margin minus realised margin, summed over completed jobs
+jobs_with_remakes	6/50	remade_cabinets > 0
+remakes_from_survey	5	jobs, remake_cause
+fit_slipped_share	0.48	fit_start after fit_planned_start
+fit_slip_days_median_when_slipped	5.5	days
+invoice_days_median	12.5	final_invoice_date - fit_end
+balance_avg_gbp	7512	60% of quoted_price, completed jobs

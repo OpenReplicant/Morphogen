@@ -1,0 +1,55 @@
+# The opportunity drafted as a cell: the quote calculator, as code (cells/quote/estimate.py, the v7 sheet's
+# formula and constants), judged on how close its cost comes to what completed jobs actually cost. The margin and
+# the labour rate are the firm's (the operator: "35% on cost is the number the bank and I agreed and I want to
+# actually get it, not change it"), so they are kept fixed; the constants that describe costs may move.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: quote-calculator
+  description: >-
+    Quote calculator v7.xlsx: a job's four inputs in, cost and price out. Its costs are below actual on all 50
+    completed jobs (median -13.8%); realised markup 16.3% on cost against the intended 35%.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/quote-calculator.md:L27 | "The constants were last changed in March 2023. Nobody compares a job's quote with what it cost afterwards; the"
+      stated | material/interview.md:L14 | "Lindale put their"
+      stated | analysis/baseline.txt:L15 | "jobs_cost_underestimated	50/50"
+      stated | analysis/baseline.txt:L12 | "markup_on_cost_median	0.163"
+spec:
+  type: tool
+  lifecycle: production
+  owner: group:default/design-sales
+  system: fernhill
+  providesApis: [job-spec]
+  morphogen:
+    description: Estimate a kitchen job's cost (materials and labour) as close as possible to what it will cost.
+    dir: cells/quote
+    change:
+      - cells/quote/estimate.py#CARCASS_STANDARD in 150..320
+      - cells/quote/estimate.py#CARCASS_PREMIUM in 250..500
+      - cells/quote/estimate.py#WORKTOP_WASTE in 0.0..0.4
+      - cells/quote/estimate.py#HOURS_PER_CABINET in 3..12
+      - cells/quote/estimate.py#HOURS_PER_WORKTOP_M in 0.5..4
+      - cells/quote/estimate.py#FIXED_HOURS in 8..40
+    keep: [cells/quote/estimate.py#MARGIN, cells/quote/estimate.py#LABOUR_RATE]
+    run: python bench.py
+    score: python score.py
+    better: {mape: {lower: true, min: 0.01, gain: absolute}}
+    tests: python -m unittest -q tests.test_estimate
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: job-spec
+  description: A job as the calculator takes it (cabinets, range, worktop material, worktop metres) and its cost and price.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | material/quote-calculator.md:L5 | "The designer types four things: the number of cabinets, the range (Standard or Premium), the worktop material"
+spec:
+  type: python
+  lifecycle: production
+  owner: group:default/design-sales
+  system: fernhill
+  definition: cells/quote/estimate.py (cost, price)
+  morphogen:
+    tests: cd cells/quote && python -m unittest -q tests.test_estimate
