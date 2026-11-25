@@ -70,6 +70,28 @@ What is different here:
 The new code is the transfer model, the scheduler and the claim-condition schema. Ingestion, cataloguing,
 optimising and judging exist or are already planned.
 
+### Where evidence claims live
+
+A claim is a file of its own ([schemas/evidence-claim.v1.json](../schemas/evidence-claim.v1.json), a draft). It is
+not part of the option's `spec.morphogen`. Each file is shaped like a Backstage entity of a custom kind
+(`apiVersion: morphogen.dev/v1alpha1`, `kind: EvidenceClaim`). It names the option in `spec.about` and the role in
+`spec.role`. The option lists its claim files in `spec.morphogen.evaluation.evidence`, as the `catalog` skill already
+does for a trial's output. Claim files are never `Location` targets of the judge's catalog. Why:
+
+- **Claims change on a different clock.** A claim's status moves from predicted to replicated each time a trial
+  lands, and claims are added as papers are read. Every catalog file is a rule file, read from the base commit, and
+  an option rarely changes. Keeping claims out of the catalog keeps the rules stable. Default deny still keeps
+  candidates out of them, since a claim file is named in no cell's `change`.
+- **`spec.morphogen` is the code's contract.** Its schema matches the fields the judge loads, and a test keeps the
+  two equal. Claims would add a nested structure the judge never reads. `evaluation.evidence` already takes a list
+  of files.
+- **One claim, many systems.** A claim's source, numbers and conditions are the same for every system that reads
+  it. Only its status differs, so each system adds an `assessments` entry rather than a copy (phase 5).
+- **A trial's own result is a claim too** (`source.kind: trial`, `reporting: ours`). The paper claim it tests links
+  to it from `outcome.observed`. A result that bears on several claims is then written down once.
+
+[demos/research-loop](../demos/research-loop/README.md) is phase 0 in this form.
+
 ## The first worked example
 
 MetaSoar, 2026-11-25:

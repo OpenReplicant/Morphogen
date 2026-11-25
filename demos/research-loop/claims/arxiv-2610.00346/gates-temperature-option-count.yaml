@@ -1,0 +1,61 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-temperature-option-count
+  description: >-
+    A temperature fitted under one option count does not carry to another (Kev-9B 0.051 to 0.377 at 150 options).
+spec:
+  about: component:default/temperature-scaling
+  role: component:default/readout-calibration
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, fourth bullet
+      quote: >-
+        A temperature fitted under one option count does not carry to another (Kev-9B: 0.051 to 0.377 at 150 options).
+  claim:
+    statement: >-
+      A temperature fitted under one option count does not carry to another: Kev-9B's calibration error went from
+      0.051 to 0.377 at 150 options.
+    metric: calibration error
+    better: lower
+    value: 0.377
+    where: 150 options
+    baseline: {name: the option count the temperature was fitted under, value: 0.051}
+    finding: worse
+    runs: null
+    cases: null
+    reporting: independent
+  conditions:
+    models:
+      - {name: Kev-9B, size: 9B, tuned: a decision-model checkpoint}
+    method: one temperature fitted under one option count, applied under another
+    unstated: [the option count it was fitted under, engine, precision]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: predicted
+      prediction:
+        p_transfer: 0.7
+        reason: >-
+          A property of temperature scaling, not of the model's size, so it should hold here. E-04a fits one
+          temperature per slice and left BANKING77 (77 options) out, so it neither tests nor depends on it yet; it
+          matters as soon as one temperature is shared across tasks with different option counts.
+        by: agent draft for research-loop phase 0; not yet reviewed by the owner
+        date: 2026-11-25
+        before_outcome: true
+      date: 2026-11-25

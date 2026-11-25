@@ -1,0 +1,217 @@
+# The options: one Component with spec.lifecycle: candidate per method the session's papers measured, for the
+# role it could fill. Each lists its claim files (claims/, schemas/evidence-claim.v1.json) in
+# spec.morphogen.evaluation.evidence; check.py keeps that list equal to the claims whose `about` names the option.
+# Where the method came from is the claims' business; the evidence annotation only says where it is described.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: likelihood-readout
+  description: >-
+    Read a generative model as a decision model: one forward pass, no thinking, the probability of each option's key
+    (its first token) renormalised over the options. Untuned.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/decision-backend
+    evaluation:
+      need: >-
+        E-04a's falsifier, inverted: after debiasing and one temperature per slice, pooled accuracy within 10 points
+        of Jev's and coverage at 5% risk at least half of Jev's, on the JevBench cases.
+      method: E-04a, MetaSoar trials/decision-readout at facbe84 (readout.py, serve.sh, score.py)
+      result: LFM3 1.7B untuned does not meet it (0.528 against 0.842; coverage 0.09 against 0.67). Inkling pending.
+      evidence:
+        - claims/arxiv-2610.00346/gates-likelihood-readout-27-31b-matches-jev.yaml
+        - claims/arxiv-2610.00346/gates-order-effects-untrained.yaml
+        - claims/arxiv-2610.03935/jeval-first-token-readout.yaml
+        - claims/e04a/e04a-lfm3-pooled-accuracy.yaml
+        - claims/e04a/e04a-lfm3-coverage.yaml
+        - claims/e04a/e04a-lfm3-order-flip.yaml
+        - claims/e04a/e04a-lfm3-slices.yaml
+        - claims/e04a/e04a-lfm3-speed.yaml
+        - claims/probe/probe-lfm3-first-token.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: temperature-scaling
+  description: One temperature per task, fitted on held-out data, applied to a readout's option probabilities.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/readout-calibration
+    evaluation:
+      need: Calibration error at Jev's level on the same cases.
+      method: E-04a's `scaled` system (one temperature per slice, fitted on the `fit` half of families)
+      result: LFM3 1.7B pooled calibration error 0.026 against Jev's 0.024.
+      evidence:
+        - claims/arxiv-2610.00346/gates-temperature-fixes-calibration.yaml
+        - claims/arxiv-2610.00346/gates-temperature-option-count.yaml
+        - claims/e04a/e04a-lfm3-calibration.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: per-task-risk-threshold
+  description: A threshold for acting on a decision, set per model and per task on held-out labels at a chosen risk.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/readout-calibration
+    evaluation:
+      evidence: [claims/arxiv-2610.00346/gates-thresholds-per-model-task.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: finetuned-classifier
+  description: A small encoder (DeBERTa-v3-large, under 0.5B) fine-tuned on the task's labels.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/decision-backend
+    evaluation:
+      evidence: [claims/arxiv-2610.00346/gates-finetuned-classifier-clinc150.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: embedding-logreg
+  description: Logistic regression on sentence embeddings (BGE-small in the gates paper), trained on local labels.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: [component:default/decision-backend, component:default/think-router]
+    evaluation:
+      evidence:
+        - claims/arxiv-2610.00346/gates-embedding-logreg-labelled.yaml
+        - claims/arxiv-2605.02241/zsconf-embedding-router-ood.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: stated-probability
+  description: Ask the model to state a probability for each option in its reply, and parse it.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/decision-backend
+    evaluation:
+      evidence: [claims/arxiv-2610.00346/gates-stated-probabilities-unparseable.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: decision-cascade
+  description: A cheap first stage that answers when sure and passes the rest to a stronger, dearer stage.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/decision-backend
+    evaluation:
+      evidence: [claims/arxiv-2610.00346/gates-cascade-needs-labels.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: self-distilled-readout
+  description: >-
+    Fine-tune a model so its one-pass readout gives the answer it reaches after reasoning (SII-Decision's recipe).
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/decision-backend
+    evaluation:
+      evidence:
+        - claims/arxiv-2610.03935/jeval-self-distillation-27b.yaml
+        - claims/arxiv-2610.03935/jeval-distillation-reasoning-heavy.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: always-think
+  description: Let the model reason before every answer (the router's always-on end).
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/think-router
+    evaluation:
+      evidence: [claims/arxiv-2610.03935/jeval-qwen35-4b-thinking.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: dart-draft-agreement
+  description: >-
+    DART: two cheap no-think drafts; answer directly when they agree, otherwise think with a budget from the drafts'
+    entropy. Training-free.
+  links:
+    - url: https://github.com/js-lee-AI/DART
+      title: code
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/think-router
+    evaluation:
+      evidence: [claims/arxiv-2606.23181/dart-draft-agreement.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ask-to-think
+  description: Ask the model whether a question needs thinking (DART's MC-Binary baseline); a typed question about thinking.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/think-router
+    evaluation:
+      evidence: [claims/arxiv-2606.23181/dart-mc-binary-collapses.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: answer-logprob-confidence
+  description: The mean log-probability of the model's own answer, as its confidence; think (or escalate) when it is low.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/think-router
+    evaluation:
+      evidence: [claims/arxiv-2605.02241/zsconf-answer-logprob-auroc.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: learned-think-mode
+  description: A model trained with GRPO to choose NoThink, Short or Long as its first token.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/think-router
+    evaluation:
+      evidence: [claims/arxiv-2608.20256/lwt-grpo-think-mode.yaml]

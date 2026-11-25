@@ -1,0 +1,55 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-stated-probabilities-unparseable
+  description: >-
+    One model's stated probabilities could not be parsed in 0.767 of its emotion replies.
+spec:
+  about: component:default/stated-probability
+  role: component:default/decision-backend
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, third bullet
+      quote: >-
+        One model's stated probabilities could not be parsed in 0.767 of its emotion replies.
+  claim:
+    statement: >-
+      Read the key's likelihood, not stated probabilities: one model's stated probabilities could not be parsed in
+      0.767 of its emotion replies.
+    metric: share of replies whose stated probabilities could not be parsed
+    better: lower
+    value: 0.767
+    where: the emotion task
+    baseline: {name: the option keys' likelihood (parsing not needed)}
+    finding: worse
+    runs: null
+    cases: null
+    reporting: independent
+  conditions:
+    models:
+      - {name: one of the four open generative models (not named in the note)}
+    engine: {name: vLLM}
+    dataset: {name: the gates paper's emotion task}
+    method: the model asked to state a probability for each option in its reply
+    unstated: [which model, the prompt]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: untested
+      reason: E-04a reads likelihoods only; nothing here asks a model to state probabilities.
+      date: 2026-11-25

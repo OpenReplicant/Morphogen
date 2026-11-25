@@ -1,0 +1,88 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-likelihood-readout-27-31b-matches-jev
+  description: Read by the likelihood of each option key, Gemma-4-31B and Qwen3.6-27B matched Jev; Qwen3-14B and Mistral-Small-24B did not.
+spec:
+  about: component:default/likelihood-readout
+  role: component:default/decision-backend
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, second bullet
+      quote: >-
+        Gemma-4-31B and Qwen3.6-27B read by the likelihood of each option key matched Jev; Qwen3-14B and
+        Mistral-Small-24B stayed significantly below it. No generative model under 14B was tested.
+  claim:
+    statement: >-
+      Without labels, an untuned generative model read by the likelihood of each option key matches Jev for some
+      checkpoints (Gemma-4-31B, Qwen3.6-27B) and stays significantly below it for others (Qwen3-14B,
+      Mistral-Small-24B): it depends on the checkpoint, not on the class. No generative model under 14B was tested.
+    metric: accuracy
+    better: higher
+    value: null
+    baseline: {name: Jev, value: null}
+    finding: matches
+    significance: the 14B and 24B models "stayed significantly below" Jev (the note's words)
+    runs: null
+    cases: null
+    reporting: independent
+    note: The note gives no numbers for this claim; the finding is for the 27B and 31B models only.
+  conditions:
+    models:
+      - {name: Gemma-4-31B, size: 31B, precision: bf16, tuned: untuned (open generative model)}
+      - {name: Qwen3.6-27B, size: 27B, precision: FP8, tuned: untuned (open generative model)}
+      - {name: Qwen3-14B, size: 14B, precision: AWQ 4-bit, tuned: untuned; below Jev}
+      - {name: Mistral-Small-24B, size: 24B, precision: bf16, tuned: untuned; below Jev}
+    engine: {name: vLLM}
+    dataset: {name: "the gates paper's decision tasks (the note names CLINC-150, workflow decisions, emotion and intent; which ones this finding covers is not stated)"}
+    method: the likelihood of each option key; every model given the same requests
+    labels: none used by the readout
+    unstated: [the prompt, which tasks the match holds on, hardware, the number of cases]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070, resource:default/jevbench-ed50fe0]
+      status: did-not-transfer
+      outcome:
+        trial:
+          id: E-04a
+          url: https://github.com/OpenReplicant/MetaSoar/tree/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout
+          repository: OpenReplicant/MetaSoar
+          commit: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+          path: trials/decision-readout/README.md
+        observed: [e04a-lfm3-pooled-accuracy, e04a-lfm3-coverage]
+        summary: >-
+          LFM3 1.7B Q6_K, read the same way (first token, untuned), debiased over both option orders and scaled with
+          one temperature per slice: pooled accuracy 0.528 [0.508, 0.547] against Jev 1.13's 0.842 [0.828, 0.857] on
+          the same 3,412 JevBench cases, and coverage at 5% risk 0.09 against 0.67. Its calibration error matched
+          Jev's after scaling (0.026 against 0.024), so the gap is accuracy, not calibration.
+        comparison: our-setup
+        verdict:
+          by: falsifier
+          decision: met
+          ref: OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:docs/experiments.md (E-04a)
+          note: >-
+            Registered before the outcome: pooled accuracy more than 10 points below Jev's, or coverage at 5% risk
+            under half of Jev's, after debiasing and one temperature per slice. Both limbs are met.
+        date: 2026-11-25
+      reason: >-
+        No probability was written before the trial: the note's table had "LFM3 1.7B read that way is good enough"
+        as open, so this outcome does not count towards calibration. A transfer test, not a replication: a 1.7B
+        model untuned, on llama.cpp at Q6_K, on JevBench rather than the paper's tasks. Inkling 2 Mini is still to
+        come, and tuning the readout (prompt, then self-distillation) is the cell's next step.
+      see_also: [e04a-lfm3-slices, probe-lfm3-first-token]
+      date: 2026-11-25

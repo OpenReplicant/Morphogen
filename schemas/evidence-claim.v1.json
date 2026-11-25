@@ -1,0 +1,871 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OpenReplicant/Morphogen/schemas/evidence-claim.v1.json",
+  "title": "EvidenceClaim (v1, draft)",
+  "description": "One claim about an option for a role, extracted from one source, with the conditions it was measured under, and its status for each system that has assessed it (docs/research-loop.md, 'Where evidence claims live'). A claim is a file of its own, shaped like a Backstage entity of a custom kind (apiVersion morphogen.dev/v1alpha1, kind EvidenceClaim) so the kernel can ingest it beside the catalog; the judge never reads it, and it is never a Location target of the judge's catalog. The option it is about is a Component with spec.lifecycle: candidate, which lists its claim files in spec.morphogen.evaluation.evidence. A trial's own result is a claim too, with source.kind trial and reporting ours; a paper's claim links to it from an assessment's outcome.observed. One claim holds one primary measure; further measures from the same sentence or table row go in claim.also.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "morphogen.dev/v1alpha1"
+    },
+    "kind": {
+      "const": "EvidenceClaim"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+([-_.][a-z0-9]+)*$",
+          "maxLength": 63,
+          "description": "Backstage's name rule. Unique among claims; outcomes and see_also name claims by it."
+        },
+        "description": {
+          "type": "string",
+          "description": "The claim in one line."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "about",
+        "role",
+        "source",
+        "claim",
+        "conditions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "about": {
+          "$ref": "#/$defs/EntityRef",
+          "description": "The option the claim is about: a Component with spec.lifecycle: candidate."
+        },
+        "role": {
+          "$ref": "#/$defs/EntityRef",
+          "description": "The role the claim bears on, one the option fills (spec.morphogen.fills). An option that fills two roles has a claim per role it bears on."
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "claim": {
+          "$ref": "#/$defs/Claim"
+        },
+        "conditions": {
+          "$ref": "#/$defs/Conditions"
+        },
+        "assessments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Assessment"
+          },
+          "description": "The claim's status for each system that has looked at it. This system's own measurements (source.kind trial or probe) need none."
+        }
+      },
+      "if": {
+        "properties": {
+          "source": {
+            "properties": {
+              "kind": {
+                "not": {
+                  "enum": [
+                    "trial",
+                    "probe"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "assessments"
+        ],
+        "properties": {
+          "assessments": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "EntityRef": {
+      "type": "string",
+      "pattern": "^([a-z]+:)?([a-z0-9-_.]+/)?[a-z0-9]+([-_.][a-z0-9]+)*$",
+      "description": "A Backstage entity ref, `[kind:][namespace/]name`."
+    },
+    "ClaimName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+([-_.][a-z0-9]+)*$"
+    },
+    "Number": {
+      "description": "A number; or a range over the conditions the source pooled (several models, datasets), {min, max}; or null where the source gives none.",
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "min",
+            "max"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "over": {
+              "type": "string",
+              "description": "What the range runs over."
+            }
+          }
+        }
+      ]
+    },
+    "Interval": {
+      "type": "object",
+      "required": [
+        "low",
+        "high"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "level": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "e.g. 0.95"
+        },
+        "method": {
+          "type": "string",
+          "description": "How it was computed, as the source says (bootstrap over families, ...)."
+        }
+      }
+    },
+    "Measure": {
+      "type": "object",
+      "required": [
+        "metric"
+      ],
+      "properties": {
+        "metric": {
+          "type": "string",
+          "description": "As the source names it: accuracy, calibration error (ECE), AUROC, order-flip rate, ..."
+        },
+        "better": {
+          "enum": [
+            "higher",
+            "lower"
+          ],
+          "description": "Which way the metric is better, as in a cell's `better`."
+        },
+        "unit": {
+          "type": "string",
+          "description": "When it is not a plain fraction: percent, ms, tokens, per hundred."
+        },
+        "value": {
+          "$ref": "#/$defs/Number",
+          "description": "The option's value, as stated."
+        },
+        "interval": {
+          "$ref": "#/$defs/Interval",
+          "description": "Only if the source states one."
+        },
+        "where": {
+          "type": "string",
+          "description": "Where this measure was taken when it narrows the claim's conditions (one dataset, one slice)."
+        },
+        "baseline": {
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "What the option is compared with (Jev 1.13, always-thinking, the raw readout)."
+            },
+            "value": {
+              "$ref": "#/$defs/Number"
+            },
+            "interval": {
+              "$ref": "#/$defs/Interval"
+            }
+          }
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "location",
+        "read",
+        "quote",
+        "quote_status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "paper",
+            "preprint",
+            "docs",
+            "repository",
+            "dataset",
+            "note",
+            "trial",
+            "probe"
+          ],
+          "description": "trial: a measurement this system ran; probe: an informal check recorded in a note."
+        },
+        "title": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "description": "A stable identifier: arXiv:2610.00346, a DOI, a trial id (E-04a)."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "version": {
+          "type": "string",
+          "description": "arXiv v2, a release, a commit: the exact text the claim came from."
+        },
+        "repository": {
+          "type": "string",
+          "description": "For a trial or note in git: the repository (owner/name)."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "path": {
+          "type": "string",
+          "description": "The file in that repository at that commit."
+        },
+        "location": {
+          "type": "string",
+          "description": "Where in the source: section, table, figure, finding."
+        },
+        "read": {
+          "type": "string",
+          "description": "How much of the source was read before the claim was written (abstract only, results, in full)."
+        },
+        "quote": {
+          "type": "string",
+          "description": "Verbatim from the source, or empty when none was taken; quote_status says which."
+        },
+        "quote_location": {
+          "type": "string",
+          "description": "Where the quote is, finer than location when it can be."
+        },
+        "quote_status": {
+          "enum": [
+            "checked",
+            "unchecked",
+            "none"
+          ],
+          "description": "checked: matched against the source text by a verifier; unchecked: copied but not matched; none: no verbatim quote taken."
+        },
+        "quote_note": {
+          "type": "string",
+          "description": "Why there is no quote, or what the check compared."
+        },
+        "via": {
+          "type": "object",
+          "description": "The secondary source the claim was taken from, when it was not read from the source directly (a research note that paraphrases the paper).",
+          "required": [
+            "title",
+            "quote"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{7,40}$"
+            },
+            "path": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "quote": {
+              "type": "string",
+              "description": "Verbatim from the secondary source (the paraphrase the numbers were taken from)."
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "quote_status": {
+                "const": "none"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "quote": {
+                "const": ""
+              }
+            },
+            "required": [
+              "quote_note"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "quote_status": {
+                "enum": [
+                  "checked",
+                  "unchecked"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "quote": {
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "paper",
+                  "preprint"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "id",
+              "url",
+              "version"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "trial"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "id",
+              "repository",
+              "commit",
+              "path"
+            ]
+          }
+        }
+      ]
+    },
+    "Claim": {
+      "description": "What the source says, in its own terms: one primary measure, the effect against a baseline, and how strong the evidence is.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/Measure"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "statement",
+        "finding",
+        "reporting"
+      ],
+      "unevaluatedProperties": false,
+      "properties": {
+        "statement": {
+          "type": "string",
+          "description": "The claim in words, no stronger than the source."
+        },
+        "finding": {
+          "enum": [
+            "better",
+            "worse",
+            "matches",
+            "differs",
+            "none-stated"
+          ],
+          "description": "The option against the baseline, as the source concludes."
+        },
+        "effect_size": {
+          "type": "object",
+          "required": [
+            "value",
+            "kind"
+          ],
+          "additionalProperties": false,
+          "description": "Only if the source states one; a difference computed from two stated numbers is not stated.",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/Number"
+            },
+            "kind": {
+              "enum": [
+                "absolute",
+                "relative",
+                "ratio",
+                "standardised",
+                "other"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "significance": {
+          "type": "string",
+          "description": "The source's words on significance, if any."
+        },
+        "runs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Independent runs (seeds, repeats) behind the number; null when not stated."
+        },
+        "cases": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Items the number is measured on; null when not stated."
+        },
+        "reporting": {
+          "enum": [
+            "self",
+            "independent",
+            "ours",
+            "unknown"
+          ],
+          "description": "self: the source measures its own method, or a comparison its own method wins; independent: it measures methods it did not make; ours: this system's own trial; unknown: the claim's source does not say."
+        },
+        "also": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Measure",
+            "unevaluatedProperties": false
+          },
+          "description": "Further measures from the same passage."
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "Model": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/$defs/EntityRef",
+          "description": "This system's entity for it, when it is ours."
+        },
+        "size": {
+          "type": "string",
+          "description": "As the source states it (1.7B, under 0.5B, 7 to 8B)."
+        },
+        "precision": {
+          "type": "string",
+          "description": "bf16, FP8, AWQ 4-bit, Q6_K, ..."
+        },
+        "tuned": {
+          "type": "string",
+          "description": "How it was trained for the task, if at all: untuned, fine-tuned, self-distilled, GRPO."
+        },
+        "capability": {
+          "type": "string",
+          "description": "What is known of its capability beyond size, and from whom."
+        }
+      }
+    },
+    "Conditions": {
+      "type": "object",
+      "description": "What the number was measured under. An open map: the named keys are the ones a transfer model compares first; anything else that matters goes beside them.",
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Model"
+          }
+        },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "ref": {
+              "$ref": "#/$defs/EntityRef"
+            }
+          }
+        },
+        "dataset": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "split": {
+              "type": "string"
+            },
+            "size": {
+              "type": "string"
+            },
+            "ref": {
+              "$ref": "#/$defs/EntityRef"
+            }
+          }
+        },
+        "method": {
+          "type": "string",
+          "description": "The prompt, readout or procedure as the source describes it."
+        },
+        "thinking": {
+          "type": "string",
+          "description": "Whether the model reasoned before answering, and how that was set."
+        },
+        "hardware": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "memory": {
+              "type": "string"
+            },
+            "ref": {
+              "$ref": "#/$defs/EntityRef"
+            }
+          }
+        },
+        "labels": {
+          "type": "string",
+          "description": "Labelled data the method needs or used."
+        },
+        "unstated": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Conditions that matter here and the source (or its paraphrase) does not state."
+        }
+      },
+      "additionalProperties": true
+    },
+    "Prediction": {
+      "type": "object",
+      "required": [
+        "p_transfer",
+        "reason",
+        "by",
+        "date",
+        "before_outcome"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "p_transfer": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The probability that the claim's finding (its direction, and its size roughly) holds under this system's conditions. For a claim of no gain or a loss, that the loss holds too."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Which conditions match and which do not."
+        },
+        "by": {
+          "type": "string",
+          "description": "Who or what made it: a person, an agent's draft, the transfer model and its version."
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "before_outcome": {
+          "type": "boolean",
+          "description": "Whether it was written before any outcome was seen. Only predictions made before count towards calibration."
+        }
+      }
+    },
+    "Outcome": {
+      "type": "object",
+      "required": [
+        "trial",
+        "observed",
+        "summary",
+        "comparison",
+        "verdict"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trial": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{7,40}$"
+            },
+            "path": {
+              "type": "string"
+            }
+          }
+        },
+        "observed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ClaimName"
+          },
+          "description": "The claims (source.kind trial) that hold the trial's own numbers."
+        },
+        "summary": {
+          "type": "string",
+          "description": "How the observed numbers bear on the claim."
+        },
+        "comparison": {
+          "enum": [
+            "same-setup",
+            "our-setup"
+          ],
+          "description": "same-setup: the source's own setup reproduced; our-setup: the method ported to this system's conditions (a transfer test, not a replication of the paper)."
+        },
+        "verdict": {
+          "type": "object",
+          "required": [
+            "by",
+            "decision"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "enum": [
+                "morphogen",
+                "falsifier",
+                "operator",
+                "none"
+              ],
+              "description": "morphogen: the judge's verdict on a candidate; falsifier: a criterion registered before the outcome; operator: a person's call; none: not decided yet."
+            },
+            "decision": {
+              "type": "string",
+              "description": "pass or refuse for the judge; met or not met for a falsifier."
+            },
+            "ref": {
+              "type": "string",
+              "description": "The verdict's id or file, or where the falsifier is registered."
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "Assessment": {
+      "type": "object",
+      "required": [
+        "system",
+        "status",
+        "date"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "system": {
+          "$ref": "#/$defs/EntityRef",
+          "description": "The System this status is for."
+        },
+        "against": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityRef"
+          },
+          "description": "This system's entities whose conditions the claim was compared with (models, engine, hardware, dataset)."
+        },
+        "status": {
+          "enum": [
+            "untested",
+            "predicted",
+            "replicated",
+            "did-not-transfer",
+            "not-testable"
+          ]
+        },
+        "prediction": {
+          "$ref": "#/$defs/Prediction"
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why it is untested or not testable, or anything the outcome does not say."
+        },
+        "see_also": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClaimName"
+          },
+          "description": "Observed claims that bear on it without testing it."
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "predicted"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "prediction"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "replicated",
+                  "did-not-transfer"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "outcome"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "untested",
+                  "not-testable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ],
+            "not": {
+              "required": [
+                "outcome"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

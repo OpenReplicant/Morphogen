@@ -1,0 +1,66 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-embedding-logreg-labelled
+  description: >-
+    Logistic regression on BGE-small embeddings reached 0.948 on CLINC-150 and 0.702 on the workflow decisions (Jev 0.732).
+spec:
+  about: component:default/embedding-logreg
+  role: component:default/decision-backend
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, first bullet
+      quote: >-
+        Logistic regression on BGE-small embeddings reached 0.948 on CLINC-150 and 0.702 on the workflow decisions (Jev 0.732).
+  claim:
+    statement: >-
+      Logistic regression on BGE-small embeddings, trained on the task's labels, comes close to the best systems:
+      0.948 on CLINC-150, and 0.702 on the workflow decisions against Jev's 0.732.
+    metric: accuracy
+    better: higher
+    value: 0.702
+    where: the workflow decisions
+    baseline: {name: Jev, value: 0.732}
+    finding: worse
+    runs: null
+    cases: null
+    reporting: unknown
+    also:
+      - {metric: accuracy, better: higher, value: 0.948, where: CLINC-150}
+    note: The note does not say who trained the classifier. Jev's CLINC-150 figure (0.913) is in the same bullet, beside the fine-tuned DeBERTa's.
+  conditions:
+    models:
+      - {name: BGE-small (embeddings) with logistic regression, tuned: trained on the task's labels}
+    dataset: {name: CLINC-150 and the gates paper's workflow decisions, split: not stated}
+    labels: the task's training labels
+    unstated: [training set size, hardware]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: predicted
+      prediction:
+        p_transfer: 0.6
+        reason: >-
+          The method does not depend on our generative models: BGE-small and logistic regression run cheaply on any
+          hardware, so the conditions that differ are only the tasks and the labels. Against it: we have no labels
+          yet, and arXiv 2605.02241 saw the same kind of classifier fall out of distribution
+          (zsconf-embedding-router-ood).
+        by: agent draft for research-loop phase 0, from the note's status column ("supported, but brittle out of distribution"); not yet reviewed by the owner
+        date: 2026-11-25
+        before_outcome: true
+      date: 2026-11-25

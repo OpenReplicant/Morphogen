@@ -1,0 +1,73 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e04a-lfm3-slices
+  description: >-
+    LFM3 is close to Jev where the answer is in the text and far below where knowledge or reasoning is needed.
+spec:
+  about: component:default/likelihood-readout
+  role: component:default/decision-backend
+  source:
+    kind: trial
+    title: "E-04a: local models read as decision models, against Jev"
+    id: E-04a
+    url: https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md
+    version: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    repository: OpenReplicant/MetaSoar
+    commit: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    path: trials/decision-readout/README.md
+    location: Results so far, the bullet on knowledge and reasoning
+    read: in full
+    quote: >-
+      **Far below where knowledge or reasoning is needed:** MedQA 0.43 against 0.86, MedMCQA 0.41 against 0.76, MMLU-Pro 0.35 against 0.79.
+    quote_location: Results so far, the bullet on knowledge and reasoning
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      By slice, LFM3 read untuned is close to Jev where the answer is in the text (Aegis 2.0, prompt injections) and
+      far below it where knowledge or reasoning is needed (MedQA, MedMCQA, MMLU-Pro). JEVal saw the same pattern for
+      one-pass readouts (the README's words).
+    metric: accuracy
+    better: higher
+    value: 0.43
+    where: MedQA (medqa_usmle)
+    baseline: {name: Jev 1.13, value: 0.86}
+    finding: worse
+    runs: 1
+    cases: 520
+    reporting: ours
+    also:
+      - {metric: accuracy, better: higher, value: 0.41, where: MedMCQA, baseline: {name: Jev 1.13, value: 0.76}}
+      - {metric: accuracy, better: higher, value: 0.35, where: MMLU-Pro, baseline: {name: Jev 1.13, value: 0.79}}
+      - {metric: accuracy, better: higher, value: 0.76, where: Aegis 2.0 prompts, baseline: {name: Jev 1.13, value: 0.85}}
+      - {metric: accuracy, better: higher, value: 0.76, where: Aegis 2.0 responses, baseline: {name: Jev 1.13, value: 0.80}}
+      - {metric: accuracy, better: higher, value: 0.78, where: prompt injections, baseline: {name: Jev 1.13, value: 0.74}}
+    note: >-
+      Values rounded as the README gives them. Three slices show behaviour rather than noise: on PubMedQA it answers
+      "maybe" about 94% of the time; on ATBench it calls nearly every trajectory unsafe; on MMLU-Pro its first token
+      is " The" or " We" about 58% of the time.
+  conditions:
+    models:
+      - name: LFM3 1.7B
+        ref: resource:default/lfm3-1.7b-q6-k
+        size: 1.7B
+        precision: Q6_K
+        tuned: untuned
+        capability: the owner notes it beats 12B and 14B models on general benchmarks; the note cites no benchmark
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: JevBench (Leanmcp)
+      version: ed50fe0
+      split: the eval half of families, by a hash; each temperature and 5%-risk threshold chosen on the fit half
+      size: 3,412 eval cases of 6,516 usable, ten slices (SST-5 and BANKING77 left out)
+      ref: resource:default/jevbench-ed50fe0
+    method: >-
+      The question's instructions, the state as JSON and the options labelled A, B, C..., ending "Reply with the
+      letter of one option only"; `Answer:` prefilled; one token generated and its top 50 log-probabilities kept;
+      the option letters renormalised (an option outside the top 50 gets half the smallest listed). Two reads per
+      case, options in order and reversed. Debiased is the mean of both orders; scaled adds one temperature per slice.
+    thinking: off (enable_thinking false)
+    hardware: {name: NVIDIA GTX 1070, memory: 8 GB, ref: resource:default/gtx-1070}
+    reference: Jev 1.13, djev 0.1 and Laya 421M, their own probabilities as shipped with the cases
+    runs_note: one read per case and order; the intervals are 95% from resampling families

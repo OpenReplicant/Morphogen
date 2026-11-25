@@ -1,0 +1,46 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: probe-lfm3-first-token
+  description: >-
+    Asked a multiple-choice question with Answer prefilled, LFM3's likeliest first token was " Let" (0.37), with about
+    a third of its probability on the option letters.
+spec:
+  about: component:default/likelihood-readout
+  role: component:default/decision-backend
+  source:
+    kind: probe
+    title: MetaSoar docs/decision-backends.md (the probe before E-04a)
+    url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+    version: 92105f815c6c2691288c162a40f376be4dd564bb
+    repository: OpenReplicant/MetaSoar
+    commit: 92105f815c6c2691288c162a40f376be4dd564bb
+    path: docs/decision-backends.md
+    location: What was measured elsewhere, the paragraph "Size is the wrong condition to compare on"
+    read: in full
+    quote: >-
+      Asked a multiple-choice question with `Answer:` prefilled, LFM3's most likely first token was " Let" (0.37),
+      with only about a third of its probability on the option letters, so the model wanted to reason first.
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      Read untuned with `Answer:` prefilled, LFM3 1.7B puts most of its first-token probability on starting to
+      reason, not on an option: " Let" at 0.37, and only about a third on the option letters.
+    metric: probability on the option letters
+    better: higher
+    value: null
+    finding: none-stated
+    runs: 1
+    cases: 1
+    reporting: ours
+    also:
+      - {metric: probability of the first token " Let", value: 0.37}
+    note: >-
+      One question, recorded in a note; "about a third" is not a number to compare. E-04a's prompt ends "Reply with
+      the letter of one option only", and its pooled letter mass was 0.86 (e04a-lfm3-order-flip).
+  conditions:
+    models:
+      - {name: LFM3 1.7B, ref: resource:default/lfm3-1.7b-q6-k, size: 1.7B, precision: Q6_K, tuned: untuned}
+    method: a multiple-choice question with `Answer:` prefilled
+    unstated: [the question, the prompt beyond the prefill, the engine and its build, whether thinking was off]

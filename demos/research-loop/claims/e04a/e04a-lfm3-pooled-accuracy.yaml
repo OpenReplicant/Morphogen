@@ -1,0 +1,67 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e04a-lfm3-pooled-accuracy
+  description: >-
+    LFM3 1.7B read untuned, debiased: pooled accuracy 0.528 against Jev 1.13's 0.842 on the same JevBench cases.
+spec:
+  about: component:default/likelihood-readout
+  role: component:default/decision-backend
+  source:
+    kind: trial
+    title: "E-04a: local models read as decision models, against Jev"
+    id: E-04a
+    url: https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md
+    version: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    repository: OpenReplicant/MetaSoar
+    commit: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    path: trials/decision-readout/README.md
+    location: Results so far, the LFM3 table, row LFM3 debiased
+    read: in full
+    quote: >-
+      | LFM3, debiased | 0.528 [0.508, 0.547] | 0.699 | 0.227 | 0.03 (0.112) |
+    quote_location: Results so far, the LFM3 table, row LFM3 debiased
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      LFM3 1.7B, read by its first token and debiased over both option orders, is 31 points below Jev 1.13 in pooled
+      accuracy on the same cases (scaling does not change accuracy).
+    metric: accuracy
+    better: higher
+    value: 0.528
+    interval: {low: 0.508, high: 0.547, level: 0.95, method: resampling families}
+    where: all ten slices pooled
+    baseline: {name: Jev 1.13, value: 0.842, interval: {low: 0.828, high: 0.857, level: 0.95, method: resampling families}}
+    finding: worse
+    runs: 1
+    cases: 3412
+    reporting: ours
+    also:
+      - {metric: accuracy, better: higher, value: 0.501, interval: {low: 0.481, high: 0.521, level: 0.95, method: resampling families}, where: LFM3 raw (the case's order)}
+      - {metric: accuracy, better: higher, value: 0.669, interval: {low: 0.650, high: 0.688, level: 0.95, method: resampling families}, where: djev 0.1}
+      - {metric: accuracy, better: higher, value: 0.409, interval: {low: 0.392, high: 0.429, level: 0.95, method: resampling families}, where: Laya 421M}
+  conditions:
+    models:
+      - name: LFM3 1.7B
+        ref: resource:default/lfm3-1.7b-q6-k
+        size: 1.7B
+        precision: Q6_K
+        tuned: untuned
+        capability: the owner notes it beats 12B and 14B models on general benchmarks; the note cites no benchmark
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: JevBench (Leanmcp)
+      version: ed50fe0
+      split: the eval half of families, by a hash; each temperature and 5%-risk threshold chosen on the fit half
+      size: 3,412 eval cases of 6,516 usable, ten slices (SST-5 and BANKING77 left out)
+      ref: resource:default/jevbench-ed50fe0
+    method: >-
+      The question's instructions, the state as JSON and the options labelled A, B, C..., ending "Reply with the
+      letter of one option only"; `Answer:` prefilled; one token generated and its top 50 log-probabilities kept;
+      the option letters renormalised (an option outside the top 50 gets half the smallest listed). Two reads per
+      case, options in order and reversed. Debiased is the mean of both orders; scaled adds one temperature per slice.
+    thinking: off (enable_thinking false)
+    hardware: {name: NVIDIA GTX 1070, memory: 8 GB, ref: resource:default/gtx-1070}
+    reference: Jev 1.13, djev 0.1 and Laya 421M, their own probabilities as shipped with the cases
+    runs_note: one read per case and order; the intervals are 95% from resampling families

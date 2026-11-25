@@ -1,0 +1,55 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-thresholds-per-model-task
+  description: >-
+    At 5% risk the same Jev accepts 0.93 of intent decisions but 0.17 of workflow decisions: a threshold belongs to one model on one task.
+spec:
+  about: component:default/per-task-risk-threshold
+  role: component:default/readout-calibration
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, sixth bullet
+      quote: >-
+        the same Jev accepts 0.93 of intent decisions but 0.17 of workflow decisions at 5% risk.
+  claim:
+    statement: >-
+      Thresholds belong to one model on one task, set on held-out labels and checked on more: at 5% risk the same
+      Jev accepts 0.93 of intent decisions but 0.17 of workflow decisions.
+    metric: coverage at 5% risk
+    better: higher
+    value: 0.17
+    where: workflow decisions
+    baseline: {name: the same Jev on intent decisions, value: 0.93}
+    finding: differs
+    runs: null
+    cases: null
+    reporting: independent
+  conditions:
+    models:
+      - {name: Jev, tuned: a decision model}
+    dataset: {name: the gates paper's intent and workflow decisions}
+    method: a threshold set on held-out labels at 5% risk
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: untested
+      reason: >-
+        E-04a already sets each 5%-risk threshold on the fit half per slice, which follows the claim rather than
+        testing it; a test would carry one threshold across slices and measure the realised risk.
+      date: 2026-11-25

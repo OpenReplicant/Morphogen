@@ -1,0 +1,71 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: jeval-first-token-readout
+  description: >-
+    An open model's first-token readout is a decision model (JEVal's Finding 11).
+spec:
+  about: component:default/likelihood-readout
+  role: component:default/decision-backend
+  source:
+    kind: preprint
+    title: "General Decision Models: Benchmarking and Insights Beyond Jev (JEVal)"
+    id: arXiv:2610.03935
+    url: https://arxiv.org/pdf/2610.03935
+    version: v2
+    location: Finding 11
+    read: the abstract, the experiments and sections 6 to 9 (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, JEVal, second bullet
+      quote: >-
+        An open model's first-token readout is a decision model (their Finding 11),
+  claim:
+    statement: An open model's first-token readout is a decision model.
+    metric: not stated in the note
+    value: null
+    finding: none-stated
+    runs: null
+    cases: null
+    reporting: independent
+    note: Qualitative; the numbers behind Finding 11 are not in the note.
+  conditions:
+    models:
+      - {name: "open generative models (which ones is not stated in the note)"}
+    engine: {name: vLLM}
+    hardware: {name: H100}
+    dataset: {name: JEVal, size: "11,257 items from 36 datasets, 25 configurations"}
+    method: the model's first-token probabilities over the options
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070, resource:default/jevbench-ed50fe0]
+      status: replicated
+      outcome:
+        trial:
+          id: E-04a
+          url: https://github.com/OpenReplicant/MetaSoar/tree/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout
+          repository: OpenReplicant/MetaSoar
+          commit: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+          path: trials/decision-readout/README.md
+        observed: [e04a-lfm3-calibration, e04a-lfm3-order-flip]
+        summary: >-
+          In the qualitative sense only: LFM3 1.7B's first token gives a typed decision with probabilities (0.86 of
+          its probability on the option letters, pooled) that one temperature per slice calibrates to Jev's level
+          (0.026 against 0.024). It is no match for Jev in accuracy (gates-likelihood-readout-27-31b-matches-jev),
+          and on MMLU-Pro its first token is not its answer about 58% of the time (letter mass 0.52).
+        comparison: our-setup
+        verdict:
+          by: none
+          decision: no verdict
+          note: A qualitative claim read against E-04a's measurements; the owner may prefer not-testable.
+        date: 2026-11-25
+      reason: No probability was written before the trial (the note's table had it as supported).
+      see_also: [e04a-lfm3-pooled-accuracy, probe-lfm3-first-token]
+      date: 2026-11-25
