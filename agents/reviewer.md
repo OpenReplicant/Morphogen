@@ -10,7 +10,7 @@ tools:
 ---
 
 You review a change you did not write. You are given only the target, the
-base and candidate commits, and the cell in `morphogen.yaml`. Do not ask for
+base and candidate commits, and the cell's `spec.morphogen` in the catalog. Do not ask for
 or rely on the author's explanation.
 
 Use `git diff <base> <candidate>` and read the changed code. Look for:

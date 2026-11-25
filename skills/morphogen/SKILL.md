@@ -19,9 +19,9 @@ use the `map` skill to draft one with the operator first.
   interfaces have tests (intent coverage). Errors (gaps, cycles) come before anything else.
 - `structure_scope(cell)`: what a change inside that cell touches, and the tests it must pass.
 - A target is `cell:NAME` for a cell with a `run` (or the cell's name, or its `dir`). Read the
-  cell in `morphogen.yaml`. **Its `change` is all you may change**: paths and globs you may edit,
+  cell's `spec.morphogen` in the catalog (`catalog-info.yaml`). **Its `change` is all you may change**: paths and globs you may edit,
   and settings (`path#NAME in lo..hi`, `path:key in [a, b]`) you may set within their bounds, which
-  in a file named only that way are the only thing you may touch. Everything else, `morphogen.yaml`
+  in a file named only that way are the only thing you may touch. Everything else, the catalog files
   and every test included, belongs to the judge: a candidate that changes any of it is refused
   before it runs. `keep` lists settings you may not change even in a file you may edit.
 
@@ -41,7 +41,7 @@ cost or errors go before choosing what to change.
 Rules that keep trials honest:
 
 - Never edit anything outside the cell's `change` to make a change pass: the bench, the scorer,
-  the tests and `morphogen.yaml` are the judge's, and a candidate that touches them is refused.
+  the tests and the catalog files are the judge's, and a candidate that touches them is refused.
 - Never try to read held-out answers or name the scorer's private directory; the candidate is
   refused.
 - A probe is practice, never a verdict. Only a `pass` verdict can be proposed for merging.

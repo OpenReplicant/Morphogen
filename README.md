@@ -93,35 +93,99 @@ hole it closes.
 
 ## The cell format
 
-> **Coming, phase 2.** The cell format below is today's. The kit moves every committed artifact into Backstage
-> catalog entities: a cell's rules go on the entity it judges under one namespaced key, `spec.morphogen`; an
-> option for a role is a `Component` with `spec.lifecycle: candidate`; sub-grain cells are `Component`s nested
-> with `subcomponentOf`; an interface's tests go on its `API` entity; the project's settings and shared defaults go
-> on the `System` entity. The fields are drafted in [`schemas/morphogen-spec.v0.json`](schemas/morphogen-spec.v0.json)
-> and carried over unchanged from what a cell accepts below. `morphogen.local.yaml` stays as it is. Until phase 2
-> lands, `morphogen.yaml` is what the judge reads, and this reference is current.
+Everything committed is a Backstage catalog. The project's catalog root is `catalog-info.yaml` at the
+repository root; it may be a `Location` whose `targets` name more files inside the project. Morphogen's own
+fields go under one key, `spec.morphogen`, on the entity they are about (the fields are in
+[`schemas/morphogen-spec.v1.json`](schemas/morphogen-spec.v1.json)):
 
-One `morphogen.yaml` at the project's root:
+| On | `spec.morphogen` holds |
+|---|---|
+| the entity a cell judges (Component, System, Domain, AiResource) | the cell's rules: `change`, `keep`, `run`, `better`, `tests`, `score`, ... (below). An entity with no `run` (and no tests) is structure, not a judged cell |
+| a sub-grain cell | the same, on a `Component` of its own nested with `spec.subcomponentOf` |
+| an `API` | the interface's `tests`, and `external: consumes` or `provides` when the code needs it |
+| the `System` | the project's settings (`trunk`, `sandbox`, `sandbox_image`, `budget`, `autonomy`) and `defaults`: cell fields every cell with rules in that System inherits unless it sets its own (a field set to `null` opts out). At most one System carries settings; two is an error |
+| an option for a role (`spec.lifecycle: candidate`) | `fills`, `parameters`, `licence`, `docs`, `evaluation` (the `catalog` skill). An option, and a role (`spec.type: role`), is never a cell |
+
+What Backstage already says is not repeated: `in` is `subcomponentOf` (or `system`, `domain`, `subdomainOf`),
+`provides` and `consumes` are `providesApis` and `consumesApis` (and `dependsOn`), `owner` and `lifecycle` are the
+entity's own. A cell is named by its `metadata.name` (`namespace/name` outside the `default` namespace), so two
+cell entities may not share a name; a ref in any spelling (`classify`, `component:classify`,
+`component:default/classify`) names it.
+
+A complete project, `catalog-info.yaml`:
 
 ```yaml
-cells:
-  app: {}
-  classify:
-    in: app                                   # the cell this one belongs to
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata: {name: app}
+spec:
+  owner: team-a
+  morphogen:
+    sandbox: podman                           # settings: from the base commit, like every rule
+    budget: {trials_per_day: 20}
+    autonomy: {experimental: merge}           # lifecycle -> may an agent merge a pass (default: review)
+    defaults:                                 # inherited by every cell below that sets none of its own
+      rounds: {warmup: 0, repeats: 4, max_repeats: 8}
+      timeout: 60
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata: {name: classify}
+spec:
+  type: service
+  lifecycle: experimental                     # what `autonomy` keys on
+  owner: team-a                               # who approves its candidates
+  system: app                                 # `in`
+  providesApis: [labels]
+  morphogen:
     dir: classify                             # where its commands run (default: the root)
     change: classify/classify.py#THRESHOLD in 0..100   # what may change; nothing else may
     run: python bench.py                      # the workload
     better: accuracy higher                   # the primary metric and its direction
     score: python score.py                    # scores each run's output, from the base
     tests: python -m unittest -q test_classify   # must pass; a failure refuses
-    provides: labels
-  report: {in: app, consumes: labels}
-interfaces:
-  labels: python -m unittest -q contracts.test_labels   # run from the root
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata: {name: threshold}                   # below the grain of the part: its own cell, nested
+spec:
+  type: library
+  subcomponentOf: classify                    # `in`
+  morphogen:
+    change: classify/classify.py#THRESHOLD in 0..100
+    run: python bench.py
+    better: wall_seconds lower
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata: {name: report}
+spec: {type: service, system: app, consumesApis: [labels]}   # structure: no morphogen, no run
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata: {name: labels}
+spec:
+  type: openapi
+  definition: labels.yaml
+  morphogen:
+    tests: python -m unittest -q contracts.test_labels   # run from the root
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata: {name: rapidfuzz}                   # an option for a role: never a cell
+spec:
+  type: library
+  lifecycle: candidate
+  morphogen: {fills: matcher, licence: MIT}
 ```
 
+Every catalog file the judge reads (the root and each `Location` target) is a rule file, read from the base
+commit only: a candidate that changes, adds or removes one is refused, whatever `change` says, so a candidate
+cannot edit the rules it is judged by. A catalog file the root does not reference is not read and is not
+a rule file.
+
 - **Default deny.** A candidate may change only what the judged cell's scope names in `change`.
-  Anything else changed, the project file, the bench, the scorer and every test included, refuses
+  Anything else changed, the catalog files, the bench, the scorer and every test included, refuses
   the candidate before anything runs. Candidates may not add symbolic links.
 - **`change`**: a path or glob (`src/**`, `prompts/`), or a setting: `path#NAME` (a Python constant)
   or `path:dotted.key` (YAML, JSON, TOML), bounded with `in lo..hi` or `in [a, b]`. A setting entry
@@ -176,35 +240,28 @@ or their enclosing systems' boundaries cross, must pass on the candidate. That i
 computed from the structure rather than declared. The result is recorded as a verdict on the change,
 with the same `gate` (who may merge it) as any other.
 
-### Backstage above it
-
-A project that already keeps Backstage's `catalog-info.yaml` files need not restate its structure.
-`backstage: catalog-info.yaml` (or a list) in `morphogen.yaml` reads them directly, with no
-Backstage server, following `Location` targets inside the project:
+### How the catalog maps to cells
 
 | Backstage | Becomes |
 |---|---|
-| `Component`, `System`, `Domain` | a cell, named by its ref: `component:default/classify` |
+| `Component`, `System`, `Domain` | a cell, named by its name (`namespace/name` outside `default`) |
 | `AiResource` (Backstage 1.51: skills and rules) | a cell, `in` its `system`; a skill named in `change` is a text cell |
 | `owner`, `lifecycle` | the cell's `owner` (who approves its candidates) and `lifecycle` (what `autonomy` keys on) |
 | `subcomponentOf`, `system`, `domain`, `subdomainOf` | `in` |
-| `API` | an interface, named by its ref; its tests from the annotation `morphogen.dev/tests` |
+| `API` | an interface; its tests are `spec.morphogen.tests` |
 | `providesApis`, `consumesApis` | `provides`, `consumes` |
 | `dependsOn` | consumes it: provided by that cell, or external (a `Resource`) |
-| annotations `morphogen.dev/change`, `keep`, `run`, `better`, `tests`, `score`, `dir`, `observe` | the cell's fields (one entry per line for lists) |
+| `Location` targets | more catalog files to read, and so more rule files |
+
+The catalog is read directly, with no Backstage server. `structure check` reports which file each cell and
+interface came from.
 
 **Who may merge a pass.** The judge never merges. Each verdict carries a `gate`: the cell's owner
-and lifecycle, and the decision, `review` (a person decides) unless the operator's `autonomy` in
-`morphogen.yaml` lets an agent merge a pass for that lifecycle (`autonomy: {experimental: merge}`).
+and lifecycle, and the decision, `review` (a person decides) unless the System's `autonomy`
+lets an agent merge a pass for that lifecycle (`autonomy: {experimental: merge}`).
 The gate is read from the base, so a candidate that relabels its cell `experimental`, or grants
-itself autonomy, is refused like any other edit to the rules.
-
-`morphogen.yaml` then adds what the catalog does not hold, under the same names (`component:classify`
-is enough), and may add cells below Backstage's grain with `in: component:classify`. Where the two
-disagree on a field, the structure has an error and the judge refuses it; `structure check` reports
-where each cell and interface came from. The catalog files are the judge's, like `morphogen.yaml`:
-a candidate that changes one is refused, whatever `change` says. `demos/entity-resolution` is
-described this way.
+itself autonomy, is refused like any other edit to the rules. `demos/entity-resolution` is
+described this way: one `catalog-info.yaml`, its `er` System carrying the F1 workload as `defaults`.
 
 ## In Claude Code
 
@@ -224,7 +281,7 @@ evidence and draft its cells; `catalog`: find options for a role; `research`: ch
 **Starting fresh.** In a git repository, ask Claude to start Morphogen here. The map skill calls
 `status`, which says where the project stands and the next step: no commit yet, no map, a map
 drafted but not on `main`, a cell the judge cannot judge yet (and why), a cell to measure, a cell
-to improve. It reads a Backstage `catalog-info.yaml` if there is one. The first map is one cell,
+to improve. It reads the project's `catalog-info.yaml`; where one exists without Morphogen's fields, it adds `spec.morphogen` and leaves the rest. The first map is one cell,
 the part you want improved, with what may change, how to run it, what "better" means and the tests
 it must keep passing; it reaches `main` by your pull request, and only then does a verdict rest on
 it.
@@ -234,7 +291,7 @@ it.
 ```
 uv sync
 uv run morphogen status                         # where the project stands; the next step
-uv run morphogen structure check morphogen.yaml
+uv run morphogen structure check catalog-info.yaml
 uv run morphogen measure cell:classify
 uv run morphogen judge cell:classify my-branch
 uv run morphogen change my-branch                # a change that claims no improvement: its cells' tests
@@ -265,7 +322,7 @@ local:                          # optional: replaces morphogen.local.yaml
   gateway: {container: my-gateway, port: 8080, meter: /outside/meter}
 ```
 
-The rules (cells, interfaces, tests, and the settings in `morphogen.yaml`) still come from the base commit:
+The rules (cells, interfaces, tests, and the System's settings in the catalog) still come from the base commit:
 a request that carries any, or sits inside the repository, is refused. The verdict records the request's
 digest. Each record in the evidence log follows a published schema,
 [`schemas/evidence-record.v1.json`](schemas/evidence-record.v1.json) (generated from `morphogen/schema.py`,
@@ -296,7 +353,7 @@ directory, so it can only answer. The cell's `description` is its objective.
 
 | Part | Module | Does |
 |---|---|---|
-| Cell format | `project.py`, `backstage.py` | parses `morphogen.yaml` and any Backstage catalog files it names; compiles them to a structure and, per cell, the spec the judge runs; default deny |
+| Cell format | `project.py`, `backstage.py` | reads the catalog (`catalog-info.yaml` and the Location targets it names); compiles it to a structure and, per cell, the spec the judge runs; default deny |
 | Structure | `structure.py`, `render.py` | cells in a containment tree, interfaces as hyperedges with their tests; checks, scopes, computed boundaries, intent coverage, intended against observed, a Mermaid diagram |
 | Judge | `judge.py`, `runner.py` | scores a candidate commit against a base by the base's rules; `judge_change` holds a change with no measure to the tests of what it touches; `probe` gives practice feedback; `measure` records a baseline |
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
@@ -374,7 +431,7 @@ service images and its own model gateway in its own store.
 
 ## What the judge guarantees
 
-- **The rules are the base's.** `morphogen.yaml` and everything a cell's `change` does not name come
+- **The rules are the base's.** The catalog files and everything a cell's `change` does not name come
   from the base commit; a candidate that changes any of it is refused before anything runs.
 - **Measurement is outside the code.** Time and memory are measured by a wrapper process; inputs
   come from a fresh seed every round; each timed run must print what the base prints (unless the
@@ -394,7 +451,7 @@ service images and its own model gateway in its own store.
   the gateway's to refuse. Each run's calls, tokens and cost come from the operator's meter reading the
   gateway's record; the key the meter gives a run is scanned for in its output like any secret.
 - **The judge's own settings are the base's too.** The sandbox, its image and the budget come from
-  `morphogen.yaml` as committed on the base, with only the operator's `morphogen.local.yaml` (or a
+  the catalog's settings as committed on the base, with only the operator's `morphogen.local.yaml` (or a
   request's `local`) over them, never from the working copy; each verdict records them and where each
   came from.
 - **Settings stay in bounds.** A setting moved outside its range or choices, a kept setting
@@ -411,7 +468,7 @@ service images and its own model gateway in its own store.
 
 The red team holds the known ways to cheat: 61 of them (`tests/test_redteam.py` and the default-deny
 cheats in `tests/test_cells.py`), from patching the timer to reading the held-out answers, rigging
-the bench, widening `change` in the candidate's own `morphogen.yaml`, breaking a neighbour's
+the bench, widening `change` in the candidate's own catalog, breaking a neighbour's
 contract, winning locally while the system gets slower, switching telemetry off to look free, raising
 the budget in an uncommitted working copy, or carrying rules in a request.
 Every one must fail; a new one goes there first. The whole suite also runs with every trial in

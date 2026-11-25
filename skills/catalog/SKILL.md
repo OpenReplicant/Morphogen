@@ -7,7 +7,7 @@ description: Find alternatives for a role a part plays - search the catalogs (pa
 
 Works on a role the `map` skill named, in files: no database, any harness. An option for a role is an ordinary
 Backstage `Component` with `spec.lifecycle: candidate`; what Morphogen adds goes under the one key
-`spec.morphogen` (draft schema: `schemas/morphogen-spec.v0.json`). An option is *an alternative* when it
+`spec.morphogen` (draft schema: `schemas/morphogen-spec.v1.json`). An option is *an alternative* when it
 provides every interface the role requires, which is why a loosely named interface makes everything look
 interchangeable.
 

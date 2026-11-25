@@ -16,10 +16,10 @@ to try, and a branch name.
 1. Create a git worktree for your branch from the trunk:
    `git worktree add ../<branch> -b <branch> <trunk>`, and work only there.
 2. Make the smallest change that implements the approach.
-3. Change only what the cell's `change` in `morphogen.yaml` names (and, for a
+3. Change only what the cell's `change` (`spec.morphogen` in the catalog) names (and, for a
    setting, only that setting, within its bounds). The judge refuses a
    candidate that changes anything else, the bench, the tests and
-   `morphogen.yaml` included, so doing so only wastes the trial.
+   the catalog files included, so doing so only wastes the trial.
 4. Run the target's own tests if they are quick, and the tests of the
    interfaces your change touches (`structure_scope` lists them). Do not tune
    against the benchmark's input or try to read held-out answers: the judge

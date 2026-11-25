@@ -7,14 +7,14 @@ docs/restart/LESSONS.md.
 - `morphogen/`: the core. `structure.py` (cells, interfaces, parameters; checks, scopes,
   boundaries, intended against observed), `render.py` (Mermaid), `judge.py` and `runner.py` (the
   judge), `serve.py` (the env values, services and model gateway a run is given; the meter), `errors.py`, `evidence.py`, `optimize.py` (the optimizer catalog, the selector and `tune`), `observers.py` (`command`,
-  `otel`), `project.py` (the cell format: morphogen.yaml's cells and interfaces, default deny),
-  `backstage.py` (catalog-info.yaml files as a source of cells),
+  `otel`), `project.py` (the cell format: `spec.morphogen` on the catalog's entities, default deny),
+  `backstage.py` (the catalog: `catalog-info.yaml` and its Location targets, read into cells, interfaces and settings),
   `status.py` (where a project stands and the next step),
-  `documents.py` (morphogen.yaml's settings, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
+  `documents.py` (the project's settings, from the System's `spec.morphogen`, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills (the kit):
   `morphogen` (improve a cell), `map` (take a system apart into Backstage entity files and draft cells),
-  `catalog` and `research` (options for a role, as `lifecycle: candidate` Components). `schemas/morphogen-spec.v0.json`
-  is the draft of the `spec.morphogen` fields; phase 2 loads them, morphogen.yaml still works until then.
+  `catalog` and `research` (options for a role, as `lifecycle: candidate` Components). `schemas/morphogen-spec.v1.json`
+  is the schema of the `spec.morphogen` fields the code loads (a test keeps them equal).
 - `tests/`: the core's tests and red team; fixture projects in `tests/fixture*.py`, the timed
   sample's files in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
@@ -64,7 +64,7 @@ judge callable by any system and tests the value claims before it is published; 
 into it.
 
 1. Design simplifications left: probe as a mode of the judge. Done: one structure document
-   (morphogen.yaml, phases 1-2), one kind of "still works" test (`tests`, `same_as_base`).
+   (the catalog, phases 1-2), one kind of "still works" test (`tests`, `same_as_base`).
 2. Optimizers that escape local optima: done (hill-climb restarts, `anneal`, the selector's
    stagnation signal). Later: a stepping-stone archive and multi-step candidates.
 3. The entity-resolution demo as the first real run: move its F1 into a scorer outside the
