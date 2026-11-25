@@ -1,6 +1,6 @@
 # Demos
 
-> These projects describe themselves in `morphogen.yaml` and `catalog-info.yaml` today. In phase K2 of the kit ([PLAN.md](../PLAN.md)) their cells move onto Backstage entities under `spec.morphogen` and `morphogen.yaml` is removed, with no back-compatibility; the demos are moved by hand.
+> These projects describe themselves in a Backstage `catalog-info.yaml`, with Morphogen's fields under `spec.morphogen` (the kit's phase K2, [PLAN.md](../PLAN.md)).
 
 Projects a fresh Morphogen instance can start building, and that Morphogen can then drive. Each
 is a component that stands alone, or a larger system built from them.
