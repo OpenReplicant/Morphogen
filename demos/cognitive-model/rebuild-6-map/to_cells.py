@@ -1,9 +1,11 @@
-"""Convert the rebuild 6 map (lists/) to the cell format, printing a morphogen.yaml.
+"""Convert the rebuild 6 map (lists/) to a Backstage catalog, printing the demo's catalog-info.yaml.
 
-    python rebuild-6-map/to_cells.py > morphogen.yaml
+    python rebuild-6-map/to_cells.py > catalog-info.yaml
 
-Systems and slots become cells: each slot sits `in` its system, and each subsystem `in` the slot of
-`cmc` it fills. Links become interfaces, one per slot others use: `talks_through` and `read_by`
+Systems and slots become Components (an API for each interface), nested with `subcomponentOf`: each slot
+sits in its system, and each subsystem in the slot of `cmc` it fills. A name with a slash (`wm/buffer-goal`)
+is the entity `buffer-goal` in the namespace `wm`, which is how Backstage writes it; Morphogen names the cell
+the same way. Links become interfaces, one per slot others use: `talks_through` and `read_by`
 consume it, `written_by` (slots only) consume it too. What does not carry over:
 
 - `next` links (the cycle's order of phases): sequence, not an interface;
@@ -53,4 +55,26 @@ for i in interfaces:
 for c in cells.values():
     if c.get("in") is None:
         c.pop("in", None)
-yaml.safe_dump({"cells": cells, "interfaces": interfaces}, sys.stdout, sort_keys=False, width=110)
+
+
+def ref(name):
+    """A reference with its namespace written out: Backstage reads a bare name in the referrer's own namespace."""
+    return name if "/" in name else f"default/{name}"
+
+
+def entity(kind, name, spec=None, description=None):
+    ns, _, short = name.rpartition("/")
+    md = {"name": short, **({"namespace": ns} if ns else {}), **({"description": description} if description else {})}
+    return {"apiVersion": "backstage.io/v1alpha1", "kind": kind, "metadata": md, "spec": spec or {}}
+
+
+docs = []
+for name, c in cells.items():
+    spec = {"type": "service", **({"subcomponentOf": ref(c["in"])} if c.get("in") else {})}
+    if c.get("provides"):
+        spec["providesApis"] = [ref(c["provides"])]
+    if c.get("consumes"):
+        spec["consumesApis"] = [ref(x) for x in c["consumes"]]
+    docs.append(entity("Component", name, spec, c.get("description")))
+docs += [entity("API", name, {"type": "slot"}) for name in interfaces]
+yaml.safe_dump_all(docs, sys.stdout, sort_keys=False, width=110)

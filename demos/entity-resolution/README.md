@@ -7,7 +7,7 @@ Plan and build are done for a baseline; optimizing waits for Morphogen's base. S
 |---|---|
 | Plan: interface tests | `tests/test_interface.py` (the resolver), `tests/test_contracts.py` (candidates, pair-score, similarity) |
 | Build: two backends | `overlap` (overlap coefficient) and `tfidf` (TF-IDF cosine); both pass the interface test |
-| Cells | `catalog-info.yaml` (the structure) and `morphogen.yaml` (what may change, how each is judged): backend, blocking, matcher on F1; `speed` (er/text.py) on wall time with the same output |
+| Cells | `catalog-info.yaml` (the structure, and under `spec.morphogen` what may change and how each is judged; the `er` System's `defaults` carry the F1 workload): backend, blocking, matcher on F1; `speed` (er/text.py) on wall time with the same output |
 | Measure | `bench.py` prints the pairs it finds; `score.py`, from the base, computes F1 against answers outside the repository |
 | Judged | `speed`: passed, 69% faster; `matcher` tuned: passed, held-out F1 0.422 to 0.428 (below) |
 | Optimize | next: `blocking`, then `backend` |
@@ -19,7 +19,7 @@ Run it (Python 3.11 or later, standard library only):
     python data/split.py ~/er-split          # records and answers outside the repository
     MORPHOGEN_INPUTS=~/er-split/inputs python bench.py | MORPHOGEN_PRIVATE=~/er-split/search python score.py
 
-To judge it, the demo must be the root of its own git repository (the judge reads `morphogen.yaml`
+To judge it, the demo must be the root of its own git repository (the judge reads `catalog-info.yaml`
 at the root), with the lines `data/split.py` prints in `morphogen.local.yaml`.
 
 ## First verdicts (2026-11-06, Abt-Buy, in Podman)

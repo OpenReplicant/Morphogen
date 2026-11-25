@@ -25,8 +25,8 @@ server = MCPServer(
     name="morphogen",
     instructions=(
         "Morphogen improves a system at any scope behind a judge the agent cannot edit. Start with status: "
-        "where the project stands and the next step. morphogen.yaml "
-        "says what the cells are, which interfaces join them, which tests guard each, and what each cell "
+        "where the project stands and the next step. The catalog (catalog-info.yaml, Backstage entities; "
+        "a cell's rules are `spec.morphogen` on its entity) says what the cells are, which interfaces join them, which tests guard each, and what each cell "
         "may change (`change`); nothing else may change, and a candidate that touches anything else is "
         "refused. To improve a cell: measure it (target cell:NAME), change it on a branch, commit, then "
         "call judge(target, candidate); or call tune(target) to search its bounded settings. probe gives "
@@ -70,7 +70,7 @@ def _target(target: str) -> tuple[str, str | None]:
 @server.tool()
 @_safe
 def status() -> dict:
-    """Where the project stands: its sources (morphogen.yaml, morphogen.local.yaml, Backstage catalog
+    """Where the project stands: its sources (the catalog, morphogen.local.yaml, other catalog
     files), each cell on the trunk and whether the judge can judge it, cells drafted but not yet on the
     trunk, what is missing, its measurements and verdicts, and the next step. Call it first."""
     from .status import status as status_of
@@ -85,7 +85,7 @@ def status() -> dict:
 @server.tool()
 @_safe
 def structure_check(file: str | None = None) -> dict:
-    """Check the system structure (default: morphogen.yaml): cycles, unknown
+    """Check the system structure (default: the catalog, catalog-info.yaml): cycles, unknown
     parents or interfaces, gaps, unused or untested interfaces; and intent coverage."""
     s = _structure(file)
     return {"findings": [f.__dict__ for f in s.check()], "coverage": s.coverage(), "roots": s.roots(),
@@ -131,7 +131,7 @@ def probe(target: str, candidate: str, base: str | None = None, cases: int = 5, 
 @server.tool()
 @_safe
 def judge(target: str, candidate: str, base: str = "main", labels: dict | None = None) -> dict:
-    """Score a candidate commit against the base by the base's rules (its morphogen.yaml; default deny).
+    """Score a candidate commit against the base by the base's rules (its catalog; default deny).
     With target `cell:NAME`, the candidate must also pass the tests of every interface the cell's scope
     touches, from the base's structure. The verdict is measured evidence. `labels` (optimizer,
     approach) are recorded, never decide."""

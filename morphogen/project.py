@@ -1,21 +1,36 @@
-"""The cell format: one morphogen.yaml with the project's cells and interfaces.
+"""The cell format: the project's cells and interfaces, read from its Backstage catalog.
 
-    cells:
-      classify:
-        in: app                                     # the cell this one belongs to
+The root is `catalog-info.yaml` at the repository root (a `Location` may name more files inside the
+project). A cell's rules are `spec.morphogen` on the entity it judges:
+
+    kind: Component
+    metadata: {name: classify}
+    spec:
+      type: service
+      lifecycle: experimental
+      system: app                                  # the cell this one is in (`subcomponentOf` for a sub-grain cell)
+      providesApis: [labels]
+      morphogen:
         change: classify/classify.py#THRESHOLD in 0..100   # what may change; nothing else may
-        run: python bench.py                        # the workload
-        better: accuracy higher                     # the primary metric, and its direction
-        tests: python -m unittest -q test_classify  # must pass on the candidate
-        score: python score.py                      # optional: scores each run's output
-    interfaces:
-      labels: python -m unittest -q contracts.test_labels
+        run: python bench.py                               # the workload
+        better: accuracy higher                            # the primary metric, and its direction
+        tests: python -m unittest -q test_classify         # must pass on the candidate
+        score: python score.py                             # optional: scores each run's output
+    ---
+    kind: API
+    metadata: {name: labels}
+    spec: {morphogen: {tests: python -m unittest -q contracts.test_labels}}
+
+An entity with no `run` is structure, not a judged cell. The project's settings (trunk, sandbox,
+sandbox_image, budget, autonomy) and `defaults` (cell fields every cell with rules in that System inherits
+unless it sets its own) are `spec.morphogen` on the System; at most one System carries them. Options
+(`spec.lifecycle: candidate`) and roles (`spec.type: role`) are never cells. See backstage.py.
 
 **Default deny.** A candidate may change only the paths the judged cell's scope names in `change`.
-Everything else, the project file included, is the judge's: a candidate that changes it is refused
-before anything runs. A `change` entry that names a setting (`path#NAME`, `path:dotted.key`) lets
-only that setting change in its file, within its range or choices. `keep` names settings that must
-not change even in a file `change` opens.
+Everything else is the judge's, every catalog file it reads included (the root and each Location
+target): a candidate that changes, adds or removes one is refused before anything runs. A `change`
+entry that names a setting (`path#NAME`, `path:dotted.key`) lets only that setting change in its file,
+within its range or choices. `keep` names settings that must not change even in a file `change` opens.
 
 Paths are relative to the project root; commands run in the cell's `dir` (default the root), and
 interface tests from the root. The compiled form is what the judge already reads: a Structure, and
@@ -37,7 +52,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from . import documents
 from .structure import Structure, StructureError
 
-FILE = "morphogen.yaml"
+FILE = "catalog-info.yaml"   # the project's catalog root, at the repository root
 LOCAL = "morphogen.local.yaml"
 JUDGE_METRICS = ("wall_seconds", "cpu_seconds", "max_rss_kb")
 METRIC_OPTIONS = {"min": "min_improvement", "max_regression": "max_regression", "gain": "gain",
@@ -68,8 +83,8 @@ class SameAsBase(_Strict):
     cases: int | None = None
 
 
-class CellDoc(_Strict):
-    in_: str | None = Field(None, alias="in")
+class CellRules(_Strict):
+    """A cell's rules: the fields of `spec.morphogen` on the entity it judges."""
     description: str | None = None
     dir: str = "."
     change: str | list[str] = []
@@ -81,28 +96,64 @@ class CellDoc(_Strict):
     observe: str | dict[str, Any] | None = None
     same_as_base: SameAsBase | None = None
     same_output: bool | None = None
-    provides: str | list[str] = []
-    consumes: str | list[str] = []
     guard: bool | dict[str, float] | None = None
     rounds: Rounds | None = None
     timeout: int | None = None
     simulates: str | None = None
     requires: list[str] = []
+
+
+CELL_FIELDS = tuple(CellRules.model_fields)
+
+
+class CellDoc(CellRules):
+    """A cell as compiled: its rules, and what the catalog says around it."""
+    in_: str | None = Field(None, alias="in")
+    provides: str | list[str] = []
+    consumes: str | list[str] = []
     owner: str | None = None        # who approves its candidates (a Backstage group or user ref)
     lifecycle: str | None = None    # experimental, production, ...: what `autonomy` keys on
 
 
 class InterfaceDoc(_Strict):
+    """An interface's tests: `spec.morphogen` on its API entity."""
     tests: str | list[str] = []
     external: Literal["consumes", "provides"] | None = None
 
 
+class Budget(_Strict):
+    model_config = ConfigDict(extra="allow")
+    trials_per_day: int | None = None
+    probes_per_day: int | None = None
+
+
+class SystemRules(_Strict):
+    """The project's settings and shared defaults: `spec.morphogen` on the System."""
+    trunk: str | None = None
+    sandbox: Literal["auto", "podman", "docker", "none"] | None = None
+    sandbox_image: str | None = None
+    budget: Budget | None = None
+    autonomy: dict[str, Literal["merge", "review"]] | None = None   # lifecycle -> what a pass allows (default review)
+    defaults: CellRules | None = None
+
+
+class OptionRules(_Strict):
+    """An option for a role: `spec.morphogen` on a Component with `spec.lifecycle: candidate`."""
+    fills: str | list[str] | None = None
+    parameters: dict[str, Any] | None = None
+    licence: str | None = None
+    docs: dict[str, Any] | None = None
+    evaluation: dict[str, Any] | None = None
+
+
+class MorphogenSpec(CellRules, InterfaceDoc, SystemRules, OptionRules):
+    """Everything `spec.morphogen` may hold, flat: one entity may carry the fields of more than one."""
+
+
 class ProjectDoc(BaseModel):
-    model_config = ConfigDict(extra="allow")   # trunk, sandbox, budget: morphogen.yaml's settings
-    backstage: str | list[str] = []
-    autonomy: dict[str, Literal["merge", "review"]] = {}   # lifecycle -> what a pass allows (default review)
     cells: dict[str, CellDoc] = {}
-    interfaces: dict[str, str | list[str] | InterfaceDoc] = {}
+    interfaces: dict[str, InterfaceDoc] = {}
+    autonomy: dict[str, Literal["merge", "review"]] = {}
 
 
 # --- the small grammars
@@ -253,55 +304,48 @@ def only_settings_differ(base: Path, cand: Path, names: set[str], keys: set[str]
 
 # --- the project
 
-def _merge(bcells: dict, bifaces: dict, origin: dict, cells: dict, ifaces: dict) -> tuple[dict, dict, dict, list]:
-    """The catalog's cells and interfaces with morphogen.yaml's laid over them: (cells, interfaces,
-    where each came from, conflicts). A name that is a Backstage ref (component:x, api:ns/y) is
-    normalised; provides and consumes are joined; any other field both give must agree."""
+def read_catalog(read_text, files: list[str] = (FILE,)) -> tuple[dict, dict, dict, dict, list[str]]:
+    """The catalog at `files` (the root, and the Location targets it names) read through `read_text`:
+    (cells, interfaces, where each came from, the project's settings, the files read)."""
     from . import backstage as bs
-    norm = (lambda k, kind="component": bs.parse_ref(k, kind) if bs.is_ref(k) else k)
-    sources = {n: f"backstage ({origin[n]})" for n in list(bcells) + list(bifaces)}
-    conflicts: list[str] = []
-    out = {n: dict(c) for n, c in bcells.items()}
-    for raw, c in cells.items():
-        name = norm(raw)
-        c = dict(c or {})
-        if isinstance(c.get("in"), str):
-            c["in"] = norm(c["in"])
-        mine = out.setdefault(name, {})
-        sources[name] = f"{sources[name]} and {FILE}" if name in sources else FILE
-        for k, v in c.items():
-            if k in ("provides", "consumes"):
-                v = [norm(x, "api") for x in _listed(v)]
-                mine[k] = list(dict.fromkeys(_listed(mine.get(k)) + v))
-            elif k in mine and mine[k] != v:
-                conflicts.append(f"cell {name}: {k} is {mine[k]!r} in the catalog and {v!r} in {FILE}")
-            else:
-                mine[k] = v
-        for k in ("provides", "consumes"):
-            if k in mine:
-                mine[k] = [norm(x, "api") for x in _listed(mine[k])]
-    outi = {n: dict(i) for n, i in bifaces.items()}
-    for raw, i in ifaces.items():
-        name = norm(raw, "api")
-        i = {"tests": i} if isinstance(i, (str, list)) else dict(i or {})
-        mine = outi.setdefault(name, {})
-        sources[name] = f"{sources[name]} and {FILE}" if name in sources else FILE
-        for k, v in i.items():
-            if k in mine and _listed(mine[k]) != _listed(v):
-                conflicts.append(f"interface {name}: {k} is {mine[k]!r} in the catalog and {v!r} in {FILE}")
-            else:
-                mine[k] = v
-    return out, outi, sources, conflicts
+    try:
+        entities, read = bs.read(list(files), read_text)
+        cells, ifaces, origin, settings = bs.to_cells(entities)
+    except bs.CatalogError as e:
+        raise ProjectError(str(e)) from None
+    return cells, ifaces, origin, settings, read
+
+
+def git_reader(repo: Path, sha: str):
+    """Reads project files as committed at `sha`, never the working copy."""
+    import subprocess
+
+    def read_text(rel: str) -> str:
+        r = subprocess.run(["git", "show", f"{sha}:{rel}"], cwd=repo, capture_output=True, text=True)
+        if r.returncode != 0:
+            raise FileNotFoundError(2, "not in the commit", rel)
+        return r.stdout
+    return read_text
+
+
+def settings_at(read_text) -> dict:
+    """The project's settings (what the System's `spec.morphogen` says) through `read_text`, or {} when
+    there is no catalog root."""
+    try:
+        read_text(FILE)
+    except OSError:
+        return {}
+    return read_catalog(read_text)[3]
 
 
 class Project:
     def __init__(self, doc: ProjectDoc, source: str = FILE, rule_files: list[str] = (),
-                 sources: dict | None = None, conflicts: list[str] = ()):
+                 sources: dict | None = None, settings: dict | None = None):
         self.doc, self.source = doc, source
-        # Files the rules are read from besides morphogen.yaml (catalog files): never changeable.
+        # Every catalog file the rules were read from (the root and each Location target): never changeable.
         self.rule_files = list(rule_files)
         self.sources = sources or {}
-        self.conflicts = list(conflicts)
+        self.settings = settings or {}
         self.changes = {n: [parse_change(x) for x in _listed(c.change)] for n, c in doc.cells.items()}
         self.keeps = {n: [parse_change(x) for x in _listed(c.keep)] for n, c in doc.cells.items()}
         for n, ks in self.keeps.items():
@@ -313,40 +357,26 @@ class Project:
         self._structure = self._compile_structure()
 
     @classmethod
-    def from_dict(cls, data: Any, source: str = FILE, root: Path | None = None) -> Project:
-        """`root` is the project's directory, where `backstage` files are read from."""
-        extra: dict = {}
-        if isinstance(data, dict) and data.get("backstage"):
-            from . import backstage as bs
-            if root is None:
-                raise ProjectError(f"{source}: reading `backstage` needs the project's directory")
-            try:
-                entities, files = bs.read(Path(root), _listed(data["backstage"]))
-                bcells, bifaces, origin = bs.to_cells(entities)
-            except bs.CatalogError as e:
-                raise ProjectError(f"{source}: backstage: {e}") from None
-            cells, ifaces, sources, conflicts = _merge(bcells, bifaces, origin, data.get("cells") or {},
-                                                       data.get("interfaces") or {})
-            data = {**data, "cells": cells, "interfaces": ifaces}
-            extra = {"rule_files": files, "sources": sources, "conflicts": conflicts}
-        elif isinstance(data, dict):
-            extra = {"sources": {n: FILE for n in list(data.get("cells") or {}) + list(data.get("interfaces") or {})}}
+    def from_parts(cls, cells: dict, interfaces: dict, origin: dict, settings: dict, files: list[str],
+                   source: str = FILE) -> Project:
         try:
-            return cls(ProjectDoc.model_validate(data), source, **extra)
+            doc = ProjectDoc.model_validate({"cells": cells, "interfaces": interfaces,
+                                             "autonomy": settings.get("autonomy") or {}})
+            return cls(doc, source, rule_files=files, sources=origin, settings=settings)
         except ValidationError as e:
             raise ProjectError(f"{source}: " + "; ".join(
                 f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())) from None
 
     @classmethod
-    def load(cls, tree: Path) -> Project | None:
-        """The project in `tree` (a checkout), or None when its morphogen.yaml has no cells."""
-        f = Path(tree) / FILE
-        if not f.exists():
+    def load(cls, tree: Path, file: str = FILE) -> Project | None:
+        """The project in `tree` (a checkout): its catalog read from `catalog-info.yaml` at the root (and
+        the Location targets it names), or None when there is none."""
+        tree = Path(tree)
+        if not (tree / file).exists():
             return None
-        data = yaml.safe_load(f.read_text()) or {}
-        if not isinstance(data, dict) or not ("cells" in data or data.get("backstage")):
-            return None
-        return cls.from_dict(data, str(f), root=Path(tree))
+        from . import backstage as bs
+        cells, ifaces, origin, settings, files = read_catalog(bs.fs_reader(tree), [file])
+        return cls.from_parts(cells, ifaces, origin, settings, files, str(tree / file))
 
     # what the judge reads
 
@@ -373,7 +403,7 @@ class Project:
                 interfaces[n] = {"tests": _listed(i)}
         try:
             s = Structure.from_dict({"cells": cells, "interfaces": interfaces}, self.source)
-            s.origins, s.conflicts = dict(self.sources), list(self.conflicts)
+            s.origins = dict(self.sources)
         except StructureError as e:
             raise ProjectError(str(e)) from None
         return s   # structural errors (gaps, cycles) are findings: `structure check` reports them
@@ -389,7 +419,7 @@ class Project:
             return name
         from . import backstage as bs
         try:
-            ref = bs.parse_ref(name, "component")
+            ref = bs.ref_name(name, "component")
         except bs.CatalogError:
             return name
         return ref if ref in self.doc.cells else name
@@ -408,7 +438,7 @@ class Project:
     def cell(self, name: str) -> CellDoc:
         name = self.resolve(name)
         if name not in self.doc.cells:
-            raise ProjectError(f"no cell {name!r} in {FILE}")
+            raise ProjectError(f"no cell {name!r} in the catalog ({FILE})")
         return self.doc.cells[name]
 
     def dir(self, name: str) -> Path:
@@ -463,7 +493,7 @@ class Project:
         return [e for c in cells for e in self.changes.get(c, [])]
 
     def allows(self, cells, path: str) -> bool:
-        if path in (FILE, LOCAL) or path in self.rule_files:   # the rules themselves never change
+        if path in (FILE, LOCAL) or path in self.rule_files:   # the rules themselves never change: the catalog root and every file it names
             return False
         return any(_glob_re(e["path"]).match(path) for e in self._entries(cells))
 
@@ -491,7 +521,7 @@ class Project:
 
 
 def structure_file(root: Path, cfg: dict) -> str:
-    """The file the structure is read from."""
+    """The file the structure is read from: the catalog root."""
     return FILE
 
 

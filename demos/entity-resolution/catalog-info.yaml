@@ -1,16 +1,32 @@
-# The resolver as Backstage sees it: the components and the APIs between them. What Morphogen adds
-# (what each cell may change, and how it is judged) is in morphogen.yaml, which reads this file.
+# The resolver as a Backstage catalog: the components and the APIs between them (the structure), and under
+# `spec.morphogen` what each cell may change and how it is judged. `er` is the System: its `defaults` are what
+# every cell in it inherits (the F1 workload and its scorer), and it is itself the whole system the guard measures.
+#
+# The benchmark data is not committed (its licence names no version). data/fetch.py downloads it and
+# data/split.py writes the records and the two answer sets outside the repository; the uncommitted
+# morphogen.local.yaml names them per cell: `inputs` (the records, read-only to every run),
+# `search` (answers for probes and optimizers) and `private` (held-out answers, for verdicts).
+# bench.py prints the pairs it finds; score.py, from the base, computes F1 against the answers.
 apiVersion: backstage.io/v1alpha1
-kind: Component
+kind: System
 metadata:
   name: er
   description: Entity resolution, the resolver as a whole
 spec:
-  type: library
-  lifecycle: experimental
   owner: operator
+  lifecycle: experimental
   providesApis: [resolver]
   consumesApis: [candidates, pair-score]   # Base.resolve and Base.add use both
+  morphogen:
+    tests: python -m unittest discover -s tests -t .
+    defaults:
+      run: python bench.py
+      score: python score.py
+      better:
+        f1: {higher: true, min: 0.005, gain: absolute, aggregate: mean}
+        precision: {higher: true, max_regression: 0.10}
+      rounds: {warmup: 0, repeats: 4, max_repeats: 8}   # the score is deterministic; 8 rounds decide it
+      timeout: 300
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -21,8 +37,12 @@ spec:
   type: library
   lifecycle: experimental
   owner: operator
-  subcomponentOf: er
+  system: er
   providesApis: [candidates]
+  morphogen:
+    change:
+      - er/settings.py#BLOCK_MAX_DF in 0.01..0.5
+      - er/settings.py#BLOCK_LIMIT in 5..200
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -33,9 +53,16 @@ spec:
   type: library
   lifecycle: experimental
   owner: operator
-  subcomponentOf: er
+  system: er
   providesApis: [pair-score]
   consumesApis: [similarity]
+  morphogen:
+    change:
+      - er/settings.py#THRESHOLD in 0.5..0.99
+      - er/settings.py#MODEL_MISMATCH in 0..1
+      - er/settings.py#WORD_MISMATCH in 0..1
+      - er/settings.py#TYPO_RATIO in 0.6..1
+    keep: [er/settings.py#ALIASES, er/settings.py#STOPWORDS]
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -46,8 +73,10 @@ spec:
   type: library
   lifecycle: experimental
   owner: operator
-  subcomponentOf: er
+  system: er
   providesApis: [similarity]
+  morphogen:
+    change: er/settings.py#BACKEND in [overlap, tfidf]
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -58,42 +87,66 @@ spec:
   type: library
   lifecycle: experimental
   owner: operator
-  subcomponentOf: er
+  system: er
   consumesApis: [pair-score]
+---
+# Below Backstage's grain: the text functions the matcher uses, judged on speed. The pairs found
+# must be exactly the base's (same_output), so F1 cannot move. It sets its own everything the System
+# defaults, and opts out of the scorer with `score: null`.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: speed
+  description: Tokenising and comparing names (er/text.py). Most of the run is spent here, in difflib.
+spec:
+  type: library
+  lifecycle: experimental
+  owner: operator
+  subcomponentOf: matcher
+  morphogen:
+    change: er/text.py
+    run: python bench.py
+    score: null
+    tests: python -m unittest discover -s tests -t .
+    better: {wall_seconds: {lower: true, min: 0.10}, max_rss_kb: {lower: true, max_regression: 0.5}}
+    same_output: true
+    rounds: {warmup: 1, repeats: 5, max_repeats: 12}
+    timeout: 300
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: resolver
   description: The Resolver protocol (er/base.py)
-  annotations:
-    morphogen.dev/tests: python -m unittest discover -s tests -t .
 spec:
   type: python
   lifecycle: experimental
   owner: operator
   definition: see er/base.py
+  morphogen:
+    tests: python -m unittest discover -s tests -t .
+    external: consumes    # used by whatever needs resolution
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: candidates
-  annotations:
-    morphogen.dev/tests: python -m unittest -q tests.test_contracts.Candidates
-spec: {type: python, lifecycle: experimental, owner: operator, definition: Base.candidates}
+spec:
+  {type: python, lifecycle: experimental, owner: operator, definition: Base.candidates,
+   morphogen: {tests: python -m unittest -q tests.test_contracts.Candidates}}
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: pair-score
-  annotations:
-    morphogen.dev/tests: python -m unittest -q tests.test_contracts.PairScore
-spec: {type: python, lifecycle: experimental, owner: operator, definition: Base.pair}
+spec:
+  {type: python, lifecycle: experimental, owner: operator, definition: Base.pair,
+   morphogen: {tests: python -m unittest -q tests.test_contracts.PairScore}}
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: similarity
-  annotations:
-    morphogen.dev/tests: python -m unittest -q tests.test_contracts.Similarity
-spec: {type: python, lifecycle: experimental, owner: operator, definition: er.backends}
+spec:
+  {type: python, lifecycle: experimental, owner: operator, definition: er.backends,
+   morphogen: {tests: python -m unittest -q tests.test_contracts.Similarity}}

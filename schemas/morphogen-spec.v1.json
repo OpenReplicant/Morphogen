@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/OpenReplicant/Morphogen/schemas/morphogen-spec.v0.json",
-  "title": "spec.morphogen (DRAFT, v0)",
-  "description": "DRAFT. Morphogen's own fields on a Backstage catalog entity, under the one key `spec.morphogen`. Phase 1 of the kit publishes this schema; nothing reads these fields yet (phase 2 loads them). The cell fields are those a cell in morphogen.yaml accepts today (morphogen/project.py, CellDoc), so a cell moves unchanged. What Backstage already holds is not repeated: a cell's `in` is the entity's subcomponentOf or system, `provides` and `consumes` are providesApis and consumesApis, `owner` and `lifecycle` are the entity's own. Use the Option fields on a Component with spec.lifecycle: candidate, the Cell fields on the entity a cell judges, the ApiTests fields on an API entity and the SystemSettings fields on the System entity. The fields are flat under `spec.morphogen`: the schema is the four definitions together, so one entity may carry the fields of more than one (a candidate that is also judged, say), and a field none of them defines is refused.",
+  "$id": "https://github.com/OpenReplicant/Morphogen/schemas/morphogen-spec.v1.json",
+  "title": "spec.morphogen (v1)",
+  "description": "Morphogen's own fields on a Backstage catalog entity, under the one key `spec.morphogen`; the project's catalog (`catalog-info.yaml` at the repository root, and the files a `Location` in it names) is where the judge reads them, from the base commit only. The cell fields are those of CellRules in morphogen/project.py. What Backstage already holds is not repeated: a cell's `in` is the entity's subcomponentOf (a Component nested in a Component) or system, `provides` and `consumes` are providesApis and consumesApis (and dependsOn), `owner` and `lifecycle` are the entity's own. Use the Option fields on a Component with spec.lifecycle: candidate (never a cell; nor is an entity with spec.type: role), the Cell fields on the entity a cell judges (an entity with no `run` is structure), the ApiTests fields on an API entity and the SystemSettings fields on the System entity (at most one System carries them). The fields are flat under `spec.morphogen`: the schema is the four definitions together, so one entity may carry the fields of more than one (a System that is also a judged cell, say), and a field none of them defines is refused.",
   "type": "object",
   "$defs": {
     "StringOrList": {
@@ -71,7 +71,7 @@
       }
     },
     "Cell": {
-      "description": "A cell's rules, on the entity it judges. The fields of CellDoc in morphogen/project.py, less those Backstage holds (in, provides, consumes, owner, lifecycle). Commands run in `dir`, relative to the project root.",
+      "description": "A cell's rules, on the entity it judges: the fields of CellRules in morphogen/project.py, less those Backstage holds (in, provides, consumes, owner, lifecycle). Commands run in `dir`, relative to the project root. In `SystemSettings.defaults`, a field a cell sets to null opts out of that default.",
       "type": "object",
       "properties": {
         "description": {
@@ -214,7 +214,7 @@
       }
     },
     "SystemSettings": {
-      "description": "On the System entity: the judge's settings (Config in morphogen/documents.py, today the top level of morphogen.yaml) and defaults cells inherit, which replace YAML anchors.",
+      "description": "On the System entity: the judge's settings (SystemRules in morphogen/project.py), read from the base commit, and `defaults`: cell fields every cell with rules of its own in this System inherits unless it sets its own (the System too, when it has cell rules of its own). `autonomy`, `sandbox` and `budget` can be overridden by the operator's uncommitted morphogen.local.yaml where documents.py says so.",
       "type": "object",
       "properties": {
         "trunk": {
@@ -258,7 +258,7 @@
         },
         "defaults": {
           "$ref": "#/$defs/Cell",
-          "description": "Fields a cell in this system inherits where it does not set them."
+          "description": "Fields a cell in this system inherits where it does not set them (a field set to null is set, so it opts out)."
         }
       }
     }

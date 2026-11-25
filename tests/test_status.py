@@ -12,6 +12,7 @@ from morphogen import judge as judge_mod
 from morphogen.documents import load_config
 from morphogen.evidence import Evidence
 from morphogen.status import status
+from tests.catalog import dump
 from tests.fixture import SANDBOX, git
 
 WORK = "import time\n\nDELAY = 0.4\n\n\ndef main():\n    time.sleep(DELAY)\n    print('done')\n\n\nif __name__ == '__main__':\n    main()\n"
@@ -36,7 +37,7 @@ class FreshStart(unittest.TestCase):
         (self.repo / rel).write_text(text)
 
     def doc(self, cells, **extra):
-        self.write("morphogen.yaml", yaml.safe_dump({"sandbox": SANDBOX, **extra, "cells": cells}, sort_keys=False))
+        self.write("catalog-info.yaml", dump({"sandbox": SANDBOX, **extra, "cells": cells}))
 
     def commit(self, msg="c"):
         git(self.repo, "add", "-A")
@@ -57,8 +58,8 @@ class FreshStart(unittest.TestCase):
         self.write("test_work.py", TEST)
         self.commit("the system")
         s = self.now()
-        self.assertFalse(s["sources"]["morphogen.yaml"])
-        self.assertIn("no map yet", s["next"])
+        self.assertFalse(s["sources"]["catalog-info.yaml"])
+        self.assertIn("no catalog yet", s["next"])
 
         # the map skill's first draft, not yet on main
         self.doc({"work": CELL})
@@ -97,25 +98,27 @@ class FreshStart(unittest.TestCase):
         git(self.repo, "config", "user.email", "t@example.com")
         git(self.repo, "config", "user.name", "test")
         self.write("work.py", WORK)
-        self.write("catalog-info.yaml", yaml.safe_dump({
+        (self.repo / "sub").mkdir()
+        self.write("sub/catalog-info.yaml", yaml.safe_dump({
             "apiVersion": "backstage.io/v1alpha1", "kind": "Component",
             "metadata": {"name": "work"}, "spec": {"type": "service", "lifecycle": "experimental", "owner": "me"}}))
         self.commit()
         s = self.now()
-        self.assertEqual(s["sources"]["backstage"]["found"], ["catalog-info.yaml"])
-        self.assertIn("backstage: [catalog-info.yaml]", s["next"])
+        self.assertEqual(s["sources"]["catalog"]["found"], ["sub/catalog-info.yaml"])
+        self.assertIn("not the project's catalog root", s["next"])
 
         # a cell with a run but nothing it may change; a committed local file
-        self.doc({"work": {"run": "python work.py"}}, backstage="catalog-info.yaml")
+        self.doc({"work": {"run": "python work.py"}})
         self.write("morphogen.local.yaml", "sandbox: none\n")
         self.commit()
         s = self.now()
         names = {c["cell"]: c for c in s["cells"]}
-        self.assertIn("component:default/work", names)
+        self.assertIn("work", names)
         self.assertFalse(names["work"]["ready"])
         self.assertIn("no `change`", names["work"]["problems"][0])
         self.assertIn("no `better`", " ".join(names["work"]["notes"]))
         self.assertTrue(any("morphogen.local.yaml is committed" in m for m in s["missing"]))
+        self.assertTrue(any("sub/catalog-info.yaml" in m for m in s["missing"]), s["missing"])
         self.assertIn("not ready to judge", s["next"])
 
     def test_structure_errors_on_the_trunk(self):

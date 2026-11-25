@@ -12,8 +12,6 @@ import datetime
 import subprocess
 from pathlib import Path
 
-import yaml
-
 from . import judge as judge_mod
 from .project import FILE, LOCAL, Project, ProjectError
 
@@ -25,27 +23,17 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def _catalogs(repo: Path) -> list[str]:
-    """Backstage catalog files in the checkout, tracked or not (ignored files excluded)."""
+    """Catalog files (`catalog-info.yaml`) in the checkout, tracked or not (ignored files excluded)."""
     p = _git(repo, "ls-files", "--cached", "--others", "--exclude-standard")
     files = p.stdout.splitlines() if p.returncode == 0 else []
     return sorted(f for f in files if Path(f).name in CATALOG_NAMES)
-
-
-def _named_catalogs(tree: Path) -> list[str]:
-    f = tree / FILE
-    try:
-        data = yaml.safe_load(f.read_text()) if f.exists() else None
-    except yaml.YAMLError:
-        return []
-    b = (data or {}).get("backstage") if isinstance(data, dict) else None
-    return [b] if isinstance(b, str) else list(b or [])
 
 
 def _load(tree: Path) -> tuple[Project | None, str | None]:
     """The project on `tree`, or None; and a problem that stops it loading."""
     try:
         return Project.load(tree), None
-    except (ProjectError, yaml.YAMLError) as e:
+    except ProjectError as e:
         return None, str(e)
 
 
@@ -137,7 +125,7 @@ def status(start: Path, cfg: dict | None = None, evidence=None) -> dict:
     sources = {
         FILE: (repo / FILE).exists(),
         LOCAL: (repo / LOCAL).exists(),
-        "backstage": {"named": _named_catalogs(repo), "found": catalogs},
+        "catalog": {"read": list(work.rule_files) if work else [], "found": catalogs},
     }
     out["sources"] = sources
     missing: list[str] = []
@@ -145,10 +133,10 @@ def status(start: Path, cfg: dict | None = None, evidence=None) -> dict:
         missing.append(f"{LOCAL} is committed: it holds held-out paths and the sandbox; remove it from git")
     elif sources[LOCAL] and _git(repo, "check-ignore", "-q", LOCAL).returncode != 0:
         missing.append(f"{LOCAL} is not in .gitignore: add it, so it is never committed")
-    unread = [f for f in catalogs if f not in sources["backstage"]["named"]]
-    if unread:
-        missing.append(f"Backstage catalog files Morphogen does not read: {', '.join(unread)} "
-                       f"(name them under `backstage:` in {FILE})")
+    unread = [f for f in catalogs if f not in sources["catalog"]["read"]]
+    if unread and work is not None:
+        missing.append(f"catalog files Morphogen does not read: {', '.join(unread)} "
+                       f"(name them as targets of a Location in {FILE})")
 
     base_sha = None
     if _git(repo, "rev-parse", "--verify", f"{trunk}^{{commit}}").returncode == 0:
@@ -178,9 +166,9 @@ def status(start: Path, cfg: dict | None = None, evidence=None) -> dict:
     if drafted:
         out["drafted"] = drafted
     if work_problem:
-        missing.append(f"{FILE} in the working tree does not load: {work_problem}")
+        missing.append(f"the catalog in the working tree does not load: {work_problem}")
     elif work and work.errors():
-        missing.append(f"{FILE} in the working tree has errors: {'; '.join(work.errors())}")
+        missing.append(f"the catalog in the working tree has errors: {'; '.join(work.errors())}")
     if base:
         untested = [i for i, spec in base.structure().interfaces.items() if not spec.tests]
         if untested:
@@ -198,13 +186,15 @@ def _next(out: dict, work: Project | None, base: Project | None, catalogs: list[
         return f"fix the structure on `{trunk}` (the judge refuses it until then): " + "; ".join(out["errors"])
     if base is None:
         if work is not None:
-            return (f"{FILE} is drafted but not on `{trunk}`: commit it on a branch and open a pull request; "
-                    "the operator merges it. Until then `probe` can practise against it; no verdict rests on it")
+            return (f"the catalog ({FILE}) is drafted but not on `{trunk}`: commit it on a branch and open a pull "
+                    "request; the operator merges it. Until then `probe` can practise against it; no verdict rests on it")
         if catalogs:
-            return (f"write {FILE} with `backstage: [{', '.join(catalogs)}]` and add, for the one part to improve, "
-                    "`change`, `run`, `better` and `tests` (the map skill, step 2)")
-        return ("no map yet: ask the operator what to improve and how they would know it improved, then draft "
-                f"one cell in {FILE} with `change`, `run`, `better` and `tests` (the map skill)")
+            return (f"{', '.join(catalogs)} is not the project's catalog root: the root is {FILE} at the repository "
+                    "root (a Location may name this file as a target). Add `spec.morphogen` with `change`, `run`, "
+                    "`better` and `tests` to the one part to improve (the map skill, step 2)")
+        return ("no catalog yet: ask the operator what to improve and how they would know it improved, then write "
+                f"{FILE} with one Component whose `spec.morphogen` has `change`, `run`, `better` and `tests` "
+                "(the map skill)")
     ready = [c for c in out["cells"] if c.get("ready")]
     if not ready:
         broken = [c for c in out["cells"] if c.get("problems")]

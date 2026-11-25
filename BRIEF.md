@@ -10,12 +10,12 @@ what it taught. Issue numbers (#43, #45) refer to this repository's history.
 
 **What it is now: the kit, with the judge at its core.** Morphogen maps a system, researches and catalogues the
 options for each role, and optimises behind its judge, on files only, on any harness. The map, the options and
-(in phase 2) the cells are all Backstage catalog entities, with Morphogen's own fields under one namespaced key,
+the cells are all Backstage catalog entities, with Morphogen's own fields under one namespaced key,
 `spec.morphogen`; documentation is fetched into markdown files. The judge stays the core and stays independent:
 the skills that write the map and the catalog write what the judge reads from the base commit, and no candidate
-may touch it. Everything below about the judge, the cell and the optimizers is unchanged. **Coming, phase 2:** the
-cell format moves from `morphogen.yaml` onto the entities (draft: `schemas/morphogen-spec.v0.json`); until then
-`morphogen.yaml` is what the judge reads.
+may touch it. Everything below about the judge, the cell and the optimizers is unchanged. The cell format
+is `spec.morphogen` on the entity a cell judges (`schemas/morphogen-spec.v1.json`), read from the project's
+`catalog-info.yaml`: there is no other project file.
 
 **Where it sits.** The Knowledge Kernel is an optional layer above the kit: it ingests the same Backstage files when
 someone wants indexing, search or graph traversal, and the kit never requires it. Substrate is the default
@@ -173,8 +173,8 @@ Morphogen needs cells, not a system structure. A mapper helps when there are man
 changes cross interfaces, or when intent is missing from the code. Without one, start by
 measuring:
 
-1. **One cell by hand.** Name what may change, its existing tests and a measure: one cell in
-   `morphogen.yaml` and nothing else (rebuild 6 ran this way, with a `target.yaml`).
+1. **One cell by hand.** Name what may change, its existing tests and a measure: one cell
+   (`spec.morphogen` on one catalog entity) and nothing else (rebuild 6 ran this way, with a `target.yaml`).
 2. **Or profile first.** Run the system under its tests or workload with outside observation (a
    profiler offline, OBI live). The hot spots, by time, cost or errors, become candidate cells.
    An agent drafts each cell from what is already there (location, modality, tests it finds);
@@ -307,7 +307,7 @@ secondary reports; read the paper before quoting them).
 Strategy:
 
 1. **Allowed alternatives are a setting's choices.** No new concept: a `change` entry whose
-   choices are set in `morphogen.yaml` at the base commit, where no candidate can change them.
+   choices are set in the catalog at the base commit, where no candidate can change them.
    Adding a choice is an operator change, with its evidence attached:
 
    ```yaml

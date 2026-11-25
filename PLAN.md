@@ -7,19 +7,21 @@
 ## The kit: the way there
 
 Everything committed becomes a Backstage catalog entity; Morphogen's own fields go under one key,
-`spec.morphogen` ([schemas/morphogen-spec.v0.json](schemas/morphogen-spec.v0.json), a draft). An option for a role
+`spec.morphogen` ([schemas/morphogen-spec.v1.json](schemas/morphogen-spec.v1.json), a draft). An option for a role
 is a `Component` with `spec.lifecycle: candidate`; a cell's rules go on the entity it judges; sub-grain cells are
 `Component`s nested with `subcomponentOf`; an interface's tests go on its `API`; settings and shared defaults go on
 the `System`. `morphogen.local.yaml` stays as it is.
 
 - **K1, skills and schema (this pull request, #102).** README, BRIEF and the skills say what Morphogen is now; the
   `map` skill is merged with Substrate's and writes entity files; new `catalog` and `research` skills; the draft
-  schema. No code behaviour changes; `morphogen.yaml` still works. Open check before K2: that Backstage's `API` and
+  schema. No code behaviour changes. Open check before K2: that Backstage's `API` and
   `System` kinds leave `spec` open the way `Component` does.
-- **K2, cells into entities.** Load `spec.morphogen` from the catalog files; check a cell's settings against its
-  option's parameter schema; default deny covers every catalog file the judge reads (a red-team test across files
-  first); `morphogen.yaml` is removed with **no back-compatibility**, since only our own projects use it (Substrate,
-  the demos), and they are moved by hand. Decide whether `lifecycle: candidate` entities are skipped as cells.
+- **K2, cells into entities (the pull request stacked on #102).** Done: `spec.morphogen` is loaded from the project's
+  catalog (`catalog-info.yaml` at the root and the `Location` targets it names); every catalog file the judge reads
+  is a rule file (a candidate that changes, adds or removes one is refused; red-team tests across files); settings and
+  `defaults` are the System's, read from the base; options (`lifecycle: candidate`) and roles (`type: role`) are
+  never cells; `morphogen.yaml` is removed with **no back-compatibility**, and the demos are moved by hand. Not done:
+  checking a cell's settings against its option's `parameters` schema (nothing in the judge reads options yet).
 - **K3, documentation as files.** A documentation MCP server that turns web documentation into markdown files,
   chosen with the `research` skill (a local one first: a hosted one sends what is looked up off the machine). Its
   output is a folder of markdown beside the catalog, named in each option's `docs.path`.
@@ -145,7 +147,7 @@ cell file, and judges the same as before.
 
 Done: the demo is split that way and compiles to the same structure as before (a test). It cannot be
 judged until phase 6 makes its data reachable, so "judges the same" is shown on the structured
-classifier instead: described half in a catalog, it reaches the same verdicts as in morphogen.yaml
+classifier instead: described in a catalog split over files, it reaches the same verdicts as in one file
 alone. Red team: a candidate that weakens the catalog (drops an API) for later judgments is refused,
 even when `change` is `**`; it passed the judge before catalog files were made the judge's.
 
@@ -217,7 +219,7 @@ Each item is one pull request; the ones that change the judge start with their c
 and end with the suite passing locally and in Podman, and an A/A check.
 
 - **7a. One request in, one verdict out.** The judge's input, written down as one document: the base
-  and candidate commits, the cells and interfaces (from `morphogen.yaml`, `catalog-info.yaml`, or a
+  and candidate commits, the cells and interfaces (from the project's `catalog-info.yaml`, or a
   request file a caller writes from its own store), `inputs`, and the local settings. Its output: the
   verdict record, with a published, versioned schema (the evidence log's canonical JSON and hash
   chain included), so a caller verifies a log without copying Morphogen's code.
@@ -282,7 +284,7 @@ extras or leave it (7d); where the two demos go (7f); and what 7e's result means
 - Domain modules around a shared knowledge base, joined by the resolver.
 
 ## Decisions (operator, 2026-11-05)
-1. **One file:** the cell format and project settings live in `morphogen.yaml` at the root;
+1. **One file:** the cell format and project settings live in the catalog (`catalog-info.yaml` at the root);
    held-out paths, budget overrides and the sandbox in an uncommitted `morphogen.local.yaml`.
 2. **The old format** (`target.yaml` plus `cells.yaml`) is removed after phase 2.
 3. **The field is `change`.**

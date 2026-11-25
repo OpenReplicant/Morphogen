@@ -10,6 +10,7 @@ from pathlib import Path
 from morphogen import documents
 from morphogen import judge as judge_mod
 from morphogen.evidence import Evidence
+from tests.catalog import dump
 from tests.fixture import (CLASSIFY, COMPUTE, FAST, SETTINGS, TARGET, WRONG, GuardedProject, InputsProject,
                            SampleProject, ScoredProject, StructuredProject, git, parameter_project)
 
@@ -54,7 +55,7 @@ class JudgeOnSample(unittest.TestCase):
     def test_the_judge_refuses_a_malformed_cell(self):
         doc = self.p.doc()
         doc["cells"]["slow-script"]["better"] = {"wall_seconds": {"lower": True, "gain": "huge"}}
-        cand = self.p.branch("malformed-base", {"morphogen.yaml": self.p.dump(doc)}, root=True)
+        cand = self.p.branch("malformed-base", {"catalog-info.yaml": self.p.dump(doc)}, root=True)
         with self.assertRaises(judge_mod.JudgeError):
             self.p.judge("main", base=cand)
 
@@ -197,7 +198,7 @@ class CellGate(unittest.TestCase):
         doc = self.p.doc()
         doc["cells"]["classify"]["change"] += ["targets/classify/classify.py#MARGIN in [0, 1, 2]",
                                                "targets/classify/classify.py#THRESHOLD in 0..100"]   # twice
-        base = self.p.branch_files("cell-params", {"morphogen.yaml": self.p.dump(doc),
+        base = self.p.branch_files("cell-params", {"catalog-info.yaml": self.p.dump(doc),
                                                    "targets/classify/classify.py": CLASSIFY + "MARGIN = 0\n"})
         git(self.p.repo, "checkout", "-q", base)
         try:
@@ -246,7 +247,7 @@ class SystemGuard(unittest.TestCase):
     def test_no_guard_when_turned_off(self):
         doc = self.p.doc()
         doc["cells"]["fast"]["guard"] = False
-        base = self.p.branch_root("no-guard-base", {"morphogen.yaml": self.p.dump(doc)})
+        base = self.p.branch_root("no-guard-base", {"catalog-info.yaml": self.p.dump(doc)})
         cand = self.p.branch_root("faster-3", {"targets/system/compute.py": self.FASTER}, base=base)
         self.assertIsNone(self.p.judge(cand, base=base)["system"])
 

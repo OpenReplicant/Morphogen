@@ -1,0 +1,790 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cmc
+  description: 'Common Model of Cognition on Claude Code: Claude is the central pattern matcher and action selector;
+    the plugin supplies a small working memory, separate procedural and declarative stores, quantitative metadata,
+    and learning as a side effect of work'
+spec:
+  type: service
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cycle
+  description: 'The cognitive cycle: one model step between tool batches'
+spec:
+  type: service
+  subcomponentOf: cmc/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: dm
+  description: 'Declarative memory: semantic and episodic chunks; one best chunk per cue, by activation'
+spec:
+  type: service
+  subcomponentOf: cmc/declarative-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: learn
+  description: 'Learning: online and gated'
+spec:
+  type: service
+  subcomponentOf: cmc/learning
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: motor
+  description: 'Motor: write-side tools are the only way to change the world'
+spec:
+  type: service
+  subcomponentOf: cmc/motor
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: percept
+  description: 'Perception: senses feed the percept buffer, compressed'
+spec:
+  type: service
+  subcomponentOf: cmc/perception
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: pm
+  description: 'Procedural memory: skills as explicit productions over the model''s implicit procedures'
+spec:
+  type: service
+  subcomponentOf: cmc/procedural-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: wm
+  description: 'Working memory: named buffers, each holding at most one chunk (imaginal up to 5)'
+spec:
+  type: service
+  subcomponentOf: cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: central-selector
+  namespace: cmc
+  description: reads the WM snapshot, matches productions, selects one act per cycle
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  consumesApis:
+  - wm/buffer-goal
+  - wm/buffer-imaginal
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cycle
+  namespace: cmc
+  description: One model step between tool batches; hooks run each phase
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  consumesApis:
+  - cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: declarative-memory
+  namespace: cmc
+  description: Semantic and episodic chunks, retrieved one at a time by activation
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  consumesApis:
+  - cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: evaluation
+  namespace: cmc
+  description: '20 recurring tasks over 2 weeks, with and without cmc: success rate, tokens per task, how often
+    the same mistake repeats'
+spec:
+  type: service
+  subcomponentOf: default/cmc
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: harness
+  namespace: cmc
+  description: hooks, skills, subagents, MCP client, permissions
+spec:
+  type: service
+  subcomponentOf: default/cmc
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: learning
+  namespace: cmc
+  description: Reinforcement, encoding, chunking and consolidation as side effects of work
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  consumesApis:
+  - cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: motor
+  namespace: cmc
+  description: Write-side tools, gated on a stated goal
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  consumesApis:
+  - cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: operator
+  namespace: cmc
+  description: promotes proposed skills; gives explicit feedback that outweighs the judge
+spec:
+  type: service
+  subcomponentOf: default/cmc
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: perception
+  namespace: cmc
+  description: Read-side tools and watchers, compressed into the percept buffer
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  consumesApis:
+  - cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: procedural-memory
+  namespace: cmc
+  description: Productions (skills, subagents, the model's weights) with utilities
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  consumesApis:
+  - cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: working-memory
+  namespace: cmc
+  description: A small, slot-based workspace re-injected into context every cycle; the only hub
+spec:
+  type: service
+  subcomponentOf: default/cmc
+  providesApis:
+  - cmc/working-memory
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: act
+  namespace: cycle
+  description: gate motor tools; log the selection
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: boot
+  namespace: cycle
+  description: restore the goal stack from dm; inject WM and the active skills
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: close
+  namespace: cycle
+  description: decay and evict; tick the cycle; re-inject WM
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: encode
+  namespace: cycle
+  description: encode the turn as an episodic chunk
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: input
+  namespace: cycle
+  description: prompt as percept; set goal; inject WM and top-3 candidates
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: perceive
+  namespace: cycle
+  description: compress results; motor outcome; log fired skill
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: pre-compact
+  namespace: cycle
+  description: flush WM and the goal stack to dm
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: select
+  namespace: cycle
+  description: Claude matches skills against WM and chooses one act
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: session-end
+  namespace: cycle
+  description: queue consolidation and chunking
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: turn-end
+  namespace: cycle
+  description: judge the goal; record reward; continue if a subgoal is open
+spec:
+  type: service
+  subcomponentOf: default/cycle
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: activation
+  namespace: dm
+  description: A_i = ln(sum t_j^-d) + sum W_k S_ki + beta sim(cue,i) + noise; below threshold returns failure
+spec:
+  type: service
+  subcomponentOf: default/dm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: core-facts
+  namespace: dm
+  description: high-activation facts always loaded; promoted and demoted by the consolidator
+spec:
+  type: service
+  subcomponentOf: default/dm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: embeddings
+  namespace: dm
+  description: embed chunks and cues
+spec:
+  type: service
+  subcomponentOf: default/dm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: encode
+  namespace: dm
+  description: dm_encode(chunk)
+spec:
+  type: service
+  subcomponentOf: default/dm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: retrieve
+  namespace: dm
+  description: dm_retrieve(cue, kind?) -> one chunk into the retrieval buffer; appends the time to access_times
+    (rehearsal)
+spec:
+  type: service
+  subcomponentOf: default/dm
+  consumesApis:
+  - wm/buffer-retrieval
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: search
+  namespace: dm
+  description: 'dm_search(query, k): debugging only; denied to Claude in settings'
+spec:
+  type: service
+  subcomponentOf: default/dm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: store
+  namespace: dm
+  description: 'chunk: id, kind, slots (JSON), text, embedding, created, access_times[], source'
+spec:
+  type: service
+  subcomponentOf: default/dm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: vector-index
+  namespace: dm
+  description: nearest chunks to a cue
+spec:
+  type: service
+  subcomponentOf: default/dm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: chunking
+  namespace: learn
+  description: draft a skill from a tool sequence that recurred >= 3 times with high reward, into _proposed/ with
+    an evidence note
+spec:
+  type: service
+  subcomponentOf: default/learn
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: consolidation
+  namespace: learn
+  description: merge duplicate chunks; promote and demote CLAUDE.md facts; prune skills
+spec:
+  type: service
+  subcomponentOf: default/learn
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: critic
+  namespace: learn
+  description: after low reward twice in a row; writes the retrieval buffer
+spec:
+  type: service
+  subcomponentOf: default/learn
+  consumesApis:
+  - wm/buffer-retrieval
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: episodic-encoding
+  namespace: learn
+  description: goal, skills fired, key percepts, outcome, reward; also evicted WM chunks
+spec:
+  type: service
+  subcomponentOf: default/learn
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: failure-credit
+  namespace: learn
+  description: small negative reward to the active skill on PostToolUseFailure
+spec:
+  type: service
+  subcomponentOf: default/learn
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: review-gate
+  namespace: learn
+  description: a person moves drafts from _proposed/ to skills/
+spec:
+  type: service
+  subcomponentOf: default/learn
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: reward
+  namespace: learn
+  description: R in [0,1] from goal outcome, tests passing and explicit feedback; at most 2 continuations per turn
+spec:
+  type: service
+  subcomponentOf: default/learn
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: utility-update
+  namespace: learn
+  description: U_i <- U_i + alpha (R - U_i) for every skill fired this turn
+spec:
+  type: service
+  subcomponentOf: default/learn
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: effectors
+  namespace: motor
+  description: Edit, Write, Bash, actuator MCP tools
+spec:
+  type: service
+  subcomponentOf: default/motor
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: gate
+  namespace: motor
+  description: deny a motor tool when the goal buffer is empty
+spec:
+  type: service
+  subcomponentOf: default/motor
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: outcome
+  namespace: motor
+  description: write the action and outcome to the motor buffer
+spec:
+  type: service
+  subcomponentOf: default/motor
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: permissions
+  namespace: motor
+  description: which effectors run without asking
+spec:
+  type: service
+  subcomponentOf: default/motor
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: serial-bottleneck
+  namespace: motor
+  description: one intention per batch; optionally deny a second motor tool in a batch
+spec:
+  type: service
+  subcomponentOf: default/motor
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: compress
+  namespace: percept
+  description: compress large results into a percept chunk; may replace the result with updatedToolOutput
+spec:
+  type: service
+  subcomponentOf: default/percept
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: extra-senses
+  namespace: percept
+  description: log tail, CI status poller, screenshot description
+spec:
+  type: service
+  subcomponentOf: default/percept
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: senses
+  namespace: percept
+  description: Read, Grep, Glob, WebFetch, WebSearch, read-only MCP servers
+spec:
+  type: service
+  subcomponentOf: default/percept
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: watch
+  namespace: percept
+  description: bottom-up percepts when watched files change
+spec:
+  type: service
+  subcomponentOf: default/percept
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: candidate-ranking
+  namespace: pm
+  description: top 3 skills by similarity(description, goal) x utility, added to the WM snapshot
+spec:
+  type: service
+  subcomponentOf: default/pm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: compiled-routines
+  namespace: pm
+  description: long self-contained procedures; return one chunk to the retrieval or imaginal buffer
+spec:
+  type: service
+  subcomponentOf: default/pm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: implicit
+  namespace: pm
+  description: 'the model''s weights: most procedural knowledge'
+spec:
+  type: service
+  subcomponentOf: default/pm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: productions
+  namespace: pm
+  description: condition names WM buffers; every action step ends by changing WM
+spec:
+  type: service
+  subcomponentOf: default/pm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: pruning
+  namespace: pm
+  description: move skills with utility < 0.2 after >= 10 fires to _inactive/, then reloadSkills
+spec:
+  type: service
+  subcomponentOf: default/pm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: skill-log
+  namespace: pm
+  description: log which skill fired this cycle
+spec:
+  type: service
+  subcomponentOf: default/pm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: utility-table
+  namespace: pm
+  description: 'per skill: utility (0..1, starts 0.5), fires, successes, last_fired'
+spec:
+  type: service
+  subcomponentOf: default/pm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: buffer-goal
+  namespace: wm
+  description: holds current goal and subgoal stack
+spec:
+  type: service
+  subcomponentOf: default/wm
+  providesApis:
+  - wm/buffer-goal
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: buffer-imaginal
+  namespace: wm
+  description: holds scratch problem state (plan, partial answer)
+spec:
+  type: service
+  subcomponentOf: default/wm
+  providesApis:
+  - wm/buffer-imaginal
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: buffer-motor
+  namespace: wm
+  description: holds last action and its outcome
+spec:
+  type: service
+  subcomponentOf: default/wm
+  providesApis:
+  - wm/buffer-motor
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: buffer-percept
+  namespace: wm
+  description: holds latest compressed perception
+spec:
+  type: service
+  subcomponentOf: default/wm
+  providesApis:
+  - wm/buffer-percept
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: buffer-retrieval
+  namespace: wm
+  description: holds last chunk returned from declarative memory
+spec:
+  type: service
+  subcomponentOf: default/wm
+  providesApis:
+  - wm/buffer-retrieval
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: compaction-guard
+  namespace: wm
+  description: flush WM and the goal stack to dm before compaction; re-inject after
+spec:
+  type: service
+  subcomponentOf: default/wm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: decay
+  namespace: wm
+  description: evict chunks untouched for N cycles and hand them to the encoder
+spec:
+  type: service
+  subcomponentOf: default/wm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: injection
+  namespace: wm
+  description: snapshot as additionalContext at the start of every cycle, ~2,000 characters
+spec:
+  type: service
+  subcomponentOf: default/wm
+  consumesApis:
+  - wm/buffer-goal
+  - wm/buffer-imaginal
+  - wm/buffer-motor
+  - wm/buffer-percept
+  - wm/buffer-retrieval
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: store
+  namespace: wm
+  description: buffers, goal stack and the procedures table in .cmc/cmc.sqlite
+spec:
+  type: service
+  subcomponentOf: default/wm
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: tools
+  namespace: wm
+  description: wm_get, wm_put(buffer, chunk), wm_set_goal, wm_push_subgoal, wm_pop_subgoal, wm_clear(buffer)
+spec:
+  type: service
+  subcomponentOf: default/wm
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: working-memory
+  namespace: cmc
+spec:
+  type: slot
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: buffer-goal
+  namespace: wm
+spec:
+  type: slot
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: buffer-imaginal
+  namespace: wm
+spec:
+  type: slot
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: buffer-motor
+  namespace: wm
+spec:
+  type: slot
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: buffer-percept
+  namespace: wm
+spec:
+  type: slot
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: buffer-retrieval
+  namespace: wm
+spec:
+  type: slot

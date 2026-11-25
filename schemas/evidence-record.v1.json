@@ -371,7 +371,7 @@
         }
       ],
       "default": null,
-      "description": "per setting: base (the base commit's morphogen.yaml), morphogen.local.yaml, request, or default",
+      "description": "per setting: base (the base commit's catalog), morphogen.local.yaml, request, or default",
       "title": "Settings From"
     },
     "subject": {

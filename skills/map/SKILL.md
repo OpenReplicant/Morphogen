@@ -11,10 +11,9 @@ judge from the base commit. No database and no server are needed, and any Backst
 A map counts for a verdict only once the operator has approved it and it is on main. Your job is a draft the
 operator can approve: small, checked, every claim traceable to where you found it.
 
-**Coming, phase 2:** the cell rules will move from `morphogen.yaml` into the entity they judge, under
-`spec.morphogen` (draft schema: `schemas/morphogen-spec.v0.json`). Until phase 2 lands, the judge reads cells
-from `morphogen.yaml` and the catalog files as section 1 says; write the rest of the map as entities now, and
-the cell rules where the judge reads them today.
+The cell rules are part of the same files: `spec.morphogen` on the entity a cell judges (schema:
+`schemas/morphogen-spec.v1.json`; section 1 shows where each kind of rule goes). There is no other
+project file for the judge to read.
 
 ## 0. How you work
 
@@ -50,7 +49,7 @@ Backstage server.
 | an option for a role | a `Component` with `spec.lifecycle: candidate` (the catalog skill) |
 
 Morphogen's own fields go under **one key**, `spec.morphogen`, so they never clash with fields Backstage adds.
-Annotation values must be strings. Fields are described in `schemas/morphogen-spec.v0.json` (a draft).
+Annotation values must be strings. Fields are described in `schemas/morphogen-spec.v1.json` (a draft).
 
 A role is interchangeable when its interfaces are named exactly enough to check: an API and its version, a file
 format, a protocol, a socket size, a skill set. An interface named loosely ("an API") makes everything look
@@ -92,25 +91,49 @@ metadata: {name: labels}
 spec: {type: openapi, lifecycle: production, owner: group:default/team, definition: "see contracts/labels.md"}
 ```
 
-Until phase 2, the cell's rules live in `morphogen.yaml`, naming the entity's ref where there is one:
+The cell's rules go on the entity it judges, under `spec.morphogen` (the project root's
+`catalog-info.yaml`, or a file a `Location` in it names):
 
 ```yaml
-# morphogen.yaml, at the project root
-cells:
-  app: {}
-  classify:
-    in: app
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata: {name: app}
+spec:
+  owner: team
+  morphogen:                              # once per project: its settings, and defaults every cell inherits
+    sandbox: podman
+    defaults: {rounds: {warmup: 0, repeats: 4, max_repeats: 8}, timeout: 60}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata: {name: classify}
+spec:
+  type: library
+  lifecycle: production
+  owner: team
+  system: app                             # a part below the grain of another is a Component with subcomponentOf
+  providesApis: [labels]
+  morphogen:
     dir: targets/classify                 # where its commands run (default: the root)
     change: targets/classify/classify.py#THRESHOLD in 0..100   # or a path or glob: src/**, prompts/
     run: python bench.py
     better: accuracy higher               # plain names: wall_seconds, cpu_seconds, max_rss_kb, or scored
     score: python score.py                # scores each run's output, from the base
     tests: python -m unittest -q test_classify
-    provides: labels
-  report: {in: app, consumes: labels}
-interfaces:
-  labels: python -m unittest -q contracts.test_labels   # run from the root
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata: {name: labels}
+spec:
+  type: openapi
+  morphogen:
+    tests: python -m unittest -q contracts.test_labels   # run from the root
 ```
+
+An entity with no `run` (and no tests) is structure, not a judged cell. An option for a role
+(`spec.lifecycle: candidate`) and a role (`spec.type: role`) are never cells. Every catalog file the judge
+reads (the root and each `Location` target) is a rule file: a candidate that changes one is refused, so
+write the cell's rules before the operator merges the map, never in the same branch as the improvement.
 
 Settings: `path#NAME` is a module-level constant in a Python file, `path:dotted.key` a key in YAML,
 JSON or TOML; `in lo..hi` or `in [a, b]` bounds it. Optional on a cell: `same_as_base: {gen, run}`
@@ -122,8 +145,8 @@ cannot be committed goes there too, as `inputs: /path` (read from `MORPHOGEN_INP
 
 ## 2. Start with `status`, and smaller than you think
 
-Call `status` first (or `morphogen status`). It reports the sources (`morphogen.yaml`,
-`morphogen.local.yaml`, Backstage catalog files), each cell on the trunk and whether the judge can
+Call `status` first (or `morphogen status`). It reports the sources (the catalog,
+`morphogen.local.yaml`, catalog files nothing names), each cell on the trunk and whether the judge can
 judge it, cells drafted but not yet on the trunk, what is missing, and the next step. Follow the
 next step; call it again after each one.
 
@@ -131,9 +154,9 @@ Morphogen needs cells, not a complete map. Measure first; map what earns attenti
 
 - **Not a git repository, or no commit on `main`:** the judge reads its rules from a commit. Ask the
   operator before running `git init` or committing on their behalf.
-- **A Backstage catalog, no `morphogen.yaml`:** do not rewrite the catalog. Write
-  `morphogen.yaml` with `backstage: [catalog-info.yaml]` and add only what the catalog lacks, for
-  the one part to improve, under its ref (`component:classify` is enough).
+- **A Backstage catalog already:** do not rewrite it. Add `spec.morphogen` to the one entity to improve
+  (and the System's settings if the project needs any), and nothing else. A catalog file the root
+  `catalog-info.yaml` does not name is not read: name it as a `Location` target.
 - **No catalog:** write the entities for the parts that matter (section 1), nothing more.
 - **Nothing here yet:** ask the operator what to improve and how they would know it improved.
   Draft one cell for that: `change` (as narrow as the job allows), `run`, `better` and `tests`.

@@ -1,4 +1,4 @@
-"""Throwaway git projects in the cell format (one morphogen.yaml), committed on main.
+"""Throwaway git projects in the cell format (a catalog, catalog-info.yaml), committed on main.
 
 Trials run with `sandbox: none` unless MORPHOGEN_TEST_SANDBOX names another runner (docker or
 podman), so the same suites can run inside a container.
@@ -16,6 +16,7 @@ import yaml
 from morphogen import judge as judge_mod
 from morphogen.documents import load_config
 from morphogen.evidence import Evidence
+from tests.catalog import FILE, dump as catalog_dump
 
 HERE = Path(__file__).resolve().parent
 TARGET = "targets/slow-script"
@@ -43,7 +44,7 @@ SLOW_CELL = {
 
 
 class Project:
-    """A git repository with morphogen.yaml (`cells`, `interfaces`) and files, committed on main.
+    """A git repository with a catalog (written from `cells`, `interfaces` and settings) and files, committed on main.
 
     `home` is the directory `path()` and `branch()` resolve against (the judged cell's `dir`); `cell`
     is the cell judged by default. `local` is written to the uncommitted morphogen.local.yaml."""
@@ -73,7 +74,7 @@ class Project:
                      "cells": cells}
         if interfaces:
             self.doc_["interfaces"] = interfaces
-        self._write(self.repo / "morphogen.yaml", yaml.safe_dump(self.doc_, sort_keys=False))
+        self._write(self.repo / FILE, self.dump(self.doc_))
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "base")
         (self.repo / ".git" / "info" / "exclude").write_text("morphogen.local.yaml\n")
@@ -101,11 +102,11 @@ class Project:
         return self.repo / self.home / rel
 
     def doc(self) -> dict:
-        """A copy of morphogen.yaml as committed on main."""
+        """A copy of the catalog's authoring form as committed on main."""
         return copy.deepcopy(self.doc_)
 
     def dump(self, doc: dict) -> str:
-        return yaml.safe_dump(doc, sort_keys=False)
+        return catalog_dump(doc)
 
     def branch(self, name, files=None, delete=(), root=False, links=None, base="main"):
         """Commit a candidate on `name`. `files` and `delete` are paths relative to `home`, or to the
@@ -133,16 +134,16 @@ class Project:
     branch_root = branch_files
 
     def on_main(self, files=None, doc=None, root=False):
-        """Commit on main: files (relative to `home`, or the root), and a new morphogen.yaml."""
+        """Commit on main: files (relative to `home`, or the root), and a new catalog."""
         git(self.repo, "checkout", "-q", "main")
         at = self.repo if root else self.repo / self.home
         for rel, text in (files or {}).items():
             self._write(at / rel, text)
         if doc is not None:
             self.doc_ = copy.deepcopy(doc)
-            self._write(self.repo / "morphogen.yaml", self.dump(doc))
+            self._write(self.repo / FILE, self.dump(doc))
         git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-q", "-m", "base: " + ", ".join(sorted(files or {}) or ["morphogen.yaml"]))
+        git(self.repo, "commit", "-q", "-m", "base: " + ", ".join(sorted(files or {}) or [FILE]))
         self.cfg = load_config(self.repo)
 
     def judge(self, candidate, labels=None, target=None, base="main"):
@@ -205,7 +206,7 @@ def observed_project(collected, primary=True):
     return Project({"observe.py": OBSERVER}, cells={"slow-script": observed_cell(collected, primary)})
 
 
-SETTINGS = "\n# Settings the judge reads (see morphogen.yaml).\nCHUNK = 64\nLIMIT = 1000\n"
+SETTINGS = "\n# Settings the judge reads (see the catalog).\nCHUNK = 64\nLIMIT = 1000\n"
 
 
 def parameter_project() -> "Project":
