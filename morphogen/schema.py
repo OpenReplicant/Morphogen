@@ -87,7 +87,7 @@ class Verdict(Record):
     sandbox: str = Field(description="the runner the judge used: none, podman or docker")
     runner: dict[str, Any] = Field(description="the guarantees that runner gives")
     settings: dict[str, Any] | None = Field(None, description="the judge's settings for this run (trunk, sandbox, sandbox_image, budget)")
-    settings_from: dict[str, str] | None = Field(None, description="per setting: base (the base commit's morphogen.yaml), morphogen.local.yaml, request, or default")
+    settings_from: dict[str, str] | None = Field(None, description="per setting: base (the base commit's catalog), morphogen.local.yaml, request, or default")
     request: RequestRef | None = None
     served: Served | None = Field(None, description="what the runs were given beyond their tree (morphogen.local.yaml's env and services); names, a digest and image ids, never a value")
     parameters: dict[str, Any] | list[Any] | None = None

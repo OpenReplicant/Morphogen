@@ -84,7 +84,7 @@ class Api:
         return out
 
     def targets(self) -> list[dict]:
-        """Each cell with a `run`, from the working tree's morphogen.yaml, with its last results."""
+        """Each cell with a `run`, from the working tree's catalog, with its last results."""
         recs = self._evidence().dump()
         out = []
         try:

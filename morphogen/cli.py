@@ -10,7 +10,7 @@
     morphogen evidence [--verify] [--limit N] [--by judge]
     morphogen ui [--host 127.0.0.1] [--port 8765]
 
-TARGET is `cell:NAME` for a cell with a `run` in morphogen.yaml (or the cell's name, or its `dir`).
+TARGET is `cell:NAME` for a cell with a `run` in the catalog (`spec.morphogen.run` on its entity) (or the cell's name, or its `dir`).
 """
 
 from __future__ import annotations
