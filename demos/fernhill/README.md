@@ -11,6 +11,7 @@ options catalogued for one role, cells drafted for one opportunity) and a demo o
 | [making/](making/) | how `jobs.csv` was made (`make_jobs.py`, one seed). It holds the true costs the engagement has to find, so no engagement run sees it. |
 | [engagement/](engagement/) | the first run's result, done in a Claude Code session following the skills: the map (`catalog-info.yaml`, `catalog/`), the baselines (`analysis/`), the quote calculator as a judged cell (`cells/quote/`), four options for job scheduling (`catalog/scheduling.yaml`) and [the report](engagement/report.md). |
 | `prompt.md`, `run.sh`, `check.py` | the engagement unattended: a fresh project from `material/`, Claude Code with only the plugin, then the checks of its result |
+| [runs/](runs/) | unattended runs: each one's report and `check.py` output |
 
 ## The first run (2026-11-24)
 
@@ -24,7 +25,15 @@ options catalogued for one role, cells drafted for one opportunity) and a demo o
 - **Report:** four projects: the calculator (about £53,000 a year of margin), quotes in three days, a schedule the
   fitters can see, fewer remakes.
 
-What the run found in the kit, for issues:
+## The unattended run (2026-11-24, sonnet)
+
+`run.sh`, no help: all eight checks pass ([check.txt](runs/2026-11-24-sonnet/check.txt)); 29 evidence quotes, all
+found. It mapped the firm, drafted its own quote cell (hours per cabinet split by range), tuned it to held-out
+error 15.0% to 4.5% (pass) by moving fixed hours per job from 16 to 50, catalogued Tradify, ServiceM8, Powered Now
+and Jobber, and wrote [a report](runs/2026-11-24-sonnet/report.md) of five projects. It said itself that 50 is the
+top of the range it allowed, standing in for under-counted hours per cabinet.
+
+## What the runs found in the kit, for issues
 
 1. **A plugin update did not happen.** #102 and #103 changed the plugin but not its version (0.8.0), so
    `claude plugin update` reported "already at the latest version" and kept code from before them; the old code
@@ -34,7 +43,9 @@ What the run found in the kit, for issues:
    best p is 0.0156), so a 9-point gain failed. `status` and `structure_check` could say so before a run.
 3. **Org maps are noisy in `status`.** Every process step is listed as a cell, `ready: false`, though none has a
    `run`; structure-only entities could be listed apart.
-4. **The CLI needs a file.** `morphogen structure check` takes the catalog's path, where `status` finds it itself.
+4. **A tuned value at its bound passes without a word.** The unattended run's pass rests on a setting at the
+   top of its range; `tune` could report it, since a value at the bound means the range, not the system, chose it.
+5. **The CLI needs a file.** `morphogen structure check` takes the catalog's path, where `status` finds it itself.
 
 Run it again (Python 3.11 or later, Podman, Claude Code signed in):
 

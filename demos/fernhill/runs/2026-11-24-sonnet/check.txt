@@ -1,0 +1,8 @@
+PASS  report.md committed on main
+PASS  the client's material is not committed
+PASS  a catalog: 3 files
+PASS  structure check: no errors
+PASS  a cell with a verdict: quote-calculator
+PASS  at least three options for a role: 5 candidates
+PASS  evidence quotes are where they say: 29 of 29
+PASS  the report writes opportunities up as projects
