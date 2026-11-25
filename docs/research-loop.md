@@ -59,7 +59,7 @@ What is different here:
 | Step | Part |
 | --- | --- |
 | watch, find | the `research` skill, driven by the map's roles and the docs' open questions |
-| ingest | documents encoder (Docling, as planned in kernel milestone 6) or a docs MCP server (K3); the source's HTML or LaTeX before its PDF; `verifier-quotes` (kernel D-67) checks each quote and number against its source |
+| ingest | documents encoder (Docling, as planned in kernel milestone 6) or a docs MCP server (K3); the source's HTML or LaTeX before its PDF; `verifier-quotes` (kernel D-67) checks each quote and number against its source; the parser survey is `docs/research-loop-parsers.md` |
 | catalogue | options as `Component`s with `spec.lifecycle: candidate`; evidence as claims on them, with conditions |
 | our side | the map and its observed state (encoders for running components, model files, hardware, git) |
 | predict, schedule | new: a transfer model over claim conditions against ours; a value-of-information queue |
