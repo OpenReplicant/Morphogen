@@ -2,9 +2,9 @@
 
 What makes it hard to fool:
 
-- The rules come from the base commit: morphogen.yaml (the cells, their
-  workloads, scorers and tests), and every file a cell's `change` does not
-  name. Default deny: a candidate that changes anything else is refused
+- The rules come from the base commit: the project's catalog (`catalog-info.yaml` and every file it
+  names; each cell's workload, scorer and tests are `spec.morphogen` on its entity), and every file a
+  cell's `change` does not name. Default deny: a candidate that changes anything else is refused
   before anything runs, so it cannot change how it is scored.
 - Time and memory are measured from outside the measured process, by a
   wrapper that waits for it and reads the operating system's resource usage.
@@ -397,7 +397,7 @@ def _names_private(spec: dict, ctree: Path, changed: list[str]) -> list[str]:
 
 
 def project_of(tree: Path) -> Project | None:
-    """The cell-format project (morphogen.yaml with `cells`) on `tree`, or None."""
+    """The project (its catalog, `catalog-info.yaml`) on `tree`, or None when there is none."""
     try:
         return Project.load(tree)
     except ProjectError as e:
@@ -405,10 +405,10 @@ def project_of(tree: Path) -> Project | None:
 
 
 def structure_of(tree: Path) -> Project:
-    """The project (morphogen.yaml with `cells`) on `tree`, the base's checkout."""
+    """The project (its catalog) on `tree`, the base's checkout."""
     proj = project_of(tree)
     if proj is None:
-        raise JudgeError(f"no {PROJECT_FILE} with cells on the base commit")
+        raise JudgeError(f"no {PROJECT_FILE} (the project's catalog) on the base commit")
     if proj.errors():
         raise JudgeError(f"the structure on the base commit has errors: {'; '.join(proj.errors())}")
     return proj
@@ -709,7 +709,7 @@ def _check_runner(spec: dict, cfg: dict) -> None:
     gaps = missing(cfg, spec.get("requires") or [])
     if gaps:
         raise JudgeError(f"this target requires {', '.join(gaps)}, which the {sandbox_mode(cfg)} runner does not "
-                         "provide; set sandbox: podman (or auto, with Podman installed) in morphogen.yaml")
+                         "provide; set sandbox: podman (or auto, with Podman installed) under spec.morphogen on the System in the catalog")
 
 
 def _check_spec(spec: dict) -> dict:
@@ -768,7 +768,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
           cases: int = 5, rounds: int = 3, cell: str | None = None, request: dict | None = None) -> dict:
     """A practice run: feedback on a candidate, never a verdict. It is the optimizers' inner evaluator.
 
-    Same rules as the judge (the base's morphogen.yaml, default deny, the forbidden-file and
+    Same rules as the judge (the base's catalog, default deny, the forbidden-file and
     setting checks, the cell's interface tests, fresh random inputs; scored against `search`
     answers, not the held-out ones), but it reports what an optimizer or an agent needs to learn
     from: the check's output, each generated case with the base's output and the candidate's where
@@ -784,7 +784,7 @@ def probe(root: Path, cfg: dict, target: str, candidate: str, evidence, base: st
     limit = int((cfg.get("budget") or {}).get("probes_per_day", 0) or 0)
     if limit and _trials_today(evidence, "probe") >= limit:
         raise JudgeError(f"the probe budget for today ({limit}) is spent; the operator can raise "
-                         "budget.probes_per_day in morphogen.yaml")
+                         "budget.probes_per_day on the System's spec.morphogen")
     with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
         a = _admit(root, repo, cfg, target, cell, base_sha, cand_sha, btree, ctree, "probe")
         spec, rel, gate, metrics_spec, bdir, cdir = (a[k] for k in ("spec", "rel", "gate", "metrics_spec",
@@ -961,7 +961,7 @@ def judge_change(root: Path, cfg: dict, base: str, candidate: str, evidence, tim
         "kind": "verdict",
         "verdict": verdict,
         "subject": {"system": ", ".join(cells), "path": "change"},
-        "method": "base's morphogen.yaml; cells from the changed files; default deny; forbidden-file check; "
+        "method": "base's catalog; cells from the changed files; default deny; forbidden-file check; "
                   "declared settings; each cell's tests and the tests of every interface its scope touches "
                   "or its enclosing systems' boundaries cross, from the base, run on the candidate",
         "outcome": {"files": files, "denied": denied, "forbidden": forbidden, "parameter_violations": violations,
@@ -996,7 +996,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
     limit = int((cfg.get("budget") or {}).get("trials_per_day", 0) or 0)
     if limit and _trials_today(evidence) >= limit:
         raise JudgeError(f"the trial budget for today ({limit}) is spent; the operator can raise "
-                         "budget.trials_per_day in morphogen.yaml")
+                         "budget.trials_per_day on the System's spec.morphogen")
     with worktrees(repo, [base_sha, cand_sha]) as (btree, ctree):
         a = _admit(root, repo, cfg, target, cell, base_sha, cand_sha, btree, ctree)
         spec, rel, cell, gate, metrics_spec, bdir, cdir = (a[k] for k in ("spec", "rel", "cell", "gate",
@@ -1098,7 +1098,7 @@ def judge(root: Path, cfg: dict, target: str, base: str, candidate: str, evidenc
         "kind": "verdict",
         "verdict": verdict,
         "subject": {"system": name, "path": subject},
-        "method": "base's morphogen.yaml; default deny; forbidden-file check; declared settings; base's tests; "
+        "method": "base's catalog; default deny; forbidden-file check; declared settings; base's tests; "
                   "output equivalence on fresh "
                   "random inputs; paired ABBA runs timed outside the process, each checked for the base's "
                   "output; sign test",

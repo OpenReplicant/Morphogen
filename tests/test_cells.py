@@ -1,4 +1,4 @@
-"""The cell format (morphogen.yaml): parsing, compiling, and default deny. A candidate may change only
+"""The cell format (`spec.morphogen` in the catalog): parsing, compiling, and default deny. A candidate may change only
 what the judged cell's scope names in `change`; everything else is the judge's."""
 
 from pathlib import Path
@@ -10,6 +10,7 @@ from morphogen import judge as judge_mod
 from morphogen import optimize as O
 from morphogen import project as P
 from morphogen.structure import Structure
+from tests.catalog import dump, project as catalog_project
 from tests.fixture_cells import CELLS_CONTRACT, CellsProject, cells_doc
 from tests.fixture_scored import CLASSIFY, CLASSIFY_BENCH
 
@@ -43,7 +44,7 @@ class Parse(unittest.TestCase):
             P.parse_better("accuracy sideways")
 
     def test_compile_structure_and_spec(self):
-        proj = P.Project.from_dict(cells_doc())
+        proj = catalog_project(cells_doc())
         s = proj.structure()
         self.assertEqual(s.cells["classify"].parent, "app")
         self.assertEqual(s.providers("labels"), ["classify"])
@@ -62,13 +63,13 @@ class Parse(unittest.TestCase):
         d = cells_doc()
         d["cells"]["classify"]["chnage"] = "x.py"
         with self.assertRaises(P.ProjectError):
-            P.Project.from_dict(d)
+            catalog_project(d)
 
-    def test_tests_only_from_the_base_and_the_project_file_is_never_changeable(self):
+    def test_tests_only_from_the_base_and_the_catalog_is_never_changeable(self):
         d = cells_doc()
         d["cells"]["classify"]["change"] = "**"
-        proj = P.Project.from_dict(d)
-        self.assertFalse(proj.allows(["classify"], "morphogen.yaml"))
+        proj = catalog_project(d)
+        self.assertFalse(proj.allows(["classify"], "catalog-info.yaml"))
         self.assertTrue(proj.allows(["classify"], "classify/bench.py"))
 
 
@@ -138,7 +139,7 @@ class DefaultDenyCheats(unittest.TestCase):
         d["cells"]["classify"]["change"] = "classify/**"
         rigged = CLASSIFY_BENCH.replace("print(label(x))", 'print("high" if x >= 50 else "low")')
         self.assertRefused(self.p, "widen", "outside",
-                           files={"morphogen.yaml": yaml.safe_dump(d), "classify/bench.py": rigged})
+                           files={"catalog-info.yaml": dump(d), "classify/bench.py": rigged})
 
     def test_change_more_than_the_setting(self):
         rigged = BETTER.replace('def label(x):\n', 'def label(x):\n    x = x + 0\n')
@@ -187,7 +188,7 @@ class Paths(unittest.TestCase):
             self.p.judge("by-name", target="cell:report")       # no run
 
     def test_structure_tools_read_the_project_file(self):
-        s = Structure.load(self.p.repo / "morphogen.yaml")
+        s = Structure.load(self.p.repo / "catalog-info.yaml")
         self.assertEqual(sorted(s.cells), ["app", "classify", "report"])
         self.assertEqual(s.coverage()["tested"], 1)
 

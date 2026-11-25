@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import yaml
+from tests.catalog import dump
 
 from morphogen import Structure, StructureError, compare
 from morphogen.render import mermaid
@@ -38,7 +38,7 @@ AGENT = {
 }
 
 
-# The same structure as the operator writes it (morphogen.yaml's cell format).
+# The same structure as the operator writes it (the catalog's cell format).
 AGENT_FILE = {
     "cells": {
         "agent": {"provides": "answer"},
@@ -194,8 +194,8 @@ class CommandLine(unittest.TestCase):
 
     def test_the_file_compiles_to_the_same_structure(self):
         with tempfile.TemporaryDirectory() as d:
-            f = Path(d) / "morphogen.yaml"
-            f.write_text(yaml.safe_dump(AGENT_FILE))
+            f = Path(d) / "catalog-info.yaml"
+            f.write_text(dump(AGENT_FILE))
             s, ref = Structure.load(f), structure()
             for c in ref.cells:
                 self.assertEqual((s.parent(c), s.cells[c].provides, s.cells[c].consumes),
@@ -205,8 +205,8 @@ class CommandLine(unittest.TestCase):
 
     def test_check_scope_render(self):
         with tempfile.TemporaryDirectory() as d:
-            f = Path(d) / "morphogen.yaml"
-            f.write_text(yaml.safe_dump(AGENT_FILE))
+            f = Path(d) / "catalog-info.yaml"
+            f.write_text(dump(AGENT_FILE))
             r = self.run_cli("structure", "check", str(f))
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(json.loads(r.stdout)["coverage"]["tested"], 4)
@@ -217,8 +217,8 @@ class CommandLine(unittest.TestCase):
 
     def test_check_fails_on_errors(self):
         with tempfile.TemporaryDirectory() as d:
-            f = Path(d) / "morphogen.yaml"
-            f.write_text(yaml.safe_dump({"cells": {"a": {"consumes": "x"}}, "interfaces": {"x": []}}))
+            f = Path(d) / "catalog-info.yaml"
+            f.write_text(dump({"cells": {"a": {"consumes": "x"}}, "interfaces": {"x": []}}))
             self.assertEqual(self.run_cli("structure", "check", str(f)).returncode, 1)
             f.write_text("cells: [")
             self.assertEqual(self.run_cli("structure", "check", str(f)).returncode, 2)

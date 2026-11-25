@@ -9,6 +9,7 @@ import yaml
 
 from morphogen.documents import load_config
 from morphogen.schema import Verdict
+from tests.catalog import dump
 from tests.fixture import CLASSIFY, git
 from tests.fixture_cells import CellsProject, cells_doc
 
@@ -35,7 +36,7 @@ class Metered(unittest.TestCase):
         (self.p.repo / "morphogen.local.yaml").write_text(yaml.safe_dump(doc))
         doc = cells_doc(code=True)
         doc["cells"]["classify"]["better"] = "metered.calls lower, metered.tokens lower"
-        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+        self.p.write("catalog-info.yaml", dump(doc))
         self.p.write("classify/classify.py", self.calls(3))
         git(self.p.repo, "commit", "-qam", "base: three calls a run")
         self.p.cfg = load_config(self.p.repo)

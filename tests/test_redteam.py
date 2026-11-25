@@ -18,6 +18,7 @@ import yaml
 
 from morphogen import judge as judge_mod
 from morphogen.documents import load_config
+from tests.catalog import dump
 from tests.fixture_cells import CellsProject, cells_doc
 from tests.fixture import (AGENT, git, CLASSIFY, CLASSIFY_CELL, COMPUTE, CONTRACT_TEST, FAST, SETTINGS, AgentProject,
                            GuardedProject, InputsProject,
@@ -123,9 +124,9 @@ class RedTeam(unittest.TestCase):
 
     def assertFails(self, name, files=None, delete=()):
         files = dict(files or {})
-        doc = files.pop("morphogen.yaml", None)
+        doc = files.pop("catalog-info.yaml", None)
         if doc is not None:
-            name = self.p.branch(name, {"morphogen.yaml": doc}, root=True)
+            name = self.p.branch(name, {"catalog-info.yaml": doc}, root=True)
             r = self.p.judge(self.p.branch(name, files, delete, base=name))
             self.assertEqual(r["verdict"], "fail", f"cheat {name!r} passed the judge: {r}")
             return r
@@ -146,8 +147,8 @@ class RedTeam(unittest.TestCase):
     def test_lower_the_bar_in_the_project_file(self):
         doc = self.p.doc()
         doc["cells"]["slow-script"].update(run="true", better={"wall_seconds": {"lower": True, "min": -1}})
-        r = self.assertFails("lower-bar", {"morphogen.yaml": self.p.dump(doc), "topwords.py": self.slow + "# x\n"})
-        self.assertTrue(any("morphogen.yaml" in x for x in r["reasons"]), r["reasons"])
+        r = self.assertFails("lower-bar", {"catalog-info.yaml": self.p.dump(doc), "topwords.py": self.slow + "# x\n"})
+        self.assertTrue(any("catalog-info.yaml" in x for x in r["reasons"]), r["reasons"])
 
     def test_delete_the_tests(self):
         self.assertFails("delete-tests", delete=["test_topwords.py"])
@@ -247,10 +248,10 @@ class ObserverCheats(unittest.TestCase):
             doc["cells"]["slow-script"]["better"] = {"observed.latency_ms": {"lower": True, "min": 0.10},
                                                      "wall_seconds": "lower"}
             cand = p.branch("promote-self", {"observe.py": QUIET_OBSERVER})
-            cand = p.branch("promote-self-2", {"morphogen.yaml": p.dump(doc)}, root=True, base=cand)
+            cand = p.branch("promote-self-2", {"catalog-info.yaml": p.dump(doc)}, root=True, base=cand)
             r = p.judge(cand)
             self.assertEqual(r["verdict"], "fail", r)
-            self.assertTrue(any("morphogen.yaml" in x for x in r["reasons"]), r["reasons"])
+            self.assertTrue(any("catalog-info.yaml" in x for x in r["reasons"]), r["reasons"])
         finally:
             p.close()
 
@@ -371,7 +372,7 @@ class ScoreCheats(unittest.TestCase):
 
     def assertFails(self, name, files):
         files = dict(files)
-        root = {"morphogen.yaml": files.pop("morphogen.yaml")} if "morphogen.yaml" in files else {}
+        root = {"catalog-info.yaml": files.pop("catalog-info.yaml")} if "catalog-info.yaml" in files else {}
         root.update({f"{self.p.home}/{k}": v for k, v in files.items()})
         r = self.p.judge(self.p.branch(name, root, root=True))
         self.assertEqual(r["verdict"], "fail", f"cheat {name!r} passed the judge: {r}")
@@ -408,8 +409,8 @@ class ScoreCheats(unittest.TestCase):
     def test_edit_the_bar_in_the_project_file(self):
         doc = self.p.doc()
         doc["cells"]["classify"]["better"]["accuracy"]["min"] = -1
-        r = self.assertFails("lower-bar", {"morphogen.yaml": self.p.dump(doc), "classify.py": CLASSIFY + "# touched\n"})
-        self.assertTrue(any("morphogen.yaml" in x for x in r["reasons"]), r["reasons"])
+        r = self.assertFails("lower-bar", {"catalog-info.yaml": self.p.dump(doc), "classify.py": CLASSIFY + "# touched\n"})
+        self.assertTrue(any("catalog-info.yaml" in x for x in r["reasons"]), r["reasons"])
 
 
 # --- cheats with the inputs: data kept outside the repository (its licence keeps it out of git) and
@@ -540,8 +541,8 @@ class StructureCheats(unittest.TestCase):
         doc["cells"]["classify"]["provides"] = []
         doc["cells"]["report"]["consumes"] = []
         r = self.assertFails("drop-interface", {"targets/classify/classify.py": BETTER_BUT_BREAKS_NEIGHBOUR,
-                                                "morphogen.yaml": self.p.dump(doc)})
-        self.assertTrue(any("morphogen.yaml" in x for x in r["reasons"]), r["reasons"])
+                                                "catalog-info.yaml": self.p.dump(doc)})
+        self.assertTrue(any("catalog-info.yaml" in x for x in r["reasons"]), r["reasons"])
 
     def test_break_a_neighbours_interface_naming_the_target_by_path(self):
         """The target is the cell's measure, named by its directory (spelled oddly) and not as a cell."""
@@ -699,8 +700,8 @@ class ChangeCheats(unittest.TestCase):
     def test_drop_the_interface_tests_from_the_rules(self):
         doc = cells_doc(code=True)
         doc["interfaces"]["labels"] = []
-        self.assertRefused("no-tests", {"classify/classify.py": BROKEN_LABEL, "morphogen.yaml": yaml.safe_dump(doc)},
-                           why="morphogen.yaml")
+        self.assertRefused("no-tests", {"classify/classify.py": BROKEN_LABEL, "catalog-info.yaml": dump(doc)},
+                           why="catalog-info.yaml")
 
     def test_shadow_unittest_at_the_root(self):
         self.assertRefused("fake-unittest", {"classify/classify.py": BROKEN_LABEL, "unittest.py": FAKE_UNITTEST},
@@ -717,9 +718,9 @@ class ChangeCheats(unittest.TestCase):
 
 
 class SettingsCheats(unittest.TestCase):
-    """The judge's settings (sandbox, sandbox_image, budget) are rules too: they come from the base commit's
-    morphogen.yaml, with only the operator's uncommitted morphogen.local.yaml laid over them. An agent that
-    edits the working copy of morphogen.yaml without committing, then calls the judge from that checkout
+    """The judge's settings (sandbox, sandbox_image, budget) are rules too: they come from the System's
+    `spec.morphogen` in the base commit's catalog, with only the operator's uncommitted morphogen.local.yaml laid over them. An agent that
+    edits the working copy of the catalog without committing, then calls the judge from that checkout
     (the CLI and the MCP server read the project root), must change nothing."""
 
     def setUp(self):
@@ -729,15 +730,15 @@ class SettingsCheats(unittest.TestCase):
         self.p.close()
 
     def edit_working_copy(self, **settings):
-        doc = yaml.safe_load((self.p.repo / "morphogen.yaml").read_text())
+        doc = cells_doc(code=True)
         doc.update(settings)
-        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))   # not committed
+        self.p.write("catalog-info.yaml", dump(doc))   # not committed
         self.p.cfg = load_config(self.p.repo)                                 # as the CLI and MCP read it
 
     def test_raise_the_trial_budget_in_the_working_copy(self):
         doc = cells_doc(code=True)
         doc["budget"] = {"trials_per_day": 1}
-        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+        self.p.write("catalog-info.yaml", dump(doc))
         git(self.p.repo, "commit", "-qam", "base: one trial a day")
         self.p.evidence.append({"kind": "verdict", "by": "judge", "verdict": "fail", "claim": "today's trial", "trust": "measured"})
         self.edit_working_copy(budget={"trials_per_day": 100})
@@ -947,7 +948,7 @@ class MeteredCheats(unittest.TestCase):
         from tests.fixture_gateway import CALL
         doc = cells_doc(code=True)
         doc["cells"]["classify"]["better"] = "metered.calls lower"
-        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+        self.p.write("catalog-info.yaml", dump(doc))
         self.p.write("classify/classify.py", CLASSIFY + "LIMIT = 100\n" + CALL + "for _ in range(3):\n    call()\n")
         git(self.p.repo, "commit", "-qam", "base: three calls a run, calls metered")
         self.p.cfg = load_config(self.p.repo)
@@ -963,7 +964,7 @@ class MeteredCheats(unittest.TestCase):
         from tests.fixture_gateway import CALL
         doc = cells_doc(code=True)
         doc["cells"]["classify"]["better"] = "metered.calls lower"
-        self.p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+        self.p.write("catalog-info.yaml", dump(doc))
         self.p.write("classify/classify.py", CLASSIFY + "LIMIT = 100\n" + CALL + "for _ in range(3):\n    call()\n")
         git(self.p.repo, "commit", "-qam", "base: three calls a run, calls metered")
         self.p.cfg = load_config(self.p.repo)
@@ -1034,7 +1035,7 @@ class MeteredWithoutAContainer(unittest.TestCase):
         try:
             doc = cells_doc(code=True)
             doc["cells"]["classify"]["better"] = "metered.calls lower"
-            p.write("morphogen.yaml", yaml.safe_dump(doc, sort_keys=False))
+            p.write("catalog-info.yaml", dump(doc))
             git(p.repo, "commit", "-qam", "calls metered")
             p.cfg = load_config(p.repo)
             with self.assertRaises(judge_mod.JudgeError) as e:

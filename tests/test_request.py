@@ -12,7 +12,7 @@ import yaml
 from morphogen import request as request_mod
 from morphogen.documents import DocumentError
 from tests.fixture import CLASSIFY
-from tests.fixture_cells import CellsProject
+from tests.fixture_cells import CellsProject, cells_doc
 
 HONEST = CLASSIFY + "LIMIT = 100\n# same\n"
 
@@ -71,7 +71,7 @@ class RequestCheats(Requests):
         self.assertRefused(self.write(self.change_request(), where=self.p.repo), "inside the repository")
 
     def test_carry_rules_in_the_request(self):
-        doc = yaml.safe_load((self.p.repo / "morphogen.yaml").read_text())
+        doc = cells_doc(code=True)
         doc["interfaces"]["labels"] = []
         self.assertRefused(self.write(self.change_request(cells=doc["cells"], interfaces=doc["interfaces"])),
                            "the rules come from the base commit")

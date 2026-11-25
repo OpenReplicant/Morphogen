@@ -1,4 +1,4 @@
-"""The classifier in the cell format: one morphogen.yaml with the cells, their `change`, `run`,
+"""The classifier in the cell format: one catalog with the cells, their `change`, `run`,
 `better` and `tests`, and the interfaces; the held-out answers named in an uncommitted
 morphogen.local.yaml."""
 
@@ -11,6 +11,7 @@ import yaml
 
 from morphogen.documents import load_config
 from morphogen.evidence import Evidence
+from tests.catalog import FILE, dump
 from tests.fixture import SANDBOX, git, judge_mod
 from tests.fixture_scored import (CLASSIFY, CLASSIFY_BENCH, CLASSIFY_SCORE, CLASSIFY_TEST, CONTRACT_TEST,
                                   GOLD, INPUTS)
@@ -43,7 +44,7 @@ def cells_doc(code: bool = False) -> dict:
 
 
 class CellsProject:
-    """A git repository on main with the classifier described in morphogen.yaml."""
+    """A git repository on main with the classifier described in its catalog."""
 
     target = "cell:classify"
 
@@ -64,7 +65,7 @@ class CellsProject:
             "classify/inputs.json": json.dumps(INPUTS),
             "contracts/__init__.py": "",
             "contracts/test_labels.py": CELLS_CONTRACT,
-            "morphogen.yaml": yaml.safe_dump(cells_doc(code), sort_keys=False),
+            FILE: dump(cells_doc(code)),
         }
         for rel, text in files.items():
             self.write(rel, text)
