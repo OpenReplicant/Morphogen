@@ -1,0 +1,60 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: jeval-self-distillation-27b
+  description: >-
+    Distilling a model's own post-reasoning answer into its first-token readout (SII-Decision-27B) reaches Jev's level in about 0.1 s.
+spec:
+  about: component:default/self-distilled-readout
+  role: component:default/decision-backend
+  source:
+    kind: preprint
+    title: "General Decision Models: Benchmarking and Insights Beyond Jev (JEVal)"
+    id: arXiv:2610.03935
+    url: https://arxiv.org/pdf/2610.03935
+    version: v2
+    location: not stated in the note
+    read: the abstract, the experiments and sections 6 to 9 (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, JEVal, second bullet
+      quote: >-
+        and distilling its own post-reasoning answer into that readout (SII-Decision-4B, -27B) brings the 27B to Jev's level in about 0.1 s.
+  claim:
+    statement: >-
+      Distilling an open model's own post-reasoning answer into its first-token readout (SII-Decision-4B and -27B)
+      brings the 27B to Jev's level, in about 0.1 s per decision.
+    metric: not stated in the note ("Jev's level")
+    value: null
+    baseline: {name: Jev}
+    finding: matches
+    runs: null
+    cases: null
+    reporting: unknown
+    also:
+      - {metric: seconds per decision, better: lower, value: 0.1, where: SII-Decision-27B}
+    note: The note gives no figure for the 4B; whether JEVal's authors made SII-Decision is not stated.
+  conditions:
+    models:
+      - {name: SII-Decision-27B, size: 27B, tuned: self-distilled from its own post-reasoning answers}
+      - {name: SII-Decision-4B, size: 4B, tuned: self-distilled from its own post-reasoning answers}
+    engine: {name: vLLM}
+    hardware: {name: H100}
+    dataset: {name: JEVal, size: "11,257 items from 36 datasets, 25 configurations"}
+    method: first-token readout after self-distillation
+    labels: none (the model's own post-reasoning answers)
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: untested
+      reason: >-
+        Needs fine-tuning on our model's own post-reasoning answers: the note's later route if a small readout is
+        close but not enough, after prompt changes have been searched.
+      date: 2026-11-25

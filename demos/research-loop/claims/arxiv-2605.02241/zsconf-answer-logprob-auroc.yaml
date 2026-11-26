@@ -1,0 +1,62 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: zsconf-answer-logprob-auroc
+  description: >-
+    The mean log-probability of a small model's own answer predicted its correctness with AUROC 0.65 to 0.71, better than asking it (0.56 to 0.64).
+spec:
+  about: component:default/answer-logprob-confidence
+  role: component:default/think-router
+  source:
+    kind: preprint
+    title: Zero-Shot Confidence Estimation for Small LLMs
+    id: arXiv:2605.02241
+    url: https://arxiv.org/html/2605.02241
+    version: v3
+    location: not stated in the note
+    read: not stated in the note
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, When to think, zero-shot confidence
+      quote: >-
+        the mean log-probability of the model's own answer predicted correctness with AUROC 0.65 to 0.71, better than asking it whether it was confident (0.56 to 0.64).
+  claim:
+    statement: >-
+      Zero-shot, the mean log-probability of a 7 to 8B model's own answer predicts whether it is correct with AUROC
+      0.65 to 0.71, better than asking the model whether it is confident (0.56 to 0.64).
+    metric: AUROC for correctness
+    better: higher
+    value: {min: 0.65, max: 0.71, over: models and datasets}
+    baseline: {name: asking the model whether it is confident, value: {min: 0.56, max: 0.64, over: models and datasets}}
+    finding: better
+    runs: null
+    cases: null
+    reporting: unknown
+  conditions:
+    models:
+      - {name: 7B to 8B models (not named in the note), size: 7 to 8B}
+    dataset: {name: MMLU-Pro and TriviaQA}
+    method: mean log-probability of the model's own answer, zero-shot
+    labels: none
+    unstated: [engine, precision, which models]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: predicted
+      prediction:
+        p_transfer: 0.6
+        reason: >-
+          Zero-shot and measured on 7 to 8B models, the nearest size class of any claim here. E-04a's readout margin
+          is the same kind of signal and costs nothing extra (the note's E-04 step 2). The AUROC is modest, and our
+          questions are typed decisions, not MMLU-Pro and TriviaQA answers.
+        by: agent draft for research-loop phase 0, from the note's table ("supported"); not yet reviewed by the owner
+        date: 2026-11-25
+        before_outcome: true
+      date: 2026-11-25

@@ -1,0 +1,61 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e04a-lfm3-speed
+  description: >-
+    One LFM3 read takes 108 ms (median) on the GTX 1070.
+spec:
+  about: component:default/likelihood-readout
+  role: component:default/decision-backend
+  source:
+    kind: trial
+    title: "E-04a: local models read as decision models, against Jev"
+    id: E-04a
+    url: https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md
+    version: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    repository: OpenReplicant/MetaSoar
+    commit: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    path: trials/decision-readout/README.md
+    location: Results so far, the last LFM3 bullet
+    read: in full
+    quote: >-
+      **Speed:** 108 ms per read (median) on the GTX 1070.
+    quote_location: Results so far, the last LFM3 bullet
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: A one-token read of LFM3 1.7B Q6_K takes 108 ms (median) on the GTX 1070 with llama.cpp.
+    metric: milliseconds per read
+    better: lower
+    unit: ms
+    value: 108
+    where: all ten slices pooled (median)
+    finding: none-stated
+    runs: 1
+    cases: null
+    reporting: ours
+    note: From 76 to 585 ms by slice, slowest on atbench500 (results/summary-lfm3.md).
+  conditions:
+    models:
+      - name: LFM3 1.7B
+        ref: resource:default/lfm3-1.7b-q6-k
+        size: 1.7B
+        precision: Q6_K
+        tuned: untuned
+        capability: the owner notes it beats 12B and 14B models on general benchmarks; the note cites no benchmark
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: JevBench (Leanmcp)
+      version: ed50fe0
+      split: the eval half of families, by a hash; each temperature and 5%-risk threshold chosen on the fit half
+      size: 3,412 eval cases of 6,516 usable, ten slices (SST-5 and BANKING77 left out)
+      ref: resource:default/jevbench-ed50fe0
+    method: >-
+      The question's instructions, the state as JSON and the options labelled A, B, C..., ending "Reply with the
+      letter of one option only"; `Answer:` prefilled; one token generated and its top 50 log-probabilities kept;
+      the option letters renormalised (an option outside the top 50 gets half the smallest listed). Two reads per
+      case, options in order and reversed. Debiased is the mean of both orders; scaled adds one temperature per slice.
+    thinking: off (enable_thinking false)
+    hardware: {name: NVIDIA GTX 1070, memory: 8 GB, ref: resource:default/gtx-1070}
+    reference: Jev 1.13, djev 0.1 and Laya 421M, their own probabilities as shipped with the cases
+    runs_note: one read per case and order; the intervals are 95% from resampling families

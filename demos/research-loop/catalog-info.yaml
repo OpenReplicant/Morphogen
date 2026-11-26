@@ -1,0 +1,24 @@
+# The research loop, phase 0: MetaSoar's decision-backends session of 2026-11-25 recorded as data. The map's side
+# (catalog/map.yaml): the System, the two roles the papers bear on, and this system's own conditions (models,
+# engine, hardware, cases). The options (catalog/options.yaml): one Component with spec.lifecycle: candidate per
+# method the papers measured. The claims (claims/) are files of their own, not Location targets: see README.md.
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: metasoar
+  description: >-
+    MetaSoar's System 1 on modest hardware: typed decisions (M-22) and when the slow model thinks (E-04), on local
+    models served by llama.cpp. Only the parts the session's evidence bears on are mapped here.
+  links:
+    - url: https://github.com/OpenReplicant/MetaSoar
+      title: MetaSoar
+spec:
+  owner: group:default/metasoar
+  lifecycle: experimental
+---
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: research-loop-map
+spec:
+  targets: [./catalog/map.yaml, ./catalog/options.yaml]

@@ -1,0 +1,71 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: dart-draft-agreement
+  description: >-
+    DART matched or beat always-thinking on 13 of 14 model and benchmark pairs while cutting thinking tokens by 32 to 73%.
+spec:
+  about: component:default/dart-draft-agreement
+  role: component:default/think-router
+  source:
+    kind: preprint
+    title: "DART: Draft-Agreement Routing for Training-Free Adaptive Thinking Budgets"
+    id: arXiv:2606.23181
+    url: https://arxiv.org/pdf/2606.23181
+    version: v4
+    location: results (section not stated in the note)
+    read: the results (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, When to think, DART
+      quote: >-
+        On Qwen3 8B to 32B and DeepSeek-V3.2 it matched or beat always-thinking on 13 of 14 model and benchmark pairs while cutting thinking tokens by 32 to 73%, and its first-stage signal held from 0.6B to 32B.
+  claim:
+    statement: >-
+      Training-free routing by draft agreement (two cheap no-think drafts; answer if they agree, else think with a
+      budget from their entropy) matched or beat always-thinking on 13 of 14 model and benchmark pairs, while cutting
+      thinking tokens by 32 to 73%; its first-stage signal held from 0.6B to 32B.
+    metric: model and benchmark pairs where it matched or beat always-thinking
+    better: higher
+    value: 13
+    unit: pairs of 14
+    baseline: {name: always-thinking}
+    finding: matches
+    runs: null
+    cases: null
+    reporting: self
+    also:
+      - {metric: thinking tokens saved, better: higher, value: {min: 0.32, max: 0.73, over: the model and benchmark pairs}, baseline: {name: always-thinking}}
+  conditions:
+    models:
+      - {name: Qwen3, size: 8B to 32B, tuned: untuned}
+      - {name: DeepSeek-V3.2}
+      - {name: "the first-stage signal: Qwen3 from 0.6B to 32B"}
+    dataset: {name: "14 model and benchmark pairs; the note does not name the benchmarks for this result"}
+    method: two no-think drafts; agree, answer directly; disagree, think with a budget from the drafts' entropy
+    thinking: routed per question
+    labels: none (training-free)
+    unstated: [engine, precision, hardware, the full benchmark list]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: predicted
+      prediction:
+        p_transfer: 0.55
+        reason: >-
+          Training-free, and its first-stage signal held down to 0.6B, so our models' size is not the obstacle.
+          Against it: the gains are on Qwen3 and DeepSeek-V3.2 with their own thinking modes;
+          our slow model is Inkling 2 Mini at Q4_K on llama.cpp, and E-04's questions are typed decisions, not those benchmarks; the
+          numbers are the method's authors' own. Code is released (js-lee-AI/DART), so the paper's own number can be
+          reproduced first.
+        by: agent draft for research-loop phase 0, from the note's table ("supported"); not yet reviewed by the owner
+        date: 2026-11-25
+        before_outcome: true
+      date: 2026-11-25

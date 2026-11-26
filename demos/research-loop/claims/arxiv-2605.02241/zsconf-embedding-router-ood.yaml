@@ -1,0 +1,62 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: zsconf-embedding-router-ood
+  description: >-
+    A RouteLLM-style logistic regression on query embeddings was close in distribution (AUROC 0.66 to 0.68) but fell to 0.546 on the other dataset.
+spec:
+  about: component:default/embedding-logreg
+  role: component:default/think-router
+  source:
+    kind: preprint
+    title: Zero-Shot Confidence Estimation for Small LLMs
+    id: arXiv:2605.02241
+    url: https://arxiv.org/html/2605.02241
+    version: v3
+    location: not stated in the note
+    read: not stated in the note
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, When to think, zero-shot confidence
+      quote: >-
+        A RouteLLM-style logistic regression on query embeddings, trained on 1,000 labels, was close in distribution (0.66 to 0.68) but fell to 0.546 on the other dataset.
+  claim:
+    statement: >-
+      A RouteLLM-style logistic regression on query embeddings, trained on 1,000 labels, was close in
+      distribution (AUROC 0.66 to 0.68) but fell to 0.546 on the other dataset.
+    metric: AUROC for correctness
+    better: higher
+    value: 0.546
+    where: the dataset it was not trained on
+    baseline: {name: the same router in distribution, value: {min: 0.66, max: 0.68, over: models}}
+    finding: worse
+    runs: null
+    cases: null
+    reporting: unknown
+  conditions:
+    models:
+      - {name: 7B to 8B models (not named in the note), size: 7 to 8B}
+    dataset: {name: MMLU-Pro and TriviaQA}
+    method: logistic regression on query embeddings (RouteLLM-style)
+    labels: 1,000
+    unstated: [the embedding model, which dataset was held out]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: predicted
+      prediction:
+        p_transfer: 0.65
+        reason: >-
+          A failure out of distribution is a property of training on few labels, not of the answering model, so it
+          should hold here; E-04 is to separate slices in and out of the training distribution for this reason.
+        by: agent draft for research-loop phase 0, from the note's table ("brittle out of distribution"); not yet reviewed by the owner
+        date: 2026-11-25
+        before_outcome: true
+      date: 2026-11-25

@@ -1,0 +1,57 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-finetuned-classifier-clinc150
+  description: >-
+    With labels, a fine-tuned DeBERTa-v3-large had the highest accuracy on every labelled task but one; 0.953 on CLINC-150 against Jev's 0.913.
+spec:
+  about: component:default/finetuned-classifier
+  role: component:default/decision-backend
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, first bullet
+      quote: >-
+        A fine-tuned DeBERTa-v3-large (under 0.5B) had the highest accuracy on every labelled task except one: 0.953 on CLINC-150 against Jev's 0.913.
+  claim:
+    statement: >-
+      When labels exist, a fine-tuned DeBERTa-v3-large (under 0.5B) had the highest accuracy of every system on
+      every labelled task except one; on CLINC-150, 0.953 against Jev's 0.913.
+    metric: accuracy
+    better: higher
+    value: 0.953
+    where: CLINC-150
+    baseline: {name: Jev, value: 0.913}
+    finding: better
+    runs: null
+    cases: null
+    reporting: unknown
+    note: The note does not say who fine-tuned the classifier, nor which task was the exception.
+  conditions:
+    models:
+      - {name: DeBERTa-v3-large, size: under 0.5B, tuned: fine-tuned on the task's labels}
+    dataset: {name: CLINC-150, split: not stated}
+    labels: the task's training labels
+    unstated: [training set size, precision, hardware]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: untested
+      reason: >-
+        Needs local labels (E-04's), which do not exist yet. The note puts classifiers first for any task that has
+        labels.
+      date: 2026-11-25

@@ -1,0 +1,49 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-cascade-needs-labels
+  description: >-
+    Cascades pay when the cheap stage knows the task's labels; an untrained first stage gained only where both stages were weak.
+spec:
+  about: component:default/decision-cascade
+  role: component:default/decision-backend
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, last bullet
+      quote: >-
+        **Cascades pay when the cheap stage knows the task's labels;** an untrained first stage gained only where both stages were weak.
+  claim:
+    statement: >-
+      A cascade pays when its cheap first stage knows the task's labels; an untrained first stage gained only where
+      both stages were weak.
+    metric: not stated in the note
+    value: null
+    baseline: {name: the stronger stage alone}
+    finding: differs
+    runs: null
+    cases: null
+    reporting: unknown
+  conditions:
+    method: a cheap first stage that answers when sure, the rest passed on
+    unstated: [which stages, which tasks, the metric, the numbers]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: untested
+      reason: No cascade is built; a trained first stage would need E-04's labels.
+      date: 2026-11-25

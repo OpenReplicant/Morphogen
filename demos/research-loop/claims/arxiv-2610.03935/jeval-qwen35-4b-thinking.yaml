@@ -1,0 +1,61 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: jeval-qwen35-4b-thinking
+  description: >-
+    Qwen3.5-4B's decisions: accuracy 61.4 without thinking, 70.7 with it; Jev 78.4.
+spec:
+  about: component:default/always-think
+  role: component:default/think-router
+  source:
+    kind: preprint
+    title: "General Decision Models: Benchmarking and Insights Beyond Jev (JEVal)"
+    id: arXiv:2610.03935
+    url: https://arxiv.org/pdf/2610.03935
+    version: v2
+    location: not stated in the note
+    read: the abstract, the experiments and sections 6 to 9 (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, JEVal, first bullet
+      quote: >-
+        Qwen3.5-4B, generating without thinking: accuracy 61.4, calibration error 0.253; with thinking: 70.7, 0.172. Jev: 78.4, 0.053.
+  claim:
+    statement: >-
+      Thinking improves a 4B general model's decisions, and does not reach a decision model: Qwen3.5-4B generating
+      without thinking, accuracy 61.4 and calibration error 0.253; with thinking, 70.7 and 0.172; Jev 78.4 and 0.053.
+    metric: accuracy
+    better: higher
+    unit: percent
+    value: 70.7
+    baseline: {name: the same model without thinking, value: 61.4}
+    finding: better
+    runs: null
+    cases: null
+    reporting: independent
+    also:
+      - {metric: calibration error, better: lower, value: 0.172, baseline: {name: the same model without thinking, value: 0.253}}
+      - {metric: accuracy, better: higher, unit: percent, value: 78.4, where: Jev}
+      - {metric: calibration error, better: lower, value: 0.053, where: Jev}
+  conditions:
+    models:
+      - {name: Qwen3.5-4B, size: 4B, tuned: untuned (general model)}
+    engine: {name: vLLM}
+    hardware: {name: H100}
+    dataset: {name: JEVal, size: "11,257 items from 36 datasets, 25 configurations"}
+    method: the model generates its answer, with and without thinking
+    thinking: both, compared
+    unstated: [precision, the thinking budget]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: untested
+      reason: E-04a ran with thinking off only; E-04 is to compare always on with always off.
+      date: 2026-11-25

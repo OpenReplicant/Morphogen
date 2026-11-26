@@ -1,0 +1,57 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: lwt-grpo-think-mode
+  description: >-
+    A 1.5B model trained with GRPO to pick NoThink, Short or Long kept MATH500 accuracy (0.782 against 0.796) at 41% fewer tokens.
+spec:
+  about: component:default/learned-think-mode
+  role: component:default/think-router
+  source:
+    kind: preprint
+    title: "Learning When to Think: Adaptive Reasoning for Test-Time Compute Allocation"
+    id: arXiv:2608.20256
+    url: https://arxiv.org/pdf/2608.20256
+    version: v2
+    location: the abstract
+    read: the abstract only (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, When to think, Learning When to Think
+      quote: >-
+        a 1.5B model trained with GRPO to pick NoThink, Short or Long as its first token kept MATH500 accuracy (0.782 against 0.796) at 41% fewer tokens.
+  claim:
+    statement: >-
+      A 1.5B model trained with GRPO to choose NoThink, Short or Long as its first token kept its MATH500 accuracy
+      (0.782 against 0.796) with 41% fewer tokens.
+    metric: accuracy
+    better: higher
+    value: 0.782
+    where: MATH500
+    baseline: {name: "the comparison the note gives, not named there", value: 0.796}
+    finding: matches
+    runs: null
+    cases: null
+    reporting: self
+    also:
+      - {metric: tokens saved, better: higher, value: 0.41, where: MATH500}
+  conditions:
+    models:
+      - {name: a 1.5B model (not named in the note), size: 1.5B, tuned: GRPO}
+    dataset: {name: MATH500}
+    method: the model's first token picks NoThink, Short or Long
+    labels: reinforcement learning with GRPO
+    unstated: [the base model, engine, precision, hardware, the baseline's exact setting]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: untested
+      reason: It needs training (GRPO), so the note makes it a later option, not a baseline.
+      date: 2026-11-25

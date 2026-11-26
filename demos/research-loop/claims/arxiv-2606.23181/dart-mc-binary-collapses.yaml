@@ -1,0 +1,65 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: dart-mc-binary-collapses
+  description: >-
+    Asking Qwen3-8B whether it needs to think (MC-Binary) matched on MATH-500 but collapsed on HumanEval (10.4 against DART's 78.7).
+spec:
+  about: component:default/ask-to-think
+  role: component:default/think-router
+  source:
+    kind: preprint
+    title: "DART: Draft-Agreement Routing for Training-Free Adaptive Thinking Budgets"
+    id: arXiv:2606.23181
+    url: https://arxiv.org/pdf/2606.23181
+    version: v4
+    location: results (section not stated in the note)
+    read: the results (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, When to think, DART
+      quote: >-
+        (MC-Binary) matched on MATH-500 (85.8) but collapsed on HumanEval (10.4, against 78.7 for DART);
+  claim:
+    statement: >-
+      Asking the model whether it needs to think (MC-Binary) is unreliable across tasks: on Qwen3-8B it matched on
+      MATH-500 (85.8) but collapsed on HumanEval (10.4, against 78.7 for DART).
+    metric: HumanEval score
+    better: higher
+    value: 10.4
+    where: HumanEval
+    baseline: {name: DART, value: 78.7}
+    finding: worse
+    runs: null
+    cases: null
+    reporting: self
+    also:
+      - {metric: MATH-500 score, better: higher, value: 85.8, where: MATH-500, baseline: {name: DART (matched; DART's figure not in the note)}}
+    note: A baseline in the DART paper, measured by DART's authors against their own method.
+  conditions:
+    models:
+      - {name: Qwen3-8B, size: 8B, tuned: untuned}
+    dataset: {name: MATH-500 and HumanEval}
+    method: the model asked, as a binary choice, whether the question needs thinking
+    unstated: [the prompt, engine, precision]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+      status: predicted
+      prediction:
+        p_transfer: 0.7
+        reason: >-
+          The collapse was task-dependent on an 8B model, and nothing about a smaller one makes a typed question
+          about its own thinking more reliable. This is the observer the note says has the weakest evidence, so E-04
+          puts it last.
+        by: agent draft for research-loop phase 0, from the note's table ("weak"); not yet reviewed by the owner
+        date: 2026-11-25
+        before_outcome: true
+      date: 2026-11-25

@@ -1,0 +1,97 @@
+# Our side: the roles the session's papers bear on, and the conditions a claim is compared with. Evidence lines cite
+# MetaSoar at a commit (repository@commit:path); demos/research-loop/check.py --metasoar checks each quote.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: decision-backend
+  description: >-
+    The role: answer a typed question (a choice among options, or yes or no) with a probability for each option, for
+    MetaSoar's typed-question interface (M-22). Not filled yet: the backend is to be chosen per task after E-04.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@92105f815c6c2691288c162a40f376be4dd564bb:docs/decision-backends.md | "The typed-question interface (M-22) is well supported. The backend is not decided by the evidence,"
+spec: {type: role, lifecycle: experimental, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: readout-calibration
+  description: >-
+    The role: turn a decision backend's raw scores into probabilities and thresholds fit to act on (debiasing over
+    option orders, a temperature per task, a threshold at a chosen risk).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@92105f815c6c2691288c162a40f376be4dd564bb:docs/decision-backends.md | "What the papers do say holds at any size: an untuned readout needs work before its probabilities can be trusted."
+spec: {type: role, lifecycle: experimental, owner: group:default/metasoar, system: metasoar, subcomponentOf: decision-backend}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: think-router
+  description: >-
+    The role: decide, per question, whether the slow model thinks before it answers (E-04's observers). Not filled
+    yet.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@92105f815c6c2691288c162a40f376be4dd564bb:docs/decision-backends.md | "E-04 with the observers reordered by evidence:"
+spec: {type: role, lifecycle: experimental, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: lfm3-1.7b-q6-k
+  description: >-
+    LFM3 1.7B, Q6_K, wholly on the GPU; MetaSoar's fast model. The owner notes it beats 12B and 14B models on general
+    benchmarks (no benchmark is cited in the note).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "`fast` is LFM3 1.7B Q6_K, wholly on the GPU, with thinking off by `enable_thinking: false`."
+      stated | OpenReplicant/MetaSoar@92105f815c6c2691288c162a40f376be4dd564bb:docs/decision-backends.md | "The owner notes that LFM3 1.7B beats 12B and 14B models on general"
+spec: {type: model, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: inkling-2-mini-q4-k
+  description: >-
+    Inkling 2 Mini, Q4_K, the experts of loop layers 6-12 on the GPU; MetaSoar's slow model. The owner notes it is
+    strong for its size. Its E-04a run was still going on 2026-11-25, so no claim here holds its numbers.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "`slow` is Inkling 2 Mini Q4_K, with the experts of loop layers 6–12 on the GPU, with thinking off by"
+      stated | OpenReplicant/MetaSoar@92105f815c6c2691288c162a40f376be4dd564bb:docs/decision-backends.md | "and that Inkling 2 Mini is likewise strong for its size;"
+spec: {type: model, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: llama-cpp-b12627
+  description: llama.cpp's server, Substrate's pinned CUDA 12 image at build b12627, on localhost only.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "Substrate's pinned llama.cpp image `server-cuda12-b12627` and model files (Substrate S-169),"
+spec: {type: engine, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: gtx-1070
+  description: One NVIDIA GTX 1070 with 8 GB; one model on the GPU at a time.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "108 ms per read (median) on the GTX 1070."
+      stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "`run.sh` runs both in turn, one on the GPU at a time."
+      stated | operator, 2026-11-25 | "GTX 1070 8 GB"
+spec: {type: hardware, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: jevbench-ed50fe0
+  description: >-
+    The Leanmcp JevBench release at revision ed50fe0: cases with a typed question, a gold answer, and Jev 1.13's,
+    djev 0.1's and Laya's probabilities. Ten slices used (SST-5 and BANKING77 left out).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "the Leanmcp JevBench release, pinned at revision `ed50fe0`."
+spec: {type: dataset, owner: group:default/metasoar, system: metasoar}

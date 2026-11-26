@@ -1,0 +1,69 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e04a-lfm3-calibration
+  description: >-
+    One temperature per slice took LFM3's pooled calibration error from 0.227 to 0.026; Jev's is 0.024.
+spec:
+  about: component:default/temperature-scaling
+  role: component:default/readout-calibration
+  source:
+    kind: trial
+    title: "E-04a: local models read as decision models, against Jev"
+    id: E-04a
+    url: https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md
+    version: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    repository: OpenReplicant/MetaSoar
+    commit: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+    path: trials/decision-readout/README.md
+    location: Results so far, the bullet after the LFM3 table
+    read: in full
+    quote: >-
+      **Calibration is not the gap; accuracy is.** One temperature per slice brings the calibration error to Jev's level.
+    quote_location: Results so far, the bullet after the LFM3 table
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      After debiasing, one temperature per slice (fitted on the fit half) brings LFM3's pooled calibration error to
+      Jev's level: 0.026 against 0.024, from 0.227 debiased and 0.311 raw.
+    metric: calibration error
+    better: lower
+    value: 0.026
+    where: all ten slices pooled, debiased and scaled
+    baseline: {name: Jev 1.13, value: 0.024}
+    finding: matches
+    runs: 1
+    cases: 3412
+    reporting: ours
+    also:
+      - {metric: calibration error, better: lower, value: 0.227, where: LFM3 debiased before scaling}
+      - {metric: calibration error, better: lower, value: 0.311, where: LFM3 raw}
+      - {metric: Brier score, better: lower, value: 0.553, where: LFM3 debiased and scaled, baseline: {name: Jev 1.13, value: 0.229}}
+    note: >-
+      From results/summary-lfm3.md at the same commit: the fitted temperatures ran from 1.4 to 30.0, reaching 30.0
+      on atbench500 and pubmedqa, where the scaled calibration error was 0.070 and 0.158.
+  conditions:
+    models:
+      - name: LFM3 1.7B
+        ref: resource:default/lfm3-1.7b-q6-k
+        size: 1.7B
+        precision: Q6_K
+        tuned: untuned
+        capability: the owner notes it beats 12B and 14B models on general benchmarks; the note cites no benchmark
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: JevBench (Leanmcp)
+      version: ed50fe0
+      split: the eval half of families, by a hash; each temperature and 5%-risk threshold chosen on the fit half
+      size: 3,412 eval cases of 6,516 usable, ten slices (SST-5 and BANKING77 left out)
+      ref: resource:default/jevbench-ed50fe0
+    method: >-
+      The question's instructions, the state as JSON and the options labelled A, B, C..., ending "Reply with the
+      letter of one option only"; `Answer:` prefilled; one token generated and its top 50 log-probabilities kept;
+      the option letters renormalised (an option outside the top 50 gets half the smallest listed). Two reads per
+      case, options in order and reversed. Debiased is the mean of both orders; scaled adds one temperature per slice.
+    thinking: off (enable_thinking false)
+    hardware: {name: NVIDIA GTX 1070, memory: 8 GB, ref: resource:default/gtx-1070}
+    reference: Jev 1.13, djev 0.1 and Laya 421M, their own probabilities as shipped with the cases
+    runs_note: one read per case and order; the intervals are 95% from resampling families

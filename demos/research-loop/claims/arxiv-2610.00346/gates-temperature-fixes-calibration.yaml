@@ -1,0 +1,71 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: gates-temperature-fixes-calibration
+  description: >-
+    One temperature fitted on held-out data took Gemma-4-31B's key-likelihood calibration error from 0.244 to 0.064.
+spec:
+  about: component:default/temperature-scaling
+  role: component:default/readout-calibration
+  source:
+    kind: preprint
+    title: Benchmarking System One decision models against trained classifiers and language models for automated decision gates
+    id: arXiv:2610.00346
+    url: https://arxiv.org/html/2610.00346v2
+    version: v2
+    location: not stated in the note (from section 6, the conclusion or the tables)
+    read: section 6 and the conclusion in full, the tables partly (as the note says)
+    quote: ""
+    quote_status: none
+    quote_note: The note paraphrases the paper and quotes none of it; the paper's own words are still to be taken and checked.
+    via:
+      title: MetaSoar docs/decision-backends.md
+      url: https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md
+      repository: OpenReplicant/MetaSoar
+      commit: 92105f815c6c2691288c162a40f376be4dd564bb
+      path: docs/decision-backends.md
+      location: What was measured elsewhere, Decision gates, fourth bullet
+      quote: >-
+        Gemma-4-31B's key likelihoods: calibration error 0.244 as shipped, 0.064 after one temperature fitted on held-out data.
+  claim:
+    statement: >-
+      Raw key likelihoods are miscalibrated, and one temperature per task, fitted on held-out data, fixes most of it:
+      Gemma-4-31B's calibration error 0.244 as shipped, 0.064 after.
+    metric: calibration error
+    better: lower
+    value: 0.064
+    baseline: {name: the same likelihoods as shipped, value: 0.244}
+    finding: better
+    runs: null
+    cases: null
+    reporting: independent
+  conditions:
+    models:
+      - {name: Gemma-4-31B, size: 31B, precision: bf16, tuned: untuned}
+    engine: {name: vLLM}
+    method: key likelihoods; one temperature fitted on held-out data
+    unstated: [the task or tasks, the held-out split, the calibration error's binning]
+  assessments:
+    - system: system:default/metasoar
+      against: [resource:default/lfm3-1.7b-q6-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070, resource:default/jevbench-ed50fe0]
+      status: replicated
+      outcome:
+        trial:
+          id: E-04a
+          url: https://github.com/OpenReplicant/MetaSoar/tree/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout
+          repository: OpenReplicant/MetaSoar
+          commit: facbe842bcc0778afc2fbe2a9801cd9895d46fab
+          path: trials/decision-readout/README.md
+        observed: [e04a-lfm3-calibration]
+        summary: >-
+          LFM3 1.7B Q6_K, debiased: pooled calibration error 0.227, and 0.026 after one temperature per slice fitted
+          on the other half of families (Jev 1.13: 0.024). Holds at 1.7B, on llama.cpp, on JevBench. Two slices'
+          temperatures reached 30.0 (atbench500, pubmedqa), and PubMedQA's scaled error stayed at 0.158.
+        comparison: our-setup
+        verdict:
+          by: none
+          decision: no verdict
+          note: E-04a's registered falsifier is on accuracy and coverage, not calibration; this record reads the measurement against the claim.
+        date: 2026-11-25
+      reason: No probability was written before the trial (the note marked it "supported for larger models").
+      date: 2026-11-25
