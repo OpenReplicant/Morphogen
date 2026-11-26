@@ -5,6 +5,7 @@
     morphogen measure TARGET [--ref main]
     morphogen judge TARGET CANDIDATE [--base main]
     morphogen request FILE          # one document: what to judge, and the operator's local settings
+    morphogen pr --base B --head H --sandbox docker --out FILE   # a pull request, as the GitHub judge runs it
     morphogen tune TARGET [--optimizer NAME] [--steps N] [--trials N]
     morphogen optimizers
     morphogen evidence [--verify] [--limit N] [--by judge]
@@ -118,6 +119,11 @@ def cmd_request(a) -> int:
     return 0 if r.get("verdict", "pass") == "pass" else 1
 
 
+def cmd_pr(a) -> int:
+    from .pullrequest import main as pr_main
+    return pr_main(a)
+
+
 def cmd_intake(a) -> int:
     from . import intake
     home = Path(a.home) if a.home else Path.home()
@@ -207,6 +213,24 @@ def main(argv: list[str] | None = None) -> int:
                         "from the base commit, the local settings from the request; the verdict records its digest")
     rq.add_argument("file", help="a request/v1 document, outside the repository")
     rq.set_defaults(fn=cmd_request)
+
+    pr = sub.add_parser("pr", help="judge a pull request without a person at the keyboard (the GitHub judge): "
+                        "not judged, refused, or a request to the judge; the verdict document always written to --out")
+    pr.add_argument("--base", required=True, help="the base: where the rules come from")
+    pr.add_argument("--head", required=True, help="the pull request's head commit")
+    pr.add_argument("--sandbox", required=True, choices=["podman", "docker", "none"],
+                    help="where candidates run; none only with --unsandboxed")
+    pr.add_argument("--local", help="the operator's morphogen.local.yaml, outside the repository (held-out answers, "
+                    "inputs, env, services); relative paths in it are read from its directory")
+    pr.add_argument("--target", help="what to judge (cell:NAME); else a `morphogen-target:` line in --body-env, "
+                    "else the change is judged as one that claims no improvement")
+    pr.add_argument("--body-env", help="an environment variable holding the pull request's description")
+    pr.add_argument("--protect", action="append", help="a glob no pull request may change (repeatable)")
+    pr.add_argument("--label", action="append", help="KEY=VALUE recorded with the verdict, never deciding it")
+    pr.add_argument("--pull", action="store_true", help="pull the sandbox image before any run")
+    pr.add_argument("--unsandboxed", action="store_true", help="allow --sandbox none (tests and local trials only)")
+    pr.add_argument("--out", required=True, help="where to write the pr-verdict/v1 document")
+    pr.set_defaults(fn=cmd_pr)
 
     it = sub.add_parser("intake", help="the judge held by another user: judge the candidate bundled on standard "
                         "input by a request that user keeps, or (the owner's) advance its base")

@@ -296,6 +296,8 @@ uv run morphogen measure cell:classify
 uv run morphogen judge cell:classify my-branch
 uv run morphogen change my-branch                # a change that claims no improvement: its cells' tests
 uv run morphogen request /outside/request.yaml   # one document: what to judge, and the operator's settings
+uv run morphogen pr --base main --head HEAD --sandbox podman --local /outside/morphogen.local.yaml --out v.json
+                                                 # a pull request, as the GitHub judge runs it
 uv run morphogen tune cell:classify              # the selector chooses optimizers
 uv run morphogen optimizers                      # the catalog
 uv run morphogen evidence --verify
@@ -428,6 +430,46 @@ that commit the base and be judged by them.
 
 Rootless Podman keeps images and containers per user, so the judge needs the sandbox image, any
 service images and its own model gateway in its own store.
+
+## On GitHub: the judge as a reusable workflow
+
+`.github/workflows/judge.yml` judges every pull request into your main branch by the catalog on main. Your repository
+needs only `catalog-info.yaml`; the operator's private material (a `morphogen.local.yaml` naming the held-out answers,
+inputs, env file and services, with the directories it names) lives in a private repository the workflow clones
+outside your checkout. Call it from a `pull_request_target` workflow, so the definition that runs is main's:
+
+```yaml
+name: morphogen
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+permissions: {}
+jobs:
+  judge:
+    uses: OpenReplicant/Morphogen/.github/workflows/judge.yml@COMMIT   # pin by commit
+    permissions: {contents: read, statuses: write, id-token: write}
+    secrets: inherit                                # MORPHOGEN_CASES_TOKEN, and the App's keys with verdict-poster: app
+    with:
+      judge-ref: COMMIT                             # the same commit
+      cases-repo: you/your-judge-material           # holds DIR/morphogen.local.yaml and what it names
+      cases-dir: your-project                       # paths in that file are relative to it
+      protected: ".github/** .morphogen/**"         # beyond the catalog files, which are always refused
+      sandbox: docker                               # or podman; never none
+      verdict-poster: app                           # or actions
+```
+
+The `judge` job holds only a read token. It fetches main and the pull request's head as git objects (nothing of the
+candidate is checked out by the workflow), installs the judge at `judge-ref` from hash-locked wheels
+(`requirements.lock`, exported from `uv.lock`), clones the private material, and runs `morphogen pr`, which hands the
+judge a request (above) and so keeps every rule it keeps: the rules from main as it is now (a branch behind main is
+judged merged onto it), a candidate that changes a catalog file or `morphogen.local.yaml` refused, every candidate
+command in a container with no network that sees only the candidate's tree, the answers given only to main's scorer.
+A pull request that touches no file any cell may change, and no rule file, is a pass (not judged); one that touches a
+`protected` path is refused. Name the cell to judge with a line `morphogen-target: cell:NAME` in the pull request's
+description; without one, the change is judged as one that claims no improvement (`morphogen change`). The `post`
+job signs the verdict (Sigstore, keyless by default), posts `morphogen/verdict` on the head commit and keeps the
+verdict and the run's evidence records as artifacts; a judge that fails is posted as a stop, never a pass.
 
 ## What the judge guarantees
 
