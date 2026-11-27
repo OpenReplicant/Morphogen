@@ -120,3 +120,30 @@ metadata:
     morphogen.dev/evidence: |
       stated | OpenReplicant/MetaSoar@22feddc6fa29682e94c2f62fe25da93b559980ab:docs/experiments.md | "TabMWP at `5a1a522` (data CC BY-NC-SA 4.0, fetched, not committed; `dev1k` for prompts, `test1k` for the stream)"
 spec: {type: dataset, owner: group:default/metasoar, system: metasoar}
+---
+# Roles added for the research loop's phase 1 (research/watch.yaml): the escalation gates (E-04b, E-16) and
+# table questions (E-17, E-18), which the watch searches for, beside intent-handler above.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: escalation-gate
+  description: >-
+    The role: decide which requests a cheap model answers and which go to a larger one (System 1 to System 2, Haiku
+    to Opus). Open: whether a learned gate beats the first stage's own confidence (E-04b, E-04c: not so far).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@22feddc6fa29682e94c2f62fe25da93b559980ab:docs/experiments.md | "every escalation gate (System 1 to System 2, E-16's Haiku to Opus, the hook)"
+      stated | OpenReplicant/MetaSoar@22feddc6fa29682e94c2f62fe25da93b559980ab:docs/experiments.md | "Haiku first, escalating to Opus on outcome triggers, matches Opus throughout on success at a fraction of its cost"
+spec: {type: role, lifecycle: experimental, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: table-qa
+  description: >-
+    The role: answer a question over a table (TabMWP in E-17, WikiTableQuestions in E-18), by a model, a plan or a
+    program over the table. The handler ladder's test task.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@22feddc6fa29682e94c2f62fe25da93b559980ab:docs/experiments.md | "On TabMWP (Lu et al., ICLR 2023; tables and math word problems, generated from templates, so intents recur by construction)"
+spec: {type: role, lifecycle: experimental, owner: group:default/metasoar, system: metasoar, subcomponentOf: intent-handler}

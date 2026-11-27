@@ -1,0 +1,74 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: pd-first-breakthrough-share
+  description: 'Over 244 runs with a positive gain, the first improvement to a program accounted on average for
+    68.7% of the run''s total gain, and the first three for 87.6%: gains came in one early breakthrough, not gradually.'
+spec:
+  about: component:default/program-distillation
+  role: component:default/intent-handler
+  source:
+    kind: preprint
+    title: 'Program Distillation: Transferring LLM Capability from System 2 to System 0'
+    id: arXiv:2611.19461
+    url: https://arxiv.org/abs/2611.19461v1
+    version: v1
+    location: Section 3.6, Figure 3
+    read: abstract, introduction, method and results (sections 1 to 3.6)
+    quote: the first improvement in policy performance accounts for an average of 68.7% of the total gain over a
+      run, while the first three improvements account for an average of 87.6%.
+    quote_location: 'arXiv HTML #S3.SS6.SSS0.Px1.p2.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 67fb63a98c0d) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: 'Over 244 runs with a positive gain, the first improvement to a program accounted on average for
+      68.7% of the run''s total gain, and the first three for 87.6%: gains came in one early breakthrough, not gradually.'
+    metric: share of a run's total development gain from its first improvement
+    better: higher
+    value: 0.687
+    finding: none-stated
+    runs: 244
+    cases: null
+    reporting: self
+    also:
+    - metric: share of total gain from the first three improvements
+      value: 0.876
+    note: A description of the learning curve, not a comparison; it says where revision budget pays.
+  conditions:
+    models:
+    - name: ten teacher LLMs (Table 2)
+      tuned: untuned
+    dataset:
+      name: PDBench
+      size: 27 tasks; 3,643 valid attempts
+    method: feedback-driven revision of a policy program; each candidate kept only if it beats the best on development
+      seeds
+    unstated:
+    - how the share is distributed across tasks
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.6
+      reason: A property of revising a program against a score, which E-18's handler writing also does (up to 4
+        tries a class, each after 3 more labels). Different models and task, but the claim is about the shape of
+        the curve, which is less tied to model size than the score is. If it holds, a class needs one good rewrite,
+        not many.
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: 'Re-analysis of E-18''s logs (no new model calls): for each operation class whose handler was rewritten,
+        the agreement of each try with the large model; the claim holds here if the first try that agrees on at
+        least half its labels captures most of the final agreement.'
+      cost_hours: 2
+      needs:
+      - E-18's stream.jsonl and state.json
+    date: '2026-11-27'

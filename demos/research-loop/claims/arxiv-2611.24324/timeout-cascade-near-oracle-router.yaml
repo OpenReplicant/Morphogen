@@ -1,0 +1,72 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: timeout-cascade-near-oracle-router
+  description: The simple cascade's GPU-hour saving (16.4%) came close to that of an oracle-style router sending
+    tasks by their true difficulty (17.9%), so a learned difficulty router would add little.
+spec:
+  about: component:default/timeout-cascade
+  role: component:default/escalation-gate
+  source:
+    kind: preprint
+    title: Reducing Inference Cost of Coding Agents with Timeout Cascades
+    id: arXiv:2611.24324
+    url: https://arxiv.org/abs/2611.24324v1
+    version: v1
+    location: Section I (contributions) and V-D
+    read: abstract, introduction, method and results (sections I to V-D)
+    quote: the cascade captures most of the router’s cost-saving benefit without requiring classifier training or
+      additional routing infrastructure (16.4% GPU-hour reduction from timeout cascade versus 17.9% from task router).
+    quote_location: 'arXiv HTML #S1.I1.i2.p1.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 99f78b1fd38d) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: The simple cascade's GPU-hour saving (16.4%) came close to that of an oracle-style router sending
+      tasks by their true difficulty (17.9%), so a learned difficulty router would add little.
+    metric: GPU-hour reduction against the large model alone
+    better: higher
+    value: 0.164
+    baseline:
+      name: an oracle task router by human-annotated difficulty
+      value: 0.179
+    finding: matches
+    runs: 1
+    cases: 466
+    reporting: self
+  conditions:
+    models:
+    - name: GLM-4.7-Flash
+      size: 30B
+    - name: GLM-4.7
+      size: 355B
+    dataset:
+      name: SWE-bench Verified
+    method: the router simulated with ground-truth difficulty labels at 100% accuracy
+    unstated:
+    - a real trained router; only an oracle is simulated
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.65
+      reason: 'Our own gates point the same way: in E-04b and E-04c a learned front (logistic, TabICL, embeddings)
+        was no better than d1-2B''s own confidence. The setting differs (coding agents, an outcome check, an oracle
+        router), but the claim, that a learned router adds little over a simple signal, has already held twice here.'
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: 'Already partly answered by E-04b and E-04c; the remaining test is the same comparison in the handler
+        ladder: a gate learned from the ladder''s own logs against its fixed rule (cheapest rung over its bound),
+        simulated on E-17d''s stream.'
+      cost_hours: 3
+      needs:
+      - E-17d's stream.jsonl
+    date: '2026-11-27'

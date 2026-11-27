@@ -1,0 +1,101 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: timeout-cascade-gpu-hours
+  description: On SWE-bench Verified, a cascade from GLM-4.7-Flash (30B) to GLM-4.7 (355B), escalating on timeout
+    or failed tests, cut GPU-hours from 2585 to 2160 (16.4%) over all tasks while keeping the large model's resolve
+    rate; on easy tasks the cut was 33.5%.
+spec:
+  about: component:default/timeout-cascade
+  role: component:default/escalation-gate
+  source:
+    kind: preprint
+    title: Reducing Inference Cost of Coding Agents with Timeout Cascades
+    id: arXiv:2611.24324
+    url: https://arxiv.org/abs/2611.24324v1
+    version: v1
+    location: Section V-C, Figure 4
+    read: abstract, introduction, method and results (sections I to V-D)
+    quote: Across all tasks, it drops from 2585 to 2160 GPU-hours, a 16.4% reduction.
+    quote_location: 'arXiv HTML #S5.SS3.p4.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 99f78b1fd38d) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: On SWE-bench Verified, a cascade from GLM-4.7-Flash (30B) to GLM-4.7 (355B), escalating on timeout
+      or failed tests, cut GPU-hours from 2585 to 2160 (16.4%) over all tasks while keeping the large model's resolve
+      rate; on easy tasks the cut was 33.5%.
+    metric: GPU-hours over all tasks
+    better: lower
+    value: 2160
+    unit: GPU-hours (MI300X)
+    baseline:
+      name: GLM-4.7 alone
+      value: 2585
+    finding: better
+    effect_size:
+      value: 0.164
+      kind: relative
+    runs: 1
+    cases: 466
+    reporting: self
+    also:
+    - metric: GPU-hours on easy tasks
+      better: lower
+      value: 546
+      baseline:
+        name: GLM-4.7 alone
+        value: 821
+      where: the 190 easy tasks
+    note: Simulated from single-model traces (each model run once on each task), with the 120-minute timeout; escalation
+      restarts the task cold.
+  conditions:
+    models:
+    - name: GLM-4.7-Flash
+      size: 30B
+      tuned: untuned
+    - name: GLM-4.7
+      size: 355B
+      tuned: untuned
+    engine:
+      name: vLLM
+      version: 0.16.0 on ROCm 7.0.0
+    hardware:
+      name: AMD Instinct MI300X
+    dataset:
+      name: SWE-bench Verified
+      size: 466 of 500 tasks with traces for both models
+    method: trace-driven simulation of a timeout sweep from 0 to 120 minutes; mini-swe-agent scaffold, 250 steps,
+      2 hours a task
+    labels: none for the gate; the task's unit tests decide success
+    unstated:
+    - variance across runs
+    - which the authors note
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.3
+      reason: 'The gate escalates on an outcome check, as E-16 (Haiku to Opus on outcome triggers) and the handler
+        ladder''s fallback do. But its check is a test suite, which says whether an answer is right; our checks
+        (type, choices, non-answers) only say whether it is well formed, and E-17b showed a weak check lets wrong
+        cheap answers through. Our models are 1.7B to Inkling 2 Mini, not 30B and 355B. It would transfer where
+        a task brings its own check: E-16''s recorded tasks with their own checks.'
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: 'In E-16''s design, before it runs: on the recorded tasks with their own checks, simulate from single-model
+        traces (Haiku alone, Opus alone) a cascade that escalates on a failed check, and report cost and success
+        against Opus alone; it holds here if success is not lower beyond the interval and cost is lower.'
+      cost_hours: 8
+      needs:
+      - E-16's recorded task set
+      - Haiku and Opus traces on it
+    date: '2026-11-27'

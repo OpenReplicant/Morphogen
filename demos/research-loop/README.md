@@ -19,6 +19,7 @@ Nothing here runs a model. These are records, and a check that they hold togethe
 | `claims/arxiv-*/` | 18 claims from the five papers, one file each ([schemas/evidence-claim.v1.json](../../schemas/evidence-claim.v1.json)), with their conditions and their status for `system:default/metasoar` |
 | `claims/e04a/`, `claims/e17/`, `claims/probe/` | 12 of our own observations: six from E-04a's LFM3 run and one from its Inkling 2 Mini run, four from the handler ladder (E-17, E-17b, E-17c, E-17d), one from the probe the note records. Each is a claim with `source.kind: trial` (or `probe`) and `reporting: ours`, which a paper claim's outcome links to |
 | `check.py` | validates every claim and every option, and the links between them |
+| `catalog/found.yaml`, `research/` | phase 1: the options the research agent found, and its state (below) |
 
 The claims are not `Location` targets, so the judge never reads them (docs/research-loop.md, "Where evidence claims
 live").
@@ -79,6 +80,72 @@ removed every error and nearly every cheap answer (8.7%, E-17d).
   name the judge's verdict.
 - **Quotes from 2026-11-26** (the Inkling run and E-17) are from MetaSoar at `22feddc` (its main on 2026-11-27);
   the earlier ones stay at `facbe84` and `92105f8`.
+
+## Phase 1: the first session run by the research agent (2026-11-27)
+
+The `research-loop` skill (`skills/research-loop/SKILL.md`) run once, by Claude Opus 5.5 in Claude Code, with
+`morphogen.research` doing the fetching, checking and writing. The map gained two roles from MetaSoar's open
+questions (`docs/experiments.md` at `22feddc`: E-04b, E-16, E-17), each with the quoted lines it comes from:
+`escalation-gate` and `table-qa`; the handler ladder's papers are claims on the existing `intent-handler` role.
+`research/watch.yaml` holds one arXiv topic for each of the three.
+
+- **Watched:** three queries over the last 45 days found 46 papers (`research/seen.jsonl`). Four were read, 37 skipped
+  with a reason, and 5 are left `new` for the next session.
+- **Read:** Program Distillation (arXiv 2611.19461), Timeout Cascades (2611.24324), TableRouter (2611.32006) and
+  TableRoute (2611.25853), all from their arXiv HTML.
+- **Cataloged:** 10 claims in `claims/arxiv-2611.*/`, each with a verbatim quote matched against the paper's text
+  (`quote_status: checked`, and `quote_location` naming the HTML element), and 6 options in `catalog/found.yaml`.
+  The drafts the claims came from are in `research/drafts/`. On the first run the checker refused 4 claims (YAML
+  values with commas the draft had not quoted); they were fixed in the drafts and run again, and the repeat runs
+  refused every claim already held as a duplicate.
+- **Predicted and ranked** (`research/queue.json`: bits of information in the outcome over the trial's hours):
+
+| Claim | Option | Role | p (transfer) | Cost (h) | Score |
+| --- | --- | --- | --- | --- | --- |
+| `pd-program-beats-ppo` | program-distillation | intent-handler | 0.35 | 1 | 0.93 |
+| `pd-first-breakthrough-share` | program-distillation | intent-handler | 0.6 | 2 | 0.49 |
+| `tableroute-oracle-route-complementarity` | capability-aware-table-routing | table-qa | 0.6 | 2 | 0.49 |
+| `timeout-cascade-near-oracle-router` | timeout-cascade | escalation-gate | 0.65 | 3 | 0.31 |
+| `tableroute-computational-support` | computed-table-statistics | table-qa | 0.5 | 4 | 0.25 |
+| `tablerouter-statistics-double-accuracy` | computed-table-statistics | table-qa | 0.55 | 4 | 0.25 |
+| `pd-reset-swarm-more-effort` | fresh-context-restarts | intent-handler | 0.45 | 6 | 0.17 |
+| `timeout-cascade-gpu-hours` | timeout-cascade | escalation-gate | 0.3 | 8 | 0.11 |
+| `tableroute-wikitq-gain` | capability-aware-table-routing | table-qa | 0.25 | 16 | 0.05 |
+| `tablerouter-post-freeze-bird` | query-aware-table-evidence | table-qa | 0.2 | 20 | 0.04 |
+
+The first row is cheap because its trial is E-18, which is already running: only recording its outcome against the
+claim remains. The two after it are re-analyses of E-18's logs. The phase-0 claims have no `trial` yet, so they are
+in the queue without a score. All predictions are the agent's draft (`prediction.by` says so), written before any
+outcome; the owner should revise them before a trial lands.
+- **Steering:** no issue with a `research:*` label existed, so `research/steering.jsonl` is empty.
+
+### Files a website reads
+
+All paths are under `demos/research-loop/`. Everything is a static file; no server is needed.
+
+| File | Format | What it holds |
+| --- | --- | --- |
+| `research/index.json` | JSON: `{system, claims: [{name, file, about, role, source: {kind, id, title, url}, statement, status, p_transfer}], seen, steering}` | every claim, phase 0's and phase 1's, with the path of its file: the list a static site cannot get by listing a folder |
+| `claims/**/NAME.yaml` | YAML, one `EvidenceClaim` (`schemas/evidence-claim.v1.json`) | the claim in full: source, quote, conditions, prediction, trial |
+| `research/queue.json` | JSON: `{system, date, how, queue: [{claim, file, role, about, p_transfer, information_bits, cost_hours, plan, prioritised_by, rejected_by, score, reason}]}`, best first | what to test next |
+| `research/seen.jsonl` | JSON lines: `{id, version, title, abstract, published, category, topics, roles, status, reason, claims}` | every paper the watch returned, and what became of it |
+| `research/steering.jsonl` | JSON lines: `{issue, url, kind, target, title, text, author, association, applied, why, recorded}` | every steering issue recorded |
+| `research/watch.yaml` | YAML: `{system, conditions, topics: [{name, question, roles, terms, categories}]}` | what the agent watches, and why |
+| `catalog/map.yaml`, `catalog/found.yaml` | Backstage entities | the roles (`spec.type: role`) and the options (`spec.lifecycle: candidate`) claims point at |
+
+`morphogen.research rank` rewrites `index.json` and `queue.json` from the claims, so they never disagree with them.
+For the claim site (`site/config.toml`): `sources.claims` stays `demos/research-loop/claims` (the agent writes
+there, in `claims/arxiv-ID/`), and `sources.catalog` needs `demos/research-loop/catalog/found.yaml` added beside
+`map.yaml` and `options.yaml`, since the options the agent finds are written there.
+Steering links are described in `docs/research-loop.md`, "Phase 1: running it".
+
+### Run it
+
+```sh
+export MORPHOGEN_RESEARCH_CACHE=~/.cache/morphogen-research   # papers stay here, outside the repository
+uv run python -I -m morphogen.research check demos/research-loop --fetch   # re-fetches the four papers, re-checks the quotes
+uv run python -I -m morphogen.research rank demos/research-loop
+```
 
 ## Run the check
 

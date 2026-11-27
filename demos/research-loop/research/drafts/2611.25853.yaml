@@ -1,0 +1,114 @@
+# Drafted by the research-loop skill (Claude Opus 5.5 in Claude Code), 2026-11-27, from the arXiv HTML of v1.
+paper: arXiv:2611.25853v1
+read: abstract, introduction, analysis, main results and ablations (sections 1 to 6)
+claims:
+  - name: tableroute-oracle-route-complementarity
+    option: {name: capability-aware-table-routing, description: "TableRoute: ground the question to columns, values and conditions, then per question choose direct answering, table reduction or a program, by table size ranges calibrated per model and operation on held-out data (a lower confidence bound per bin)."}
+    role: table-qa
+    location: Section 3 (analysis), Table 2
+    quote: "Oracle routing exceeds the strongest single route by 11.0 points on WTQ-L and 7.9 points on BirdQA."
+    claim:
+      statement: >-
+        With GPT-4o-mini, choosing per question the route that succeeds (an oracle over direct answering, table
+        reduction and program execution) beat the best single route by 11.0 points on WTQ-L and 7.9 on BirdQA: the
+        routes fail on different questions.
+      metric: exact-match accuracy, oracle over routes against the best single route
+      better: higher
+      value: null
+      baseline: {name: the strongest single route}
+      finding: better
+      effect_size: {value: 11.0, kind: absolute, note: "points, on WTQ-L; 7.9 on BirdQA"}
+      runs: null
+      cases: null
+      reporting: self
+      note: An upper bound, not a method; it says how much a router could gain.
+    conditions:
+      models:
+        - {name: GPT-4o-mini, tuned: untuned}
+      dataset: {name: WTQ-L and BirdQA (long-table sets derived from WikiTableQuestions and BIRD)}
+      method: oracle routing among Direct, Reduce and Execute
+      unstated: [the numbers on short WikiTQ tables for this analysis]
+    prediction:
+      p_transfer: 0.6
+      reason: >-
+        The handler ladder already has routes (handler, template, large model) and E-18's falsifier depends on the
+        cheap ones being right on different cases from where they fail. Complementarity between a program and direct
+        reading is likely at any model size, since programs fail on grounding and models on arithmetic, as the paper
+        finds. Our tables are short, where the gap may be smaller than on WTQ-L.
+    trial:
+      plan: >-
+        From E-18's logs (no new calls): on cases where both a class handler (in shadow) and Inkling answered, the
+        share each got right that the other did not; an oracle over the two against Inkling alone.
+      cost_hours: 2
+      needs: [E-18's stream.jsonl with shadow answers]
+  - name: tableroute-wikitq-gain
+    option: {name: capability-aware-table-routing}
+    role: table-qa
+    location: Section 5, Table 3
+    quote: "Averaged over the three base LLMs, it outperforms the strongest baseline by 2.1 points on WikiTQ (RoT), 3.2 points on WTQ-L (TALON), and 5.3 points on BirdQA (DeepEye-SQL)."
+    claim:
+      statement: >-
+        Averaged over Qwen2.5-72B, LLaMA3.3-70B and GPT-4o-mini, TableRoute beat the strongest baseline by 2.1 points
+        on WikiTableQuestions, 3.2 on WTQ-L and 5.3 on BirdQA, with fewer online tokens than TALON.
+      metric: exact-match accuracy (WikiTableQuestions' official evaluator), gain over the strongest baseline
+      better: higher
+      value: null
+      baseline: {name: "the strongest baseline per benchmark (RoT on WikiTQ)"}
+      finding: better
+      effect_size: {value: 2.1, kind: absolute, note: points on WikiTQ; 3.2 on WTQ-L; 5.3 on BirdQA}
+      significance: paired McNemar tests, p < 0.001 against the strongest matched baselines
+      runs: null
+      cases: null
+      reporting: self
+    conditions:
+      models:
+        - {name: Qwen2.5-72B, size: 72B}
+        - {name: LLaMA3.3-70B, size: 70B}
+        - {name: GPT-4o-mini}
+      dataset: {name: WikiTableQuestions, version: the official test set (as the paper names it)}
+      method: grounding evidence, then per-question routing by calibrated size ranges; deterministic computations added as context
+      unstated: [precision, engine, run-to-run variance]
+    prediction:
+      p_transfer: 0.25
+      reason: >-
+        The same dataset as E-18 and the same evaluator, which is rare. But the base models are 70B or an API model,
+        ours 1.7B to Inkling 2 Mini at Q4_K; the gain on WikiTQ is 2.1 points, small enough to vanish in our noise; and
+        the method is several calls a question, where ours aims at none. Code is not yet released.
+    trial:
+      plan: Wait for the code; then its route ranges calibrated for LFM3 and Inkling on WTQ's train split, against E-18's ladder on the same cases.
+      cost_hours: 16
+      needs: [TableRoute's code (announced, not released)]
+  - name: tableroute-computational-support
+    option: {name: computed-table-statistics}
+    role: table-qa
+    location: Section 6, Table 5 (ablations)
+    quote: "Computational support contributes 2.0 and 2.1 points on WikiTQ and WTQ-L, respectively."
+    claim:
+      statement: >-
+        Removing the deterministic computations (counts, sums, averages, differences added as context) cost TableRoute
+        2.0 points on WikiTableQuestions and 2.1 on WTQ-L.
+      metric: exact-match accuracy lost without the computations
+      better: higher
+      value: null
+      baseline: {name: TableRoute without computational support}
+      finding: better
+      effect_size: {value: 2.0, kind: absolute, note: points on WikiTQ; 2.1 on WTQ-L}
+      runs: null
+      cases: null
+      reporting: self
+    conditions:
+      models:
+        - {name: "the paper's base LLMs (70B and GPT-4o-mini)"}
+      dataset: {name: WikiTableQuestions and WTQ-L}
+      method: an ablation of TableRoute's evidence layer
+      unstated: [which base model the ablation used]
+    prediction:
+      p_transfer: 0.5
+      reason: >-
+        A second, independent paper on the same option (see tablerouter-statistics-double-accuracy), and on WTQ itself.
+        The gain is small for large models; for our smaller ones it may be larger, but that is the other paper's
+        evidence, not this one's.
+    trial:
+      plan: The same trial as tablerouter-statistics-double-accuracy settles both.
+      cost_hours: 4
+      needs: [that trial]

@@ -10,10 +10,11 @@ docs/restart/LESSONS.md.
   `otel`), `project.py` (the cell format: `spec.morphogen` on the catalog's entities, default deny),
   `backstage.py` (the catalog: `catalog-info.yaml` and its Location targets, read into cells, interfaces and settings),
   `status.py` (where a project stands and the next step),
-  `documents.py` (the project's settings, from the System's `spec.morphogen`, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `pullrequest.py` (`morphogen pr`: a pull request as the GitHub judge, `.github/workflows/judge.yml`, hands it to the judge as a request), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
+  `documents.py` (the project's settings, from the System's `spec.morphogen`, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `pullrequest.py` (`morphogen pr`: a pull request as the GitHub judge, `.github/workflows/judge.yml`, hands it to the judge as a request), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `research.py` (the research loop's deterministic half: arXiv watch, paper text, quote checks, claim files, steering, the queue; never imported by the judge), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills (the kit):
   `morphogen` (improve a cell), `map` (take a system apart into Backstage entity files and draft cells),
-  `catalog` and `research` (options for a role, as `lifecycle: candidate` Components). `schemas/morphogen-spec.v1.json`
+  `catalog` and `research` (options for a role, as `lifecycle: candidate` Components), `research-loop` (one session of
+  the research agent: papers to checked EvidenceClaim files, docs/research-loop.md). `schemas/morphogen-spec.v1.json`
   is the schema of the `spec.morphogen` fields the code loads (a test keeps them equal).
 - `tests/`: the core's tests and red team; fixture projects in `tests/fixture*.py`, the timed
   sample's files in `tests/fixtures`.

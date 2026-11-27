@@ -21,4 +21,4 @@ kind: Location
 metadata:
   name: research-loop-map
 spec:
-  targets: [./catalog/map.yaml, ./catalog/options.yaml]
+  targets: [./catalog/map.yaml, ./catalog/options.yaml, ./catalog/found.yaml]

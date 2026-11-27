@@ -1,0 +1,607 @@
+{
+ "system": "system:default/metasoar",
+ "claims": [
+  {
+   "name": "dart-draft-agreement",
+   "file": "claims/arxiv-2606.23181/dart-draft-agreement.yaml",
+   "about": "component:default/dart-draft-agreement",
+   "role": "component:default/think-router",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2606.23181",
+    "title": "DART: Draft-Agreement Routing for Training-Free Adaptive Thinking Budgets",
+    "url": "https://arxiv.org/pdf/2606.23181"
+   },
+   "statement": "Training-free routing by draft agreement (two cheap no-think drafts; answer if they agree, else think with a budget from their entropy) matched or beat always-thinking on 13 of 14 model and benchmark pairs, while cutting thinking tokens by 32 to 73%; its first-stage signal held from 0.6B to 32B.",
+   "status": "predicted",
+   "p_transfer": 0.55
+  },
+  {
+   "name": "dart-mc-binary-collapses",
+   "file": "claims/arxiv-2606.23181/dart-mc-binary-collapses.yaml",
+   "about": "component:default/ask-to-think",
+   "role": "component:default/think-router",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2606.23181",
+    "title": "DART: Draft-Agreement Routing for Training-Free Adaptive Thinking Budgets",
+    "url": "https://arxiv.org/pdf/2606.23181"
+   },
+   "statement": "Asking the model whether it needs to think (MC-Binary) is unreliable across tasks: on Qwen3-8B it matched on MATH-500 (85.8) but collapsed on HumanEval (10.4, against 78.7 for DART).",
+   "status": "predicted",
+   "p_transfer": 0.7
+  },
+  {
+   "name": "e04a-inkling-pooled-accuracy",
+   "file": "claims/e04a/e04a-inkling-pooled-accuracy.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "trial",
+    "id": "E-04a",
+    "title": "E-04a: local models read as decision models, against Jev",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/trials/decision-readout/README.md"
+   },
+   "statement": "Inkling 2 Mini (a mixture of experts of about 26B parameters), read by its first token, debiased over both option orders and scaled with one temperature per slice, is 3.3 points below Jev 1.13 in pooled accuracy on the same cases: a real gap, but within E-04a's registered 10 points. Its coverage at 5% risk is 0.51 against Jev's 0.64, above half of Jev's.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e04a-lfm3-calibration",
+   "file": "claims/e04a/e04a-lfm3-calibration.yaml",
+   "about": "component:default/temperature-scaling",
+   "role": "component:default/readout-calibration",
+   "source": {
+    "kind": "trial",
+    "id": "E-04a",
+    "title": "E-04a: local models read as decision models, against Jev",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md"
+   },
+   "statement": "After debiasing, one temperature per slice (fitted on the fit half) brings LFM3's pooled calibration error to Jev's level: 0.026 against 0.024, from 0.227 debiased and 0.311 raw.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e04a-lfm3-coverage",
+   "file": "claims/e04a/e04a-lfm3-coverage.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "trial",
+    "id": "E-04a",
+    "title": "E-04a: local models read as decision models, against Jev",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md"
+   },
+   "statement": "With its 5%-risk threshold chosen on the fit half, LFM3 debiased and scaled acts on 0.09 of eval cases (realised risk 0.072), against Jev's 0.67 (realised risk 0.050): about a seventh of Jev's coverage, and above the target risk.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e04a-lfm3-order-flip",
+   "file": "claims/e04a/e04a-lfm3-order-flip.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "trial",
+    "id": "E-04a",
+    "title": "E-04a: local models read as decision models, against Jev",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/results/summary-lfm3.md"
+   },
+   "statement": "LFM3 1.7B read untuned changes its answer on 0.327 of cases when the options are reversed (pooled), 0.667 on MMLU-Pro, where only 0.52 of its first-token probability is on the option letters (0.86 pooled).",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e04a-lfm3-pooled-accuracy",
+   "file": "claims/e04a/e04a-lfm3-pooled-accuracy.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "trial",
+    "id": "E-04a",
+    "title": "E-04a: local models read as decision models, against Jev",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md"
+   },
+   "statement": "LFM3 1.7B, read by its first token and debiased over both option orders, is 31 points below Jev 1.13 in pooled accuracy on the same cases (scaling does not change accuracy).",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e04a-lfm3-slices",
+   "file": "claims/e04a/e04a-lfm3-slices.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "trial",
+    "id": "E-04a",
+    "title": "E-04a: local models read as decision models, against Jev",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md"
+   },
+   "statement": "By slice, LFM3 read untuned is close to Jev where the answer is in the text (Aegis 2.0, prompt injections) and far below it where knowledge or reasoning is needed (MedQA, MedMCQA, MMLU-Pro). JEVal saw the same pattern for one-pass readouts (the README's words).",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e04a-lfm3-speed",
+   "file": "claims/e04a/e04a-lfm3-speed.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "trial",
+    "id": "E-04a",
+    "title": "E-04a: local models read as decision models, against Jev",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/facbe842bcc0778afc2fbe2a9801cd9895d46fab/trials/decision-readout/README.md"
+   },
+   "statement": "A one-token read of LFM3 1.7B Q6_K takes 108 ms (median) on the GTX 1070 with llama.cpp.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e17-ladder-last-150",
+   "file": "claims/e17/e17-ladder-last-150.yaml",
+   "about": "component:default/handler-ladder",
+   "role": "component:default/intent-handler",
+   "source": {
+    "kind": "trial",
+    "id": "E-17",
+    "title": "E-17: the handler ladder on TabMWP",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/docs/experiments.md"
+   },
+   "statement": "On the last 150 cases of a 300-case TabMWP stream, the handler ladder answered 58.7% of cases with templates and handlers, at 98.0% accuracy against the large model alone's 99.3% on the same cases: -1.3 points, with a 95% interval of [-3.3, +0.0], so a loss over 2 points is not excluded. E-17's falsifier is not met.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e17b-ladder-fresh-cases",
+   "file": "claims/e17/e17b-ladder-fresh-cases.yaml",
+   "about": "component:default/handler-ladder",
+   "role": "component:default/intent-handler",
+   "source": {
+    "kind": "trial",
+    "id": "E-17b",
+    "title": "E-17b: what E-17's runner learned, on cases it has never seen",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/docs/experiments.md"
+   },
+   "statement": "Frozen at the end of E-17 and run on the stream's next 150 cases, never seen while it was tuned, the ladder answered 74.0% of them with templates and handlers, but at 94.0% accuracy against the large model alone's 99.3%: -5.3 points [-9.3, -2.0]. The interval's upper end is -2.0 exactly, so by the registered rule the falsifier is not met; the loss is real by every other reading.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e17c-ladder-perturbed",
+   "file": "claims/e17/e17c-ladder-perturbed.yaml",
+   "about": "component:default/handler-ladder",
+   "role": "component:default/intent-handler",
+   "source": {
+    "kind": "trial",
+    "id": "E-17c",
+    "title": "E-17c: the ladder's cheap answers under changes that keep the answer",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/docs/experiments.md"
+   },
+   "statement": "Read-only (nothing learned), the ladder as it stood after E-17b kept its accuracy on variants of the cases a template or handler had answered: rows shuffled, 91.9% against 91.9% on the originals, +0.0 points [-3.6, +3.6]; labels permuted and the question reworded, +0.0 [+0.0, +0.0] each. The handlers did not learn their examples' surface; E-17b's errors came from shapes and non-answers a perturbation of seen shapes cannot find.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "e17d-ladder-strict-promotion",
+   "file": "claims/e17/e17d-ladder-strict-promotion.yaml",
+   "about": "component:default/handler-ladder",
+   "role": "component:default/intent-handler",
+   "source": {
+    "kind": "trial",
+    "id": "E-17d",
+    "title": "E-17d: E-17b's three fixes, on fresh cases",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/docs/experiments.md"
+   },
+   "statement": "With promotion at a 95% Wilson lower bound of 0.70 (9 of 9 at the least), a promoted candidate answering only table shapes it has agreed on, a check that refuses non-answers, and intents matched by d1-2B among the nearest known ones, the ladder made no errors on cases 451 to 600 (100.0% against the large model alone's 100.0%), but templates and handlers answered only 8.7% of them, all templates. The fixes removed the errors and nearly all the cheap answers; E-17d's falsifier is met on coverage.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "gates-cascade-needs-labels",
+   "file": "claims/arxiv-2610.00346/gates-cascade-needs-labels.yaml",
+   "about": "component:default/decision-cascade",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "A cascade pays when its cheap first stage knows the task's labels; an untrained first stage gained only where both stages were weak.",
+   "status": "untested",
+   "p_transfer": null
+  },
+  {
+   "name": "gates-embedding-logreg-labelled",
+   "file": "claims/arxiv-2610.00346/gates-embedding-logreg-labelled.yaml",
+   "about": "component:default/embedding-logreg",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "Logistic regression on BGE-small embeddings, trained on the task's labels, comes close to the best systems: 0.948 on CLINC-150, and 0.702 on the workflow decisions against Jev's 0.732.",
+   "status": "predicted",
+   "p_transfer": 0.6
+  },
+  {
+   "name": "gates-finetuned-classifier-clinc150",
+   "file": "claims/arxiv-2610.00346/gates-finetuned-classifier-clinc150.yaml",
+   "about": "component:default/finetuned-classifier",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "When labels exist, a fine-tuned DeBERTa-v3-large (under 0.5B) had the highest accuracy of every system on every labelled task except one; on CLINC-150, 0.953 against Jev's 0.913.",
+   "status": "untested",
+   "p_transfer": null
+  },
+  {
+   "name": "gates-likelihood-readout-27-31b-matches-jev",
+   "file": "claims/arxiv-2610.00346/gates-likelihood-readout-27-31b-matches-jev.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "Without labels, an untuned generative model read by the likelihood of each option key matches Jev for some checkpoints (Gemma-4-31B, Qwen3.6-27B) and stays significantly below it for others (Qwen3-14B, Mistral-Small-24B): it depends on the checkpoint, not on the class. No generative model under 14B was tested.",
+   "status": "did-not-transfer",
+   "p_transfer": null
+  },
+  {
+   "name": "gates-order-effects-untrained",
+   "file": "claims/arxiv-2610.00346/gates-order-effects-untrained.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "Order effects are large for untrained readers: swapping yes and no flipped at least 16.8 answers per hundred for every generative model, against at most 6.5 for fine-tuned decision checkpoints (and 50.5 for Jev).",
+   "status": "replicated",
+   "p_transfer": null
+  },
+  {
+   "name": "gates-stated-probabilities-unparseable",
+   "file": "claims/arxiv-2610.00346/gates-stated-probabilities-unparseable.yaml",
+   "about": "component:default/stated-probability",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "Read the key's likelihood, not stated probabilities: one model's stated probabilities could not be parsed in 0.767 of its emotion replies.",
+   "status": "untested",
+   "p_transfer": null
+  },
+  {
+   "name": "gates-temperature-fixes-calibration",
+   "file": "claims/arxiv-2610.00346/gates-temperature-fixes-calibration.yaml",
+   "about": "component:default/temperature-scaling",
+   "role": "component:default/readout-calibration",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "Raw key likelihoods are miscalibrated, and one temperature per task, fitted on held-out data, fixes most of it: Gemma-4-31B's calibration error 0.244 as shipped, 0.064 after.",
+   "status": "replicated",
+   "p_transfer": null
+  },
+  {
+   "name": "gates-temperature-option-count",
+   "file": "claims/arxiv-2610.00346/gates-temperature-option-count.yaml",
+   "about": "component:default/temperature-scaling",
+   "role": "component:default/readout-calibration",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "A temperature fitted under one option count does not carry to another: Kev-9B's calibration error went from 0.051 to 0.377 at 150 options.",
+   "status": "predicted",
+   "p_transfer": 0.7
+  },
+  {
+   "name": "gates-thresholds-per-model-task",
+   "file": "claims/arxiv-2610.00346/gates-thresholds-per-model-task.yaml",
+   "about": "component:default/per-task-risk-threshold",
+   "role": "component:default/readout-calibration",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.00346",
+    "title": "Benchmarking System One decision models against trained classifiers and language models for automated decision gates",
+    "url": "https://arxiv.org/html/2610.00346v2"
+   },
+   "statement": "Thresholds belong to one model on one task, set on held-out labels and checked on more: at 5% risk the same Jev accepts 0.93 of intent decisions but 0.17 of workflow decisions.",
+   "status": "untested",
+   "p_transfer": null
+  },
+  {
+   "name": "jeval-distillation-reasoning-heavy",
+   "file": "claims/arxiv-2610.03935/jeval-distillation-reasoning-heavy.yaml",
+   "about": "component:default/self-distilled-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.03935",
+    "title": "General Decision Models: Benchmarking and Insights Beyond Jev (JEVal)",
+    "url": "https://arxiv.org/pdf/2610.03935"
+   },
+   "statement": "A distilled one-pass readout recovers most of what thinking adds on label selection (intent, harm, emotion), but a quarter or less on reasoning-heavy sets (GPQA, MMLU-Pro): one pass does not reproduce multi-step computation.",
+   "status": "predicted",
+   "p_transfer": 0.7
+  },
+  {
+   "name": "jeval-first-token-readout",
+   "file": "claims/arxiv-2610.03935/jeval-first-token-readout.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.03935",
+    "title": "General Decision Models: Benchmarking and Insights Beyond Jev (JEVal)",
+    "url": "https://arxiv.org/pdf/2610.03935"
+   },
+   "statement": "An open model's first-token readout is a decision model.",
+   "status": "replicated",
+   "p_transfer": null
+  },
+  {
+   "name": "jeval-qwen35-4b-thinking",
+   "file": "claims/arxiv-2610.03935/jeval-qwen35-4b-thinking.yaml",
+   "about": "component:default/always-think",
+   "role": "component:default/think-router",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.03935",
+    "title": "General Decision Models: Benchmarking and Insights Beyond Jev (JEVal)",
+    "url": "https://arxiv.org/pdf/2610.03935"
+   },
+   "statement": "Thinking improves a 4B general model's decisions, and does not reach a decision model: Qwen3.5-4B generating without thinking, accuracy 61.4 and calibration error 0.253; with thinking, 70.7 and 0.172; Jev 78.4 and 0.053.",
+   "status": "untested",
+   "p_transfer": null
+  },
+  {
+   "name": "jeval-self-distillation-27b",
+   "file": "claims/arxiv-2610.03935/jeval-self-distillation-27b.yaml",
+   "about": "component:default/self-distilled-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2610.03935",
+    "title": "General Decision Models: Benchmarking and Insights Beyond Jev (JEVal)",
+    "url": "https://arxiv.org/pdf/2610.03935"
+   },
+   "statement": "Distilling an open model's own post-reasoning answer into its first-token readout (SII-Decision-4B and -27B) brings the 27B to Jev's level, in about 0.1 s per decision.",
+   "status": "untested",
+   "p_transfer": null
+  },
+  {
+   "name": "lwt-grpo-think-mode",
+   "file": "claims/arxiv-2608.20256/lwt-grpo-think-mode.yaml",
+   "about": "component:default/learned-think-mode",
+   "role": "component:default/think-router",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2608.20256",
+    "title": "Learning When to Think: Adaptive Reasoning for Test-Time Compute Allocation",
+    "url": "https://arxiv.org/pdf/2608.20256"
+   },
+   "statement": "A 1.5B model trained with GRPO to choose NoThink, Short or Long as its first token kept its MATH500 accuracy (0.782 against 0.796) with 41% fewer tokens.",
+   "status": "untested",
+   "p_transfer": null
+  },
+  {
+   "name": "pd-first-breakthrough-share",
+   "file": "claims/arxiv-2611.19461/pd-first-breakthrough-share.yaml",
+   "about": "component:default/program-distillation",
+   "role": "component:default/intent-handler",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.19461",
+    "title": "Program Distillation: Transferring LLM Capability from System 2 to System 0",
+    "url": "https://arxiv.org/abs/2611.19461v1"
+   },
+   "statement": "Over 244 runs with a positive gain, the first improvement to a program accounted on average for 68.7% of the run's total gain, and the first three for 87.6%: gains came in one early breakthrough, not gradually.",
+   "status": "predicted",
+   "p_transfer": 0.6
+  },
+  {
+   "name": "pd-program-beats-ppo",
+   "file": "claims/arxiv-2611.19461/pd-program-beats-ppo.yaml",
+   "about": "component:default/program-distillation",
+   "role": "component:default/intent-handler",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.19461",
+    "title": "Program Distillation: Transferring LLM Capability from System 2 to System 0",
+    "url": "https://arxiv.org/abs/2611.19461v1"
+   },
+   "statement": "Programs written and revised by the strongest LLM (Claude-Opus-5, in the MiniSWEAgent harness) reached a normalised mean score of 0.728 over 27 Gym control tasks, above PPO's 0.656 and Jev-like decision models' 0.239, and ran on a CPU alone.",
+   "status": "predicted",
+   "p_transfer": 0.35
+  },
+  {
+   "name": "pd-reset-swarm-more-effort",
+   "file": "claims/arxiv-2611.19461/pd-reset-swarm-more-effort.yaml",
+   "about": "component:default/fresh-context-restarts",
+   "role": "component:default/intent-handler",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.19461",
+    "title": "Program Distillation: Transferring LLM Capability from System 2 to System 0",
+    "url": "https://arxiv.org/abs/2611.19461v1"
+   },
+   "statement": "With GLM-5.3 as the model, restarting each revision session from the best program with a fresh context (Reset) raised the overall score to 0.744 and five parallel sessions (Swarm) to 0.746, against 0.718 for the standard single session, at a higher build cost.",
+   "status": "predicted",
+   "p_transfer": 0.45
+  },
+  {
+   "name": "probe-lfm3-first-token",
+   "file": "claims/probe/probe-lfm3-first-token.yaml",
+   "about": "component:default/likelihood-readout",
+   "role": "component:default/decision-backend",
+   "source": {
+    "kind": "probe",
+    "id": null,
+    "title": "MetaSoar docs/decision-backends.md (the probe before E-04a)",
+    "url": "https://github.com/OpenReplicant/MetaSoar/blob/92105f815c6c2691288c162a40f376be4dd564bb/docs/decision-backends.md"
+   },
+   "statement": "Read untuned with `Answer:` prefilled, LFM3 1.7B puts most of its first-token probability on starting to reason, not on an option: \" Let\" at 0.37, and only about a third on the option letters.",
+   "status": null,
+   "p_transfer": null
+  },
+  {
+   "name": "tableroute-computational-support",
+   "file": "claims/arxiv-2611.25853/tableroute-computational-support.yaml",
+   "about": "component:default/computed-table-statistics",
+   "role": "component:default/table-qa",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.25853",
+    "title": "TableRoute: Capability-Aware Routing for Scalable Table Question Answering",
+    "url": "https://arxiv.org/abs/2611.25853v1"
+   },
+   "statement": "Removing the deterministic computations (counts, sums, averages, differences added as context) cost TableRoute 2.0 points on WikiTableQuestions and 2.1 on WTQ-L.",
+   "status": "predicted",
+   "p_transfer": 0.5
+  },
+  {
+   "name": "tableroute-oracle-route-complementarity",
+   "file": "claims/arxiv-2611.25853/tableroute-oracle-route-complementarity.yaml",
+   "about": "component:default/capability-aware-table-routing",
+   "role": "component:default/table-qa",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.25853",
+    "title": "TableRoute: Capability-Aware Routing for Scalable Table Question Answering",
+    "url": "https://arxiv.org/abs/2611.25853v1"
+   },
+   "statement": "With GPT-4o-mini, choosing per question the route that succeeds (an oracle over direct answering, table reduction and program execution) beat the best single route by 11.0 points on WTQ-L and 7.9 on BirdQA: the routes fail on different questions.",
+   "status": "predicted",
+   "p_transfer": 0.6
+  },
+  {
+   "name": "tableroute-wikitq-gain",
+   "file": "claims/arxiv-2611.25853/tableroute-wikitq-gain.yaml",
+   "about": "component:default/capability-aware-table-routing",
+   "role": "component:default/table-qa",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.25853",
+    "title": "TableRoute: Capability-Aware Routing for Scalable Table Question Answering",
+    "url": "https://arxiv.org/abs/2611.25853v1"
+   },
+   "statement": "Averaged over Qwen2.5-72B, LLaMA3.3-70B and GPT-4o-mini, TableRoute beat the strongest baseline by 2.1 points on WikiTableQuestions, 3.2 on WTQ-L and 5.3 on BirdQA, with fewer online tokens than TALON.",
+   "status": "predicted",
+   "p_transfer": 0.25
+  },
+  {
+   "name": "tablerouter-post-freeze-bird",
+   "file": "claims/arxiv-2611.32006/tablerouter-post-freeze-bird.yaml",
+   "about": "component:default/query-aware-table-evidence",
+   "role": "component:default/table-qa",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.32006",
+    "title": "TableRouter: Query-Aware Evidence Construction for Long-Table Question Answering",
+    "url": "https://arxiv.org/abs/2611.32006v1"
+   },
+   "statement": "On 299 questions over long tables from databases not used during development (committed after the method was frozen), TableRouter with Qwen2.5-7B answered 35.8%, against 16.4% for the strongest external baseline.",
+   "status": "predicted",
+   "p_transfer": 0.2
+  },
+  {
+   "name": "tablerouter-statistics-double-accuracy",
+   "file": "claims/arxiv-2611.32006/tablerouter-statistics-double-accuracy.yaml",
+   "about": "component:default/computed-table-statistics",
+   "role": "component:default/table-qa",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.32006",
+    "title": "TableRouter: Query-Aware Evidence Construction for Long-Table Question Answering",
+    "url": "https://arxiv.org/abs/2611.32006v1"
+   },
+   "statement": "Given the same answer-determining rows, adding statistics computed from them raised Qwen2.5-7B's accuracy from 40.0% to 80.0% and Llama-3.1-8B's from 37.8% to 71.1% on 45 count and sum questions; Qwen3.5-9B went from 86.7% to 93.3%.",
+   "status": "predicted",
+   "p_transfer": 0.55
+  },
+  {
+   "name": "timeout-cascade-gpu-hours",
+   "file": "claims/arxiv-2611.24324/timeout-cascade-gpu-hours.yaml",
+   "about": "component:default/timeout-cascade",
+   "role": "component:default/escalation-gate",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.24324",
+    "title": "Reducing Inference Cost of Coding Agents with Timeout Cascades",
+    "url": "https://arxiv.org/abs/2611.24324v1"
+   },
+   "statement": "On SWE-bench Verified, a cascade from GLM-4.7-Flash (30B) to GLM-4.7 (355B), escalating on timeout or failed tests, cut GPU-hours from 2585 to 2160 (16.4%) over all tasks while keeping the large model's resolve rate; on easy tasks the cut was 33.5%.",
+   "status": "predicted",
+   "p_transfer": 0.3
+  },
+  {
+   "name": "timeout-cascade-near-oracle-router",
+   "file": "claims/arxiv-2611.24324/timeout-cascade-near-oracle-router.yaml",
+   "about": "component:default/timeout-cascade",
+   "role": "component:default/escalation-gate",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2611.24324",
+    "title": "Reducing Inference Cost of Coding Agents with Timeout Cascades",
+    "url": "https://arxiv.org/abs/2611.24324v1"
+   },
+   "statement": "The simple cascade's GPU-hour saving (16.4%) came close to that of an oracle-style router sending tasks by their true difficulty (17.9%), so a learned difficulty router would add little.",
+   "status": "predicted",
+   "p_transfer": 0.65
+  },
+  {
+   "name": "zsconf-answer-logprob-auroc",
+   "file": "claims/arxiv-2605.02241/zsconf-answer-logprob-auroc.yaml",
+   "about": "component:default/answer-logprob-confidence",
+   "role": "component:default/think-router",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2605.02241",
+    "title": "Zero-Shot Confidence Estimation for Small LLMs",
+    "url": "https://arxiv.org/html/2605.02241"
+   },
+   "statement": "Zero-shot, the mean log-probability of a 7 to 8B model's own answer predicts whether it is correct with AUROC 0.65 to 0.71, better than asking the model whether it is confident (0.56 to 0.64).",
+   "status": "predicted",
+   "p_transfer": 0.6
+  },
+  {
+   "name": "zsconf-embedding-router-ood",
+   "file": "claims/arxiv-2605.02241/zsconf-embedding-router-ood.yaml",
+   "about": "component:default/embedding-logreg",
+   "role": "component:default/think-router",
+   "source": {
+    "kind": "preprint",
+    "id": "arXiv:2605.02241",
+    "title": "Zero-Shot Confidence Estimation for Small LLMs",
+    "url": "https://arxiv.org/html/2605.02241"
+   },
+   "statement": "A RouteLLM-style logistic regression on query embeddings, trained on 1,000 labels, was close in distribution (AUROC 0.66 to 0.68) but fell to 0.546 on the other dataset.",
+   "status": "predicted",
+   "p_transfer": 0.65
+  }
+ ],
+ "seen": 46,
+ "steering": 0
+}

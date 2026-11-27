@@ -1,0 +1,28 @@
+# What the research loop watches for MetaSoar (morphogen.research watch). One topic per open question; each names the
+# map's roles it bears on and the phrases searched for in arXiv titles and abstracts. Steering issues labelled
+# research:question add a topic at the end with empty terms; the next session fills them in.
+system: system:default/metasoar
+owner: group:default/metasoar
+# This system's conditions, which every prediction is made against (catalog/map.yaml).
+against: [resource:default/lfm3-1.7b-q6-k, resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070]
+# What a prediction compares a claim's conditions with, in one place (the map's Resources say the same, with sources).
+conditions: >-
+  Local models only: LFM3 1.7B Q6_K and d1-2B as the small models, Inkling 2 Mini Q4_K as the large one, on
+  llama.cpp b12627; one GTX 1070 with 8 GB (and Kaggle's 2x T4 for experiments). Tasks: typed decisions (JevBench) and
+  streams of table questions (TabMWP, WikiTableQuestions). Labels come from the large model's own answers, not gold.
+topics:
+  - name: compiled-handlers
+    question: How to compile what a large model solved into reusable plans or programs, promote them safely and share them across intents (E-17d, E-18).
+    roles: [intent-handler]
+    terms: [plan caching, workflow memory, skill library, program distillation, tool making, agent experience reuse, LLM-generated programs]
+    categories: [cs.CL, cs.AI, cs.LG, cs.SE]
+  - name: model-cascades
+    question: When should a cheap model defer to a larger one, and does a learned gate beat the small model's own confidence (E-04b, E-04c, E-16)?
+    roles: [escalation-gate]
+    terms: [model cascade, LLM cascade, LLM routing, deferral, escalation, small and large language models]
+    categories: [cs.CL, cs.AI, cs.LG]
+  - name: table-qa
+    question: Answering questions over tables that are not templated, with small models or programs (E-18, WikiTableQuestions).
+    roles: [table-qa]
+    terms: [table question answering, WikiTableQuestions, tabular reasoning, table reasoning]
+    categories: [cs.CL, cs.AI, cs.DB]
