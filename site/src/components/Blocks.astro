@@ -1,0 +1,19 @@
+---
+// Generated sections a Markdown page can ask for in its front matter (`blocks: [statuses, steering, files]`).
+import StatusBadge from "./StatusBadge.astro";
+import ExtLink from "./ExtLink.astro";
+import { OBSERVATION, STATUSES, STATUS_HELP } from "../lib/text.mjs";
+const { site, blocks = [], depth = 0 } = Astro.props;
+const u = "../".repeat(depth);
+const actions = [["prioritise", "test this claim sooner; it counts double in the queue"], ["reject", "drop it from the queue"],
+  ["dispute", "the transfer prediction is wrong; the next session reassesses it"], ["question", "a question to watch"],
+  ["propose-role", "a role to read papers for"], ["propose-option", "an option or paper for a role"]];
+---
+{blocks.includes("statuses") && <section class="panel" aria-labelledby="st-h"><h2 id="st-h">What a status means</h2><ul class="plain statuses">{[...STATUSES, OBSERVATION].map((s) => <li><StatusBadge status={s} /> {STATUS_HELP[s]}</li>)}</ul>
+<p class="small">"Replicated" means the finding held on this system's setup. It is a transfer test of the method, not a reproduction of the paper, and "did not transfer" is not a refutation of it.</p></section>}
+{blocks.includes("steering") && <section class="panel" aria-labelledby="sg-h"><h2 id="sg-h">Steering it</h2>
+<p>The agent takes direction from GitHub issues. The buttons on this site open one, filled in, for you to edit and submit; nothing is sent until you do. Each ends with a <span class="mono">research-action:</span> line, which the agent reads first:</p>
+<ul class="plain">{actions.map(([k, t]) => <li><span class="mono tag">research-action: {k}</span> {t}{(site.labels[k] || []).length > 0 && <> <span class="muted small">(label {site.labels[k].join(", ")})</span></>}</li>)}</ul>
+<p class="small muted">GitHub applies labels from a link only for people who can triage the repository, which is why the body line comes first. The agent records every issue but acts only on those from the repository's owner, members and collaborators.</p></section>}
+{blocks.includes("files") && <section class="panel" aria-labelledby="f-h"><h2 id="f-h">Files, not a service</h2>
+<p>Every claim is a YAML file in the repository (<ExtLink url={site.fileUrl("schemas/evidence-claim.v1.json")} text="schemas/evidence-claim.v1.json" />), and the roles and options are Backstage entity files. This site is built from them by Astro (<span class="mono">site/</span>); <a href={`${u}data/claims.json`}>data/claims.json</a> holds the same records and <a href={`${u}data/graph.json`}>data/graph.json</a> every reference between them, for other tools. The judge never reads the claims: what decides a change is only what it measures.</p></section>}

@@ -1,0 +1,8 @@
+---
+// A list of claims, each with its status badges and its role and option.
+import StatusBadges from "./StatusBadges.astro";
+import { refName, truncate, up } from "../lib/text.mjs";
+const { site, claims, depth = 0, empty = "None yet." } = Astro.props;
+const list = site.sorted(claims);
+---
+{list.length ? <ul class="plain clist">{list.map((c) => <li><StatusBadges site={site} c={c} /> <a href={`${up(depth)}${c.url}`}>{truncate(c.title, 140)}</a> <span class="muted small mono">{refName(c.spec.role)} · {refName(c.spec.about)}</span></li>)}</ul> : <p class="muted">{empty}</p>}

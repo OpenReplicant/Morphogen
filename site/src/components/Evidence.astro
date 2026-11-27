@@ -1,0 +1,7 @@
+---
+// The `morphogen.dev/evidence` annotation of a catalog entity: where the map says what it says.
+import { parseEvidence } from "../lib/text.mjs";
+const { ent } = Astro.props;
+const ev = parseEvidence(ent.doc?.metadata?.annotations?.["morphogen.dev/evidence"]);
+---
+{ev.map(([s, q]) => <blockquote class="verbatim small"><p>{q}</p><footer class="mono muted">{s}</footer></blockquote>)}

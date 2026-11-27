@@ -1,0 +1,36 @@
+---
+// The relations graph: every claim between the papers and trials it comes from (and the models it was tested on)
+// and the options and roles it bears on. A static SVG of links, laid out at build time (src/lib/layout.mjs);
+// Alpine's `graph` component (assets/site.js) highlights a node's neighbours and filters by kind.
+import Base from "../layouts/Base.astro";
+import { TYPES } from "../lib/data.mjs";
+import { layout } from "../lib/layout.mjs";
+import { getSite } from "../lib/site.mjs";
+const site = await getSite();
+const g = layout(site);
+const types = [...new Set(g.nodes.map((n) => n.ent.type))];
+const cls = (n) => `node t-${n.ent.type}${n.ent.type === "claim" ? ` s-${site.status(n.ent)}` : ""}`;
+---
+<Base site={site} title="Map" current="map.html" description="Every claim, paper, trial, model, option and role on the site, and how they link.">
+<section class="hero small-hero">
+  <p class="eyebrow">How it all links</p>
+  <h1>The map</h1>
+  <p class="lede">Each claim sits between where it came from (a paper or one of our trials, and the models it was tested on) and what it bears on (an option, and the role that option could fill). Point at a node to see its neighbours; open it for its page. Models link only to claims with a result on them; every page lists the rest.</p>
+</section>
+<div x-data="graph">
+<form class="filters" hidden x-bind:hidden="off" aria-label="Show kinds of entity" x-on:change="filter">
+  <fieldset class="f-row"><legend class="f-lab">Show</legend>{types.map((t) => <label class="chk"><input type="checkbox" name="type" value={t} checked> {TYPES[t].many} <span class="n">{g.nodes.filter((n) => n.ent.type === t).length}</span></label>)}</fieldset>
+</form>
+<div class="graph-wrap">
+<svg class="graph" id="graph" viewBox={`0 0 ${g.width} ${g.height}`} width={String(g.width)} height={String(g.height)} role="img" aria-labelledby="g-t" x-on:mouseover="hover" x-on:focusin="hover" x-on:mouseleave="clear" x-on:focusout="clear">
+<title id="g-t">The map: {g.nodes.length} entities and {g.paths.length} links</title>
+{g.cols.map((c) => <text class="col-h" x={String(c.x)} y="20">{c.label}</text>)}
+<g class="edges">{g.paths.map((p) => <path class={`edge r-${p.rel}${p.status ? ` e-${p.status}` : ""}`} d={p.d} data-from={p.from} data-to={p.to} />)}</g>
+<g class="nodes">{g.nodes.map((n) => <a href={n.ent.url} class={cls(n)} data-id={n.ent.id} data-type={n.ent.type}><rect x={String(n.x)} y={n.y.toFixed(1)} width={String(n.w)} height={String(n.h)} rx="4" /><text x={String(n.x + 6)} y={(n.y + n.h / 2 + 4).toFixed(1)}>{n.label}</text><title>{TYPES[n.ent.type].one}: {n.ent.title}</title></a>)}</g>
+</svg>
+</div>
+</div>
+<section class="panel" aria-labelledby="l-h"><h2 id="l-h">Reading it</h2>
+<p class="small">Claims are coloured by their status here: green replicated, red did not transfer, amber mixed, blue predicted, grey untested, purple our own observation. A link from a claim to a model means the claim was measured on it, or tested on it with a result. <a href="data/graph.json">data/graph.json</a> has every entity and reference, for other tools; <a href="search.html">search</a> lists everything by kind.</p>
+</section>
+</Base>

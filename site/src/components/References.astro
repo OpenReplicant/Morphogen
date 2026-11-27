@@ -1,0 +1,33 @@
+---
+// Every reference an entity makes and every one made to it, grouped by kind: the generic panel at the foot of each
+// entity page, so nothing that links here is missed.
+import { RELS, TYPES } from "../lib/data.mjs";
+import { up } from "../lib/text.mjs";
+const { ent, depth = 0 } = Astro.props;
+const u = up(depth);
+function groups(edges, end, idx) {
+  const by = new Map();
+  for (const e of edges) {
+    const other = e[end];
+    const label = (RELS[e.rel] || [e.rel, e.rel])[idx];
+    if (!by.has(label)) by.set(label, new Map());
+    const m = by.get(label);
+    if (!m.has(other.id)) m.set(other.id, { ent: other, statuses: new Set() });
+    if (e.status) m.get(other.id).statuses.add(e.status);
+  }
+  return [...by.entries()].map(([label, m]) => [label, [...m.values()]]);
+}
+const outs = groups(ent.out, "to", 0);
+const ins = groups(ent.in, "from", 1);
+---
+<section class="panel refs" aria-labelledby="refs-h">
+  <h2 id="refs-h">References</h2>
+  <div class="cols">
+    <div><h3>Links to <span class="n">{ent.out.length ? "" : "none"}</span></h3>
+      {outs.map(([label, items]) => <><p class="f-lab">{label} <span class="n">{items.length}</span></p><ul class="plain refl">{items.map((x) => <li><span class="tag">{TYPES[x.ent.type].one}</span> <a href={`${u}${x.ent.url}`}>{x.ent.title}</a>{x.statuses.size > 0 && <span class="small muted"> {[...x.statuses].join(", ")}</span>}</li>)}</ul></>)}
+    </div>
+    <div><h3>Linked from <span class="n">{ent.in.length ? "" : "nothing yet"}</span></h3>
+      {ins.map(([label, items]) => <><p class="f-lab">{label} <span class="n">{items.length}</span></p><ul class="plain refl">{items.map((x) => <li><span class="tag">{TYPES[x.ent.type].one}</span> <a href={`${u}${x.ent.url}`}>{x.ent.title}</a>{x.statuses.size > 0 && <span class="small muted"> {[...x.statuses].join(", ")}</span>}</li>)}</ul></>)}
+    </div>
+  </div>
+</section>

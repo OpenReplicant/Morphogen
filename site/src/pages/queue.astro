@@ -1,0 +1,37 @@
+---
+// Next to test: the agent's queue.json, best first, with its plan, cost, score and steering.
+import Base from "../layouts/Base.astro";
+import Meter from "../components/Meter.astro";
+import { getSite } from "../lib/site.mjs";
+import { issue, issueBody } from "../lib/steer.mjs";
+import { refName } from "../lib/text.mjs";
+const site = await getSite();
+const q = site.research.queue || {};
+const items = site.queue().map((it, i) => {
+  const c = site.claim(it.claim || "");
+  const role = site.catalogRef(it.role), about = site.catalogRef(it.about);
+  const steer = [["prioritised_by", "prioritised"], ["rejected_by", "rejected"], ["disputed_by", "disputed"]]
+    .filter(([k]) => (it[k] || []).length).map(([k, text]) => `${text} by ${it[k].map(String).join(", ")}`);
+  const nums = [["score", typeof it.score === "number" ? it.score.toFixed(3) : "none"], ["bits", it.information_bits], ["hours", it.cost_hours]]
+    .filter(([, v]) => v !== undefined && v !== null);
+  const pri = c && issue(site, "prioritise", `Prioritise: ${c.name}`, issueBody("prioritise", site, c, ["Please test this claim sooner.", "", "Why it is worth a trial now:", ""]));
+  const rej = c && issue(site, "reject", `Reject: ${c.name}`, issueBody("reject", site, c, ["Please drop this claim from the queue.", "", "Why:", ""]));
+  return { it, i: i + 1, c, role, about, steer, nums, pri, rej };
+});
+---
+<Base site={site} title="Next to test" current="queue.html">
+<section class="hero small-hero">
+  <p class="eyebrow">The research agent's queue</p>
+  <h1>Next to test</h1>
+  <p class="lede">Claims ranked by what a trial would teach for its cost: a prediction near 0.5 teaches the most, a cheap trial costs the least.{q.date && ` Ranked on ${q.date}.`}</p>
+  {q.how && <p class="small muted">{q.how}</p>}
+</section>
+{items.length ? <ol class="queue">{items.map((x) => <li class="qitem"><span class="qrank mono" aria-label={`Rank ${x.i}`}>{String(x.i).padStart(2, "0")}</span><article class="card">
+<div class="card-top"><span class="mono muted small">{x.role ? <a href={x.role.url}>{refName(x.it.role)}</a> : refName(x.it.role)} · option {x.about ? <a href={x.about.url}>{refName(x.it.about)}</a> : refName(x.it.about)}</span>{typeof x.it.p_transfer === "number" && <Meter p={x.it.p_transfer} />}</div>
+<h3>{x.c ? <a href={x.c.url}>{x.c.title}</a> : x.it.claim}</h3>
+<p class="qnums">{x.nums.map(([k, v]) => <span class="qnum"><span class="f-lab">{k}</span> <span class="mono">{v}</span></span>)}{x.steer.map((s) => <span class="tag">{s}</span>)}</p>
+{x.it.plan && <p><span class="f-lab">Plan</span><br>{x.it.plan}</p>}
+{x.it.reason && <details><summary>Why this probability</summary><p class="small">{x.it.reason}</p></details>}
+{x.c && <p class="actions"><a class="btn ghost small-btn" href={x.pri} rel="noopener noreferrer">Test sooner</a> <a class="btn ghost small-btn" href={x.rej} rel="noopener noreferrer">Reject</a></p>}
+</article></li>)}</ol> : <p class="panel muted">No queue yet: the research agent writes one (research/queue.json) when it ranks its claims.</p>}
+</Base>

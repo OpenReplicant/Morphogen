@@ -1,0 +1,5 @@
+---
+import { STATUS_HELP, STATUS_TEXT } from "../lib/text.mjs";
+const { status } = Astro.props;
+---
+<span class={`badge s-${status}`} title={STATUS_HELP[status] || ""}>{STATUS_TEXT[status] || status}</span>

@@ -1,0 +1,60 @@
+---
+// The feed: every claim, newest first, filtered in the page by search, role, source and status (Alpine's `feed`
+// component in assets/site.js; the filters are kept in the address). Without JavaScript every claim is listed.
+import Base from "../layouts/Base.astro";
+import Meter from "../components/Meter.astro";
+import StatusBadge from "../components/StatusBadge.astro";
+import StatusBadges from "../components/StatusBadges.astro";
+import { getSite } from "../lib/site.mjs";
+import { questionUrl } from "../lib/steer.mjs";
+import { OBSERVATION, QUOTE_SHORT, QUOTE_TEXT, STATUSES, STATUS_TEXT, refName, truncate } from "../lib/text.mjs";
+const site = await getSite();
+const claims = site.sorted();
+const all = [...STATUSES, OBSERVATION];
+const counts = Object.fromEntries(all.map((s) => [s, 0]));
+for (const c of claims) for (const s of site.statuses(c)) counts[s] = (counts[s] || 0) + 1;
+const roles = [...new Set(claims.map((c) => refName(c.spec.role)))].sort();
+const sources = new Map();
+for (const c of claims) if (!sources.has(c.source.id || c.source.title || "")) sources.set(c.source.id || c.source.title || "", c.source.title || "");
+const srcOpts = [...sources.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+const paperN = claims.filter((c) => !c.ours).length;
+const short = (src) => src.id || src.title || "";
+function item(c) {
+  const src = c.source, cl = c.spec.claim || {};
+  const role = refName(c.spec.role), option = refName(c.spec.about);
+  const search = [c.name, c.doc.metadata.description || "", cl.statement || "", src.title || "", src.id || "", role, option, cl.metric || "",
+    ...(c.spec.conditions?.models || []).map((m) => m.name || ""), ...(c.spec.assessments || []).map((a) => site.configLabel(a))].join(" ").toLowerCase();
+  return { c, src, role, option, search, qs: src.quote_status || "none", from: c.out.find((e) => e.rel === "from")?.to };
+}
+---
+<Base site={site} title={site.title} current="index.html">
+<section class="hero">
+  <p class="eyebrow">The research agent's catalog</p>
+  <h1>Claims from papers, checked against this system</h1>
+  <p class="lede">The agent reads new papers for the roles in the map, writes down each claimed gain with the conditions it was measured under, and predicts whether it will hold here. Trials behind the judge then score the prediction. {paperN} claims from papers so far, for <span class="mono">{refName(site.system)}</span>.</p>
+  <ul class="stats" aria-label="Claims by status">{all.filter((s) => counts[s]).map((s) => <li><span class="stat-n">{counts[s]}</span> <StatusBadge status={s} /></li>)}</ul>
+  <p class="actions"><a class="btn" href={questionUrl(site)} rel="noopener noreferrer">Propose a question to watch</a> <a class="btn ghost" href="map.html">The map of what links to what</a></p>
+</section>
+
+<div x-data="feed">
+<form id="filters" class="filters" hidden x-bind:hidden="off" role="search" aria-label="Filter claims" x-on:input="apply" x-on:change="apply" x-on:submit.prevent="apply">
+  <div class="f-row">
+    <label class="f-search"><span class="sr">Search</span><input type="search" name="q" placeholder="Search claims, models, metrics…" autocomplete="off"></label>
+    <label><span class="f-lab">Role</span><select name="role"><option value="">All roles</option>{roles.map((r) => <option value={r}>{r}</option>)}</select></label>
+    <label><span class="f-lab">Source</span><select name="source"><option value="">All sources</option>{srcOpts.map(([k, v]) => <option value={k}>{truncate(k + (v && v !== k ? " · " + v : ""), 70)}</option>)}</select></label>
+  </div>
+  <fieldset class="f-row f-status"><legend class="f-lab">Status</legend>{all.map((s) => <label class="chk"><input type="checkbox" name="status" value={s} checked={s !== OBSERVATION}> {STATUS_TEXT[s]} <span class="n">{counts[s] || 0}</span></label>)}</fieldset>
+</form>
+<p class="count" id="count" aria-live="polite" x-text="countText"></p>
+<ol class="feed" id="claims">
+{claims.map(item).map((x) => <li class="item" data-name={x.c.name} data-status={site.statuses(x.c).join(" ")} data-role={x.role} data-source={short(x.src)} data-search={x.search}>
+  <article class="card">
+    <div class="card-top"><StatusBadges site={site} c={x.c} /><span class={`qs q-${x.qs}`} title={QUOTE_TEXT[x.qs] || ""}>{QUOTE_SHORT[x.qs] || ""}</span>{site.predictions(x.c).map((pr) => <Meter p={pr.p_transfer} />)}</div>
+    <h3><a href={x.c.url}>{x.c.title}</a></h3>
+    <p class="meta"><a class="mono" href={x.from?.url}>{short(x.src)}</a> <span aria-hidden="true">·</span> <a href={site.catalogRef(x.c.spec.role)?.url}>{x.role}</a> <span aria-hidden="true">·</span> <span>option <a class="mono" href={site.catalogRef(x.c.spec.about)?.url}>{x.option}</a></span>{site.date(x.c) && <> <span aria-hidden="true">·</span> <time datetime={site.date(x.c)}>{site.date(x.c)}</time></>}</p>
+  </article>
+</li>)}
+</ol>
+<p class="empty" id="empty" hidden x-bind:hidden="!none">No claim matches these filters.</p>
+</div>
+</Base>

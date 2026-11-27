@@ -1,0 +1,31 @@
+---
+// A Markdown page from site/content: the shared layout, the page's text, any generated blocks it asks for, and
+// links to the entities its front matter names (`refs:`), each of which links back here.
+import { render } from "astro:content";
+import Base from "../layouts/Base.astro";
+import Blocks from "../components/Blocks.astro";
+import { TYPES } from "../lib/data.mjs";
+import { getSite } from "../lib/site.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("page").map((p) => ({ params: { slug: p.key }, props: { id: p.id } }));
+}
+const site = await getSite();
+const p = site.entities.get(Astro.props.id);
+const depth = p.key.split("/").length - 1;
+const u = "../".repeat(depth);
+const { Content } = await render(p.page.entry);
+const refs = site.outs(p, "mentions");
+const nav = typeof p.page.nav === "number" ? `${p.key}.html` : p.kind !== "page" ? "notes.html" : "";
+---
+<Base site={site} title={p.title} description={p.summary} depth={depth} current={nav}>
+<section class="hero small-hero">
+  <p class="eyebrow">{p.kind === "page" ? "Page" : p.kind === "announcement" ? "Announcement" : "Note"}{p.date && <> · <time datetime={p.date}>{p.date}</time></>}</p>
+  <h1>{p.title}</h1>
+  {p.summary && <p class="lede">{p.summary}</p>}
+</section>
+<article class="prose panel"><Content /></article>
+<Blocks site={site} blocks={p.page.blocks} depth={depth} />
+{refs.length > 0 && <section class="panel" aria-labelledby="ab-h"><h2 id="ab-h">This page is about</h2><ul class="plain">{refs.map((x) => <li><span class="tag">{TYPES[x.type].one}</span> <a href={`${u}${x.url}`}>{x.title}</a></li>)}</ul></section>}
+</Base>

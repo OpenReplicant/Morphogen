@@ -1,0 +1,24 @@
+{
+  "name": "morphogen-research-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The research site: Astro pages built from the claim, role and option files (site/README.md).",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@alpinejs/csp": "3.17.5",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "astro": "7.4.11",
+    "smol-toml": "1.9.1",
+    "yaml": "2.9.1"
+  }
+}

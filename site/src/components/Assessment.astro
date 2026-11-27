@@ -1,0 +1,36 @@
+---
+// One assessment of a claim: the configuration, the prediction, the cheapest trial, the outcome.
+import ClaimRef from "./ClaimRef.astro";
+import ExtLink from "./ExtLink.astro";
+import Meter from "./Meter.astro";
+import StatusBadge from "./StatusBadge.astro";
+import { refName } from "../lib/text.mjs";
+const { site, c, a } = Astro.props;
+const label = site.configLabel(a);
+const pr = a.prediction;
+const plan = a.trial;
+const ranked = plan ? site.queueRank(c.name) : null;
+const out = a.outcome;
+const t = out?.trial || {};
+const trialEnt = t.id ? site.entities.get(`trial:${t.id}`) : null;
+const v = out?.verdict || {};
+const by = { morphogen: "the judge", falsifier: "a falsifier registered before the outcome", operator: "the operator", none: "nobody yet" }[v.by] || v.by || "";
+---
+<div class="assess"><p class="assess-head"><StatusBadge status={a.status} />{label && <> on <strong>{label}</strong></>} for <span class="mono">{a.system}</span>{a.date && <> <span class="muted">on {a.date}</span></>}</p>
+{(a.against || []).length > 0 && <p class="small muted">Compared with: {a.against.map((r, i) => { const e = site.catalogRef(r); return <>{i > 0 && ", "}{e ? <a class="mono" href={`../${e.url}`}>{refName(r)}</a> : <span class="mono">{refName(r)}</span>}</>; })}</p>}
+{pr && <div class="pred"><h3>Transfer prediction</h3>
+<p class="pred-p"><Meter p={pr.p_transfer} /></p>
+<p>{pr.reason || ""}</p>
+<p class="small muted">By {pr.by || ""}, {pr.date || ""}. {pr.before_outcome ? "Written before any outcome, so it counts towards calibration." : "Written after an outcome was seen, so it does not count towards calibration."}</p></div>}
+{plan && <div class="pred"><h3>The cheapest trial that would settle it</h3>
+<p>{plan.plan || ""}</p>
+<dl class="kv"><dt>Cost</dt><dd>about {plan.cost_hours} hours, setting up included</dd>{(plan.needs || []).length > 0 && <><dt>Needs</dt><dd><ul class="plain">{plan.needs.map((n) => <li>{n}</li>)}</ul></dd></>}{plan.code && <><dt>Code</dt><dd><ExtLink url={plan.code} text={plan.code} /></dd></>}</dl>
+{ranked && <p class="small">Number {ranked[0]} of {site.queue().length} in the <a href="../queue.html">queue</a>.</p>}</div>}
+{out && <div class="outcome"><h3>Outcome</h3>
+<p>Trial {trialEnt ? <a class="mono" href={`../${trialEnt.url}`}>{t.id}</a> : <span class="mono">{t.id || ""}</span>}{t.url && <> (<ExtLink url={t.url} text="its files" />)</>}{out.date && <> · {out.date}</>} · {out.comparison === "our-setup" ? "a transfer test on our setup" : "the source's own setup reproduced"}</p>
+<p>{out.summary || ""}</p>
+<dl class="kv"><dt>Verdict</dt><dd><strong>{v.decision || ""}</strong>, decided by {by}{v.ref && <> <span class="muted small mono">{v.ref}</span></>}{v.note && <><br><span class="small">{v.note}</span></>}</dd>
+<dt>Observed</dt><dd><ul class="plain">{(out.observed || []).map((n) => <li><ClaimRef site={site} name={n} depth={1} /></li>)}</ul></dd></dl></div>}
+{a.reason && <p><span class="f-lab">Note</span><br>{a.reason}</p>}
+{(a.see_also || []).length > 0 && <><p class="f-lab">See also</p><ul class="plain">{a.see_also.map((n) => <li><ClaimRef site={site} name={n} depth={1} /></li>)}</ul></>}
+</div>

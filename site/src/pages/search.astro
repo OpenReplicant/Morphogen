@@ -1,0 +1,31 @@
+---
+// Everything on the site, by kind, with a search over data/search.json (Alpine's `search` component). Without
+// JavaScript it is the full list.
+import Base from "../layouts/Base.astro";
+import { TYPES } from "../lib/data.mjs";
+import { getSite } from "../lib/site.mjs";
+import { truncate } from "../lib/text.mjs";
+const site = await getSite();
+const order = ["claim", "paper", "trial", "resource", "option", "role", "component", "system", "page"];
+const groups = order.map((t) => [t, [...site.of(t)].sort((a, b) => a.title.localeCompare(b.title))]).filter(([, l]) => l.length);
+---
+<Base site={site} title="Search" current="search.html" description="Search every claim, paper, trial, model, option, role and note.">
+<section class="hero small-hero">
+  <p class="eyebrow">Everything on the site</p>
+  <h1>Search</h1>
+</section>
+<div x-data="search" data-index="data/search.json">
+<form class="filters" role="search" hidden x-bind:hidden="off" x-on:submit.prevent="run">
+  <label class="f-search"><span class="sr">Search</span><input type="search" name="q" x-model="q" x-on:input="run" placeholder="A model, a trial, a metric, a paper…" autocomplete="off"></label>
+</form>
+<p class="count" aria-live="polite" x-text="countText"></p>
+<ol class="feed" hidden x-bind:hidden="idle">
+  <template x-for="r in results" x-bind:key="r.u">
+    <li><article class="card"><div class="card-top"><span class="tag" x-text="r.kind"></span><span class="small muted mono" x-text="r.s"></span></div><h3><a x-bind:href="r.u" x-text="r.t"></a></h3><p class="meta" x-text="r.d"></p></article></li>
+  </template>
+</ol>
+<div x-show="idle">
+{groups.map(([t, list]) => <section class="panel" id={t} aria-labelledby={`g-${t}`}><h2 id={`g-${t}`}>{TYPES[t].many} ({list.length})</h2><ul class="plain">{list.map((x) => <li><a href={x.url}>{truncate(x.title, 140)}</a>{x.kind && <> <span class="tag">{x.kind}</span></>}</li>)}</ul></section>)}
+</div>
+</div>
+</Base>

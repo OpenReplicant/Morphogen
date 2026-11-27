@@ -288,3 +288,59 @@ details ul { margin-top: 8px; font-size: 0.88rem; }
 /* A claim whose configurations disagree: a Mixed badge, then one badge per configuration with its name. */
 .s-mixed { color: var(--warn); background: var(--warn-bg); }
 .cfg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+
+/* Header search */
+.top-search input[type=search] { width: 9rem; padding: 5px 8px; font-size: 0.9rem; }
+@media (max-width: 640px) { .top-search { flex: 1 1 auto; } .top-search input[type=search] { width: 100%; } }
+
+/* Links inside a card sit above the card's own link */
+.card .meta a, .card .card-top a { position: relative; z-index: 1; }
+
+/* Entity pages */
+.clist li { line-height: 1.45; }
+.scounts { display: inline-flex; flex-wrap: wrap; gap: 6px 10px; }
+.refs h3 { font-size: 0.95rem; }
+.refl { margin-bottom: 12px; }
+.refl .tag { margin-right: 4px; }
+.tbl-wrap { overflow-x: auto; }
+.tbl caption { text-align: left; color: var(--muted); font-size: 0.85rem; padding-bottom: 6px; }
+.results td:last-child { white-space: nowrap; }
+.results .res-sum { display: block; margin-top: 4px; white-space: normal; }
+.results .cfg-rest { display: block; }
+
+/* Markdown pages */
+.prose { max-width: 820px; }
+.prose h2 { font-family: var(--font); text-transform: none; letter-spacing: -0.01em; font-size: 1.25rem; color: var(--text); margin-top: 0.4em; }
+.prose h3 { font-size: 1.05rem; }
+.prose ol, .prose ul { padding-left: 1.4em; margin: 0 0 1em; }
+.prose li { margin-bottom: 0.4em; }
+.prose code { font-family: var(--mono); font-size: 0.9em; background: var(--panel-2); padding: 1px 4px; border-radius: 4px; }
+.prose pre { background: var(--panel-2); padding: 12px; border-radius: 8px; overflow-x: auto; }
+.prose blockquote { margin: 0 0 1em; padding-left: 12px; border-left: 3px solid var(--accent); color: var(--muted); }
+.prose img { max-width: 100%; height: auto; }
+
+/* The map */
+.graph-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin: 0 0 16px; }
+.graph { display: block; min-width: 1000px; width: 100%; height: auto; }
+.graph .col-h { fill: var(--accent-2); font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.graph .edge { fill: none; stroke: var(--muted); stroke-opacity: 0.28; stroke-width: 1; }
+.graph .edge.e-replicated { stroke: var(--good); stroke-opacity: 0.6; }
+.graph .edge.e-did-not-transfer { stroke: var(--bad); stroke-opacity: 0.6; }
+.graph .node rect { fill: var(--bg); stroke: var(--border); stroke-width: 1.2; }
+.graph .node text { fill: var(--text); font: 11px var(--mono); }
+.graph .node:hover rect, .graph .node:focus rect { stroke: var(--accent); stroke-width: 2; }
+.graph .t-paper rect, .graph .t-trial rect { fill: var(--panel-2); }
+.graph .t-trial rect { stroke: var(--ours); }
+.graph .t-resource rect { stroke: var(--accent); }
+.graph .t-role rect, .graph .t-system rect { stroke: var(--accent-2); }
+.graph .s-replicated rect { stroke: var(--good); fill: var(--good-bg); }
+.graph .s-did-not-transfer rect { stroke: var(--bad); fill: var(--bad-bg); }
+.graph .s-mixed rect { stroke: var(--warn); fill: var(--warn-bg); }
+.graph .s-predicted rect { stroke: var(--pred); }
+.graph .s-observation rect { stroke: var(--ours); fill: var(--ours-bg); }
+.graph.focus .node:not(.hl) { opacity: 0.25; }
+.graph.focus .edge:not(.hl) { stroke-opacity: 0.06; }
+.graph .edge.hl { stroke: var(--accent); stroke-opacity: 1; stroke-width: 2; }
+.graph .off { display: none; }
+.results td:nth-last-child(2) { white-space: nowrap; }
+.top-in { max-width: 1200px; }

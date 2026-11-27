@@ -1,0 +1,5 @@
+---
+import { measureRows } from "../lib/text.mjs";
+const { m } = Astro.props;
+---
+{measureRows(m).map(([k, v]) => <><dt>{k}</dt><dd>{v}</dd></>)}

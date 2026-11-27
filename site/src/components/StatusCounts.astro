@@ -1,0 +1,8 @@
+---
+// How many of these claims have each status (a claim with several counts once under each).
+import StatusBadge from "./StatusBadge.astro";
+const { site, claims } = Astro.props;
+const counts = new Map();
+for (const c of claims) for (const s of site.statuses(c)) counts.set(s, (counts.get(s) || 0) + 1);
+---
+{counts.size ? <span class="scounts">{[...counts].map(([s, n]) => <span class="cfg"><StatusBadge status={s} /><span class="n">×{n}</span></span>)}</span> : <span class="muted small">No claims yet</span>}
