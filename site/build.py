@@ -31,6 +31,7 @@ ROOT = HERE.parent
 
 STATUSES = ["untested", "predicted", "replicated", "did-not-transfer", "not-testable"]
 OBSERVATION = "observation"  # a claim of this system's own (source.kind trial or probe): it has no status
+MIXED = "mixed"  # a claim whose assessments for the system disagree (one configuration replicated, another did not)
 STATUS_TEXT = {
     "untested": "Untested",
     "predicted": "Predicted",
@@ -38,6 +39,7 @@ STATUS_TEXT = {
     "did-not-transfer": "Did not transfer",
     "not-testable": "Not testable",
     OBSERVATION: "Our observation",
+    MIXED: "Mixed",
 }
 STATUS_HELP = {
     "untested": "Catalogued, with the reason it has not been tried here.",
@@ -46,6 +48,7 @@ STATUS_HELP = {
     "did-not-transfer": "Tried on this system's setup, and the finding did not hold.",
     "not-testable": "Cannot be tried here, and why.",
     OBSERVATION: "A measurement this system ran itself, which a paper's outcome links to.",
+    MIXED: "Tried on more than one configuration, with different results.",
 }
 QUOTE_SHORT = {"checked": "quote checked", "unchecked": "quote unchecked", "none": "no quote"}
 QUOTE_TEXT = {
@@ -125,17 +128,27 @@ class Claim:
     def ours(self) -> bool:
         return self.source.get("kind") in ("trial", "probe")
 
-    def assessment(self, system: str) -> dict | None:
-        for a in self.spec.get("assessments") or []:
-            if a.get("system") == system:
-                return a
-        return None
+    def assessments(self, system: str) -> list[dict]:
+        """Every assessment for the system: one per configuration tried (a model, an engine), and they can disagree."""
+        return [a for a in self.spec.get("assessments") or [] if a.get("system") == system]
+
+    def predictions(self, system: str) -> list[dict]:
+        return [a["prediction"] for a in self.assessments(system) if a.get("prediction")]
+
+    def statuses(self, system: str) -> list[str]:
+        """The distinct statuses of its assessments, in file order; a filter matches a claim on any of them."""
+        if self.ours:
+            return [OBSERVATION]
+        out = []
+        for a in self.assessments(system):
+            if a["status"] not in out:
+                out.append(a["status"])
+        return out or ["untested"]
 
     def status(self, system: str) -> str:
-        if self.ours:
-            return OBSERVATION
-        a = self.assessment(system)
-        return a["status"] if a else "untested"
+        """One status, or `mixed` when its assessments disagree (statuses() and the badges give the breakdown)."""
+        statuses = self.statuses(system)
+        return statuses[0] if len(statuses) == 1 else MIXED
 
     def date(self) -> str:
         dates = []
@@ -311,6 +324,38 @@ class Site:
                 return i, item
         return None
 
+    def config_label(self, a: dict) -> str:
+        """The configuration an assessment was made on, in a few words: the models among its `against` resources
+        (their description up to the first comma, as in "Inkling 2 Mini"), else every resource's name."""
+        names = []
+        for ref in a.get("against") or []:
+            res = self.catalog.get(ref)
+            if res and (res.get("spec") or {}).get("type") == "model":
+                head = (res["metadata"].get("description") or "").split(",")[0].strip()
+                names.append(head if head and len(head) <= 40 else res["metadata"]["name"])
+        if not names:
+            names = [ref_name(r) for r in a.get("against") or []]
+        return ", ".join(names)
+
+    def status_badges(self, c: Claim) -> str:
+        """One badge when the assessments agree; when they disagree, a Mixed badge and one per configuration."""
+        assessments = c.assessments(self.system)
+        if c.ours or len(c.statuses(self.system)) == 1:
+            return status_badge(c.status(self.system))
+        parts = [status_badge(MIXED)]
+        for a in assessments:
+            label = self.config_label(a)
+            parts.append(f'<span class="cfg">{status_badge(a["status"])}'
+                         f'{f" <span class=small>{e(label)}</span>" if label else ""}</span>')
+        return "".join(parts)
+
+    def status_text(self, c: Claim) -> str:
+        """The same breakdown in words, for an issue body: `replicated (Inkling 2 Mini); did-not-transfer (LFM3 1.7B)`."""
+        if c.ours or len(c.statuses(self.system)) == 1:
+            return c.status(self.system)
+        return "; ".join(f"{a['status']} ({self.config_label(a) or 'unnamed configuration'})"
+                         for a in c.assessments(self.system))
+
     def by_name(self) -> dict[str, Claim]:
         return {c.name: c for c in self.claims}
 
@@ -369,11 +414,9 @@ def page(site: Site, title: str, body: str, current: str, depth: int = 0, descri
 
 
 def feed_item(site: Site, c: Claim) -> str:
-    status = c.status(site.system)
-    a = c.assessment(site.system) or {}
+    statuses = c.statuses(site.system)
     src, cl = c.source, c.spec["claim"]
     role, option = ref_name(c.spec.get("role")), ref_name(c.spec.get("about"))
-    p = (a.get("prediction") or {}).get("p_transfer")
     search = " ".join(str(x) for x in [c.name, c.doc["metadata"].get("description", ""), cl.get("statement", ""),
                                         src.get("title", ""), src.get("id", ""), role, option, cl.get("metric", "")])
     quote_cls = "q-" + src.get("quote_status", "none")
@@ -381,10 +424,10 @@ def feed_item(site: Site, c: Claim) -> str:
             f'<span>option <span class="mono">{e(option)}</span></span>']
     if c.date():
         meta.append(f'<time datetime="{e(c.date())}">{e(c.date())}</time>')
-    right = meter(p) if p is not None else ""
-    return f"""<li class="item" data-name="{e(c.name)}" data-status="{e(status)}" data-role="{e(role)}" data-source="{e(source_short(src))}" data-search="{e(search.lower())}">
+    right = "".join(meter(pr["p_transfer"]) for pr in c.predictions(site.system))
+    return f"""<li class="item" data-name="{e(c.name)}" data-status="{e(" ".join(statuses))}" data-role="{e(role)}" data-source="{e(source_short(src))}" data-search="{e(search.lower())}">
   <article class="card">
-    <div class="card-top">{status_badge(status)}<span class="qs {e(quote_cls)}" title="{e(QUOTE_TEXT.get(src.get('quote_status', 'none'), ''))}">{e(QUOTE_SHORT.get(src.get('quote_status', 'none'), ''))}</span>{right}</div>
+    <div class="card-top">{site.status_badges(c)}<span class="qs {e(quote_cls)}" title="{e(QUOTE_TEXT.get(src.get('quote_status', 'none'), ''))}">{e(QUOTE_SHORT.get(src.get('quote_status', 'none'), ''))}</span>{right}</div>
     <h3><a href="claims/{e(c.name)}.html">{e(c.doc['metadata'].get('description') or cl.get('statement', c.name))}</a></h3>
     <p class="meta">{' <span aria-hidden="true">·</span> '.join(meta)}</p>
   </article>
@@ -394,8 +437,9 @@ def feed_item(site: Site, c: Claim) -> str:
 def render_index(site: Site) -> str:
     claims = sort_claims(site.claims)
     counts = {s: 0 for s in STATUSES + [OBSERVATION]}
-    for c in claims:
-        counts[c.status(site.system)] = counts.get(c.status(site.system), 0) + 1
+    for c in claims:  # a claim counts under each status any of its assessments has, as the filter matches it
+        for st in c.statuses(site.system):
+            counts[st] = counts.get(st, 0) + 1
     roles = sorted({ref_name(c.spec.get("role")) for c in claims})
     sources = {}
     for c in claims:
@@ -453,17 +497,16 @@ def issue_body(action: str, site: Site, c: Claim | None, extra: list[str] | None
     lines += ["", "---", f"research-action: {action}", f"system: {site.system}"]
     if c is not None:
         lines += [f"research-claim: {c.name}", f"claim-file: {site.file_url(c.path)}",
-                  f"status: {c.status(site.system)}"]
-        p = ((c.assessment(site.system) or {}).get("prediction") or {}).get("p_transfer")
-        if p is not None:
-            lines.append(f"p_transfer: {p}")
+                  f"status: {site.status_text(c)}"]
+        preds = c.predictions(site.system)
+        if len(preds) == 1:
+            lines.append(f"p_transfer: {preds[0]['p_transfer']}")
     return "\n".join(lines).strip() + "\n"
 
 
 def claim_actions(site: Site, c: Claim) -> str:
     if c.ours:
         return ""
-    a = c.assessment(site.system) or {}
     btns = [
         ("prioritise", f"Prioritise: {c.name}", "Test this claim next",
          ["Please test this claim sooner.", "", "Why it is worth a trial now:", ""]),
@@ -471,7 +514,7 @@ def claim_actions(site: Site, c: Claim) -> str:
          ["Please drop this claim from the queue.", "", "Why (does not apply here, already known, not a real gain):",
           ""]),
     ]
-    if a.get("prediction"):
+    if c.predictions(site.system):
         btns.append(("dispute", f"Dispute prediction: {c.name}", "Dispute the prediction",
                      ["I think the transfer prediction is wrong.", "", "My probability that it holds here:", "",
                       "Which conditions it gets wrong:", ""]))
@@ -548,7 +591,10 @@ def claim_ref(site: Site, name: str, depth: int) -> str:
 
 
 def assessment_html(site: Site, c: Claim, a: dict) -> str:
-    parts = [f'<div class="assess"><p class="assess-head">{status_badge(a["status"])} for <span class="mono">{e(a.get("system"))}</span>'
+    label = site.config_label(a)
+    parts = [f'<div class="assess"><p class="assess-head">{status_badge(a["status"])}'
+             + (f' on <strong>{e(label)}</strong>' if label else "")
+             + f' for <span class="mono">{e(a.get("system"))}</span>'
              + (f' <span class="muted">on {e(a["date"])}</span>' if a.get("date") else "") + "</p>"]
     if a.get("against"):
         parts.append('<p class="small muted">Compared with: ' + ", ".join(
@@ -625,7 +671,7 @@ def render_claim(site: Site, c: Claim) -> str:
 <p class="crumbs"><a href="../index.html">Claims</a> <span aria-hidden="true">/</span> <span class="mono">{e(c.name)}</span></p>
 <article class="claim">
   <header class="claim-head">
-    <div class="card-top">{status_badge(status)}<span class="mono muted">{e(ref_name(c.spec.get("role")))} · option {e(ref_name(c.spec.get("about")))}</span></div>
+    <div class="card-top">{site.status_badges(c)}<span class="mono muted">{e(ref_name(c.spec.get("role")))} · option {e(ref_name(c.spec.get("about")))}</span></div>
     <h1>{e(md.get("description") or c.name)}</h1>
     <p class="statement">{e(cl.get("statement", ""))}</p>
   </header>
@@ -715,7 +761,8 @@ def render_roles(site: Site) -> str:
             cs = claims_by_option.get(oname, [])
             counts = {}
             for c in cs:
-                counts[c.status(site.system)] = counts.get(c.status(site.system), 0) + 1
+                for st in c.statuses(site.system):
+                    counts[st] = counts.get(st, 0) + 1
             badges = " ".join(f"{status_badge(s)}<span class='n'>×{n}</span>" for s, n in counts.items())
             result = (((o.get("spec") or {}).get("morphogen") or {}).get("evaluation") or {}).get("result")
             links = "".join(f'<li><a href="claims/{e(c.name)}.html">{e(truncate(c.doc["metadata"].get("description", c.name), 120))}</a></li>' for c in cs)
@@ -761,24 +808,25 @@ def render_roles(site: Site) -> str:
 # ---------------------------------------------------------------- predictions and calibration
 
 
-def calibration_pairs(site: Site) -> list[tuple[float, int, Claim]]:
-    """(p, held, claim) for each prediction written before an outcome that now has one."""
+def calibration_pairs(site: Site) -> list[tuple[float, int, Claim, dict]]:
+    """(p, held, claim, assessment) for each assessment whose prediction was written before an outcome it now has.
+    Each assessment counts on its own: a claim tried on two configurations is two predictions."""
     out = []
     for c in site.claims:
-        a = c.assessment(site.system) or {}
-        pr, status = a.get("prediction") or {}, a.get("status")
-        if pr.get("before_outcome") and a.get("outcome") and status in ("replicated", "did-not-transfer"):
-            out.append((float(pr["p_transfer"]), 1 if status == "replicated" else 0, c))
+        for a in c.assessments(site.system):
+            pr, status = a.get("prediction") or {}, a.get("status")
+            if pr.get("before_outcome") and a.get("outcome") and status in ("replicated", "did-not-transfer"):
+                out.append((float(pr["p_transfer"]), 1 if status == "replicated" else 0, c, a))
     return out
 
 
 def brier(pairs) -> float | None:
-    return sum((p - o) ** 2 for p, o, _ in pairs) / len(pairs) if pairs else None
+    return sum((p - o) ** 2 for p, o, *_ in pairs) / len(pairs) if pairs else None
 
 
 def calibration_svg(pairs, waiting: list[float]) -> str:
     """A reliability diagram: predicted probability against the share that held, in five bins, with the diagonal
-    of perfect calibration; predictions still waiting, one per claim.are ticks under the axis. Attributes only (no inline style),
+    of perfect calibration; predictions still waiting are small dots under the axis. Attributes only (no inline style),
     so the page's content security policy holds."""
     w, h, m = 360, 300, 44
     pw, ph = w - m - 16, h - m - 30
@@ -798,14 +846,14 @@ def calibration_svg(pairs, waiting: list[float]) -> str:
     bins = []
     for i in range(5):
         lo, hi = i / 5, (i + 1) / 5
-        inside = [(p, o) for p, o, _ in pairs if lo <= p < hi or (i == 4 and p == 1.0)]
+        inside = [(p, o) for p, o, *_ in pairs if lo <= p < hi or (i == 4 and p == 1.0)]
         if inside:
             mp = sum(p for p, _ in inside) / len(inside)
             rate = sum(o for _, o in inside) / len(inside)
             bins.append((mp, rate, len(inside)))
     dots = "".join(
         f'<g class="dot"><circle cx="{x(mp):.1f}" cy="{y(r):.1f}" r="{5 + min(n, 10):.0f}"/>'
-        f'<title>Predicted {mp:.2f} on average, {r:.2f} held ({n} claim{"s" if n != 1 else ""})</title></g>'
+        f'<title>Predicted {mp:.2f} on average, {r:.2f} held ({n} prediction{"s" if n != 1 else ""})</title></g>'
         for mp, r, n in bins)
     stacked, seen = [], {}
     for p in sorted(waiting):
@@ -826,13 +874,17 @@ def calibration_svg(pairs, waiting: list[float]) -> str:
 
 def render_predictions(site: Site) -> str:
     pairs = calibration_pairs(site)
-    waiting, unscored = [], []
+    waiting, unscored = [], []  # (claim, assessment): one row per assessment
     for c in sort_claims(site.claims):
-        a = c.assessment(site.system) or {}
-        if a.get("status") == "predicted" and a.get("prediction"):
-            waiting.append(c)
-        elif a.get("status") in ("replicated", "did-not-transfer") and not (a.get("prediction") or {}).get("before_outcome"):
-            unscored.append(c)
+        for a in c.assessments(site.system):
+            if a.get("status") == "predicted" and a.get("prediction"):
+                waiting.append((c, a))
+            elif a.get("status") in ("replicated", "did-not-transfer") and not (a.get("prediction") or {}).get("before_outcome"):
+                unscored.append((c, a))
+
+    def cfg(a):
+        label = site.config_label(a)
+        return f' <span class="muted small">on {e(label)}</span>' if label else ""
     b = brier(pairs)
     if pairs:
         summary = (f"<p><strong>{len(pairs)}</strong> predictions written before their outcome now have one. "
@@ -840,16 +892,17 @@ def render_predictions(site: Site) -> str:
     else:
         summary = ("<p>No prediction has an outcome yet, so there is nothing to score. The chart fills in as trials "
                    "report: each dot is a group of predictions, placed at their average probability and at the share "
-                   "that held. The small dots under the axis are predictions still waiting, one per claim.</p>")
+                   "that held. The small dots under the axis are predictions still waiting. A claim tried on two configurations "
+                   "counts twice.</p>")
     rows = "".join(
-        f'<tr><td><a href="claims/{e(c.name)}.html">{e(truncate(c.doc["metadata"].get("description", c.name), 90))}</a></td>'
-        f'<td>{meter(p)}</td><td>{status_badge(c.status(site.system))}</td></tr>' for p, _, c in pairs)
+        f'<tr><td><a href="claims/{e(c.name)}.html">{e(truncate(c.doc["metadata"].get("description", c.name), 90))}</a>'
+        f'{cfg(a)}</td><td>{meter(p)}</td><td>{status_badge(a["status"])}</td></tr>' for p, _, c, a in pairs)
     wait_rows = "".join(
-        f'<tr><td><a href="claims/{e(c.name)}.html">{e(truncate(c.doc["metadata"].get("description", c.name), 90))}</a></td>'
-        f'<td>{meter(c.assessment(site.system)["prediction"]["p_transfer"])}</td></tr>'
-        for c in sorted(waiting, key=lambda c: -c.assessment(site.system)["prediction"]["p_transfer"]))
-    unscored_items = "".join(f"<li>{status_badge(c.status(site.system))} <a href='claims/{e(c.name)}.html'>{e(truncate(c.doc['metadata'].get('description', c.name), 110))}</a></li>" for c in unscored)
-    svg = calibration_svg(pairs, [c.assessment(site.system)["prediction"]["p_transfer"] for c in waiting])
+        f'<tr><td><a href="claims/{e(c.name)}.html">{e(truncate(c.doc["metadata"].get("description", c.name), 90))}</a>{cfg(a)}</td>'
+        f'<td>{meter(a["prediction"]["p_transfer"])}</td></tr>'
+        for c, a in sorted(waiting, key=lambda ca: -ca[1]["prediction"]["p_transfer"]))
+    unscored_items = "".join(f"<li>{status_badge(a['status'])} <a href='claims/{e(c.name)}.html'>{e(truncate(c.doc['metadata'].get('description', c.name), 110))}</a>{cfg(a)}</li>" for c, a in unscored)
+    svg = calibration_svg(pairs, [a["prediction"]["p_transfer"] for _, a in waiting])
     body = f"""
 <section class="hero small-hero">
   <p class="eyebrow">Scoring the agent</p>
@@ -1061,7 +1114,8 @@ def build(config_path: Path, out: Path, root: Path = ROOT) -> Site:
     write("how.html", render_how(site))
     for c in claims:
         write(f"claims/{c.name}.html", render_claim(site, c))
-    data = [{"name": c.name, "path": c.path, "status": c.status(site.system), "date": c.date(),
+    data = [{"name": c.name, "path": c.path, "status": c.status(site.system), "statuses": c.statuses(site.system),
+             "date": c.date(),
              "record": _jsonable(c.doc)} for c in sort_claims(claims)]
     write("data/claims.json", json.dumps({"system": site.system, "claims": data}, indent=1, ensure_ascii=False))
     write(".nojekyll", "")
