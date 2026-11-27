@@ -20,7 +20,7 @@ spec:
   - labels
   morphogen:
     dir: classify
-    change: classify/classify.py
+    change: "classify/**"
     run: python bench.py
     better:
       accuracy:
