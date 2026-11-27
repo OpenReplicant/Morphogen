@@ -82,7 +82,40 @@ spec:
       reason: >-
         No probability was written before the trial: the note's table had "LFM3 1.7B read that way is good enough"
         as open, so this outcome does not count towards calibration. A transfer test, not a replication: a 1.7B
-        model untuned, on llama.cpp at Q6_K, on JevBench rather than the paper's tasks. Inkling 2 Mini is still to
-        come, and tuning the readout (prompt, then self-distillation) is the cell's next step.
+        model untuned, on llama.cpp at Q6_K, on JevBench rather than the paper's tasks. A 1.7B model is below the
+        paper's smallest (14B), so this does not test the 27B and 31B finding itself; Inkling 2 Mini (the next
+        assessment) does. Tuning the readout (prompt, then self-distillation) is the cell's next step.
       see_also: [e04a-lfm3-slices, probe-lfm3-first-token]
       date: 2026-11-25
+    - system: system:default/metasoar
+      against: [resource:default/inkling-2-mini-q4-k, resource:default/llama-cpp-b12627, resource:default/gtx-1070, resource:default/jevbench-ed50fe0]
+      status: replicated
+      outcome:
+        trial:
+          id: E-04a
+          url: https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/trials/decision-readout/README.md
+          repository: OpenReplicant/MetaSoar
+          commit: 22feddc6fa29682e94c2f62fe25da93b559980ab
+          path: trials/decision-readout/README.md
+        observed: [e04a-inkling-pooled-accuracy]
+        summary: >-
+          Inkling 2 Mini Q4_K (a mixture of experts of about 26B in all), read the same way, untuned, debiased and
+          scaled: pooled accuracy 0.810 [0.775, 0.843] against Jev 1.13's 0.843 [0.813, 0.873] on the same 779
+          JevBench cases, 3.3 points below (paired, [-6.5, -0.3]), and coverage at 5% risk 0.51 against 0.64. On the
+          same 779 cases d1-2B reached 0.633 and LFM3 0.561. Near Jev, not equal to it: the paired interval excludes
+          zero, so "matches" holds here in the sense E-04a registered (within 10 points, coverage above half of Jev's).
+        comparison: our-setup
+        verdict:
+          by: falsifier
+          decision: not met
+          ref: OpenReplicant/MetaSoar@22feddc6fa29682e94c2f62fe25da93b559980ab:docs/experiments.md (E-04a)
+          note: >-
+            The same falsifier as for LFM3, registered before the outcome: pooled accuracy more than 10 points below
+            Jev's, or coverage at 5% risk under half of Jev's. Neither limb is met (3.3 points; 0.51 against 0.64).
+        date: 2026-11-26
+      reason: >-
+        No probability was written before the trial, so this outcome does not count towards calibration. A transfer
+        test at about the paper's size (26B in all against 27B and 31B), on a mixture of experts at Q4_K, on
+        llama.cpp and JevBench, on a sample of 100 families per slice. The trial reads it the same way: Inkling is at
+        "the size at which the decision-gate study found likelihood readouts matching Jev".
+      date: 2026-11-26

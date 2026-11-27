@@ -37,6 +37,18 @@ metadata:
 spec: {type: role, lifecycle: experimental, owner: group:default/metasoar, system: metasoar}
 ---
 apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: intent-handler
+  description: >-
+    The role: answer a recurring intent without the large model (a plan template the small model follows, or a
+    written handler), falling back to the large model when it does not hold. MetaSoar's handler ladder (M-26).
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@22feddc6fa29682e94c2f62fe25da93b559980ab:docs/experiments.md | "**The handler ladder (M-26) cuts model calls on a stream of recurring intents with no loss of accuracy.**"
+spec: {type: role, lifecycle: experimental, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
   name: lfm3-1.7b-q6-k
@@ -55,7 +67,8 @@ metadata:
   name: inkling-2-mini-q4-k
   description: >-
     Inkling 2 Mini, Q4_K, the experts of loop layers 6-12 on the GPU; MetaSoar's slow model. The owner notes it is
-    strong for its size. Its E-04a run was still going on 2026-11-25, so no claim here holds its numbers.
+    strong for its size. Its E-04a numbers are in claims/e04a/e04a-inkling-pooled-accuracy.yaml; it is also E-17's
+    large model.
   annotations:
     morphogen.dev/evidence: |
       stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "`slow` is Inkling 2 Mini Q4_K, with the experts of loop layers 6–12 on the GPU, with thinking off by"
@@ -94,4 +107,16 @@ metadata:
   annotations:
     morphogen.dev/evidence: |
       stated | OpenReplicant/MetaSoar@facbe842bcc0778afc2fbe2a9801cd9895d46fab:trials/decision-readout/README.md | "the Leanmcp JevBench release, pinned at revision `ed50fe0`."
+spec: {type: dataset, owner: group:default/metasoar, system: metasoar}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: tabmwp-5a1a522
+  description: >-
+    TabMWP (Lu et al., ICLR 2023), tables and math word problems generated from templates, at revision 5a1a522;
+    `test1k` in one fixed random order is E-17's stream. CC BY-NC-SA 4.0, fetched, not committed.
+  annotations:
+    morphogen.dev/evidence: |
+      stated | OpenReplicant/MetaSoar@22feddc6fa29682e94c2f62fe25da93b559980ab:docs/experiments.md | "TabMWP at `5a1a522` (data CC BY-NC-SA 4.0, fetched, not committed; `dev1k` for prompts, `test1k` for the stream)"
 spec: {type: dataset, owner: group:default/metasoar, system: metasoar}

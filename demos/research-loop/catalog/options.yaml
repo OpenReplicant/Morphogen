@@ -1,7 +1,8 @@
-# The options: one Component with spec.lifecycle: candidate per method the session's papers measured, for the
-# role it could fill. Each lists its claim files (claims/, schemas/evidence-claim.v1.json) in
-# spec.morphogen.evaluation.evidence; check.py keeps that list equal to the claims whose `about` names the option.
-# Where the method came from is the claims' business; the evidence annotation only says where it is described.
+# The options: one Component with spec.lifecycle: candidate per method the session's papers measured (and one of
+# MetaSoar's own, handler-ladder), for the role it could fill. Each lists its claim files (claims/,
+# schemas/evidence-claim.v1.json) in spec.morphogen.evaluation.evidence; check.py keeps that list equal to the claims whose `about`
+# names the option. Where the method came from is the claims' business; the evidence annotation only says where it is
+# described.
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
@@ -20,11 +21,14 @@ spec:
         E-04a's falsifier, inverted: after debiasing and one temperature per slice, pooled accuracy within 10 points
         of Jev's and coverage at 5% risk at least half of Jev's, on the JevBench cases.
       method: E-04a, MetaSoar trials/decision-readout at facbe84 (readout.py, serve.sh, score.py)
-      result: LFM3 1.7B untuned does not meet it (0.528 against 0.842; coverage 0.09 against 0.67). Inkling pending.
+      result: >-
+        LFM3 1.7B untuned does not meet it (0.528 against 0.842; coverage 0.09 against 0.67). Inkling 2 Mini untuned
+        does (0.810 against 0.843 on its 779-case sample, 3.3 points below; coverage 0.51 against 0.64).
       evidence:
         - claims/arxiv-2610.00346/gates-likelihood-readout-27-31b-matches-jev.yaml
         - claims/arxiv-2610.00346/gates-order-effects-untrained.yaml
         - claims/arxiv-2610.03935/jeval-first-token-readout.yaml
+        - claims/e04a/e04a-inkling-pooled-accuracy.yaml
         - claims/e04a/e04a-lfm3-pooled-accuracy.yaml
         - claims/e04a/e04a-lfm3-coverage.yaml
         - claims/e04a/e04a-lfm3-order-flip.yaml
@@ -215,3 +219,31 @@ spec:
     fills: component:default/think-router
     evaluation:
       evidence: [claims/arxiv-2608.20256/lwt-grpo-think-mode.yaml]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: handler-ladder
+  description: >-
+    MetaSoar's own method, not a paper's: name each case's intent, send it to the cheapest rung that holds for that
+    intent (a written handler, a plan template, the large model), and promote a handler or template only on agreement
+    with the large model's own answers, never gold labels.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/intent-handler
+    evaluation:
+      need: >-
+        E-17's falsifier, inverted: templates and handlers answer at least 30% of a stream's later cases, with
+        accuracy there not more than 2 points below the large model alone (paired, 95% interval).
+      method: E-17 to E-17d, MetaSoar trials/handler-ladder at 22feddc (stream.py, stream_v2.py, perturb.py)
+      result: >-
+        Met on E-17's own stream (58.7%, -1.3 points). On fresh cases it lost accuracy (E-17b, -5.3 points); the
+        stricter rules that removed the loss also removed nearly all cheap answers (E-17d, 8.7%).
+      evidence:
+        - claims/e17/e17-ladder-last-150.yaml
+        - claims/e17/e17b-ladder-fresh-cases.yaml
+        - claims/e17/e17c-ladder-perturbed.yaml
+        - claims/e17/e17d-ladder-strict-promotion.yaml
