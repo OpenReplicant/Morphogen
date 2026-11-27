@@ -1,4 +1,5 @@
 ---
+import { up } from "../lib/text.mjs";
 // What the agent watches (watch.yaml) and what became of the papers it saw (seen.jsonl).
 import ExtLink from "./ExtLink.astro";
 const { site, depth = 0 } = Astro.props;
@@ -13,8 +14,8 @@ const paperFor = (id) => site.of("paper").find((p) => String(p.source?.id || "")
 {(Object.keys(w).length > 0 || seen.length > 0) && <section class="panel" id="watching" aria-labelledby="w-h"><h2 id="w-h">Watching</h2>
 {w.conditions && <p>{w.conditions}</p>}
 {(w.topics || []).length > 0 && <ul class="opts">{w.topics.map((t) => <li class="opt"><h4 class="mono">{t.name || ""}</h4><p>{t.question || ""}</p>
-<p class="small">{(t.roles || []).map((r) => { const e = site.catalogRef(r); return <>{e ? <a class="mono" href={`${"../".repeat(depth)}${e.url}`}>{r}</a> : <span class="mono">{r}</span>} </>; })}{(t.categories || []).length > 0 && <span class="muted">· {t.categories.join(", ")}</span>}</p>
+<p class="small">{(t.roles || []).map((r) => { const e = site.catalogRef(r); return <>{e ? <a class="mono" href={`${up(depth)}${e.url}`}>{r}</a> : <span class="mono">{r}</span>} </>; })}{(t.categories || []).length > 0 && <span class="muted">· {t.categories.join(", ")}</span>}</p>
 <p class="terms">{(t.terms || []).length ? t.terms.map((x) => <span class="tag">{x}</span>) : <span class="muted small">terms still to be filled in by the next session</span>}</p></li>)}</ul>}
 {seen.length > 0 && <p class="small"><span class="f-lab">Papers seen</span> {seen.length}: {countText}.</p>}
-{cataloged.length > 0 && <details><summary>{cataloged.length} papers catalogued</summary><ul class="plain">{cataloged.map((x) => { const p = paperFor(x.id); return <li>{p ? <a href={`${"../".repeat(depth)}${p.url}`}>{x.title || ""}</a> : <ExtLink url={`https://arxiv.org/abs/${x.id || ""}`} text={x.title || ""} />} <span class="mono muted small">{x.id || ""}</span></li>; })}</ul></details>}
+{cataloged.length > 0 && <details><summary>{cataloged.length} papers catalogued</summary><ul class="plain">{cataloged.map((x) => { const p = paperFor(x.id); return <li>{p ? <a href={`${up(depth)}${p.url}`}>{x.title || ""}</a> : <ExtLink url={`https://arxiv.org/abs/${x.id || ""}`} text={x.title || ""} />} <span class="mono muted small">{x.id || ""}</span></li>; })}</ul></details>}
 </section>}

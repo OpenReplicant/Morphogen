@@ -1,4 +1,5 @@
 ---
+import { up } from "../../lib/text.mjs";
 // One trial (E-04a, E-17b...): the claims it produced, every claim it gave an outcome for and on which models, the
 // models it measured, related trials of the same family, and every reference to and from it.
 import Base from "../../layouts/Base.astro";
@@ -23,14 +24,14 @@ const models = [...new Set([...produced.flatMap((c) => site.outs(c, "measured-on
 const family = site.of("trial").filter((x) => x !== t && x.family === t.family);
 ---
 <Base site={site} title={t.key} description={t.summary} depth={1}>
-<EntityHead ent={t} eyebrow={t.sourceKind === "probe" ? "Probe · our own measurement" : "Trial · our own experiment"} crumbs={[["../search.html#trial", "Trials"]]}>
-  <p class="small">{t.url_ext && <><ExtLink url={t.url_ext} text="Its files and README" /> · </>}{produced.length} claim{produced.length === 1 ? "" : "s"} recorded from it · outcomes for {tested.length} claim{tested.length === 1 ? "" : "s"} from papers{models.length > 0 && <> · on {models.map((m, i) => <>{i > 0 && ", "}<a href={`../${m.url}`}>{m.title}</a></>)}</>}</p>
+<EntityHead ent={t} eyebrow={t.sourceKind === "probe" ? "Probe · our own measurement" : "Trial · our own experiment"} crumbs={[[`${up(1)}search.html#trial`, "Trials"]]}>
+  <p class="small">{t.url_ext && <><ExtLink url={t.url_ext} text="Its files and README" /> · </>}{produced.length} claim{produced.length === 1 ? "" : "s"} recorded from it · outcomes for {tested.length} claim{tested.length === 1 ? "" : "s"} from papers{models.length > 0 && <> · on {models.map((m, i) => <>{i > 0 && ", "}<a href={`${up(1)}${m.url}`}>{m.title}</a></>)}</>}</p>
 </EntityHead>
 <section class="panel" aria-labelledby="o-h"><h2 id="o-h">Outcomes it produced for papers' claims ({rows.length})</h2>
   {rows.length ? <ResultsTable site={site} rows={rows} depth={1} showClaim /> : <p class="muted">No paper's claim records an outcome from this trial.</p>}
 </section>
 <section class="panel" aria-labelledby="p-h"><h2 id="p-h">What it measured ({produced.length})</h2><ClaimList site={site} claims={produced} depth={1} empty="No claim records this trial as its source." /></section>
-{family.length > 0 && <section class="panel" aria-labelledby="f-h"><h2 id="f-h">Related trials ({t.family})</h2><ul class="plain">{family.map((x) => <li><a class="mono" href={`../${x.url}`}>{x.key}</a> <span class="muted small">{x.summary}</span></li>)}</ul></section>}
+{family.length > 0 && <section class="panel" aria-labelledby="f-h"><h2 id="f-h">Related trials ({t.family})</h2><ul class="plain">{family.map((x) => <li><a class="mono" href={`${up(1)}${x.url}`}>{x.key}</a> <span class="muted small">{x.summary}</span></li>)}</ul></section>}
 <Mentions site={site} ent={t} depth={1} />
 <References ent={t} depth={1} />
 </Base>

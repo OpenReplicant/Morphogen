@@ -6,7 +6,7 @@ import StatusCounts from "../components/StatusCounts.astro";
 import Watch from "../components/Watch.astro";
 import { getSite } from "../lib/site.mjs";
 import { proposeOptionUrl, proposeRoleUrl } from "../lib/steer.mjs";
-import { truncate } from "../lib/text.mjs";
+import { truncate, link } from "../lib/text.mjs";
 const site = await getSite();
 const system = site.of("system")[0];
 ---
@@ -23,22 +23,22 @@ const system = site.of("system")[0];
   const opts = site.ins(r, "fills");
   return <section class="role panel" id={r.name} aria-labelledby={`r-${r.name}`}>
     <p class="eyebrow">Role{parent && <> · part of <a class="mono" href={`#${parent.name}`}>{parent.name}</a></>}</p>
-    <h2 id={`r-${r.name}`} class="mono"><a href={r.url}>{r.name}</a></h2>
+    <h2 id={`r-${r.name}`} class="mono"><a href={link(r.url)}>{r.name}</a></h2>
     <p>{r.summary}</p><Evidence ent={r} />
-    <p class="small"><StatusCounts site={site} claims={site.ins(r, "role")} /> · <a href={r.url}>its page: questions, tests, claims</a></p>
+    <p class="small"><StatusCounts site={site} claims={site.ins(r, "role")} /> · <a href={link(r.url)}>its page: questions, tests, claims</a></p>
     <h3>Options the agent is tracking ({opts.length})</h3>
     <ul class="opts">{opts.length ? opts.map((o) => {
       const cs = site.ins(o, "about").filter((c) => !c.ours);
       const result = o.spec?.morphogen?.evaluation?.result;
-      return <li class="opt" id={o.name}><h4 class="mono"><a href={o.url}>{o.name}</a></h4><p>{o.summary}</p>
+      return <li class="opt" id={o.name}><h4 class="mono"><a href={link(o.url)}>{o.name}</a></h4><p>{o.summary}</p>
         <p class="small">{cs.length ? <StatusCounts site={site} claims={cs} /> : <span class="muted">No claims from papers yet</span>}</p>
         {result && <p class="small"><span class="f-lab">Result so far</span> {result}</p>}
-        {cs.length > 0 && <details><summary>{cs.length} claim{cs.length !== 1 ? "s" : ""}</summary><ul class="plain">{site.sorted(cs).map((c) => <li><a href={c.url}>{truncate(c.title, 120)}</a></li>)}</ul></details>}</li>;
+        {cs.length > 0 && <details><summary>{cs.length} claim{cs.length !== 1 ? "s" : ""}</summary><ul class="plain">{site.sorted(cs).map((c) => <li><a href={link(c.url)}>{truncate(c.title, 120)}</a></li>)}</ul></details>}</li>;
     }) : <li class="muted">None yet.</li>}</ul>
     <p class="actions"><a class="btn ghost" href={proposeOptionUrl(site, r.name)} rel="noopener noreferrer">Suggest an option for this role</a></p>
   </section>;
 })}
 <section class="panel" id="conditions" aria-labelledby="cond-h"><h2 id="cond-h">This system's conditions</h2>
 <p>Every claim's conditions are compared with these when its transfer is predicted. Each one's page lists the claims tested with it.</p>
-<ul class="plain conds">{site.of("resource").map((res) => <li id={res.name}><a class="mono" href={res.url}>{res.name}</a> <span class="tag">{res.kind}</span><br><span class="small">{res.summary}</span></li>)}</ul></section>
+<ul class="plain conds">{site.of("resource").map((res) => <li id={res.name}><a class="mono" href={link(res.url)}>{res.name}</a> <span class="tag">{res.kind}</span><br><span class="small">{res.summary}</span></li>)}</ul></section>
 </Base>

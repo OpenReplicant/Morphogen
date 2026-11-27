@@ -1,33 +1,100 @@
 # The research site
 
-A static site for the research loop ([docs/research-loop.md](../docs/research-loop.md)): the claims the research
-agent has catalogued, their status for this system, its transfer predictions against outcomes, and the roles it
-watches for, with a page for every claim, paper, trial, model, option and role and the links between them. Built
-with [Astro](https://astro.build) 7 into plain HTML in `_build/`; the interactive parts use
+A static site for the research loop ([docs/research-loop.md](../docs/research-loop.md)), for any system running
+Morphogen: the claims the research agent has catalogued, their status for that system, its transfer predictions
+against outcomes, and the roles it watches for, with a page for every claim, paper, trial, model, option and role and
+the links between them. Built with [Astro](https://astro.build) 7 into plain HTML; the interactive parts use
 [Alpine.js](https://alpinejs.dev)'s CSP build, served from the site itself. No server, no database, no tracking,
-nothing loaded from another host.
+nothing loaded from another host. Everything specific to one system (its sources, name, owner, repository, labels,
+theme and navigation) comes from a config file; this folder holds only the templates.
 
-## Build and preview
+## Your own site
 
-Needs Node 22.23.4 or later (the workflow uses 24.5.0).
+```sh
+uv run morphogen site init ROOT              # writes ROOT/site.toml and ROOT/site/about.md
+uv run morphogen site build --config ROOT/site.toml --out _site [--base /research] [--install]
+```
+
+`ROOT` is a research project (`catalog-info.yaml`, `catalog/`, `claims/`, `research/`). `init` takes the repository
+from the `origin` remote and the System from `catalog-info.yaml` (or `--repo`, `--system`, `--title`, `--owner`) and
+never overwrites without `--force`. `build` runs `npm run build` here with these variables, which can also be set by
+hand:
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `MORPHOGEN_SITE_CONFIG` | the config file | `site/config.toml` (Morphogen's own demo) |
+| `MORPHOGEN_SITE_OUT` | the folder to write | `site/_build` |
+| `MORPHOGEN_SITE_BASE` | the path the site is served under, e.g. `/research`: every link and asset then starts with it | none: links are relative, which works under any path |
+
+To deploy on GitHub Pages, copy [skills/research-loop/research-site.yml](../skills/research-loop/research-site.yml)
+to `.github/workflows/` in your repository and follow the steps at its top (set `SITE_CONFIG`, pin `MORPHOGEN_REF`,
+set Pages to "GitHub Actions"). The research-loop skill has the same steps ("Set up your research site").
+
+## The config file
+
+TOML; every path is relative to the file. `[site] repo` and `[site] system` are required; everything else has a
+default. Unknown label actions or navigation pages, or a theme file that does not exist, stop the build.
+
+```toml
+[site]
+title = "Grove research"             # header, page titles (default "Research")
+description = "One sentence"         # meta description of pages that have none of their own
+owner = "The Growers"                # whose research it is, in the footer (default: the repo's owner)
+repo = "Growers/grove"               # steering issues open here; claim files are linked here
+branch = "main"
+system = "system:default/orchard"    # the System each claim's status is shown for (an assessment's `system`)
+# repo_dir = ".."                    # the repository root, for claim-file links (default: found from .git)
+
+[sources]
+claims = ["claims"]                          # searched recursively for EvidenceClaim files
+catalog = ["catalog-info.yaml", "catalog"]   # Backstage entity files or folders of them; a missing one is skipped
+research = "research"                        # queue.json, watch.yaml, seen.jsonl, index.json (each optional)
+content = "site"                             # Markdown pages (optional)
+# schema = "evidence-claim.v1.json"          # default: Morphogen's schemas/evidence-claim.v1.json
+
+[labels]                                     # per steering action; the body's `research-action:` line comes first
+prioritise = ["research:prioritise"]
+reject = ["research:reject"]
+dispute = ["research:question"]
+question = ["research:question"]
+propose-role = ["research:question"]
+propose-option = ["research:question"]
+
+[theme]
+css = "brand/theme.css"     # served as assets/user/theme.css, after style.css: override its custom properties
+logo = "brand/logo.svg"     # .svg, .png, .webp or .jpg; in the header and as the icon
+
+[nav]
+# The header's pages, in order, from: claims, queue, predictions, roles, map, notes (shown once a note exists),
+# search; `{ page = "search", text = "Find" }` renames one. Markdown pages with `nav: N` follow. Every page is
+# built either way.
+pages = ["claims", "queue", "predictions", "roles", "map", "notes"]
+```
+
+Morphogen's own demo builds from [config.toml](config.toml), which points at [demos/research-loop](../demos/research-loop).
+
+## Working on the templates
+
+Needs Node 22.23.4 or later (the workflows use 24.5.0).
 
 ```sh
 cd site
-npm ci                      # the exact versions in package-lock.json
+npm ci --ignore-scripts     # the exact versions in package-lock.json
 npm run dev                 # http://localhost:4321/index.html, rebuilt as you edit (YAML too, on reload)
-npm run build               # writes _build/
+npm run build               # writes _build/ (or MORPHOGEN_SITE_OUT) from config.toml (or MORPHOGEN_SITE_CONFIG)
 npm run preview             # serves _build/
 npm test                    # the data layer's unit tests (node --test)
 cd .. && MORPHOGEN_SITE_TESTS=1 uv run python -m unittest tests.test_site -v   # builds and checks real and hostile input
 ```
 
-`SITE_CONFIG`, `SITE_ROOT`, `SITE_CONTENT` and `SITE_OUT` point a build at another config, checkout, content folder or
-output directory (the tests use them). The scripts set `ASTRO_TELEMETRY_DISABLED=1`. Without `npm ci` in `site/`,
-`tests/test_site.py` is skipped (and fails instead when `MORPHOGEN_SITE_TESTS=1`).
+The scripts set `ASTRO_TELEMETRY_DISABLED=1`. Without `npm ci` in `site/`, `tests/test_site.py` is skipped (and
+fails instead when `MORPHOGEN_SITE_TESTS=1`). It builds the demo, a hostile fixture, and a made-up second system
+through `morphogen site init` and `morphogen site build --base /lab` (another repository, other labels, a theme and
+a shorter header), and checks that every link there resolves under `/lab/`.
 
-## Adding a page: drop Markdown into `content/`
+## Adding a page: drop Markdown into the content folder
 
-Every `.md` file under `site/content/` becomes a page with the shared layout: `content/how.md` is `how.html`,
+Every `.md` file under the config's `content` folder (`site/content/` for the demo) becomes a page with the shared layout: `content/how.md` is `how.html`,
 `content/notes/2026-11-27-inkling.md` is `notes/2026-11-27-inkling.html`. Front matter (checked by
 `src/content.config.mjs`; a page that breaks it stops the build):
 
@@ -56,10 +123,9 @@ the content security policy still blocks any inline script.
 
 ## Where the data comes from
 
-`config.toml` points at [demos/research-loop](../demos/research-loop): the claims under `claims/` (searched
-recursively), the map, `options.yaml` and the agent's `found.yaml` (a missing catalog file is skipped), and the
-agent's own files in `research/`: `queue.json`, `watch.yaml`, `seen.jsonl`, and `index.json`, which the build checks
-against the claim files. `src/lib/data.mjs` reads them all, validates every claim against
+The config's sources: the claims (searched recursively), the catalog files (the map, the options and the agent's
+`found.yaml`), and the agent's own files in `research`: `queue.json`, `watch.yaml`, `seen.jsonl`, and `index.json`,
+which the build checks against the claim files. `src/lib/config.mjs` reads the config; `src/lib/data.mjs` reads them all, validates every claim against
 [schemas/evidence-claim.v1.json](../schemas/evidence-claim.v1.json) (Ajv, draft 2020-12; an invalid claim or a name
 used twice stops the build), and joins them into one graph: entities, typed references, and the backlinks of each.
 
@@ -109,7 +175,7 @@ The buttons open a prefilled GitHub new-issue page (title, body, labels); nothin
 it. Each body ends with a `research-action:` line (`prioritise`, `reject`, `dispute`, `question`, `propose-role`,
 `propose-option`), with `research-claim:`, `claim-file:` and `status:` for a claim and `role:` for an option proposed
 for a role; the agent reads those lines first (`morphogen/research.py`, `parse_issue`). They are written by
-`src/lib/steer.mjs`. The labels in `config.toml` are the fallback. Text from papers never goes into an issue body,
+`src/lib/steer.mjs`. The labels in the config's `[labels]` are the fallback. Text from papers never goes into an issue body,
 since it is rendered as Markdown.
 
 ## Safety
@@ -125,6 +191,7 @@ markup and a `javascript:` link and checks that none of it comes through.
 ## Deploying
 
 `.github/workflows/site.yml` installs the locked packages, runs the tests, builds and deploys `_build/` to GitHub
-Pages. It runs only when started by hand until its `push` trigger is uncommented, and it needs Pages set to "GitHub
-Actions" in the repository's settings. Links are relative, so the site works at `https://<owner>.github.io/Morphogen/`
-or on a custom domain.
+Pages: Morphogen's own demo. It runs only when started by hand until its `push` trigger is uncommented, and it needs
+Pages set to "GitHub Actions" in the repository's settings. Links are relative, so the site works at
+`https://<owner>.github.io/Morphogen/` or on a custom domain; `MORPHOGEN_SITE_BASE` makes them absolute under a path.
+For your own repository, use the template in [skills/research-loop/research-site.yml](../skills/research-loop/research-site.yml).

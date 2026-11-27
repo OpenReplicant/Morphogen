@@ -1,4 +1,4 @@
-// The site's data: the claim, role and option files named in config.toml, validated, joined into one graph of
+// The site's data: the claim, role and option files named in the config file (config.mjs), validated, joined into one graph of
 // entities with typed references, and the backlinks of every reference. Plain JavaScript with no Astro imports, so
 // the pages, the data files and `node --test` all read the same thing.
 //
@@ -11,20 +11,16 @@
 //   system    systems/<name>.html    a System
 //   trial     trials/<id>.html       derived: a claim's source when it is our trial or probe, and every outcome's trial
 //   paper     papers/<id>.html       derived: a claim's source when it is a paper (or any other outside source)
-//   page      <slug>.html            a Markdown file in site/content (attached by the Astro side, site.mjs)
+//   page      <slug>.html            a Markdown file in the content folder (attached by the Astro side, site.mjs)
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
-import { parse as parseToml } from "smol-toml";
 import YAML from "yaml";
+import { loadConfig } from "./config.mjs";
 import { MIXED, OBSERVATION, refKind, refName, slugify, truncate } from "./text.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-// site/: astro.config.mjs sets SITE_DIR, since a bundled page no longer sits where this file does.
-export const SITE_DIR = process.env.SITE_DIR || path.resolve(HERE, "..", "..");
 
 export const TYPES = {
   claim: { dir: "claims", one: "Claim", many: "Claims" },
@@ -140,23 +136,21 @@ export function loadResearch(dir) {
   return out;
 }
 
-/** Where to read from: SITE_CONFIG and SITE_ROOT override site/config.toml and the repository root. */
-export function locate(env = process.env) {
-  const config = path.resolve(env.SITE_CONFIG || path.join(SITE_DIR, "config.toml"));
-  const root = path.resolve(env.SITE_ROOT || path.dirname(SITE_DIR));
-  return { config, root };
-}
-
 // ---------------------------------------------------------------- the graph
 
 export class Site {
-  constructor(cfg, root) {
-    this.title = cfg.title || "Morphogen research";
+  constructor(cfg) {
+    this.cfg = cfg;
+    this.title = cfg.title;
+    this.description = cfg.description;
+    this.owner = cfg.owner;
     this.repo = cfg.repo;
-    this.branch = cfg.branch || "main";
+    this.branch = cfg.branch;
     this.system = cfg.system;
-    this.labels = cfg.labels || {};
-    this.root = root;
+    this.labels = cfg.labels;
+    this.nav = cfg.nav;
+    this.theme = cfg.theme;
+    this.root = cfg.root;
     this.entities = new Map(); // id -> entity
     this.edges = [];
     this.unresolved = [];
@@ -387,20 +381,20 @@ function sourceKey(src) {
 }
 
 /** Read everything and build the graph. Throws on an invalid claim. */
-export function loadSite({ config, root } = locate()) {
-  const cfg = parseToml(fs.readFileSync(config, "utf8"));
-  const srcs = cfg.sources || {};
-  const schema = srcs.schema ? JSON.parse(fs.readFileSync(path.join(root, srcs.schema), "utf8")) : null;
-  const raw = loadClaims((srcs.claims || []).map((d) => path.join(root, d)), root, schema);
+export function loadSite(cfg = loadConfig()) {
+  const srcs = cfg.sources;
+  const root = cfg.root;
+  const schema = JSON.parse(fs.readFileSync(srcs.schema, "utf8"));
+  const raw = loadClaims(srcs.claims, root, schema);
   const docs = [];
   const warnings = [];
-  for (const p of srcs.catalog || []) {
-    const f = path.join(root, p);
-    if (fs.existsSync(f)) docs.push(...loadYamlDocs(f));
-    else warnings.push(`${p} does not exist; skipped`);
+  for (const f of srcs.catalog) {
+    if (fs.existsSync(f) && fs.statSync(f).isDirectory()) for (const g of walk(f).sort()) docs.push(...loadYamlDocs(g));
+    else if (fs.existsSync(f)) docs.push(...loadYamlDocs(f));
+    else warnings.push(`${path.relative(path.dirname(cfg.config), f)} does not exist; skipped`);
   }
-  const site = new Site(cfg, root);
-  site.research = loadResearch(srcs.research ? path.join(root, srcs.research) : null);
+  const site = new Site(cfg);
+  site.research = loadResearch(srcs.research);
   site.warnings = warnings;
 
   // catalog entities

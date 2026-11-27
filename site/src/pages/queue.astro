@@ -4,7 +4,7 @@ import Base from "../layouts/Base.astro";
 import Meter from "../components/Meter.astro";
 import { getSite } from "../lib/site.mjs";
 import { issue, issueBody } from "../lib/steer.mjs";
-import { refName } from "../lib/text.mjs";
+import { refName, link } from "../lib/text.mjs";
 const site = await getSite();
 const q = site.research.queue || {};
 const items = site.queue().map((it, i) => {
@@ -27,8 +27,8 @@ const items = site.queue().map((it, i) => {
   {q.how && <p class="small muted">{q.how}</p>}
 </section>
 {items.length ? <ol class="queue">{items.map((x) => <li class="qitem"><span class="qrank mono" aria-label={`Rank ${x.i}`}>{String(x.i).padStart(2, "0")}</span><article class="card">
-<div class="card-top"><span class="mono muted small">{x.role ? <a href={x.role.url}>{refName(x.it.role)}</a> : refName(x.it.role)} · option {x.about ? <a href={x.about.url}>{refName(x.it.about)}</a> : refName(x.it.about)}</span>{typeof x.it.p_transfer === "number" && <Meter p={x.it.p_transfer} />}</div>
-<h3>{x.c ? <a href={x.c.url}>{x.c.title}</a> : x.it.claim}</h3>
+<div class="card-top"><span class="mono muted small">{x.role ? <a href={link(x.role.url)}>{refName(x.it.role)}</a> : refName(x.it.role)} · option {x.about ? <a href={link(x.about.url)}>{refName(x.it.about)}</a> : refName(x.it.about)}</span>{typeof x.it.p_transfer === "number" && <Meter p={x.it.p_transfer} />}</div>
+<h3>{x.c ? <a href={link(x.c.url)}>{x.c.title}</a> : x.it.claim}</h3>
 <p class="qnums">{x.nums.map(([k, v]) => <span class="qnum"><span class="f-lab">{k}</span> <span class="mono">{v}</span></span>)}{x.steer.map((s) => <span class="tag">{s}</span>)}</p>
 {x.it.plan && <p><span class="f-lab">Plan</span><br>{x.it.plan}</p>}
 {x.it.reason && <details><summary>Why this probability</summary><p class="small">{x.it.reason}</p></details>}

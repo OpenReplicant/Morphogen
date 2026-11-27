@@ -10,6 +10,8 @@
     morphogen optimizers
     morphogen evidence [--verify] [--limit N] [--by judge]
     morphogen ui [--host 127.0.0.1] [--port 8765]
+    morphogen site init [ROOT] [--repo OWNER/NAME] [--system system:default/NAME]   # a starter research site config
+    morphogen site build --config FILE --out DIR [--base /prefix]                  # the static research site
 
 TARGET is `cell:NAME` for a cell with a `run` in the catalog (`spec.morphogen.run` on its entity) (or the cell's name, or its `dir`).
 """
@@ -178,6 +180,23 @@ def cmd_ui(a) -> int:
     return 0
 
 
+def cmd_site(a) -> int:
+    from . import site
+    try:
+        if a.action == "init":
+            _print(site.init(a.root, repo=a.repo, system=a.system, title=a.title, owner=a.owner, config=a.config_name,
+                             content=a.content, force=a.force))
+        else:
+            if not a.config or not a.out:
+                print("morphogen: site build needs --config and --out", file=sys.stderr)
+                return 2
+            print(f"Built {site.build(a.config, a.out, a.base or '', install=a.install)}")
+    except site.SiteError as e:
+        print(f"morphogen: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="morphogen", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -263,6 +282,25 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8765)
     ui.set_defaults(fn=cmd_ui)
+
+    si = sub.add_parser("site", help="the research site: init writes a starter config and content folder into a "
+                        "research project; build makes the static site from a config (site/README.md)")
+    si.add_argument("action", choices=["init", "build"])
+    si.add_argument("root", nargs="?", default=".", help="for init: the research project (catalog-info.yaml, "
+                    "claims/, research/); default: here")
+    si.add_argument("--config", help="for build: the site's config file")
+    si.add_argument("--out", help="for build: the folder to write the HTML into")
+    si.add_argument("--base", help="for build: the path the site is served under, e.g. /research (default: "
+                    "relative links, which work under any path)")
+    si.add_argument("--install", action="store_true", help="for build: run npm ci in site/ first if needed")
+    si.add_argument("--repo", help="for init: OWNER/NAME for steering issues (default: the origin remote)")
+    si.add_argument("--system", help="for init: the System to assess against (default: catalog-info.yaml's)")
+    si.add_argument("--title", help="for init: the site's title")
+    si.add_argument("--owner", help="for init: whose research it is (default: the repo's owner)")
+    si.add_argument("--config-name", default="site.toml", help="for init: the config file, in ROOT")
+    si.add_argument("--content", default="site", help="for init: the content folder, in ROOT")
+    si.add_argument("--force", action="store_true", help="for init: replace existing files")
+    si.set_defaults(fn=cmd_site)
 
     a = ap.parse_args(argv)
     try:

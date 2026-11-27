@@ -1,12 +1,13 @@
-// The file-based pages: every Markdown file under site/content (or SITE_CONTENT) becomes a page with the shared
+// The file-based pages: every Markdown file under the config's content folder ([sources] content) becomes a page with the shared
 // layout (src/pages/[...slug].astro). Front matter is checked here; a page that breaks it stops the build.
 import { defineCollection, z } from "astro:content";
 import { glob } from "astro/loaders";
+import { loadConfig } from "./lib/config.mjs";
 
 const day = z.union([z.string(), z.date()]).transform((d) => (typeof d === "string" ? d : d.toISOString().slice(0, 10)));
 
 const pages = defineCollection({
-  loader: glob({ pattern: "**/*.md", base: process.env.SITE_CONTENT || "./content" }),
+  loader: glob({ pattern: "**/*.md", base: loadConfig().sources.content || "./src/no-content" }),
   schema: z.object({
     title: z.string(),
     description: z.string().optional(),

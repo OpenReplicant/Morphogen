@@ -2,9 +2,11 @@
 // Generated sections a Markdown page can ask for in its front matter (`blocks: [statuses, steering, files]`).
 import StatusBadge from "./StatusBadge.astro";
 import ExtLink from "./ExtLink.astro";
-import { OBSERVATION, STATUSES, STATUS_HELP } from "../lib/text.mjs";
+import { OBSERVATION, STATUSES, STATUS_HELP, up } from "../lib/text.mjs";
+// Morphogen's claim format, wherever this site's own files live.
+const SCHEMA_URL = "https://github.com/OpenReplicant/Morphogen/blob/main/schemas/evidence-claim.v1.json";
 const { site, blocks = [], depth = 0 } = Astro.props;
-const u = "../".repeat(depth);
+const u = up(depth);
 const actions = [["prioritise", "test this claim sooner; it counts double in the queue"], ["reject", "drop it from the queue"],
   ["dispute", "the transfer prediction is wrong; the next session reassesses it"], ["question", "a question to watch"],
   ["propose-role", "a role to read papers for"], ["propose-option", "an option or paper for a role"]];
@@ -16,4 +18,4 @@ const actions = [["prioritise", "test this claim sooner; it counts double in the
 <ul class="plain">{actions.map(([k, t]) => <li><span class="mono tag">research-action: {k}</span> {t}{(site.labels[k] || []).length > 0 && <> <span class="muted small">(label {site.labels[k].join(", ")})</span></>}</li>)}</ul>
 <p class="small muted">GitHub applies labels from a link only for people who can triage the repository, which is why the body line comes first. The agent records every issue but acts only on those from the repository's owner, members and collaborators.</p></section>}
 {blocks.includes("files") && <section class="panel" aria-labelledby="f-h"><h2 id="f-h">Files, not a service</h2>
-<p>Every claim is a YAML file in the repository (<ExtLink url={site.fileUrl("schemas/evidence-claim.v1.json")} text="schemas/evidence-claim.v1.json" />), and the roles and options are Backstage entity files. This site is built from them by Astro (<span class="mono">site/</span>); <a href={`${u}data/claims.json`}>data/claims.json</a> holds the same records and <a href={`${u}data/graph.json`}>data/graph.json</a> every reference between them, for other tools. The judge never reads the claims: what decides a change is only what it measures.</p></section>}
+<p>Every claim is a YAML file in the repository (<ExtLink url={SCHEMA_URL} text="Morphogen's EvidenceClaim schema" />), and the roles and options are Backstage entity files. This site is built from them by <span class="mono">morphogen site build</span>; <a href={`${u}data/claims.json`}>data/claims.json</a> holds the same records and <a href={`${u}data/graph.json`}>data/graph.json</a> every reference between them, for other tools. The judge never reads the claims: what decides a change is only what it measures.</p></section>}

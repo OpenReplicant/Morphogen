@@ -12,7 +12,7 @@ import ResultsTable from "../../components/ResultsTable.astro";
 import StatusCounts from "../../components/StatusCounts.astro";
 import { getSite } from "../../lib/site.mjs";
 import { proposeOptionUrl } from "../../lib/steer.mjs";
-import { refName, truncate } from "../../lib/text.mjs";
+import { refName, truncate, up } from "../../lib/text.mjs";
 
 export async function getStaticPaths() {
   const site = await getSite();
@@ -30,8 +30,8 @@ const topics = site.topicsFor(r.name);
 const queue = site.queue().map((q, i) => ({ ...q, rank: i + 1 })).filter((q) => refName(q.role) === r.name);
 ---
 <Base site={site} title={r.name} description={truncate(r.summary, 160)} depth={1}>
-<EntityHead ent={r} eyebrow="Role" crumbs={[["../roles.html", "Roles"]]}>
-  <p class="small">{parent.map((p) => <>Part of <a class="mono" href={`../${p.url}`}>{p.name}</a>. </>)}{parts.length > 0 && <>Its parts: {parts.map((p, i) => <>{i > 0 && ", "}<a class="mono" href={`../${p.url}`}>{p.name}</a></>)}. </>}{site.outs(r, "in-system").map((s) => <>In the system <a class="mono" href={`../${s.url}`}>{s.name}</a>.</>)}</p>
+<EntityHead ent={r} eyebrow="Role" crumbs={[[`${up(1)}roles.html`, "Roles"]]}>
+  <p class="small">{parent.map((p) => <>Part of <a class="mono" href={`${up(1)}${p.url}`}>{p.name}</a>. </>)}{parts.length > 0 && <>Its parts: {parts.map((p, i) => <>{i > 0 && ", "}<a class="mono" href={`${up(1)}${p.url}`}>{p.name}</a></>)}. </>}{site.outs(r, "in-system").map((s) => <>In the system <a class="mono" href={`${up(1)}${s.url}`}>{s.name}</a>.</>)}</p>
   <p><StatusCounts site={site} claims={claims} /></p>
 </EntityHead>
 <Evidence ent={r} />
@@ -42,8 +42,8 @@ const queue = site.queue().map((q, i) => ({ ...q, rank: i + 1 })).filter((q) => 
     : <p class="muted">No watch topic names this role yet (research/watch.yaml).</p>}
 </section>
 <section class="panel" aria-labelledby="n-h"><h2 id="n-h">Next to test ({queue.length})</h2>
-  {queue.length ? <ol class="plain">{queue.map((q) => <li><span class="mono">#{q.rank}</span> <a href={site.claim(q.claim) ? `../${site.claim(q.claim).url}` : undefined}>{site.claim(q.claim)?.title || q.claim}</a> {typeof q.p_transfer === "number" && <Meter p={q.p_transfer} />}</li>)}</ol>
-    : <p class="muted">Nothing for this role in the <a href="../queue.html">queue</a>.</p>}
+  {queue.length ? <ol class="plain">{queue.map((q) => <li><span class="mono">#{q.rank}</span> <a href={site.claim(q.claim) ? `${up(1)}${site.claim(q.claim).url}` : undefined}>{site.claim(q.claim)?.title || q.claim}</a> {typeof q.p_transfer === "number" && <Meter p={q.p_transfer} />}</li>)}</ol>
+    : <p class="muted">Nothing for this role in the <a href={`${up(1)}queue.html`}>queue</a>.</p>}
 </section>
 </div>
 
@@ -51,14 +51,14 @@ const queue = site.queue().map((q, i) => ({ ...q, rank: i + 1 })).filter((q) => 
   <ul class="opts">{options.length ? options.map((o) => {
     const cs = site.ins(o, "about");
     const result = o.spec?.morphogen?.evaluation?.result;
-    return <li class="opt"><h4 class="mono"><a href={`../${o.url}`}>{o.name}</a></h4><p>{o.summary}</p><p class="small"><StatusCounts site={site} claims={cs} /></p>{result && <p class="small"><span class="f-lab">Result so far</span> {result}</p>}</li>;
+    return <li class="opt"><h4 class="mono"><a href={`${up(1)}${o.url}`}>{o.name}</a></h4><p>{o.summary}</p><p class="small"><StatusCounts site={site} claims={cs} /></p>{result && <p class="small"><span class="f-lab">Result so far</span> {result}</p>}</li>;
   }) : <li class="muted">None yet.</li>}</ul>
   <p class="actions"><a class="btn ghost" href={proposeOptionUrl(site, r.name)} rel="noopener noreferrer">Suggest an option for this role</a></p>
 </section>
 
 <section class="panel" aria-labelledby="t-h"><h2 id="t-h">What has been tested ({tested.length})</h2>
   {tested.length ? <ResultsTable site={site} rows={tested} depth={1} showClaim /> : <p class="muted">No claim for this role has an outcome yet.</p>}
-  {waiting.length > 0 && <p class="small muted">{waiting.length} more predicted and waiting for a trial; see the claims below or <a href="../predictions.html">the predictions</a>.</p>}
+  {waiting.length > 0 && <p class="small muted">{waiting.length} more predicted and waiting for a trial; see the claims below or <a href={`${up(1)}predictions.html`}>the predictions</a>.</p>}
 </section>
 
 <section class="panel" aria-labelledby="c-h"><h2 id="c-h">Every claim for this role ({claims.length})</h2>

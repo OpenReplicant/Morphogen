@@ -10,7 +10,7 @@ docs/restart/LESSONS.md.
   `otel`), `project.py` (the cell format: `spec.morphogen` on the catalog's entities, default deny),
   `backstage.py` (the catalog: `catalog-info.yaml` and its Location targets, read into cells, interfaces and settings),
   `status.py` (where a project stands and the next step),
-  `documents.py` (the project's settings, from the System's `spec.morphogen`, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `pullrequest.py` (`morphogen pr`: a pull request as the GitHub judge, `.github/workflows/judge.yml`, hands it to the judge as a request), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `research.py` (the research loop's deterministic half: arXiv watch, paper text, quote checks, claim files, steering, the queue; never imported by the judge), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
+  `documents.py` (the project's settings, from the System's `spec.morphogen`, and the target spec a cell compiles to), `request.py` (one document in, one verdict out), `pullrequest.py` (`morphogen pr`: a pull request as the GitHub judge, `.github/workflows/judge.yml`, hands it to the judge as a request), `intake.py` (the judge held by another user: a candidate arrives as a git bundle), `research.py` (the research loop's deterministic half: arXiv watch, paper text, quote checks, claim files, steering, the queue; never imported by the judge), `site.py` (`morphogen site init` and `build`: the research site for any system), `cli.py`, `mcp_server.py`, `ui.py` and `ui.html` (the read-only web UI).
 - `.claude-plugin/`, `skills/`, `agents/`: the Claude Code plugin around the MCP server. Skills (the kit):
   `morphogen` (improve a cell), `map` (take a system apart into Backstage entity files and draft cells),
   `catalog` and `research` (options for a role, as `lifecycle: candidate` Components), `research-loop` (one session of
@@ -20,7 +20,8 @@ docs/restart/LESSONS.md.
   sample's files in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
 - `site/`: the research site, static HTML built with Astro (`site/src/`) from the evidence claims, the map and the
-  options (`site/README.md`); `.github/workflows/site.yml` deploys it to Pages when started by hand.
+  options named in a config file (`site/README.md`): `site/config.toml` for the demo, anyone's own through
+  `morphogen site build`. `.github/workflows/site.yml` deploys the demo to Pages when started by hand.
 
 ## Rules
 - Look it up before relying on it: read a tool's or library's current docs before designing

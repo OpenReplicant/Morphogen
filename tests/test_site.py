@@ -12,10 +12,11 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 import yaml
 
@@ -105,9 +106,9 @@ def make_project(root: Path, claims: list[dict]) -> None:
         (root / "claims" / f"{c['metadata']['name']}.yaml").write_text(yaml.safe_dump(c), encoding="utf-8")
     (root / "catalog.yaml").write_text(yaml.safe_dump_all(CATALOG), encoding="utf-8")
     (root / "config.toml").write_text(
-        'repo = "Owner/Repo"\nsystem = "system:default/sys"\n[sources]\nclaims = ["claims"]\n'
-        'catalog = ["catalog.yaml"]\nresearch = "research"\nschema = "schemas/evidence-claim.v1.json"\n'
-        '[labels]\nprioritise = ["research:prioritise"]\nreject = ["research:reject"]\n'
+        '[site]\nrepo = "Owner/Repo"\nsystem = "system:default/sys"\n[sources]\nclaims = ["claims"]\n'
+        'catalog = ["catalog.yaml"]\nresearch = "research"\ncontent = "content"\n'
+        'schema = "schemas/evidence-claim.v1.json"\n[labels]\nprioritise = ["research:prioritise"]\nreject = ["research:reject"]\n'
         'dispute = ["research:question"]\nquestion = ["research:question"]\n', encoding="utf-8")
     research = root / "research"
     research.mkdir()
@@ -128,12 +129,12 @@ def make_project(root: Path, claims: list[dict]) -> None:
         "Some *text*.\n", encoding="utf-8")
 
 
-def run_build(out: Path, root: Path | None = None, content: Path | None = None) -> subprocess.CompletedProcess:
-    env = dict(os.environ, SITE_OUT=str(out), ASTRO_TELEMETRY_DISABLED="1")
-    if root is not None:
-        env.update(SITE_ROOT=str(root), SITE_CONFIG=str(root / "config.toml"))
-    if content is not None:
-        env["SITE_CONTENT"] = str(content)
+def run_build(out: Path, config: Path | None = None, base: str = "") -> subprocess.CompletedProcess:
+    """`npm run build` with the contract's variables (site/README.md); `morphogen site build` sets the same."""
+    env = dict(os.environ, MORPHOGEN_SITE_OUT=str(out), MORPHOGEN_SITE_BASE=base, ASTRO_TELEMETRY_DISABLED="1")
+    env.pop("MORPHOGEN_SITE_CONFIG", None)
+    if config is not None:
+        env["MORPHOGEN_SITE_CONFIG"] = str(config)
     return subprocess.run(["npm", "run", "--silent", "build", "--", "--force"], cwd=SITE, env=env,
                           capture_output=True, text=True, timeout=600)
 
@@ -284,7 +285,7 @@ class Fixture(_Toolchain):
         cls.root = Path(cls.tmp.name)
         make_project(cls.root, [CLAIM, two_setups(), scored()])
         cls.out = cls.root / "out"
-        built(cls.out, root=cls.root, content=cls.root / "content")
+        built(cls.out, config=cls.root / "config.toml")
         cls.graph = json.loads(read(cls.out, "data/graph.json"))
 
     @classmethod
@@ -373,7 +374,7 @@ class BrokenInput(_Toolchain):
             bad = copy.deepcopy(CLAIM)
             bad["spec"]["assessments"][0]["status"] = "probably-fine"
             make_project(root, [bad])
-            r = run_build(root / "out", root=root, content=root / "content")
+            r = run_build(root / "out", config=root / "config.toml")
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("not a valid EvidenceClaim", r.stdout + r.stderr)
 
@@ -382,9 +383,139 @@ class BrokenInput(_Toolchain):
             root = Path(tmp)
             make_project(root, [CLAIM])
             (root / "content" / "bad.md").write_text("---\ntitle: Bad\nrefs: [resource:nowhere]\n---\nx\n", encoding="utf-8")
-            r = run_build(root / "out", root=root, content=root / "content")
+            r = run_build(root / "out", config=root / "config.toml")
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("refers to resource:nowhere", r.stdout + r.stderr)
+
+
+ORCHARD_CLAIM = {
+    "apiVersion": "morphogen.dev/v1alpha1",
+    "kind": "EvidenceClaim",
+    "metadata": {"name": "pruning-raises-yield", "description": "Summer pruning raises yield"},
+    "spec": {
+        "about": "component:default/summer-pruning",
+        "role": "component:default/canopy",
+        "source": {"kind": "preprint", "title": "Pruning and yield", "id": "arXiv:2611.00042",
+                   "url": "https://arxiv.org/abs/2611.00042", "version": "v1", "location": "Table 2",
+                   "read": "in full", "quote": "yield rose", "quote_status": "checked"},
+        "claim": {"statement": "Summer pruning raises yield", "finding": "better", "reporting": "self",
+                  "metric": "kg per tree", "value": 41, "baseline": {"name": "no pruning", "value": 35}},
+        "conditions": {"unstated": ["rootstock"]},
+        "assessments": [{"system": "system:default/orchard", "status": "predicted", "date": "2026-11-27",
+                         "prediction": {"p_transfer": 0.6, "reason": "Same climate", "by": "test",
+                                        "date": "2026-11-27", "before_outcome": True}}],
+    },
+}
+ORCHARD_CATALOG = [
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "System", "metadata": {"name": "orchard"},
+     "spec": {"owner": "group:default/growers"}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Component", "metadata": {"name": "canopy"},
+     "spec": {"type": "role", "lifecycle": "production", "owner": "group:default/growers", "system": "system:default/orchard"}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Component", "metadata": {"name": "summer-pruning"},
+     "spec": {"type": "method", "lifecycle": "candidate", "owner": "group:default/growers",
+              "morphogen": {"fills": "component:default/canopy"}}},
+]
+
+
+class AnotherSystem(_Toolchain):
+    """Anyone's system: `morphogen site init` in a made-up project (another system, other labels, a theme, fewer
+    pages in the header), built with `morphogen site build --base /lab`. Nothing of Morphogen's demo may show."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from morphogen import site
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = cls.root = Path(cls.tmp.name) / "grove"
+        (root / "claims").mkdir(parents=True)
+        (root / "claims" / "pruning.yaml").write_text(yaml.safe_dump(ORCHARD_CLAIM), encoding="utf-8")
+        (root / "catalog-info.yaml").write_text(yaml.safe_dump(ORCHARD_CATALOG[0]), encoding="utf-8")
+        (root / "catalog").mkdir()
+        (root / "catalog" / "map.yaml").write_text(yaml.safe_dump_all(ORCHARD_CATALOG[1:]), encoding="utf-8")
+        made = site.init(root, repo="Growers/grove", title="Grove lab", owner="The Growers")
+        assert made["system"] == "system:default/orchard", made  # read from catalog-info.yaml
+        cfg = Path(made["config"])
+        text = cfg.read_text(encoding="utf-8")
+        for old, new in (('"research:prioritise"', '"grove:boost"'), ('"research:reject"', '"grove:drop"'),
+                         ('# css = "site-theme.css"', 'css = "brand/theme.css"'), ('# logo = "logo.svg"', 'logo = "brand/logo.svg"'),
+                         ('pages = ["claims", "queue", "predictions", "roles", "map", "notes"]', 'pages = ["claims", "roles", {page = "search", text = "Find"}]')):
+            assert old in text, old
+            text = text.replace(old, new)
+        cfg.write_text(text, encoding="utf-8")
+        (root / "brand").mkdir()
+        (root / "brand" / "theme.css").write_text(":root { --accent: #2a7; }\n", encoding="utf-8")
+        (root / "brand" / "logo.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
+        cls.out = Path(cls.tmp.name) / "public"
+        r = subprocess.run([sys.executable, "-m", "morphogen", "site", "build", "--config", str(cfg), "--out",
+                            str(cls.out), "--base", "/lab"], cwd=cls.tmp.name, capture_output=True, text=True, timeout=600)
+        if r.returncode:
+            raise AssertionError(f"morphogen site build failed:\n{r.stdout[-3000:]}\n{r.stderr[-3000:]}")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_it_is_their_site(self):
+        text = all_html(self.out)
+        self.assertNotIn("Morphogen research", text)
+        self.assertNotIn("metasoar", text.lower())
+        self.assertNotIn("demos/research-loop", text)
+        index = read(self.out, "index.html")
+        self.assertIn("<title>Grove lab</title>", index)
+        self.assertIn("The Growers", index)
+        self.assertTrue((self.out / "claims" / "pruning-raises-yield.html").is_file())
+        self.assertTrue((self.out / "about.html").is_file())  # the starter content folder
+
+    def test_steering_goes_to_their_repo_with_their_labels(self):
+        links = issue_links(read(self.out, "claims/pruning-raises-yield.html"))
+        self.assertEqual(len(links), 3)
+        labels = set()
+        for url in links:
+            parts = urlsplit(url)
+            self.assertEqual(parts.path, "/Growers/grove/issues/new")
+            q = parse_qs(parts.query, strict_parsing=True)
+            self.assertIn("\nsystem: system:default/orchard", q["body"][0])
+            self.assertIn("\nclaim-file: https://github.com/Growers/grove/blob/main/claims/pruning.yaml", q["body"][0])
+            labels.add(q["labels"][0])
+        self.assertEqual(labels, {"grove:boost", "grove:drop", "research:question"})
+
+    def test_every_link_and_asset_is_under_the_base(self):
+        n = 0
+        for f in self.out.rglob("*.html"):
+            page = "/lab/" + f.relative_to(self.out).as_posix()
+            for u in re.findall(r'\s(?:href|src)="([^"]*)"', f.read_text(encoding="utf-8")):
+                if u.startswith(("https://", "http://", "#")):
+                    continue
+                n += 1
+                target = urlsplit(urljoin("http://host" + page, html.unescape(u))).path
+                self.assertTrue(target.startswith("/lab/"), f"{page}: {u}")
+                self.assertTrue((self.out / target[len("/lab/"):]).is_file(), f"{page}: {u} -> {target}")
+        self.assertGreater(n, 50)
+        self.assertIn('href="/lab/claims/pruning-raises-yield.html"', read(self.out, "index.html"))
+        self.assertIn('data-index="/lab/data/search.json"', read(self.out, "search.html"))
+
+    def test_theme_and_navigation(self):
+        index = read(self.out, "index.html")
+        self.assertIn('<link rel="stylesheet" href="/lab/assets/user/theme.css">', index)
+        self.assertIn('src="/lab/assets/user/logo.svg"', index)
+        self.assertEqual(read(self.out, "assets/user/theme.css"), ":root { --accent: #2a7; }\n")
+        nav = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', index).group(1)
+        self.assertEqual(re.findall(r">([^<]+)</a>", nav), ["Claims", "Roles", "Find", "About this site"])
+        self.assertTrue((self.out / "queue.html").is_file())  # left out of the header, still built
+
+
+class Init(unittest.TestCase):
+    def test_init_refuses_to_overwrite_and_needs_a_system(self):
+        from morphogen import site
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(site.SiteError, "--system"):
+                site.init(tmp, repo="A/b")
+            site.init(tmp, repo="A/b", system="mine")
+            self.assertIn('system = "system:default/mine"', (Path(tmp) / "site.toml").read_text(encoding="utf-8"))
+            with self.assertRaisesRegex(site.SiteError, "exists"):
+                site.init(tmp, repo="A/b", system="mine")
+            with self.assertRaisesRegex(site.SiteError, "OWNER/NAME"):
+                site.init(tmp, repo="not a repo", system="mine", force=True)
 
 
 if __name__ == "__main__":

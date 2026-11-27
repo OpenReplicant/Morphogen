@@ -4,7 +4,7 @@
 import Base from "../layouts/Base.astro";
 import { TYPES } from "../lib/data.mjs";
 import { getSite } from "../lib/site.mjs";
-import { truncate } from "../lib/text.mjs";
+import { truncate, up, link } from "../lib/text.mjs";
 const site = await getSite();
 const order = ["claim", "paper", "trial", "resource", "option", "role", "component", "system", "page"];
 const groups = order.map((t) => [t, [...site.of(t)].sort((a, b) => a.title.localeCompare(b.title))]).filter(([, l]) => l.length);
@@ -14,7 +14,7 @@ const groups = order.map((t) => [t, [...site.of(t)].sort((a, b) => a.title.local
   <p class="eyebrow">Everything on the site</p>
   <h1>Search</h1>
 </section>
-<div x-data="search" data-index="data/search.json">
+<div x-data="search" data-index={`${up(0)}data/search.json`}>
 <form class="filters" role="search" hidden x-bind:hidden="off" x-on:submit.prevent="run">
   <label class="f-search"><span class="sr">Search</span><input type="search" name="q" x-model="q" x-on:input="run" placeholder="A model, a trial, a metric, a paper…" autocomplete="off"></label>
 </form>
@@ -25,7 +25,7 @@ const groups = order.map((t) => [t, [...site.of(t)].sort((a, b) => a.title.local
   </template>
 </ol>
 <div x-show="idle">
-{groups.map(([t, list]) => <section class="panel" id={t} aria-labelledby={`g-${t}`}><h2 id={`g-${t}`}>{TYPES[t].many} ({list.length})</h2><ul class="plain">{list.map((x) => <li><a href={x.url}>{truncate(x.title, 140)}</a>{x.kind && <> <span class="tag">{x.kind}</span></>}</li>)}</ul></section>)}
+{groups.map(([t, list]) => <section class="panel" id={t} aria-labelledby={`g-${t}`}><h2 id={`g-${t}`}>{TYPES[t].many} ({list.length})</h2><ul class="plain">{list.map((x) => <li><a href={link(x.url)}>{truncate(x.title, 140)}</a>{x.kind && <> <span class="tag">{x.kind}</span></>}</li>)}</ul></section>)}
 </div>
 </div>
 </Base>

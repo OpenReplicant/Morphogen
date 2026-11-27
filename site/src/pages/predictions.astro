@@ -6,7 +6,7 @@ import Meter from "../components/Meter.astro";
 import StatusBadge from "../components/StatusBadge.astro";
 import { brier } from "../lib/data.mjs";
 import { getSite } from "../lib/site.mjs";
-import { truncate } from "../lib/text.mjs";
+import { truncate, link } from "../lib/text.mjs";
 const site = await getSite();
 const pairs = site.calibrationPairs();
 const waiting = [], unscored = [];
@@ -31,9 +31,9 @@ const cfg = (a) => site.configLabel(a);
     <Calibration pairs={pairs} waiting={waiting.map((x) => x.a.prediction.p_transfer)} />
   </section>
   <section class="panel" aria-labelledby="w-h"><h2 id="w-h">Waiting for a trial ({waiting.length})</h2>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Claim</th><th scope="col">Prediction</th></tr></thead><tbody>{waiting.length ? waiting.map(({ c, a }) => <tr><td><a href={c.url}>{truncate(c.title, 90)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</td><td><Meter p={a.prediction.p_transfer} /></td></tr>) : <tr><td colspan="2" class="muted">None.</td></tr>}</tbody></table></div>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Claim</th><th scope="col">Prediction</th></tr></thead><tbody>{waiting.length ? waiting.map(({ c, a }) => <tr><td><a href={link(c.url)}>{truncate(c.title, 90)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</td><td><Meter p={a.prediction.p_transfer} /></td></tr>) : <tr><td colspan="2" class="muted">None.</td></tr>}</tbody></table></div>
   <p class="small muted">Who wrote each one is on its page. To argue with one, open the claim and use "Dispute the prediction".</p></section>
 </div>
-{pairs.length > 0 && <section class="panel" aria-labelledby="s-h"><h2 id="s-h">Scored</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Claim</th><th scope="col">Prediction</th><th scope="col">Outcome</th></tr></thead><tbody>{pairs.map(({ p, claim, a }) => <tr><td><a href={claim.url}>{truncate(claim.title, 90)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</td><td><Meter p={p} /></td><td><StatusBadge status={a.status} /></td></tr>)}</tbody></table></div></section>}
-{unscored.length > 0 && <section class="panel" aria-labelledby="u-h"><h2 id="u-h">Outcomes that do not count</h2><p>These were tried before anyone wrote a probability, so they say nothing about the agent's calibration.</p><ul class="plain">{unscored.map(({ c, a }) => <li><StatusBadge status={a.status} /> <a href={c.url}>{truncate(c.title, 110)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</li>)}</ul></section>}
+{pairs.length > 0 && <section class="panel" aria-labelledby="s-h"><h2 id="s-h">Scored</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Claim</th><th scope="col">Prediction</th><th scope="col">Outcome</th></tr></thead><tbody>{pairs.map(({ p, claim, a }) => <tr><td><a href={link(claim.url)}>{truncate(claim.title, 90)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</td><td><Meter p={p} /></td><td><StatusBadge status={a.status} /></td></tr>)}</tbody></table></div></section>}
+{unscored.length > 0 && <section class="panel" aria-labelledby="u-h"><h2 id="u-h">Outcomes that do not count</h2><p>These were tried before anyone wrote a probability, so they say nothing about the agent's calibration.</p><ul class="plain">{unscored.map(({ c, a }) => <li><StatusBadge status={a.status} /> <a href={link(c.url)}>{truncate(c.title, 110)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</li>)}</ul></section>}
 </Base>
