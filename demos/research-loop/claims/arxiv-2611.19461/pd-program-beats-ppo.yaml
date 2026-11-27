@@ -1,0 +1,91 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: pd-program-beats-ppo
+  description: Programs written and revised by the strongest LLM (Claude-Opus-5, in the MiniSWEAgent harness) reached
+    a normalised mean score of 0.728 over 27 Gym control tasks, above PPO's 0.656 and Jev-like decision models'
+    0.239, and ran on a CPU alone.
+spec:
+  about: component:default/program-distillation
+  role: component:default/intent-handler
+  source:
+    kind: preprint
+    title: 'Program Distillation: Transferring LLM Capability from System 2 to System 0'
+    id: arXiv:2611.19461
+    url: https://arxiv.org/abs/2611.19461v1
+    version: v1
+    location: Abstract; section 3.2, Table 2
+    read: abstract, introduction, method and results (sections 1 to 3.6)
+    quote: The strongest model achieves a normalized mean score of 0.728, surpassing PPO (0.656) and Jev-like decision
+      models (0.239), while running exclusively on CPUs and reducing inference costs.
+    quote_location: 'arXiv HTML #abstract1.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 67fb63a98c0d) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: Programs written and revised by the strongest LLM (Claude-Opus-5, in the MiniSWEAgent harness) reached
+      a normalised mean score of 0.728 over 27 Gym control tasks, above PPO's 0.656 and Jev-like decision models'
+      0.239, and ran on a CPU alone.
+    metric: normalised mean score over 27 tasks
+    better: higher
+    value: 0.728
+    baseline:
+      name: PPO (the best conventional RL baseline)
+      value: 0.656
+    finding: better
+    runs: null
+    cases: 27
+    reporting: self
+    also:
+    - metric: normalised mean score
+      better: higher
+      value: 0.239
+      where: SemIf-4B, a Jev-like decision model acting at every step
+    note: The 27 tasks are control environments, not question answering. The best of ten teacher models is reported;
+      selection on development seeds, scores on separate test seeds.
+  conditions:
+    models:
+    - name: Claude-Opus-5
+      tuned: untuned
+      capability: frontier model through an API (the teacher and optimiser)
+    - name: 'nine further teachers: MiMo-V2.6-Pro, GLM-5.3, DeepSeek-V4.1-Flash, GPT-6-Sol, Claude-Sonnet-5, Kimi-K2.6,
+        Qwen3.8-27B, Qwen3.6-35B-A3B and others'
+    dataset:
+      name: PDBench
+      size: 27 Gym tasks (11 discrete, 16 continuous control)
+    method: at most 30 candidate programs an iteration and 5 follow-ups; the best on development seeds is kept and
+      scored on test seeds
+    hardware:
+      name: Intel Core i7-14700KF CPU for the programs; RL baselines on one RTX 4070 Ti Super
+    labels: environment scores (a reward per episode), not labels
+    unstated:
+    - the number of independent runs behind each score
+    - build cost in model calls
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.35
+      reason: 'The mechanism is the handler ladder''s top rung, so the question is whether it carries over, not
+        whether it applies. Against it: the teachers are frontier API models, our handler writer is Inkling 2 Mini
+        at Q4_K; the score is an environment reward on control tasks, our handlers are scored by agreement with
+        the large model on table questions; E-17b''s handlers lost 5.3 points on fresh cases. For it: E-17 to E-17d
+        show that handlers written by Inkling do answer many cases with no model. The claim is held to transfer
+        if a program revised against scores beats the large model per case on cost at no loss of accuracy, which
+        E-18 is testing.'
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: 'No new trial: E-18 (WikiTableQuestions, handlers per operation class) is the test of this claim on
+        our setup; record its outcome against this claim when it lands.'
+      cost_hours: 1
+      needs:
+      - E-18's result
+    date: '2026-11-27'

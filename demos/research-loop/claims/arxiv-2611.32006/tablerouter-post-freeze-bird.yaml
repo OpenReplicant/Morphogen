@@ -1,0 +1,78 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: tablerouter-post-freeze-bird
+  description: On 299 questions over long tables from databases not used during development (committed after the
+    method was frozen), TableRouter with Qwen2.5-7B answered 35.8%, against 16.4% for the strongest external baseline.
+spec:
+  about: component:default/query-aware-table-evidence
+  role: component:default/table-qa
+  source:
+    kind: preprint
+    title: 'TableRouter: Query-Aware Evidence Construction for Long-Table Question Answering'
+    id: arXiv:2611.32006
+    url: https://arxiv.org/abs/2611.32006v1
+    version: v1
+    location: Section 5, Table 2 (post-freeze BIRD)
+    read: abstract, introduction, method and main results (sections 1 to 5)
+    quote: With Qwen2.5-7B, TableRouter answers 107 questions correctly (35.8%), compared with 49 (16.4%) for LLMLingua-2,
+      the strongest external baseline (Table 2).
+    quote_location: 'arXiv HTML #S5.SS2.p1.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 a5608dfacf69) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: On 299 questions over long tables from databases not used during development (committed after the
+      method was frozen), TableRouter with Qwen2.5-7B answered 35.8%, against 16.4% for the strongest external baseline.
+    metric: accuracy
+    better: higher
+    value: 0.358
+    baseline:
+      name: LLMLingua-2 (strongest external baseline)
+      value: 0.164
+    finding: better
+    effect_size:
+      value: 19.4
+      kind: absolute
+      note: points; 95% bootstrap interval [13.7, 25.8] over questions
+    significance: positive 95% bootstrap intervals at the question and table levels; significant after Holm correction
+    runs: null
+    cases: 299
+    reporting: self
+  conditions:
+    models:
+    - name: Qwen2.5-7B-Instruct
+      size: 7B
+      tuned: untuned
+    engine:
+      name: vLLM
+    dataset:
+      name: post-freeze BIRD
+      size: 299 questions on 55 tables of 10,000 to 186,697 rows
+    method: training-free; one model call per question; table index built once and reused
+    unstated:
+    - precision
+    - how the method does on short tables like WikiTableQuestions'
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.2
+      reason: A real held-out evaluation, which counts for it; but its gain comes from tables far beyond the context
+        window, and E-18's WikiTableQuestions tables fit in Inkling's and LFM3's context whole. Our role sees little
+        of what it fixes. Kept for the day the system meets long tables.
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: Not worth a trial on WikiTableQuestions; revisit if a long-table task enters the map.
+      cost_hours: 20
+      needs:
+      - a long-table task in MetaSoar
+    date: '2026-11-27'

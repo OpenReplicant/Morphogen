@@ -1,0 +1,75 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: tableroute-oracle-route-complementarity
+  description: 'With GPT-4o-mini, choosing per question the route that succeeds (an oracle over direct answering,
+    table reduction and program execution) beat the best single route by 11.0 points on WTQ-L and 7.9 on BirdQA:
+    the routes fail on different questions.'
+spec:
+  about: component:default/capability-aware-table-routing
+  role: component:default/table-qa
+  source:
+    kind: preprint
+    title: 'TableRoute: Capability-Aware Routing for Scalable Table Question Answering'
+    id: arXiv:2611.25853
+    url: https://arxiv.org/abs/2611.25853v1
+    version: v1
+    location: Section 3 (analysis), Table 2
+    read: abstract, introduction, analysis, main results and ablations (sections 1 to 6)
+    quote: Oracle routing exceeds the strongest single route by 11.0 points on WTQ-L and 7.9 points on BirdQA.
+    quote_location: 'arXiv HTML #S3.SS3.SSS0.Px2.p1.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 dbb6579ec227) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: 'With GPT-4o-mini, choosing per question the route that succeeds (an oracle over direct answering,
+      table reduction and program execution) beat the best single route by 11.0 points on WTQ-L and 7.9 on BirdQA:
+      the routes fail on different questions.'
+    metric: exact-match accuracy, oracle over routes against the best single route
+    better: higher
+    value: null
+    baseline:
+      name: the strongest single route
+    finding: better
+    effect_size:
+      value: 11.0
+      kind: absolute
+      note: points, on WTQ-L; 7.9 on BirdQA
+    runs: null
+    cases: null
+    reporting: self
+    note: An upper bound, not a method; it says how much a router could gain.
+  conditions:
+    models:
+    - name: GPT-4o-mini
+      tuned: untuned
+    dataset:
+      name: WTQ-L and BirdQA (long-table sets derived from WikiTableQuestions and BIRD)
+    method: oracle routing among Direct, Reduce and Execute
+    unstated:
+    - the numbers on short WikiTQ tables for this analysis
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.6
+      reason: The handler ladder already has routes (handler, template, large model) and E-18's falsifier depends
+        on the cheap ones being right on different cases from where they fail. Complementarity between a program
+        and direct reading is likely at any model size, since programs fail on grounding and models on arithmetic,
+        as the paper finds. Our tables are short, where the gap may be smaller than on WTQ-L.
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: 'From E-18''s logs (no new calls): on cases where both a class handler (in shadow) and Inkling answered,
+        the share each got right that the other did not; an oracle over the two against Inkling alone.'
+      cost_hours: 2
+      needs:
+      - E-18's stream.jsonl with shadow answers
+    date: '2026-11-27'

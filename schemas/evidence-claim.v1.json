@@ -760,6 +760,38 @@
         }
       }
     },
+    "TrialPlan": {
+      "type": "object",
+      "description": "Optional, added in phase 1 (backward compatible: every file valid before is still valid): the cheapest trial that would settle the claim for this system, and what it would cost, so a queue can rank claims by what a trial would teach for its cost (morphogen.research rank).",
+      "required": [
+        "plan",
+        "cost_hours"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "type": "string",
+          "description": "What would be run, on what, and what result would count as the claim holding here."
+        },
+        "cost_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "An estimate of the trial's wall time on this system's hardware, setting it up included."
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What must exist first: code, data, a cell, another trial."
+        },
+        "code": {
+          "type": "string",
+          "format": "uri",
+          "description": "The source's released code, when there is some."
+        }
+      }
+    },
     "Assessment": {
       "type": "object",
       "required": [
@@ -809,6 +841,9 @@
         "date": {
           "type": "string",
           "format": "date"
+        },
+        "trial": {
+          "$ref": "#/$defs/TrialPlan"
         }
       },
       "allOf": [

@@ -1,0 +1,89 @@
+# Drafted by the research-loop skill (Claude Opus 5.5 in Claude Code), 2026-11-27, from the arXiv HTML of v1.
+paper: arXiv:2611.24324v1
+read: abstract, introduction, method and results (sections I to V-D)
+claims:
+  - name: timeout-cascade-gpu-hours
+    option: {name: timeout-cascade, description: "Run the small model first under a time limit; escalate to the large model, from the original task, only when the small model times out or its output fails the task's own check (tests)."}
+    role: escalation-gate
+    location: Section V-C, Figure 4
+    quote: "Across all tasks, it drops from 2585 to 2160 GPU-hours, a 16.4% reduction."
+    claim:
+      statement: >-
+        On SWE-bench Verified, a cascade from GLM-4.7-Flash (30B) to GLM-4.7 (355B), escalating on timeout or failed
+        tests, cut GPU-hours from 2585 to 2160 (16.4%) over all tasks while keeping the large model's resolve rate;
+        on easy tasks the cut was 33.5%.
+      metric: GPU-hours over all tasks
+      better: lower
+      value: 2160
+      unit: GPU-hours (MI300X)
+      baseline: {name: GLM-4.7 alone, value: 2585}
+      finding: better
+      effect_size: {value: 0.164, kind: relative}
+      runs: 1
+      cases: 466
+      reporting: self
+      also:
+        - {metric: GPU-hours on easy tasks, better: lower, value: 546, baseline: {name: GLM-4.7 alone, value: 821}, where: the 190 easy tasks}
+      note: Simulated from single-model traces (each model run once on each task), with the 120-minute timeout; escalation restarts the task cold.
+    conditions:
+      models:
+        - {name: GLM-4.7-Flash, size: 30B, tuned: untuned}
+        - {name: GLM-4.7, size: 355B, tuned: untuned}
+      engine: {name: vLLM, version: 0.16.0 on ROCm 7.0.0}
+      hardware: {name: AMD Instinct MI300X}
+      dataset: {name: SWE-bench Verified, size: 466 of 500 tasks with traces for both models}
+      method: trace-driven simulation of a timeout sweep from 0 to 120 minutes; mini-swe-agent scaffold, 250 steps, 2 hours a task
+      labels: none for the gate; the task's unit tests decide success
+      unstated: [variance across runs, which the authors note]
+    prediction:
+      p_transfer: 0.3
+      reason: >-
+        The gate escalates on an outcome check, as E-16 (Haiku to Opus on outcome triggers) and the handler ladder's
+        fallback do. But its check is a test suite, which says whether an answer is right; our checks (type, choices,
+        non-answers) only say whether it is well formed, and E-17b showed a weak check lets wrong cheap answers through.
+        Our models are 1.7B to Inkling 2 Mini, not 30B and 355B. It would transfer where a task brings its own check:
+        E-16's recorded tasks with their own checks.
+    trial:
+      plan: >-
+        In E-16's design, before it runs: on the recorded tasks with their own checks, simulate from single-model traces
+        (Haiku alone, Opus alone) a cascade that escalates on a failed check, and report cost and success against Opus
+        alone; it holds here if success is not lower beyond the interval and cost is lower.
+      cost_hours: 8
+      needs: [E-16's recorded task set, Haiku and Opus traces on it]
+  - name: timeout-cascade-near-oracle-router
+    option: {name: timeout-cascade}
+    role: escalation-gate
+    location: Section I (contributions) and V-D
+    quote: "the cascade captures most of the router’s cost-saving benefit without requiring classifier training or additional routing infrastructure (16.4% GPU-hour reduction from timeout cascade versus 17.9% from task router)."
+    claim:
+      statement: >-
+        The simple cascade's GPU-hour saving (16.4%) came close to that of an oracle-style router sending tasks by their
+        true difficulty (17.9%), so a learned difficulty router would add little.
+      metric: GPU-hour reduction against the large model alone
+      better: higher
+      value: 0.164
+      baseline: {name: an oracle task router by human-annotated difficulty, value: 0.179}
+      finding: matches
+      runs: 1
+      cases: 466
+      reporting: self
+    conditions:
+      models:
+        - {name: GLM-4.7-Flash, size: 30B}
+        - {name: GLM-4.7, size: 355B}
+      dataset: {name: SWE-bench Verified}
+      method: the router simulated with ground-truth difficulty labels at 100% accuracy
+      unstated: [a real trained router; only an oracle is simulated]
+    prediction:
+      p_transfer: 0.65
+      reason: >-
+        Our own gates point the same way: in E-04b and E-04c a learned front (logistic, TabICL, embeddings) was no
+        better than d1-2B's own confidence. The setting differs (coding agents, an outcome check, an oracle router),
+        but the claim, that a learned router adds little over a simple signal, has already held twice here.
+    trial:
+      plan: >-
+        Already partly answered by E-04b and E-04c; the remaining test is the same comparison in the handler ladder:
+        a gate learned from the ladder's own logs against its fixed rule (cheapest rung over its bound), simulated on
+        E-17d's stream.
+      cost_hours: 3
+      needs: [E-17d's stream.jsonl]

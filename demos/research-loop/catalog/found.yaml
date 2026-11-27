@@ -1,0 +1,114 @@
+# The options the research loop found (morphogen.research catalog writes this file; edit the claims, not this).
+# Each lists its claim files in spec.morphogen.evaluation.evidence.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: capability-aware-table-routing
+  description: 'TableRoute: ground the question to columns, values and conditions, then per question choose direct
+    answering, table reduction or a program, by table size ranges calibrated per model and operation on held-out
+    data (a lower confidence bound per bin).'
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/table-qa
+    docs:
+      url: https://arxiv.org/abs/2611.25853v1
+    evaluation:
+      evidence:
+      - claims/arxiv-2611.25853/tableroute-oracle-route-complementarity.yaml
+      - claims/arxiv-2611.25853/tableroute-wikitq-gain.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: computed-table-statistics
+  description: Compute the question's statistics (counts, sums, means, extrema over the rows that match its conditions)
+    by code over the whole table, and give them to the model with the rows, so it does not do the arithmetic itself.
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/table-qa
+    docs:
+      url: https://arxiv.org/abs/2611.25853v1
+    evaluation:
+      evidence:
+      - claims/arxiv-2611.25853/tableroute-computational-support.yaml
+      - claims/arxiv-2611.32006/tablerouter-statistics-double-accuracy.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: fresh-context-restarts
+  description: Revise a program in several sessions, each starting from the best program so far and its scores but
+    with a fresh model context (PD's Reset); or run several sessions in parallel and keep the best (Swarm).
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/intent-handler
+    docs:
+      url: https://arxiv.org/abs/2611.19461v1
+    evaluation:
+      evidence:
+      - claims/arxiv-2611.19461/pd-reset-swarm-more-effort.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: program-distillation
+  description: A frozen LLM, as teacher and optimiser, writes and revises a policy program against environment scores;
+    the program is then deployed alone, with no model at run time (System 2 to System 0).
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/intent-handler
+    docs:
+      url: https://arxiv.org/abs/2611.19461v1
+    evaluation:
+      evidence:
+      - claims/arxiv-2611.19461/pd-first-breakthrough-share.yaml
+      - claims/arxiv-2611.19461/pd-program-beats-ppo.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: query-aware-table-evidence
+  description: 'TableRouter: per question, choose between computed statistics over the full table and retrieved
+    rows with column summaries, from lexical cues, and give the chosen context to a frozen model in one call.'
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/table-qa
+    docs:
+      url: https://arxiv.org/abs/2611.32006v1
+    evaluation:
+      evidence:
+      - claims/arxiv-2611.32006/tablerouter-post-freeze-bird.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: timeout-cascade
+  description: Run the small model first under a time limit; escalate to the large model, from the original task,
+    only when the small model times out or its output fails the task's own check (tests).
+spec:
+  type: method
+  lifecycle: candidate
+  owner: group:default/metasoar
+  morphogen:
+    fills: component:default/escalation-gate
+    docs:
+      url: https://arxiv.org/abs/2611.24324v1
+    evaluation:
+      evidence:
+      - claims/arxiv-2611.24324/timeout-cascade-gpu-hours.yaml
+      - claims/arxiv-2611.24324/timeout-cascade-near-oracle-router.yaml

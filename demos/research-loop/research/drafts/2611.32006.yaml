@@ -1,0 +1,87 @@
+# Drafted by the research-loop skill (Claude Opus 5.5 in Claude Code), 2026-11-27, from the arXiv HTML of v1.
+paper: arXiv:2611.32006v1
+read: abstract, introduction, method and main results (sections 1 to 5)
+claims:
+  - name: tablerouter-statistics-double-accuracy
+    option: {name: computed-table-statistics, description: "Compute the question's statistics (counts, sums, means, extrema over the rows that match its conditions) by code over the whole table, and give them to the model with the rows, so it does not do the arithmetic itself."}
+    role: table-qa
+    location: Section 5, Table 3 (the fixed-row experiment)
+    quote: "When the same answer-determining rows are provided, adding their computed statistics doubles Qwen2.5-7B accuracy from 40.0% to 80.0% (+40.0 points)"
+    claim:
+      statement: >-
+        Given the same answer-determining rows, adding statistics computed from them raised Qwen2.5-7B's accuracy from
+        40.0% to 80.0% and Llama-3.1-8B's from 37.8% to 71.1% on 45 count and sum questions; Qwen3.5-9B went from
+        86.7% to 93.3%.
+      metric: accuracy
+      better: higher
+      value: 0.8
+      baseline: {name: the same rows without the statistics, value: 0.4}
+      finding: better
+      effect_size: {value: 40.0, kind: absolute, note: points}
+      runs: null
+      cases: 45
+      reporting: self
+      also:
+        - {metric: accuracy, better: higher, value: 0.711, baseline: {name: rows alone, value: 0.378}, where: Llama-3.1-8B}
+        - {metric: accuracy, better: higher, value: 0.933, baseline: {name: rows alone, value: 0.867}, where: Qwen3.5-9B}
+      note: The 45 questions were chosen by their gold queries (41 counts, 4 sums), and the statistics may contain the answer itself, as the paper says.
+    conditions:
+      models:
+        - {name: Qwen2.5-7B-Instruct, size: 7B, tuned: untuned}
+        - {name: Llama-3.1-8B-Instruct, size: 8B, tuned: untuned}
+        - {name: Qwen3.5-9B, size: 9B, tuned: untuned}
+      engine: {name: vLLM}
+      dataset: {name: BirdQA-R (BIRD single-table questions), size: 45 gold-selected questions}
+      method: one call to a frozen model; an explanation-first prompt; greedy decoding
+      thinking: non-thinking mode (Qwen3.5-9B)
+      unstated: [precision, hardware for this experiment]
+    prediction:
+      p_transfer: 0.55
+      reason: >-
+        Our template rung has LFM3 1.7B follow a plan over the table, and E-17c's two shuffle errors were LFM3 reading
+        a table by row position: the kind of evidence-use failure the statistics fix. The models here are 7B to 9B and
+        ours smaller, which the paper's own gradient (largest gain for the weaker models) favours. Against it: WTQ's
+        tables are short, the 45 questions were picked so the statistics help, and many WTQ questions are lookups.
+    trial:
+      plan: >-
+        On E-18's pilot cases (dev1k) that the template rung answers: LFM3 with the table alone against the table plus
+        a line of statistics computed for the question's column and condition (counts, sums, extrema); accuracy by
+        WTQ's evaluator, paired.
+      cost_hours: 4
+      needs: [a statistics line builder (from TableRouter's rules, Appendix B), E-18's template prompts]
+  - name: tablerouter-post-freeze-bird
+    option: {name: query-aware-table-evidence, description: "TableRouter: per question, choose between computed statistics over the full table and retrieved rows with column summaries, from lexical cues, and give the chosen context to a frozen model in one call."}
+    role: table-qa
+    location: Section 5, Table 2 (post-freeze BIRD)
+    quote: "With Qwen2.5-7B, TableRouter answers 107 questions correctly (35.8%), compared with 49 (16.4%) for LLMLingua-2, the strongest external baseline (Table 2)."
+    claim:
+      statement: >-
+        On 299 questions over long tables from databases not used during development (committed after the method was
+        frozen), TableRouter with Qwen2.5-7B answered 35.8%, against 16.4% for the strongest external baseline.
+      metric: accuracy
+      better: higher
+      value: 0.358
+      baseline: {name: LLMLingua-2 (strongest external baseline), value: 0.164}
+      finding: better
+      effect_size: {value: 19.4, kind: absolute, note: "points; 95% bootstrap interval [13.7, 25.8] over questions"}
+      significance: positive 95% bootstrap intervals at the question and table levels; significant after Holm correction
+      runs: null
+      cases: 299
+      reporting: self
+    conditions:
+      models:
+        - {name: Qwen2.5-7B-Instruct, size: 7B, tuned: untuned}
+      engine: {name: vLLM}
+      dataset: {name: post-freeze BIRD, size: "299 questions on 55 tables of 10,000 to 186,697 rows"}
+      method: training-free; one model call per question; table index built once and reused
+      unstated: [precision, how the method does on short tables like WikiTableQuestions']
+    prediction:
+      p_transfer: 0.2
+      reason: >-
+        A real held-out evaluation, which counts for it; but its gain comes from tables far beyond the context window,
+        and E-18's WikiTableQuestions tables fit in Inkling's and LFM3's context whole. Our role sees little of what it
+        fixes. Kept for the day the system meets long tables.
+    trial:
+      plan: Not worth a trial on WikiTableQuestions; revisit if a long-table task enters the map.
+      cost_hours: 20
+      needs: [a long-table task in MetaSoar]

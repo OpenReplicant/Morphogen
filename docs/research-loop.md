@@ -104,6 +104,71 @@ MetaSoar, 2026-11-25:
 
 Recording that session as data is phase 0.
 
+## Phase 1: running it
+
+Phase 1 is built (2026-11-27): the `research-loop` skill (`skills/research-loop/SKILL.md`) runs one session, and
+`morphogen/research.py` does every step that needs no judgement. The first session's output is in
+[demos/research-loop](../demos/research-loop/README.md), "Phase 1".
+
+| Step | Who | What it writes |
+| --- | --- | --- |
+| steer | `research steer ROOT --repo O/R` | `research/steering.jsonl`; a topic in `watch.yaml` per question |
+| watch | `research watch ROOT` (arXiv API, one request every 3 s, a generic User-Agent naming the project) | `research/seen.jsonl` |
+| triage | the model, then `research triage` | a status and reason per paper in `seen.jsonl` |
+| read | `research fetch ROOT ID` (arXiv HTML; the PDF through Docling when there is no HTML and Docling is installed) | the cache, outside the repository |
+| extract, predict | the model | `research/drafts/ID.yaml` |
+| catalog | `research catalog ROOT DRAFT` (quote found in the text, role on the map, schema, dedupe) | `claims/arxiv-ID/*.yaml`, `catalog/found.yaml` |
+| rank | `research rank ROOT` | `research/queue.json`, `research/index.json` |
+
+The schema gained one optional field, `assessments[].trial` (`plan`, `cost_hours`, `needs`, `code`): the cheapest
+trial that would settle a claim here and its cost, which the ranking needs. It is backward compatible: every claim
+file valid before is valid now (a test checks phase 0's).
+
+**Steering** comes from GitHub issues, which the claim site (`site/`, PR #108) opens with prefilled links. GitHub
+applies a link's labels only for people with triage access, so the site also writes lines at the end of the body,
+and those come first:
+
+```
+Please test this claim sooner.
+
+---
+research-action: prioritise
+research-claim: timeout-cascade-gpu-hours
+claim-file: https://github.com/OpenReplicant/Morphogen/blob/main/demos/research-loop/claims/arxiv-2611.24324/timeout-cascade-gpu-hours.yaml
+```
+
+`research-action` is one of `prioritise`, `reject`, `dispute` (the transfer prediction is wrong), `question`,
+`propose-role` or `propose-option`. Without that line the kind comes from the labels `research:prioritise`,
+`research:reject` and `research:question` (which the site also uses for disputes), or from a title starting
+`[research:...]`. The target is `research-claim`, or a `claim:`, `paper:`, `role:` or `option:` line. Effects: a
+prioritised claim counts double in the queue, a rejected one leaves it (a rejected paper is not read again), a
+disputed one is flagged in the queue (`disputed_by`) for the next session to reassess in a new assessment, and a
+question or proposal becomes a watch topic waiting for its terms. Every issue is recorded in `steering.jsonl`; only
+those from the repository's owner, members and collaborators (the REST API's `author_association`) are applied, so
+a stranger's issue cannot steer the agent.
+
+**To turn it on**, on GitHub (nothing is enabled by this change):
+
+1. Create the three labels: `research:prioritise`, `research:reject`, `research:question`.
+2. Add the repository secret `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`; the owner's subscription, no API key).
+3. Copy `skills/research-loop/research-session.yml` to `.github/workflows/`, run it once by hand, read the draft pull
+   request it opens, and only then uncomment its `schedule`. A pull request opened with the workflow's own token
+   does not start other workflows, so the judge's checks run once someone pushes to the branch or re-opens it.
+
+Or, without Actions, a Claude Code scheduled task: `/schedule` with the prompt "In OpenReplicant/Morphogen, read
+skills/research-loop/SKILL.md and run one session on demos/research-loop with --repo OpenReplicant/Morphogen; open a
+draft pull request into main", weekly. Or by hand, in any harness: ask it to follow the skill.
+
+**On cheap or local models:** steps 3 to 6 are the only ones that need a model, one paper at a time, and the draft
+is small. A weaker model will draft weaker claims, but it cannot write a quote that is not in the paper or a file
+the schema refuses. Its predictions are its own: `prediction.by` names the model, so calibration can be scored per
+model later.
+
+**Left for later phases:** reading the PDF route by default (Docling is used only when installed); a page or bbox
+for each quote (arXiv HTML has element ids, recorded in `quote_location`, but no pages); a transfer model learned
+from outcomes (phase 2) in place of the model's own `p_transfer`; recording outcomes against claims automatically
+when a trial lands; claims from sources other than arXiv; the same claim assessed for several systems (phase 5).
+
 ## Measures of success
 
 - **Transfer calibration:** of claims predicted to hold here, how many did (Brier score on "the gain held").
@@ -115,7 +180,7 @@ Recording that session as data is phase 0.
 ## Phases
 
 0. **The manual loop recorded as data:** today's session, as claims, conditions, a trial and its outcome.
-1. **Ingestion and the claim-condition schema:** papers in, claims with conditions and verified quotes out.
+1. **Ingestion and the claim-condition schema:** papers in, claims with conditions and verified quotes out. Built: see "Phase 1: running it".
 2. **A first transfer model:** heuristics over condition distance, scored against outcomes as they arrive.
 3. **The background scheduler:** a standing queue, a budget, and nothing urgent.
 4. **Implementation agents in a sandbox,** starting with methods that ship code.

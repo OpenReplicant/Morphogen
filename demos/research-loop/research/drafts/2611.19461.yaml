@@ -1,0 +1,128 @@
+# Drafted by the research-loop skill (Claude Opus 5.5 in Claude Code), 2026-11-27, from the arXiv HTML of v1.
+paper: arXiv:2611.19461v1
+read: abstract, introduction, method and results (sections 1 to 3.6)
+claims:
+  - name: pd-program-beats-ppo
+    option: {name: program-distillation, description: "A frozen LLM, as teacher and optimiser, writes and revises a policy program against environment scores; the program is then deployed alone, with no model at run time (System 2 to System 0)."}
+    role: intent-handler
+    location: Abstract; section 3.2, Table 2
+    quote: "The strongest model achieves a normalized mean score of 0.728, surpassing PPO (0.656) and Jev-like decision models (0.239), while running exclusively on CPUs and reducing inference costs."
+    claim:
+      statement: >-
+        Programs written and revised by the strongest LLM (Claude-Opus-5, in the MiniSWEAgent harness) reached a
+        normalised mean score of 0.728 over 27 Gym control tasks, above PPO's 0.656 and Jev-like decision models'
+        0.239, and ran on a CPU alone.
+      metric: normalised mean score over 27 tasks
+      better: higher
+      value: 0.728
+      baseline: {name: PPO (the best conventional RL baseline), value: 0.656}
+      finding: better
+      runs: null
+      cases: 27
+      reporting: self
+      also:
+        - {metric: normalised mean score, better: higher, value: 0.239, where: "SemIf-4B, a Jev-like decision model acting at every step"}
+      note: The 27 tasks are control environments, not question answering. The best of ten teacher models is reported; selection on development seeds, scores on separate test seeds.
+    conditions:
+      models:
+        - {name: Claude-Opus-5, tuned: untuned, capability: frontier model through an API (the teacher and optimiser)}
+        - {name: "nine further teachers: MiMo-V2.6-Pro, GLM-5.3, DeepSeek-V4.1-Flash, GPT-6-Sol, Claude-Sonnet-5, Kimi-K2.6, Qwen3.8-27B, Qwen3.6-35B-A3B and others"}
+      dataset: {name: PDBench, size: "27 Gym tasks (11 discrete, 16 continuous control)"}
+      method: at most 30 candidate programs an iteration and 5 follow-ups; the best on development seeds is kept and scored on test seeds
+      hardware: {name: "Intel Core i7-14700KF CPU for the programs; RL baselines on one RTX 4070 Ti Super"}
+      labels: environment scores (a reward per episode), not labels
+      unstated: [the number of independent runs behind each score, build cost in model calls]
+    prediction:
+      p_transfer: 0.35
+      reason: >-
+        The mechanism is the handler ladder's top rung, so the question is whether it carries over, not whether it
+        applies. Against it: the teachers are frontier API models, our handler writer is Inkling 2 Mini at Q4_K; the
+        score is an environment reward on control tasks, our handlers are scored by agreement with the large model on
+        table questions; E-17b's handlers lost 5.3 points on fresh cases. For it: E-17 to E-17d show that handlers
+        written by Inkling do answer many cases with no model. The claim is held to transfer if a program revised
+        against scores beats the large model per case on cost at no loss of accuracy, which E-18 is testing.
+    trial:
+      plan: >-
+        No new trial: E-18 (WikiTableQuestions, handlers per operation class) is the test of this claim on our setup;
+        record its outcome against this claim when it lands.
+      cost_hours: 1
+      needs: [E-18's result]
+  - name: pd-first-breakthrough-share
+    option: {name: program-distillation}
+    role: intent-handler
+    location: Section 3.6, Figure 3
+    quote: "the first improvement in policy performance accounts for an average of 68.7% of the total gain over a run, while the first three improvements account for an average of 87.6%."
+    claim:
+      statement: >-
+        Over 244 runs with a positive gain, the first improvement to a program accounted on average for 68.7% of the
+        run's total gain, and the first three for 87.6%: gains came in one early breakthrough, not gradually.
+      metric: share of a run's total development gain from its first improvement
+      better: higher
+      value: 0.687
+      finding: none-stated
+      runs: 244
+      cases: null
+      reporting: self
+      also:
+        - {metric: share of total gain from the first three improvements, value: 0.876}
+      note: A description of the learning curve, not a comparison; it says where revision budget pays.
+    conditions:
+      models:
+        - {name: "ten teacher LLMs (Table 2)", tuned: untuned}
+      dataset: {name: PDBench, size: "27 tasks; 3,643 valid attempts"}
+      method: feedback-driven revision of a policy program; each candidate kept only if it beats the best on development seeds
+      unstated: [how the share is distributed across tasks]
+    prediction:
+      p_transfer: 0.6
+      reason: >-
+        A property of revising a program against a score, which E-18's handler writing also does (up to 4 tries a class,
+        each after 3 more labels). Different models and task, but the claim is about the shape of the curve, which is
+        less tied to model size than the score is. If it holds, a class needs one good rewrite, not many.
+    trial:
+      plan: >-
+        Re-analysis of E-18's logs (no new model calls): for each operation class whose handler was rewritten, the
+        agreement of each try with the large model; the claim holds here if the first try that agrees on at least
+        half its labels captures most of the final agreement.
+      cost_hours: 2
+      needs: [E-18's stream.jsonl and state.json]
+  - name: pd-reset-swarm-more-effort
+    option: {name: fresh-context-restarts, description: "Revise a program in several sessions, each starting from the best program so far and its scores but with a fresh model context (PD's Reset); or run several sessions in parallel and keep the best (Swarm)."}
+    role: intent-handler
+    location: Section 3.4, Table 3
+    quote: "With more extensive training, Reset and Swarm achieve overall scores of 0.744 and 0.746, respectively, despite incurring higher training costs."
+    claim:
+      statement: >-
+        With GLM-5.3 as the model, restarting each revision session from the best program with a fresh context (Reset)
+        raised the overall score to 0.744 and five parallel sessions (Swarm) to 0.746, against 0.718 for the standard
+        single session, at a higher build cost.
+      metric: normalised mean score over 27 tasks
+      better: higher
+      value: 0.744
+      baseline: {name: the standard PDMetaHarness session, value: 0.718}
+      finding: better
+      effect_size: {value: 0.036, kind: relative, note: "\"approximately 3.6%\" over the standard method, as the paper states"}
+      runs: null
+      cases: 27
+      reporting: self
+      also:
+        - {metric: normalised mean score, better: higher, value: 0.746, where: Swarm (best of five parallel runs)}
+    conditions:
+      models:
+        - {name: GLM-5.3, tuned: untuned}
+      dataset: {name: PDBench, size: 27 tasks}
+      method: MiniSWEAgent harness; Reset carries only the best policy and its development scores into the next run
+      unstated: [the build time of each strategy in hours (in Table 3, not read), runs per strategy]
+    prediction:
+      p_transfer: 0.45
+      reason: >-
+        E-18 rewrites a class's handler up to 4 times; whether each try sees the earlier failed replies or starts fresh
+        from the best handler is a choice we have not measured. The gain is small (3.6%) and from one model on control
+        tasks, single runs, so it may not survive our noise; a fresh context also suits a small local model whose
+        context fills quickly.
+    trial:
+      plan: >-
+        On E-18's pilot cases (dev1k, not the stream): handler rewrites with the failed replies kept against a fresh
+        context holding only the best handler and its disagreements; agreement with Inkling on the class's later
+        labels, paired by class.
+      cost_hours: 6
+      needs: [Kaggle 2x T4 job, E-18's runner at 82f1fb5 with a rewrite option]

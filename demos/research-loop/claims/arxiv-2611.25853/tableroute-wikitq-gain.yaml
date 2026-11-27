@@ -1,0 +1,81 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: tableroute-wikitq-gain
+  description: Averaged over Qwen2.5-72B, LLaMA3.3-70B and GPT-4o-mini, TableRoute beat the strongest baseline by
+    2.1 points on WikiTableQuestions, 3.2 on WTQ-L and 5.3 on BirdQA, with fewer online tokens than TALON.
+spec:
+  about: component:default/capability-aware-table-routing
+  role: component:default/table-qa
+  source:
+    kind: preprint
+    title: 'TableRoute: Capability-Aware Routing for Scalable Table Question Answering'
+    id: arXiv:2611.25853
+    url: https://arxiv.org/abs/2611.25853v1
+    version: v1
+    location: Section 5, Table 3
+    read: abstract, introduction, analysis, main results and ablations (sections 1 to 6)
+    quote: Averaged over the three base LLMs, it outperforms the strongest baseline by 2.1 points on WikiTQ (RoT),
+      3.2 points on WTQ-L (TALON), and 5.3 points on BirdQA (DeepEye-SQL).
+    quote_location: 'arXiv HTML #S5.SS2.p1.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 dbb6579ec227) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: Averaged over Qwen2.5-72B, LLaMA3.3-70B and GPT-4o-mini, TableRoute beat the strongest baseline by
+      2.1 points on WikiTableQuestions, 3.2 on WTQ-L and 5.3 on BirdQA, with fewer online tokens than TALON.
+    metric: exact-match accuracy (WikiTableQuestions' official evaluator), gain over the strongest baseline
+    better: higher
+    value: null
+    baseline:
+      name: the strongest baseline per benchmark (RoT on WikiTQ)
+    finding: better
+    effect_size:
+      value: 2.1
+      kind: absolute
+      note: points on WikiTQ; 3.2 on WTQ-L; 5.3 on BirdQA
+    significance: paired McNemar tests, p < 0.001 against the strongest matched baselines
+    runs: null
+    cases: null
+    reporting: self
+  conditions:
+    models:
+    - name: Qwen2.5-72B
+      size: 72B
+    - name: LLaMA3.3-70B
+      size: 70B
+    - name: GPT-4o-mini
+    dataset:
+      name: WikiTableQuestions
+      version: the official test set (as the paper names it)
+    method: grounding evidence, then per-question routing by calibrated size ranges; deterministic computations
+      added as context
+    unstated:
+    - precision
+    - engine
+    - run-to-run variance
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.25
+      reason: The same dataset as E-18 and the same evaluator, which is rare. But the base models are 70B or an
+        API model, ours 1.7B to Inkling 2 Mini at Q4_K; the gain on WikiTQ is 2.1 points, small enough to vanish
+        in our noise; and the method is several calls a question, where ours aims at none. Code is not yet released.
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: Wait for the code; then its route ranges calibrated for LFM3 and Inkling on WTQ's train split, against
+        E-18's ladder on the same cases.
+      cost_hours: 16
+      needs:
+      - TableRoute's code (announced
+      - not released)
+    date: '2026-11-27'

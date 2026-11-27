@@ -1,0 +1,86 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: pd-reset-swarm-more-effort
+  description: With GLM-5.3 as the model, restarting each revision session from the best program with a fresh context
+    (Reset) raised the overall score to 0.744 and five parallel sessions (Swarm) to 0.746, against 0.718 for the
+    standard single session, at a higher build cost.
+spec:
+  about: component:default/fresh-context-restarts
+  role: component:default/intent-handler
+  source:
+    kind: preprint
+    title: 'Program Distillation: Transferring LLM Capability from System 2 to System 0'
+    id: arXiv:2611.19461
+    url: https://arxiv.org/abs/2611.19461v1
+    version: v1
+    location: Section 3.4, Table 3
+    read: abstract, introduction, method and results (sections 1 to 3.6)
+    quote: With more extensive training, Reset and Swarm achieve overall scores of 0.744 and 0.746, respectively,
+      despite incurring higher training costs.
+    quote_location: 'arXiv HTML #S3.SS4.SSS0.Px3.p1.1'
+    quote_status: checked
+    quote_note: matched against the paper's text (html, sha256 67fb63a98c0d) by morphogen.research html_to_text
+      v1, after NFKC and with quotes, dashes and whitespace made plain
+  claim:
+    statement: With GLM-5.3 as the model, restarting each revision session from the best program with a fresh context
+      (Reset) raised the overall score to 0.744 and five parallel sessions (Swarm) to 0.746, against 0.718 for the
+      standard single session, at a higher build cost.
+    metric: normalised mean score over 27 tasks
+    better: higher
+    value: 0.744
+    baseline:
+      name: the standard PDMetaHarness session
+      value: 0.718
+    finding: better
+    effect_size:
+      value: 0.036
+      kind: relative
+      note: '"approximately 3.6%" over the standard method, as the paper states'
+    runs: null
+    cases: 27
+    reporting: self
+    also:
+    - metric: normalised mean score
+      better: higher
+      value: 0.746
+      where: Swarm (best of five parallel runs)
+  conditions:
+    models:
+    - name: GLM-5.3
+      tuned: untuned
+    dataset:
+      name: PDBench
+      size: 27 tasks
+    method: MiniSWEAgent harness; Reset carries only the best policy and its development scores into the next run
+    unstated:
+    - the build time of each strategy in hours (in Table 3
+    - not read)
+    - runs per strategy
+  assessments:
+  - system: system:default/metasoar
+    against:
+    - resource:default/lfm3-1.7b-q6-k
+    - resource:default/inkling-2-mini-q4-k
+    - resource:default/llama-cpp-b12627
+    - resource:default/gtx-1070
+    status: predicted
+    prediction:
+      p_transfer: 0.45
+      reason: E-18 rewrites a class's handler up to 4 times; whether each try sees the earlier failed replies or
+        starts fresh from the best handler is a choice we have not measured. The gain is small (3.6%) and from one
+        model on control tasks, single runs, so it may not survive our noise; a fresh context also suits a small
+        local model whose context fills quickly.
+      by: research-loop agent draft (Claude Opus 5.5, Claude Code), from the paper and MetaSoar's docs/experiments.md
+        at 22feddc; not yet reviewed by the owner
+      date: '2026-11-27'
+      before_outcome: true
+    trial:
+      plan: 'On E-18''s pilot cases (dev1k, not the stream): handler rewrites with the failed replies kept against
+        a fresh context holding only the best handler and its disagreements; agreement with Inkling on the class''s
+        later labels, paired by class.'
+      cost_hours: 6
+      needs:
+      - Kaggle 2x T4 job
+      - E-18's runner at 82f1fb5 with a rewrite option
+    date: '2026-11-27'
