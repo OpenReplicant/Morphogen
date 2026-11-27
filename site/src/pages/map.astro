@@ -1,4 +1,5 @@
 ---
+import { link } from "../lib/text.mjs";
 // The relations graph: every claim between the papers and trials it comes from (and the models it was tested on)
 // and the options and roles it bears on. A static SVG of links, laid out at build time (src/lib/layout.mjs);
 // Alpine's `graph` component (assets/site.js) highlights a node's neighbours and filters by kind.
@@ -26,11 +27,11 @@ const cls = (n) => `node t-${n.ent.type}${n.ent.type === "claim" ? ` s-${site.st
 <title id="g-t">The map: {g.nodes.length} entities and {g.paths.length} links</title>
 {g.cols.map((c) => <text class="col-h" x={String(c.x)} y="20">{c.label}</text>)}
 <g class="edges">{g.paths.map((p) => <path class={`edge r-${p.rel}${p.status ? ` e-${p.status}` : ""}`} d={p.d} data-from={p.from} data-to={p.to} />)}</g>
-<g class="nodes">{g.nodes.map((n) => <a href={n.ent.url} class={cls(n)} data-id={n.ent.id} data-type={n.ent.type}><rect x={String(n.x)} y={n.y.toFixed(1)} width={String(n.w)} height={String(n.h)} rx="4" /><text x={String(n.x + 6)} y={(n.y + n.h / 2 + 4).toFixed(1)}>{n.label}</text><title>{TYPES[n.ent.type].one}: {n.ent.title}</title></a>)}</g>
+<g class="nodes">{g.nodes.map((n) => <a href={link(n.ent.url)} class={cls(n)} data-id={n.ent.id} data-type={n.ent.type}><rect x={String(n.x)} y={n.y.toFixed(1)} width={String(n.w)} height={String(n.h)} rx="4" /><text x={String(n.x + 6)} y={(n.y + n.h / 2 + 4).toFixed(1)}>{n.label}</text><title>{TYPES[n.ent.type].one}: {n.ent.title}</title></a>)}</g>
 </svg>
 </div>
 </div>
 <section class="panel" aria-labelledby="l-h"><h2 id="l-h">Reading it</h2>
-<p class="small">Claims are coloured by their status here: green replicated, red did not transfer, amber mixed, blue predicted, grey untested, purple our own observation. A link from a claim to a model means the claim was measured on it, or tested on it with a result. <a href="data/graph.json">data/graph.json</a> has every entity and reference, for other tools; <a href="search.html">search</a> lists everything by kind.</p>
+<p class="small">Claims are coloured by their status here: green replicated, red did not transfer, amber mixed, blue predicted, grey untested, purple our own observation. A link from a claim to a model means the claim was measured on it, or tested on it with a result. <a href={link("data/graph.json")}>data/graph.json</a> has every entity and reference, for other tools; <a href={link("search.html")}>search</a> lists everything by kind.</p>
 </section>
 </Base>

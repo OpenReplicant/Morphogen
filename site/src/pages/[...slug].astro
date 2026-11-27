@@ -1,4 +1,5 @@
 ---
+import { up } from "../lib/text.mjs";
 // A Markdown page from site/content: the shared layout, the page's text, any generated blocks it asks for, and
 // links to the entities its front matter names (`refs:`), each of which links back here.
 import { render } from "astro:content";
@@ -14,7 +15,7 @@ export async function getStaticPaths() {
 const site = await getSite();
 const p = site.entities.get(Astro.props.id);
 const depth = p.key.split("/").length - 1;
-const u = "../".repeat(depth);
+const u = up(depth);
 const { Content } = await render(p.page.entry);
 const refs = site.outs(p, "mentions");
 const nav = typeof p.page.nav === "number" ? `${p.key}.html` : p.kind !== "page" ? "notes.html" : "";

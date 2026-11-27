@@ -7,7 +7,7 @@ import StatusBadge from "../components/StatusBadge.astro";
 import StatusBadges from "../components/StatusBadges.astro";
 import { getSite } from "../lib/site.mjs";
 import { questionUrl } from "../lib/steer.mjs";
-import { OBSERVATION, QUOTE_SHORT, QUOTE_TEXT, STATUSES, STATUS_TEXT, refName, truncate } from "../lib/text.mjs";
+import { OBSERVATION, QUOTE_SHORT, QUOTE_TEXT, STATUSES, STATUS_TEXT, refName, truncate, link } from "../lib/text.mjs";
 const site = await getSite();
 const claims = site.sorted();
 const all = [...STATUSES, OBSERVATION];
@@ -33,7 +33,7 @@ function item(c) {
   <h1>Claims from papers, checked against this system</h1>
   <p class="lede">The agent reads new papers for the roles in the map, writes down each claimed gain with the conditions it was measured under, and predicts whether it will hold here. Trials behind the judge then score the prediction. {paperN} claims from papers so far, for <span class="mono">{refName(site.system)}</span>.</p>
   <ul class="stats" aria-label="Claims by status">{all.filter((s) => counts[s]).map((s) => <li><span class="stat-n">{counts[s]}</span> <StatusBadge status={s} /></li>)}</ul>
-  <p class="actions"><a class="btn" href={questionUrl(site)} rel="noopener noreferrer">Propose a question to watch</a> <a class="btn ghost" href="map.html">The map of what links to what</a></p>
+  <p class="actions"><a class="btn" href={questionUrl(site)} rel="noopener noreferrer">Propose a question to watch</a> <a class="btn ghost" href={link("map.html")}>The map of what links to what</a></p>
 </section>
 
 <div x-data="feed">
@@ -50,8 +50,8 @@ function item(c) {
 {claims.map(item).map((x) => <li class="item" data-name={x.c.name} data-status={site.statuses(x.c).join(" ")} data-role={x.role} data-source={short(x.src)} data-search={x.search}>
   <article class="card">
     <div class="card-top"><StatusBadges site={site} c={x.c} /><span class={`qs q-${x.qs}`} title={QUOTE_TEXT[x.qs] || ""}>{QUOTE_SHORT[x.qs] || ""}</span>{site.predictions(x.c).map((pr) => <Meter p={pr.p_transfer} />)}</div>
-    <h3><a href={x.c.url}>{x.c.title}</a></h3>
-    <p class="meta"><a class="mono" href={x.from?.url}>{short(x.src)}</a> <span aria-hidden="true">·</span> <a href={site.catalogRef(x.c.spec.role)?.url}>{x.role}</a> <span aria-hidden="true">·</span> <span>option <a class="mono" href={site.catalogRef(x.c.spec.about)?.url}>{x.option}</a></span>{site.date(x.c) && <> <span aria-hidden="true">·</span> <time datetime={site.date(x.c)}>{site.date(x.c)}</time></>}</p>
+    <h3><a href={link(x.c.url)}>{x.c.title}</a></h3>
+    <p class="meta"><a class="mono" href={link(x.from?.url)}>{short(x.src)}</a> <span aria-hidden="true">·</span> <a href={link(site.catalogRef(x.c.spec.role)?.url)}>{x.role}</a> <span aria-hidden="true">·</span> <span>option <a class="mono" href={link(site.catalogRef(x.c.spec.about)?.url)}>{x.option}</a></span>{site.date(x.c) && <> <span aria-hidden="true">·</span> <time datetime={site.date(x.c)}>{site.date(x.c)}</time></>}</p>
   </article>
 </li>)}
 </ol>

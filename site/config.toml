@@ -1,6 +1,12 @@
-# What the site reads (site/src/lib/data.mjs). Paths are relative to the repository root.
+# Morphogen's own research site: the research-loop demo (site/README.md, "The config file"). Paths are relative to
+# this file. Build it with `npm run build` here, or `morphogen site build --config site/config.toml --out site/_build`.
+
+[site]
 title = "Morphogen research"
-# Where steering issues go, and where claim files are linked on GitHub.
+description = "Claims from papers about options for the system's roles, with conditions, transfer predictions and outcomes."
+owner = "OpenReplicant"
+# Where steering issues go, and where claim files are linked on GitHub (by their path from the repository root,
+# found from .git above this file; `repo_dir` sets it instead).
 repo = "OpenReplicant/Morphogen"
 branch = "main"
 # The System whose status each claim is shown with (an assessment's `system`).
@@ -8,18 +14,20 @@ system = "system:default/metasoar"
 
 [sources]
 # Directories searched recursively for EvidenceClaim files (*.yaml, *.yml).
-claims = ["demos/research-loop/claims"]
-# Backstage entity files: the map (roles, this system's conditions) and the options.
+claims = ["../demos/research-loop/claims"]
+# Backstage entity files: the map (roles, this system's conditions) and the options. A missing one is skipped.
 catalog = [
-  "demos/research-loop/catalog-info.yaml",
-  "demos/research-loop/catalog/map.yaml",
-  "demos/research-loop/catalog/options.yaml",
-  "demos/research-loop/catalog/found.yaml",
+  "../demos/research-loop/catalog-info.yaml",
+  "../demos/research-loop/catalog/map.yaml",
+  "../demos/research-loop/catalog/options.yaml",
+  "../demos/research-loop/catalog/found.yaml",
 ]
 # The research agent's own files (morphogen.research): queue.json (next to test), watch.yaml (what it watches),
 # seen.jsonl (papers seen) and index.json (every claim's path). Each is optional; a missing file leaves its view empty.
-research = "demos/research-loop/research"
-schema = "schemas/evidence-claim.v1.json"
+research = "../demos/research-loop/research"
+# Markdown pages: every .md file under it becomes a page.
+content = "content"
+# schema = "../schemas/evidence-claim.v1.json"   # the default: the one next to this site
 
 # The labels the research agent reads its steering from. A label is applied only when the person opening the issue
 # can triage the repository; for anyone else GitHub drops it, and the `research-action:` line in the body still says
@@ -32,3 +40,12 @@ dispute = ["research:question"]
 question = ["research:question"]
 propose-role = ["research:question"]
 propose-option = ["research:question"]
+
+# [theme]
+# css = "theme.css"     # loaded after the default style.css; override its custom properties
+# logo = "logo.svg"     # shown in the header and used as the icon
+
+[nav]
+# The header's pages, in order: claims, queue, predictions, roles, map, notes (shown once there is a note), search.
+# A Markdown page with `nav: <number>` in its front matter is added after these.
+pages = ["claims", "queue", "predictions", "roles", "map", "notes"]

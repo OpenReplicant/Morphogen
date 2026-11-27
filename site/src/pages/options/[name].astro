@@ -11,7 +11,7 @@ import References from "../../components/References.astro";
 import ResultsTable from "../../components/ResultsTable.astro";
 import StatusCounts from "../../components/StatusCounts.astro";
 import { getSite } from "../../lib/site.mjs";
-import { truncate } from "../../lib/text.mjs";
+import { truncate, up } from "../../lib/text.mjs";
 
 export async function getStaticPaths() {
   const site = await getSite();
@@ -26,8 +26,8 @@ const docs = o.spec?.morphogen?.docs;
 const tested = site.results(claims).filter((x) => x.a.outcome);
 ---
 <Base site={site} title={o.name} description={truncate(o.summary, 160)} depth={1}>
-<EntityHead ent={o} eyebrow="Option" crumbs={[["../roles.html", "Roles"]]}>
-  <p class="small">A candidate for {roles.length ? roles.map((r, i) => <>{i > 0 && ", "}the role <a class="mono" href={`../${r.url}`}>{r.name}</a></>) : "no role named"}.{docs?.url && <> Described at <ExtLink url={docs.url} text={docs.url} />.</>}</p>
+<EntityHead ent={o} eyebrow="Option" crumbs={[[`${up(1)}roles.html`, "Roles"]]}>
+  <p class="small">A candidate for {roles.length ? roles.map((r, i) => <>{i > 0 && ", "}the role <a class="mono" href={`${up(1)}${r.url}`}>{r.name}</a></>) : "no role named"}.{docs?.url && <> Described at <ExtLink url={docs.url} text={docs.url} />.</>}</p>
   <p><StatusCounts site={site} claims={claims} /></p>
 </EntityHead>
 <Evidence ent={o} />

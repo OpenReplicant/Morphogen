@@ -1,4 +1,5 @@
 ---
+import { up } from "../../lib/text.mjs";
 // One paper (or other outside source): its claims with their status here, the options and roles they bear on,
 // what the agent saw of it, and every reference to and from it.
 import Base from "../../layouts/Base.astro";
@@ -25,14 +26,14 @@ const src = p.source || {};
 const seen = p.seen;
 ---
 <Base site={site} title={p.title} depth={1}>
-<EntityHead ent={p} eyebrow={`Paper · ${src.kind || "source"}`} crumbs={[["../search.html#paper", "Papers"]]}>
+<EntityHead ent={p} eyebrow={`Paper · ${src.kind || "source"}`} crumbs={[[`${up(1)}search.html#paper`, "Papers"]]}>
   <p class="small"><span class="mono">{[src.id, src.version && `version ${src.version}`].filter(Boolean).join(" · ")}</span> · <ExtLink url={src.url} text="read it" />{seen?.published && <> · published {seen.published}</>}{seen?.category && <> · {seen.category}</>}{seen?.seen && <> · seen by the agent {seen.seen}</>}</p>
   <p><StatusCounts site={site} claims={claims} /></p>
 </EntityHead>
 <div class="cols">
 <section class="panel" aria-labelledby="o-h"><h2 id="o-h">Options and roles</h2>
-  <p class="f-lab">Options</p><ul class="plain">{options.map((o) => <li><a class="mono" href={`../${o.url}`}>{o.name}</a></li>)}</ul>
-  <p class="f-lab">Roles</p><ul class="plain">{roles.map((r) => <li><a class="mono" href={`../${r.url}`}>{r.name}</a></li>)}</ul>
+  <p class="f-lab">Options</p><ul class="plain">{options.map((o) => <li><a class="mono" href={`${up(1)}${o.url}`}>{o.name}</a></li>)}</ul>
+  <p class="f-lab">Roles</p><ul class="plain">{roles.map((r) => <li><a class="mono" href={`${up(1)}${r.url}`}>{r.name}</a></li>)}</ul>
 </section>
 {seen?.abstract && <section class="panel" aria-labelledby="ab-h"><h2 id="ab-h">Abstract</h2><p class="small">{seen.abstract}</p></section>}
 </div>

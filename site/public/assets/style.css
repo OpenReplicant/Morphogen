@@ -1,4 +1,5 @@
-/* Morphogen research. Loosely after openreplicant.com: near-black panels, cyan and magenta, mono labels.
+/* The research site's default theme: near-black panels, cyan and magenta, mono labels. A config's [theme] css is
+   loaded after this file, so it can override any of the custom properties below.
    Light is a paper theme with darker inks so every pairing keeps 4.5:1 contrast. */
 
 :root {
@@ -125,6 +126,7 @@ p { margin: 0 0 0.9em; }
 .brand { color: var(--text); text-decoration: none; font-weight: 750; letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 8px; }
 .brand:hover { color: var(--text); }
 .brand-mark { color: var(--accent); font-size: 1.2rem; }
+.brand-logo { height: 1.6rem; width: auto; }
 .brand-sub { font-family: var(--mono); font-weight: 500; color: var(--accent-2); font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .top nav { margin-left: auto; }
 .top nav ul { list-style: none; display: flex; gap: 4px; margin: 0; padding: 0; flex-wrap: wrap; }

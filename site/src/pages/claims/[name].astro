@@ -13,7 +13,7 @@ import References from "../../components/References.astro";
 import ResultsTable from "../../components/ResultsTable.astro";
 import StatusBadges from "../../components/StatusBadges.astro";
 import Steer from "../../components/Steer.astro";
-import { fmtNumber, refName, truncate } from "../../lib/text.mjs";
+import { fmtNumber, refName, truncate, up } from "../../lib/text.mjs";
 import { getSite } from "../../lib/site.mjs";
 
 export async function getStaticPaths() {
@@ -35,10 +35,10 @@ const bearsOn = site.ins(c, "observed").concat(site.ins(c, "see-also").filter((x
 const ev = option?.spec?.morphogen?.evaluation || {};
 ---
 <Base site={site} title={md.description || c.name} description={truncate(cl.statement || "", 160)} depth={1}>
-<p class="crumbs"><a href="../index.html">Claims</a> <span aria-hidden="true">/</span> <span class="mono">{c.name}</span></p>
+<p class="crumbs"><a href={`${up(1)}index.html`}>Claims</a> <span aria-hidden="true">/</span> <span class="mono">{c.name}</span></p>
 <article class="claim">
   <header class="claim-head">
-    <div class="card-top"><StatusBadges site={site} c={c} /><span class="mono muted">{role ? <a href={`../${role.url}`}>{refName(c.spec.role)}</a> : refName(c.spec.role)} · option {option ? <a href={`../${option.url}`}>{refName(c.spec.about)}</a> : refName(c.spec.about)}</span></div>
+    <div class="card-top"><StatusBadges site={site} c={c} /><span class="mono muted">{role ? <a href={`${up(1)}${role.url}`}>{refName(c.spec.role)}</a> : refName(c.spec.role)} · option {option ? <a href={`${up(1)}${option.url}`}>{refName(c.spec.about)}</a> : refName(c.spec.about)}</span></div>
     <h1>{md.description || c.name}</h1>
     <p class="statement">{cl.statement || ""}</p>
   </header>
@@ -47,7 +47,7 @@ const ev = option?.spec?.morphogen?.evaluation || {};
 
   <section aria-labelledby="src-h" class="panel">
     <h2 id="src-h">Source</h2>
-    <p><strong><ExtLink url={src.url} text={src.title || ""} /></strong>{from && <> · <a href={`../${from.url}`}>{from.type === "trial" ? "every claim from this trial" : "every claim from this paper"}</a></>}<br><span class="mono small">{srcBits}</span> <span class="muted small">({src.kind})</span></p>
+    <p><strong><ExtLink url={src.url} text={src.title || ""} /></strong>{from && <> · <a href={`${up(1)}${from.url}`}>{from.type === "trial" ? "every claim from this trial" : "every claim from this paper"}</a></>}<br><span class="mono small">{srcBits}</span> <span class="muted small">({src.kind})</span></p>
     <dl class="kv"><dt>Where</dt><dd>{src.location || ""}</dd><dt>Read</dt><dd>{src.read || ""}</dd></dl>
     <Quote src={src} />
   </section>
@@ -80,7 +80,7 @@ const ev = option?.spec?.morphogen?.evaluation || {};
   </section>
 
   {option && <section class="panel" aria-labelledby="o-h"><h2 id="o-h">The option</h2>
-    <p><a class="mono" href={`../${option.url}`}>{option.name}</a>, a candidate for the role {role ? <a class="mono" href={`../${role.url}`}>{role.name}</a> : <span class="mono">{refName(c.spec.role)}</span>}.</p>
+    <p><a class="mono" href={`${up(1)}${option.url}`}>{option.name}</a>, a candidate for the role {role ? <a class="mono" href={`${up(1)}${role.url}`}>{role.name}</a> : <span class="mono">{refName(c.spec.role)}</span>}.</p>
     <p>{option.summary}</p>
     {(ev.need || ev.method || ev.result) && <dl class="kv">{ev.need && <><dt>What would count</dt><dd>{ev.need}</dd></>}{ev.method && <><dt>How it is measured</dt><dd>{ev.method}</dd></>}{ev.result && <><dt>Result so far</dt><dd>{ev.result}</dd></>}</dl>}
   </section>}

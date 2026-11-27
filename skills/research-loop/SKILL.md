@@ -169,3 +169,21 @@ On a branch `research/DATE`, commit `ROOT/research/`, `ROOT/claims/` and `ROOT/c
 pull request into main. Its description: papers seen, read and skipped; claims written and refused; the top five of
 the queue with their p and cost; the steering events recorded and whether each was applied; any topic still waiting
 for terms. Plain sentences, no claims stronger than the files.
+
+## Set up your research site
+
+Once a project has claims, anyone running Morphogen can publish its own research site: every claim, paper, trial,
+model, option and role as a page with links both ways, the queue, the predictions and their calibration, and steering
+buttons that open prefilled issues in their repository. Do this once, when the owner asks (it is not part of a session).
+
+1. `uv run morphogen site init ROOT` writes `ROOT/site.toml` and `ROOT/site/about.md`. It reads the repository from
+   the `origin` remote and the System from `ROOT/catalog-info.yaml`; pass `--repo OWNER/NAME`, `--system
+   system:default/NAME`, `--title` and `--owner` when they are missing or wrong. It never overwrites without `--force`.
+2. Edit `site.toml` if needed: the sources (paths relative to it), the labels the agent reads (the same ones as for
+   steering, step 1), `[theme] css` and `logo`, and `[nav] pages`. Add pages as Markdown files under `ROOT/site/`.
+3. Build and look: `uv run morphogen site build --config ROOT/site.toml --out _site --install` (Node 22.23.4 or
+   later; `--install` runs `npm ci` in Morphogen's `site/` the first time), then open `_site/index.html`. Add
+   `--base /research` only for a host that needs absolute links under that path. An invalid claim stops the build.
+4. To deploy on GitHub Pages, copy `skills/research-loop/research-site.yml` to `.github/workflows/` in that
+   repository, set `SITE_CONFIG`, pin `MORPHOGEN_REF`, and tell the owner to set Pages to "GitHub Actions" (a
+   setting: never change it yourself) and run the workflow once by hand.

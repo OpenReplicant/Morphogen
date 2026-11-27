@@ -122,7 +122,15 @@ export function parseEvidence(annotation) {
   return out;
 }
 
-/** `../` repeated once per directory below the site root, for relative links (the site may live under /Repo/). */
-export function up(depth) {
+/** A link to one of the site's own files from a page `depth` directories down (undefined stays undefined). */
+export function link(url, depth = 0) {
+  return url == null ? undefined : `${up(depth)}${url}`;
+}
+
+/** The prefix of every link to the site's own files: `../` once per directory below the site root (relative links
+ *  work under any path), or the base path when the site is built with one (MORPHOGEN_SITE_BASE, e.g. `/research/`). */
+export function up(depth, base = process.env.MORPHOGEN_SITE_BASE) {
+  const b = String(base || "").trim().replace(/^\/+|\/+$/g, "");
+  if (String(base || "").trim()) return b ? `/${b}/` : "/";
   return "../".repeat(depth);
 }

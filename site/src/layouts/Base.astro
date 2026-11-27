@@ -1,17 +1,23 @@
 ---
-// The frame of every page: the content security policy, the header and its navigation, the footer. Links are
-// relative (`depth` directories below the site root), so the site works under any path.
+// The frame of every page: the content security policy, the header and its navigation, the footer. The title, the
+// description, the owner, the navigation and the theme all come from the config file (src/lib/config.mjs). Links
+// are relative (`depth` directories below the site root), or start with the base path when there is one.
+import path from "node:path";
+import { themeFiles } from "../lib/config.mjs";
 import { safeUrl, up } from "../lib/text.mjs";
 const { site, title, description = "", depth = 0, current = "" } = Astro.props;
 const u = up(depth);
-const fixed = [["index.html", "Claims"], ["queue.html", "Next to test"], ["predictions.html", "Predictions"],
-  ["roles.html", "Roles"], ["map.html", "Map"]];
 const listed = site.pages.filter((p) => p.kind !== "page");
+const fixed = site.nav.filter((n) => n.id !== "notes" || listed.length).map((n) => [n.href, n.text]);
 const extra = site.pages.filter((p) => typeof p.nav === "number").sort((a, b) => a.nav - b.nav).map((p) => [`${p.slug}.html`, p.title]);
-const nav = [...fixed, ...(listed.length ? [["notes.html", "Notes"]] : []), ...extra];
+const nav = [...fixed, ...extra];
 const fullTitle = title && title !== site.title ? `${title} · ${site.title}` : site.title;
-const desc = description || "Claims from papers about options for the system's roles, with conditions, transfer predictions and outcomes.";
+const desc = description || site.description;
 const repoUrl = safeUrl(`https://github.com/${site.repo}`);
+const theme = Object.keys(themeFiles(site.theme));
+const logo = theme.find((f) => f.startsWith("logo"));
+const icon = logo ? `assets/user/${logo}` : "assets/icon.svg";
+const iconType = { ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp" }[path.extname(icon)] || "image/jpeg";
 ---
 <!doctype html>
 <html lang="en">
@@ -23,8 +29,9 @@ const repoUrl = safeUrl(`https://github.com/${site.repo}`);
 <meta name="description" content={desc}>
 <meta name="color-scheme" content="light dark">
 <title>{fullTitle}</title>
-<link rel="icon" href={`${u}assets/icon.svg`} type="image/svg+xml">
+<link rel="icon" href={`${u}${icon}`} type={iconType}>
 <link rel="stylesheet" href={`${u}assets/style.css`}>
+{theme.includes("theme.css") && <link rel="stylesheet" href={`${u}assets/user/theme.css`}>}
 <script is:inline src={`${u}assets/theme.js`}></script>
 <script is:inline defer src={`${u}assets/site.js`}></script>
 <script is:inline defer src={`${u}assets/vendor/alpine-csp.min.js`}></script>
@@ -33,7 +40,7 @@ const repoUrl = safeUrl(`https://github.com/${site.repo}`);
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="top-in">
-    <a class="brand" href={`${u}index.html`}><span class="brand-mark" aria-hidden="true">◇</span> Morphogen <span class="brand-sub">research</span></a>
+    <a class="brand" href={`${u}index.html`}>{logo ? <img class="brand-logo" src={`${u}assets/user/${logo}`} alt=""> : <span class="brand-mark" aria-hidden="true">◇</span>} {site.title}</a>
     <nav aria-label="Site"><ul>{nav.map(([href, text]) => <li><a href={`${u}${href}`} aria-current={href === current ? "page" : undefined}>{text}</a></li>)}</ul></nav>
     <form class="top-search" role="search" action={`${u}search.html`} method="get">
       <label><span class="sr">Search the site</span><input type="search" name="q" placeholder="Search" autocomplete="off"></label>
@@ -45,7 +52,7 @@ const repoUrl = safeUrl(`https://github.com/${site.repo}`);
 <slot />
 </main>
 <footer class="foot wrap">
-  <p>Built from the claim, role and option files in {repoUrl ? <a href={repoUrl} rel="noopener noreferrer">{site.repo}</a> : site.repo}. Static files only: no tracking, no cookies, nothing loaded from elsewhere. Steering happens in GitHub issues. <a href={`${u}search.html`}>Everything on the site</a> · <a href={`${u}data/graph.json`}>the graph as JSON</a></p>
+  <p>{site.owner}'s research, built by Morphogen from the claim, role and option files in {repoUrl ? <a href={repoUrl} rel="noopener noreferrer">{site.repo}</a> : site.repo}. Static files only: no tracking, no cookies, nothing loaded from elsewhere. Steering happens in GitHub issues. <a href={`${u}search.html`}>Everything on the site</a> · <a href={`${u}data/graph.json`}>the graph as JSON</a></p>
 </footer>
 </body>
 </html>
