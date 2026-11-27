@@ -5,3 +5,4 @@ THRESHOLD = 10
 def label(x):
     return "high" if x >= THRESHOLD else "low"
 LIMIT = 100
+# same
