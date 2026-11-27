@@ -127,7 +127,8 @@ All paths are under `demos/research-loop/`. Everything is a static file; no serv
 | --- | --- | --- |
 | `research/index.json` | JSON: `{system, claims: [{name, file, about, role, source: {kind, id, title, url}, statement, status, p_transfer}], seen, steering}` | every claim, phase 0's and phase 1's, with the path of its file: the list a static site cannot get by listing a folder |
 | `claims/**/NAME.yaml` | YAML, one `EvidenceClaim` (`schemas/evidence-claim.v1.json`) | the claim in full: source, quote, conditions, prediction, trial |
-| `research/queue.json` | JSON: `{system, date, how, queue: [{claim, file, role, about, p_transfer, information_bits, cost_hours, plan, prioritised_by, rejected_by, score, reason}]}`, best first | what to test next |
+| `research/queue.json` | JSON: `{system, date, how, queue: [{claim, file, role, about, p_transfer, information_bits, cost_hours, plan, prioritised_by, rejected_by, disputed_by, score, currency, cost_money, pledged, received, funded_fraction, funding_source, ready, reason}]}`, best first (funded and `ready` first) | what to test next |
+| `research/funding.yaml` (optional) | YAML: `{currency, rate_per_hour, funds: {claim id: {pledged, received, source}}}` | money earmarked for a test; `rank` multiplies the score by 1 + 3 x the fraction funded and marks a fully paid claim `ready` (docs/research-loop.md, Funding). The example is illustrative: no money has been received |
 | `research/seen.jsonl` | JSON lines: `{id, version, title, abstract, published, category, topics, roles, status, reason, claims}` | every paper the watch returned, and what became of it |
 | `research/steering.jsonl` | JSON lines: `{issue, url, kind, target, title, text, author, association, applied, why, recorded}` | every steering issue recorded |
 | `research/watch.yaml` | YAML: `{system, conditions, topics: [{name, question, roles, terms, categories}]}` | what the agent watches, and why |

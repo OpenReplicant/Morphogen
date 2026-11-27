@@ -147,6 +147,29 @@ question or proposal becomes a watch topic waiting for its terms. Every issue is
 those from the repository's owner, members and collaborators (the REST API's `author_association`) are applied, so
 a stranger's issue cannot steer the agent.
 
+### Funding
+
+An optional `research/funding.yaml` lets money steer the queue. Keys under `funds` are claim ids (a funded
+direction is a claim); `rate_per_hour` turns the trial's `cost_hours` into a price:
+
+```yaml
+currency: USD
+rate_per_hour: 12
+funds:
+  pd-program-beats-ppo:
+    pledged: 5        # promised, not yet paid
+    received: 6       # paid
+    source: "GitHub Sponsors, one-time, ref 1234"   # provider and reference only; no names, no emails
+```
+
+`rank` computes `funded_fraction = min(1, (pledged + received) / (cost_hours x rate_per_hour))` and multiplies the
+claim's score by `1 + 3 x funded_fraction` (unfunded x1, half funded x2.5, fully funded x4), on top of the steering
+doubling. A claim is `ready` only when `received` alone covers the price; ready claims sort first in `queue.json`,
+whatever their score (a rejected claim is never ready). The queue rows record `currency`, `cost_money`, `pledged`,
+`received`, `funded_fraction`, `funding_source` and `ready`. Money is a priority, not a verdict: it does not change a
+claim's prediction, and the result is recorded whichever way it falls. Ids that match no claim are ignored. Money
+without a `rate_per_hour` is refused.
+
 **To turn it on**, on GitHub (nothing is enabled by this change):
 
 1. Create the three labels: `research:prioritise`, `research:reject`, `research:question`.
