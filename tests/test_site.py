@@ -93,14 +93,17 @@ class RealInput(unittest.TestCase):
 
     def test_every_claim_has_a_page_and_a_feed_entry(self):
         names = {c.name for c in self.site.claims}
-        self.assertEqual(len(names), 25)
+        files = list((ROOT / "demos" / "research-loop" / "claims").rglob("*.yaml"))
+        self.assertGreaterEqual(len(names), 25)  # phase 0's records, and whatever the agent has added
+        self.assertEqual(len(names), len(files))
+        self.assertEqual(build.check_index(self.site), [])  # research/index.json, when there is one, agrees
         self.assertEqual({p.stem for p in (self.out / "claims").glob("*.html")}, names)
         index = (self.out / "index.html").read_text(encoding="utf-8")
         self.assertEqual(set(re.findall(r'<li class="item" data-name="([^"]+)"', index)), names)
         for page in ("roles.html", "predictions.html", "how.html", "assets/style.css", "assets/app.js", ".nojekyll"):
             self.assertTrue((self.out / page).exists(), page)
         data = json.loads((self.out / "data" / "claims.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(data["claims"]), 25)
+        self.assertEqual(len(data["claims"]), len(names))
 
     def test_statuses_come_from_the_assessments(self):
         status = {c.name: c.status(self.site.system) for c in self.site.claims}
