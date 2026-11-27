@@ -1,9 +1,9 @@
 # Morphogen: the design
 
 The design behind rebuild 7: what Morphogen is, why, and what it rests on. What is built, and how
-to use it, is in [README.md](README.md). The previous build is on the
-[`rebuild-6`](https://github.com/OpenReplicant/Morphogen/tree/rebuild-6) branch, with
-[LESSONS.md](https://github.com/OpenReplicant/Morphogen/blob/rebuild-6/docs/restart/LESSONS.md),
+to use it, is in [README.md](README.md). The previous build is at the tag
+[`archive/rebuild-6`](https://github.com/OpenReplicant/Morphogen/tree/archive/rebuild-6), with
+[LESSONS.md](https://github.com/OpenReplicant/Morphogen/blob/archive/rebuild-6/docs/restart/LESSONS.md),
 what it taught. Issue numbers (#43, #45) refer to this repository's history.
 
 ## Morphogen in one page

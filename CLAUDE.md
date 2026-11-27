@@ -1,6 +1,6 @@
 # Morphogen (rebuild 7)
 
-Read BRIEF.md first; it is the design. The previous build is on the `rebuild-6` branch, with
+Read BRIEF.md first; it is the design. The previous build is at the tag `archive/rebuild-6`, with
 docs/restart/LESSONS.md.
 
 ## Layout
