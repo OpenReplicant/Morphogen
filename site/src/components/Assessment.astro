@@ -3,6 +3,7 @@
 import ClaimRef from "./ClaimRef.astro";
 import ExtLink from "./ExtLink.astro";
 import Meter from "./Meter.astro";
+import Funding from "./Funding.astro";
 import StatusBadge from "./StatusBadge.astro";
 import { refName, up } from "../lib/text.mjs";
 const { site, c, a } = Astro.props;
@@ -25,6 +26,7 @@ const by = { morphogen: "the judge", falsifier: "a falsifier registered before t
 {plan && <div class="pred"><h3>The cheapest trial that would settle it</h3>
 <p>{plan.plan || ""}</p>
 <dl class="kv"><dt>Cost</dt><dd>about {plan.cost_hours} hours, setting up included</dd>{(plan.needs || []).length > 0 && <><dt>Needs</dt><dd><ul class="plain">{plan.needs.map((n) => <li>{n}</li>)}</ul></dd></>}{plan.code && <><dt>Code</dt><dd><ExtLink url={plan.code} text={plan.code} /></dd></>}</dl>
+{ranked && <Funding site={site} row={ranked[1]} />}
 {ranked && <p class="small">Number {ranked[0]} of {site.queue().length} in the <a href={`${up(1)}queue.html`}>queue</a>.</p>}</div>}
 {out && <div class="outcome"><h3>Outcome</h3>
 <p>Trial {trialEnt ? <a class="mono" href={`${up(1)}${trialEnt.url}`}>{t.id}</a> : <span class="mono">{t.id || ""}</span>}{t.url && <> (<ExtLink url={t.url} text="its files" />)</>}{out.date && <> · {out.date}</>} · {out.comparison === "our-setup" ? "a transfer test on our setup" : "the source's own setup reproduced"}</p>

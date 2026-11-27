@@ -346,3 +346,8 @@ details ul { margin-top: 8px; font-size: 0.88rem; }
 .graph .off { display: none; }
 .results td:nth-last-child(2) { white-space: nowrap; }
 .top-in { max-width: 1200px; }
+
+/* Funding: a bar, the price and a ready badge, on the queue and beside a trial plan. */
+.funding { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 0.9rem; margin: 6px 0; }
+.fund-bar { width: 120px; }
+.tag-ready { background: var(--good-bg); color: var(--good); border-color: currentColor; font-weight: 650; }

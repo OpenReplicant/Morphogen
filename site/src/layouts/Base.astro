@@ -8,8 +8,8 @@ import { safeUrl, up } from "../lib/text.mjs";
 const { site, title, description = "", depth = 0, current = "" } = Astro.props;
 const u = up(depth);
 const listed = site.pages.filter((p) => p.kind !== "page");
-const fixed = site.nav.filter((n) => n.id !== "notes" || listed.length).map((n) => [n.href, n.text]);
-const extra = site.pages.filter((p) => typeof p.nav === "number").sort((a, b) => a.nav - b.nav).map((p) => [`${p.slug}.html`, p.title]);
+const fixed = site.nav.filter((n) => n.id !== "notes" || listed.length).map((n) => [n.asIs ? n.href : `${u}${n.href}`, n.text, n.offsite, n.asIs ? null : n.href]);
+const extra = site.pages.filter((p) => typeof p.nav === "number").sort((a, b) => a.nav - b.nav).map((p) => [`${u}${p.slug}.html`, p.title, false, `${p.slug}.html`]);
 const nav = [...fixed, ...extra];
 const fullTitle = title && title !== site.title ? `${title} · ${site.title}` : site.title;
 const desc = description || site.description;
@@ -41,7 +41,7 @@ const iconType = { ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image
 <header class="top">
   <div class="top-in">
     <a class="brand" href={`${u}index.html`}>{logo ? <img class="brand-logo" src={`${u}assets/user/${logo}`} alt=""> : <span class="brand-mark" aria-hidden="true">◇</span>} {site.title}</a>
-    <nav aria-label="Site"><ul>{nav.map(([href, text]) => <li><a href={`${u}${href}`} aria-current={href === current ? "page" : undefined}>{text}</a></li>)}</ul></nav>
+    <nav aria-label="Site"><ul>{nav.map(([href, text, offsite, page]) => <li><a href={href} rel={offsite ? "noopener" : undefined} aria-current={page && page === current ? "page" : undefined}>{text}</a></li>)}</ul></nav>
     <form class="top-search" role="search" action={`${u}search.html`} method="get">
       <label><span class="sr">Search the site</span><input type="search" name="q" placeholder="Search" autocomplete="off"></label>
     </form>

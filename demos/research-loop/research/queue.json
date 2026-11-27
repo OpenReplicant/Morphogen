@@ -1,7 +1,7 @@
 {
  "system": "system:default/metasoar",
  "date": "2026-11-27",
- "how": "score = bits of information in the outcome, H(p_transfer), times 2 if prioritised by steering, divided by the trial's cost in hours; rejected or uncosted claims have no score",
+ "how": "score = bits of information in the outcome, H(p_transfer), times 2 if prioritised by steering, times 1 + 3 x the fraction funded (research/funding.yaml: pledged plus received over the trial's cost at rate_per_hour, at most 1), divided by the trial's cost in hours; rejected or uncosted claims have no score. ready: received covers the whole cost; those come first",
  "queue": [
   {
    "claim": "pd-program-beats-ppo",
@@ -15,7 +15,14 @@
    "prioritised_by": [],
    "rejected_by": [],
    "disputed_by": [],
-   "score": 0.9341,
+   "score": 1.868,
+   "currency": "USD",
+   "cost_money": 12.0,
+   "pledged": 4.0,
+   "received": 0.0,
+   "funded_fraction": 0.3333,
+   "funding_source": "example: GitHub Sponsors, one-time, ref EXAMPLE-1",
+   "ready": false,
    "reason": "The mechanism is the handler ladder's top rung, so the question is whether it carries over, not whether it applies. Against it: the teachers are frontier API models, our handler writer is Inkling 2 Mini at Q4_K; the score is an environment reward on control tasks, our handlers are scored by agreement with the large model on table questions; E-17b's handlers lost 5.3 points on fresh cases. For it: E-17 to E-17d show that handlers written by Inkling do answer many cases with no model. The claim is held to transfer if a program revised against scores beats the large model per case on cost at no loss of accuracy, which E-18 is testing."
   },
   {
@@ -31,6 +38,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.4855,
+   "currency": "USD",
+   "cost_money": 24.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "A property of revising a program against a score, which E-18's handler writing also does (up to 4 tries a class, each after 3 more labels). Different models and task, but the claim is about the shape of the curve, which is less tied to model size than the score is. If it holds, a class needs one good rewrite, not many."
   },
   {
@@ -46,6 +60,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.4855,
+   "currency": "USD",
+   "cost_money": 24.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "The handler ladder already has routes (handler, template, large model) and E-18's falsifier depends on the cheap ones being right on different cases from where they fail. Complementarity between a program and direct reading is likely at any model size, since programs fail on grounding and models on arithmetic, as the paper finds. Our tables are short, where the gap may be smaller than on WTQ-L."
   },
   {
@@ -61,6 +82,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.3114,
+   "currency": "USD",
+   "cost_money": 36.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "Our own gates point the same way: in E-04b and E-04c a learned front (logistic, TabICL, embeddings) was no better than d1-2B's own confidence. The setting differs (coding agents, an outcome check, an oracle router), but the claim, that a learned router adds little over a simple signal, has already held twice here."
   },
   {
@@ -76,6 +104,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.25,
+   "currency": "USD",
+   "cost_money": 48.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "A second, independent paper on the same option (see tablerouter-statistics-double-accuracy), and on WTQ itself. The gain is small for large models; for our smaller ones it may be larger, but that is the other paper's evidence, not this one's."
   },
   {
@@ -91,6 +126,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.2482,
+   "currency": "USD",
+   "cost_money": 48.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "Our template rung has LFM3 1.7B follow a plan over the table, and E-17c's two shuffle errors were LFM3 reading a table by row position: the kind of evidence-use failure the statistics fix. The models here are 7B to 9B and ours smaller, which the paper's own gradient (largest gain for the weaker models) favours. Against it: WTQ's tables are short, the 45 questions were picked so the statistics help, and many WTQ questions are lookups."
   },
   {
@@ -106,6 +148,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.1655,
+   "currency": "USD",
+   "cost_money": 72.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "E-18 rewrites a class's handler up to 4 times; whether each try sees the earlier failed replies or starts fresh from the best handler is a choice we have not measured. The gain is small (3.6%) and from one model on control tasks, single runs, so it may not survive our noise; a fresh context also suits a small local model whose context fills quickly."
   },
   {
@@ -121,6 +170,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.1102,
+   "currency": "USD",
+   "cost_money": 96.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "The gate escalates on an outcome check, as E-16 (Haiku to Opus on outcome triggers) and the handler ladder's fallback do. But its check is a test suite, which says whether an answer is right; our checks (type, choices, non-answers) only say whether it is well formed, and E-17b showed a weak check lets wrong cheap answers through. Our models are 1.7B to Inkling 2 Mini, not 30B and 355B. It would transfer where a task brings its own check: E-16's recorded tasks with their own checks."
   },
   {
@@ -136,6 +192,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.0507,
+   "currency": "USD",
+   "cost_money": 192.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "The same dataset as E-18 and the same evaluator, which is rare. But the base models are 70B or an API model, ours 1.7B to Inkling 2 Mini at Q4_K; the gain on WikiTQ is 2.1 points, small enough to vanish in our noise; and the method is several calls a question, where ours aims at none. Code is not yet released."
   },
   {
@@ -151,6 +214,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": 0.0361,
+   "currency": "USD",
+   "cost_money": 240.0,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "A real held-out evaluation, which counts for it; but its gain comes from tables far beyond the context window, and E-18's WikiTableQuestions tables fit in Inkling's and LFM3's context whole. Our role sees little of what it fixes. Kept for the day the system meets long tables."
   },
   {
@@ -166,6 +236,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": null,
+   "currency": "USD",
+   "cost_money": null,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "The collapse was task-dependent on an 8B model, and nothing about a smaller one makes a typed question about its own thinking more reliable. This is the observer the note says has the weakest evidence, so E-04 puts it last."
   },
   {
@@ -181,6 +258,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": null,
+   "currency": "USD",
+   "cost_money": null,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "A property of temperature scaling, not of the model's size, so it should hold here. E-04a fits one temperature per slice and left BANKING77 (77 options) out, so it neither tests nor depends on it yet; it matters as soon as one temperature is shared across tasks with different option counts."
   },
   {
@@ -196,6 +280,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": null,
+   "currency": "USD",
+   "cost_money": null,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "A limit of one forward pass, not of model size, so it should hold for a small model too. Consistent but not a test: E-04a's untuned readout was already far below Jev on MedQA, MedMCQA and MMLU-Pro."
   },
   {
@@ -211,6 +302,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": null,
+   "currency": "USD",
+   "cost_money": null,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "A failure out of distribution is a property of training on few labels, not of the answering model, so it should hold here; E-04 is to separate slices in and out of the training distribution for this reason."
   },
   {
@@ -226,6 +324,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": null,
+   "currency": "USD",
+   "cost_money": null,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "The method does not depend on our generative models: BGE-small and logistic regression run cheaply on any hardware, so the conditions that differ are only the tasks and the labels. Against it: we have no labels yet, and arXiv 2605.02241 saw the same kind of classifier fall out of distribution (zsconf-embedding-router-ood)."
   },
   {
@@ -241,6 +346,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": null,
+   "currency": "USD",
+   "cost_money": null,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "Zero-shot and measured on 7 to 8B models, the nearest size class of any claim here. E-04a's readout margin is the same kind of signal and costs nothing extra (the note's E-04 step 2). The AUROC is modest, and our questions are typed decisions, not MMLU-Pro and TriviaQA answers."
   },
   {
@@ -256,6 +368,13 @@
    "rejected_by": [],
    "disputed_by": [],
    "score": null,
+   "currency": "USD",
+   "cost_money": null,
+   "pledged": 0.0,
+   "received": 0.0,
+   "funded_fraction": 0.0,
+   "funding_source": null,
+   "ready": false,
    "reason": "Training-free, and its first-stage signal held down to 0.6B, so our models' size is not the obstacle. Against it: the gains are on Qwen3 and DeepSeek-V3.2 with their own thinking modes; our slow model is Inkling 2 Mini at Q4_K on llama.cpp, and E-04's questions are typed decisions, not those benchmarks; the numbers are the method's authors' own. Code is released (js-lee-AI/DART), so the paper's own number can be reproduced first."
   }
  ]
