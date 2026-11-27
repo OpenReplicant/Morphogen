@@ -49,3 +49,7 @@ propose-option = ["research:question"]
 # The header's pages, in order: claims, queue, predictions, roles, map, notes (shown once there is a note), search.
 # A Markdown page with `nav: <number>` in its front matter is added after these.
 pages = ["claims", "queue", "predictions", "roles", "map", "notes"]
+
+# [funding]
+# url_template = "https://openreplicant.com/fund/{id}/"   # a "fund this" link carrying the claim's id
+# label = "Fund this"

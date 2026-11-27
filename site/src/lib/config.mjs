@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseToml } from "smol-toml";
+import { safeUrl } from "./text.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // site/: astro.config.mjs sets SITE_DIR, since a bundled page no longer sits where this file does.
@@ -27,6 +28,31 @@ export const NAV_PAGES = {
 };
 const DEFAULT_NAV = ["claims", "queue", "predictions", "roles", "map", "notes"];
 const ACTIONS = ["prioritise", "reject", "dispute", "question", "propose-role", "propose-option"];
+
+/** One `[nav] pages` entry: a page id (or `{page, text}`), or `{text, href}` for any other link. A link is external
+ *  when it is an absolute URL (http or https), or starts with `/` (a path on this host, written as it is): neither
+ *  gets the base path. Anything else is relative to the site and does. Other schemes (`javascript:`) stop the build. */
+function navEntry(x) {
+  if (x && typeof x === "object" && x.href != null) {
+    const href = String(x.href).trim();
+    if (!x.text) throw new Error(`site: [nav] pages: a link needs text, ${href} has none`);
+    const absolute = /^https?:\/\//i.test(href), rooted = /^\//.test(href);
+    if (absolute ? !safeUrl(href) : /^[a-z][a-z0-9+.-]*:/i.test(href) || /[\s"'<>\\]/.test(href) || !href) {
+      throw new Error(`site: [nav] pages: ${href} must be an http(s) URL, a /path or a path in the site`);
+    }
+    return { id: null, href, text: String(x.text), asIs: absolute || rooted, offsite: absolute || href.startsWith("//") };
+  }
+  const id = typeof x === "string" ? x : x?.page;
+  if (!NAV_PAGES[id]) throw new Error(`site: [nav] pages: ${id} is not one of ${Object.keys(NAV_PAGES).join(", ")}, or {text, href}`);
+  return { id, href: NAV_PAGES[id][0], text: (typeof x === "object" && x.text) || NAV_PAGES[id][1] };
+}
+
+/** The "fund this" link for an id from `[funding] url_template` (`{id}` is replaced, URL-encoded), or null. */
+export function fundUrl(template, id) {
+  if (!template) return null;
+  const url = template.replaceAll("{id}", encodeURIComponent(String(id)));
+  return /^\/(?!\/)/.test(url) ? url : safeUrl(url);
+}
 
 /** `/research` -> `/research/`; empty -> "" (relative links). */
 export function normalizeBase(base) {
@@ -64,11 +90,12 @@ export function loadConfig(file = process.env.MORPHOGEN_SITE_CONFIG || path.join
   for (const k of Object.keys(labels)) {
     if (!ACTIONS.includes(k)) throw new Error(`site: [labels] ${k} is not one of ${ACTIONS.join(", ")}`);
   }
-  const nav = list(raw.nav?.pages ?? DEFAULT_NAV).map((x) => {
-    const id = typeof x === "string" ? x : x?.page;
-    if (!NAV_PAGES[id]) throw new Error(`site: [nav] pages: ${id} is not one of ${Object.keys(NAV_PAGES).join(", ")}`);
-    return { id, href: NAV_PAGES[id][0], text: (typeof x === "object" && x.text) || NAV_PAGES[id][1] };
-  });
+  const nav = list(raw.nav?.pages ?? DEFAULT_NAV).map(navEntry);
+  const f = raw.funding || {};
+  if (f.url_template != null && (typeof f.url_template !== "string" || !f.url_template.includes("{id}") || !fundUrl(f.url_template, "x"))) {
+    throw new Error(`site: [funding] url_template must be an http(s) URL or a /path containing {id}, not ${f.url_template}`);
+  }
+  const funding = { url_template: f.url_template || null, label: f.label || "Fund this" };
   const files = { css: at(theme.css), logo: at(theme.logo) };
   for (const [k, f] of Object.entries(files)) {
     if (f && !fs.existsSync(f)) throw new Error(`site: [theme] ${k} = ${theme[k]}: no such file`);
@@ -94,6 +121,7 @@ export function loadConfig(file = process.env.MORPHOGEN_SITE_CONFIG || path.join
     },
     theme: files,
     nav,
+    funding,
     base: normalizeBase(process.env.MORPHOGEN_SITE_BASE),
   };
 }

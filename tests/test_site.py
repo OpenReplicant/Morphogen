@@ -109,14 +109,23 @@ def make_project(root: Path, claims: list[dict]) -> None:
         '[site]\nrepo = "Owner/Repo"\nsystem = "system:default/sys"\n[sources]\nclaims = ["claims"]\n'
         'catalog = ["catalog.yaml"]\nresearch = "research"\ncontent = "content"\n'
         'schema = "schemas/evidence-claim.v1.json"\n[labels]\nprioritise = ["research:prioritise"]\nreject = ["research:reject"]\n'
-        'dispute = ["research:question"]\nquestion = ["research:question"]\n', encoding="utf-8")
+        'dispute = ["research:question"]\nquestion = ["research:question"]\n'
+        '[nav]\npages = ["claims", "queue", {text = "Home", href = "/"}, {text = "Docs", href = "https://example.org/docs?a=1&b=2"},'
+        ' {text = "Local", href = "about.html"}]\n'
+        '[funding]\nurl_template = "https://example.org/fund/{id}/"\nlabel = "Back this"\n', encoding="utf-8")
     research = root / "research"
     research.mkdir()
     (research / "queue.json").write_text(json.dumps({"date": "2026-11-27", "how": "bits / hours", "queue": [
         {"claim": "hostile-claim", "role": "component:default/role-x", "about": "component:default/opt-x",
          "p_transfer": 0.4, "information_bits": 0.971, "cost_hours": 2.5, "score": 0.388,
          "plan": "Run it " + HOSTILE, "reason": "R " + HOSTILE, "prioritised_by": ["someone"],
-         "rejected_by": [], "disputed_by": []}]}), encoding="utf-8")
+         "rejected_by": [], "disputed_by": [], "currency": "USD", "cost_money": 30.0, "pledged": 10.0, "received": 0.0,
+         "funded_fraction": 0.3333, "funding_source": "Src " + HOSTILE, "ready": True},
+        {"claim": "scored-claim", "role": "component:default/role-x", "about": "component:default/opt-x",
+         "p_transfer": 0.5, "information_bits": 1.0, "cost_hours": 1.0, "score": 1.0, "plan": "Plain",
+         "prioritised_by": [], "rejected_by": [], "disputed_by": [], "currency": "USD", "cost_money": None,
+         "pledged": 0.0, "received": 0.0, "funded_fraction": 0.0, "funding_source": None, "ready": False}]}),
+        encoding="utf-8")
     (research / "watch.yaml").write_text(yaml.safe_dump({"topics": [
         {"name": "topic-x", "question": "Q " + HOSTILE, "roles": ["role-x"], "terms": ["t1"]}]}), encoding="utf-8")
     (research / "seen.jsonl").write_text(json.dumps(
@@ -324,11 +333,48 @@ class Fixture(_Toolchain):
         page = read(self.out, "claims/hostile-claim.html")
         self.assertIn("The cheapest trial that would settle it", page)
         self.assertIn("about 2.5 hours", page)
-        self.assertIn("Number 1 of 1 in the", page)
+        self.assertIn("Number 1 of 2 in the", page)
         roles = read(self.out, "roles.html")
         self.assertIn("topic-x", roles)
         self.assertIn("Papers seen", roles)
         self.assertIn("topic-x", read(self.out, "roles/role-x.html"))
+
+    def test_funding_on_the_queue_and_beside_the_plan(self):
+        queue = read(self.out, "queue.html")
+        self.assertEqual(queue.count('class="funding"'), 1)  # the row without a price shows nothing
+        self.assertIn("33% funded", queue)
+        self.assertIn("30 USD", queue)
+        self.assertIn('class="tag tag-ready">ready<', queue)
+        self.assertIn('href="https://example.org/fund/hostile-claim/" rel="noopener">Back this</a>', queue)
+        page = read(self.out, "claims/hostile-claim.html")
+        self.assertIn("33% funded", page)
+        self.assertIn("Back this", page)
+        self.assertNotIn("funded", read(self.out, "claims/scored-claim.html"))
+        # funding_source is free text: it is escaped like any other
+        text = re.sub(r'="[^"]*"', '=""', queue + page)
+        self.assertIn("Source: Src ", text)
+        self.assertNotIn("<script>alert", text)
+        self.assertNotIn("<b>beats</b>", text)
+
+    def test_external_links_in_the_header(self):
+        index = read(self.out, "index.html")
+        nav = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', index).group(1)
+        self.assertEqual(re.findall(r">([^<]+)</a>", nav), ["Claims", "Next to test", "Home", "Docs", "Local"])
+        self.assertIn('<a href="/">Home</a>', nav)
+        self.assertIn('<a href="https://example.org/docs?a=1&amp;b=2" rel="noopener">Docs</a>', nav)
+        self.assertIn('<a href="about.html">Local</a>', nav)
+        deep = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', read(self.out, "claims/hostile-claim.html")).group(1)
+        self.assertIn('<a href="../about.html">Local</a>', deep)
+        self.assertIn('<a href="/">Home</a>', deep)
+
+    def test_external_links_respect_the_base_only_when_relative(self):
+        out = self.root / "out-base"
+        built(out, config=self.root / "config.toml", base="/lab")
+        nav = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', read(out, "claims/hostile-claim.html")).group(1)
+        self.assertIn('<a href="/">Home</a>', nav)
+        self.assertIn('href="https://example.org/docs?a=1&amp;b=2" rel="noopener"', nav)
+        self.assertIn('<a href="/lab/about.html">Local</a>', nav)
+        self.assertIn('<a href="/lab/queue.html"', nav)
 
     def test_mixed_status_with_both_results(self):
         c = self.graph["claims"]["two-setups"]
@@ -502,6 +548,22 @@ class AnotherSystem(_Toolchain):
         nav = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', index).group(1)
         self.assertEqual(re.findall(r">([^<]+)</a>", nav), ["Claims", "Roles", "Find", "About this site"])
         self.assertTrue((self.out / "queue.html").is_file())  # left out of the header, still built
+
+
+class BadNav(_Toolchain):
+    def test_javascript_link_and_bad_funding_template_stop_the_build(self):
+        for extra in ('[nav]\npages = [{text = "x", href = "javascript:alert(1)"}]\n',
+                      '[nav]\npages = [{href = "/"}]\n',
+                      '[funding]\nurl_template = "javascript:alert(\'{id}\')"\n',
+                      '[funding]\nurl_template = "https://example.org/fund/"\n'):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                make_project(root, [CLAIM])
+                cfg = root / "config.toml"
+                text = cfg.read_text(encoding="utf-8")
+                text = text[:text.index("[nav]")]  # drop the fixture's own [nav] and [funding]
+                cfg.write_text(text + extra, encoding="utf-8")
+                self.assertNotEqual(run_build(root / "out", config=cfg).returncode, 0, extra)
 
 
 class Init(unittest.TestCase):

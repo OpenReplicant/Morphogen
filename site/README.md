@@ -69,7 +69,17 @@ logo = "brand/logo.svg"     # .svg, .png, .webp or .jpg; in the header and as th
 # search; `{ page = "search", text = "Find" }` renames one. Markdown pages with `nav: N` follow. Every page is
 # built either way.
 pages = ["claims", "queue", "predictions", "roles", "map", "notes"]
+# Other links go in the same list as `{ text, href }`. An absolute http(s) URL or a path starting with `/` is written
+# as it is (a URL gets rel="noopener"); anything else is relative to the site and gets the base path from `--base`.
+# pages = ["claims", "queue", { text = "Lab", href = "https://example.org/lab" }, { text = "Home", href = "/" }]
+
+[funding]                                    # optional: the "fund this" link on the queue and the claim pages
+url_template = "https://example.org/fund/{id}/"   # {id} is the claim's id; an http(s) URL or a /path; no link without it
+label = "Fund this"                          # the link's text (default "Fund this")
 ```
+
+The funding figures themselves (a bar, price, share funded, a "ready" badge and the source) come from `queue.json`
+(`research/funding.yaml`, `morphogen.research rank`): a claim whose row has no `cost_money` shows none of it.
 
 Morphogen's own demo builds from [config.toml](config.toml), which points at [demos/research-loop](../demos/research-loop).
 
@@ -153,7 +163,7 @@ questions (`watch.yaml`), what has been tested and what is next in the queue.
 | Page | What it shows |
 | --- | --- |
 | `index.html` | the feed, newest first, filtered in the page by search, role, source and status (kept in the address); without JavaScript, unfiltered |
-| `queue.html` | next to test: `queue.json`, best first, with plan, cost, score, steering, and buttons to prioritise or reject |
+| `queue.html` | next to test: `queue.json`, best first, with plan, cost, score, funding (when there is a `funding.yaml`), steering, and buttons to prioritise or reject |
 | `predictions.html` | predictions waiting for a trial, and a calibration chart with the Brier score once predictions written before an outcome have one |
 | `roles.html` | what the agent watches (`watch.yaml`, `seen.jsonl`), the roles, the options for each, and this system's conditions |
 | `map.html` | the relations graph, laid out at build time (`src/lib/layout.mjs`); a static SVG of links, with highlighting and filters in Alpine |

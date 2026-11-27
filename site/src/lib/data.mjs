@@ -149,6 +149,7 @@ export class Site {
     this.system = cfg.system;
     this.labels = cfg.labels;
     this.nav = cfg.nav;
+    this.funding = cfg.funding;
     this.theme = cfg.theme;
     this.root = cfg.root;
     this.entities = new Map(); // id -> entity
