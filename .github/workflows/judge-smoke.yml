@@ -1,0 +1,18 @@
+# THROWAWAY (branch claude/judge-smoke-base, never for main): one live run of #106's judge.yml on GitHub Actions.
+# judge-smoke-copy.yml is judge.yml with only the event gate (pull_request for pull_request_target) and the
+# environment lines changed, since main's pull_request_target caller cannot call a judge.yml main does not hold.
+# No cases repository: no held-out answers are read. Pull requests into this branch only; the dogfood caller
+# (pull requests into main) does not run.
+name: judge-smoke
+on:
+  pull_request:
+    branches: [claude/judge-smoke-base]
+permissions: {}
+jobs:
+  judge:
+    uses: ./.github/workflows/judge-smoke-copy.yml
+    permissions: {contents: read, statuses: write, id-token: write}
+    with:
+      judge-ref: f83f32d110cab201f6853c1bd28fa9765903d1d7
+      sandbox: docker
+      verdict-poster: actions

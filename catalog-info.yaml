@@ -1,0 +1,57 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: app
+spec:
+  type: service
+  morphogen:
+    sandbox: none
+    budget:
+      trials_per_day: 0
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: classify
+spec:
+  type: service
+  system: app
+  providesApis:
+  - labels
+  morphogen:
+    dir: classify
+    change: classify/classify.py
+    run: python bench.py
+    better:
+      accuracy:
+        higher: true
+        min: 0.05
+        gain: absolute
+        aggregate: mean
+    score: python score.py
+    tests: python -m unittest -q test_classify
+    rounds:
+      warmup: 0
+      repeats: 4
+      max_repeats: 8
+    timeout: 60
+    keep: classify/classify.py#LIMIT
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: report
+spec:
+  type: service
+  system: app
+  consumesApis:
+  - labels
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: labels
+spec:
+  type: openapi
+  morphogen:
+    tests: python -m unittest -q contracts.test_labels
