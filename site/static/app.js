@@ -1,4 +1,5 @@
-// The feed's filters: search, role, source and status, all in the page (no requests). The filters are kept in the
+// The feed's filters: search, role, source and status, all in the page (no requests). A claim tried on several
+// configurations carries each of its statuses in data-status, and matches if any of them is checked. The filters are kept in the
 // address (?q=&role=&source=&status=) so a filtered view can be shared. Without JavaScript every claim is listed.
 (function () {
   var form = document.getElementById("filters");
@@ -27,7 +28,7 @@
     items.forEach(function (li) {
       var d = li.dataset;
       var ok = (!role || d.role === role) && (!source || d.source === source) &&
-        statuses.indexOf(d.status) !== -1 &&
+        d.status.split(" ").some(function (st) { return statuses.indexOf(st) !== -1; }) &&
         words.every(function (w) { return d.search.indexOf(w) !== -1; });
       li.hidden = !ok;
       if (ok) shown++;

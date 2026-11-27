@@ -284,3 +284,7 @@ details ul { margin-top: 8px; font-size: 0.88rem; }
 .small-btn { padding: 5px 10px; font-size: 0.82rem; }
 .terms { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 @media (max-width: 520px) { .qitem { grid-template-columns: 1fr; } .qrank { padding-top: 0; } }
+
+/* A claim whose configurations disagree: a Mixed badge, then one badge per configuration with its name. */
+.s-mixed { color: var(--warn); background: var(--warn-bg); }
+.cfg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }

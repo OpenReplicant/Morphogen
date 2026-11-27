@@ -107,7 +107,10 @@ class RealInput(unittest.TestCase):
 
     def test_statuses_come_from_the_assessments(self):
         status = {c.name: c.status(self.site.system) for c in self.site.claims}
-        self.assertEqual(status["gates-likelihood-readout-27-31b-matches-jev"], "did-not-transfer")
+        # E-04a: LFM3 1.7B did not transfer, Inkling 2 Mini replicated; both must show
+        gates = self.site.by_name()["gates-likelihood-readout-27-31b-matches-jev"]
+        self.assertEqual(status[gates.name], "mixed")
+        self.assertEqual(set(gates.statuses(self.site.system)), {"did-not-transfer", "replicated"})
         self.assertEqual(status["gates-embedding-logreg-labelled"], "predicted")
         self.assertEqual(status["e04a-lfm3-pooled-accuracy"], "observation")
         roles = (self.out / "roles.html").read_text(encoding="utf-8")
@@ -247,6 +250,69 @@ class AgentFiles(unittest.TestCase):
             self.assertEqual(actions, {"prioritise", "reject", "dispute", "question", "propose-role", "propose-option"})
 
 
+class SeveralAssessments(unittest.TestCase):
+    """A claim tried on two configurations of one system, with different results: every assessment shows, the feed
+    matches it under either status, and each prediction is scored on its own (the site once showed only the first)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        claim = copy.deepcopy(CLAIM)
+        claim["metadata"]["name"] = "two-setups"
+        claim["spec"]["source"]["url"] = "https://arxiv.org/abs/2611.00001"
+        outcome = {"trial": {"id": "T-1"}, "observed": ["hostile-claim"], "comparison": "our-setup",
+                   "verdict": {"by": "falsifier", "decision": "met"}}
+        pred = {"by": "test", "date": "2026-11-27", "before_outcome": True, "reason": "r"}
+        claim["spec"]["assessments"] = [
+            {"system": "system:default/sys", "against": ["resource:default/small-model"], "status": "did-not-transfer",
+             "date": "2026-11-25", "prediction": {**pred, "p_transfer": 0.3},
+             "outcome": {**outcome, "summary": "Small model: far below."}},
+            {"system": "system:default/sys", "against": ["resource:default/big-model"], "status": "replicated",
+             "date": "2026-11-27", "prediction": {**pred, "p_transfer": 0.7},
+             "outcome": {**outcome, "summary": "Big model: matched."}},
+        ]
+        cfg = make_project(root, [CLAIM, claim])
+        with (root / "catalog.yaml").open("a", encoding="utf-8") as f:
+            f.write("---\n" + yaml.safe_dump_all([
+                {"apiVersion": "backstage.io/v1alpha1", "kind": "Resource",
+                 "metadata": {"name": "small-model", "description": "Small Model 1B, Q6_K, on the GPU"},
+                 "spec": {"type": "model"}},
+                {"apiVersion": "backstage.io/v1alpha1", "kind": "Resource",
+                 "metadata": {"name": "big-model", "description": "Big Model 26B, Q4_K"}, "spec": {"type": "model"}}]))
+        self.out = root / "out"
+        self.site = build.build(cfg, self.out, root=root)
+        self.claim = self.site.by_name()["two-setups"]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_status_is_mixed_with_both_results(self):
+        self.assertEqual(self.claim.status("system:default/sys"), "mixed")
+        self.assertEqual(self.claim.statuses("system:default/sys"), ["did-not-transfer", "replicated"])
+        self.assertEqual(self.site.status_text(self.claim),
+                         "did-not-transfer (Small Model 1B); replicated (Big Model 26B)")
+
+    def test_feed_matches_either_status(self):
+        index = (self.out / "index.html").read_text(encoding="utf-8")
+        item = re.search(r'<li class="item" data-name="two-setups"[^>]*>.*?</li>', index, re.S).group(0)
+        self.assertIn('data-status="did-not-transfer replicated"', item)
+        for text in ("Mixed", "Did not transfer", "Replicated", "Small Model 1B", "Big Model 26B"):
+            self.assertIn(text, item)
+
+    def test_claim_page_shows_every_assessment(self):
+        page = (self.out / "claims" / "two-setups.html").read_text(encoding="utf-8")
+        self.assertEqual(page.count('<div class="assess">'), 2)
+        for text in ("Small model: far below.", "Big model: matched.", "on <strong>Small Model 1B</strong>",
+                     "on <strong>Big Model 26B</strong>"):
+            self.assertIn(text, page)
+
+    def test_each_prediction_is_scored(self):
+        pairs = sorted((p, o) for p, o, c, _ in build.calibration_pairs(self.site) if c.name == "two-setups")
+        self.assertEqual(pairs, [(0.3, 0), (0.7, 1)])
+        page = (self.out / "predictions.html").read_text(encoding="utf-8")
+        self.assertIn("<strong>2</strong> predictions", page)
+
+
 class Calibration(unittest.TestCase):
     def test_scored_prediction_shows_on_the_chart(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -260,7 +326,7 @@ class Calibration(unittest.TestCase):
                             "comparison": "our-setup", "verdict": {"by": "morphogen", "decision": "refuse"}}
             cfg = make_project(root, [CLAIM, scored])
             site = build.build(cfg, root / "out", root=root)
-            self.assertEqual([(p, o) for p, o, _ in build.calibration_pairs(site)], [(0.4, 0)])
+            self.assertEqual([(p, o) for p, o, *_ in build.calibration_pairs(site)], [(0.4, 0)])
             self.assertAlmostEqual(build.brier(build.calibration_pairs(site)), 0.16)
             page = (root / "out" / "predictions.html").read_text(encoding="utf-8")
             self.assertIn("Brier score <strong class='mono'>0.160</strong>", page)
