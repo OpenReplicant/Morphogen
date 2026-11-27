@@ -1,0 +1,8 @@
+# Example only: illustrative figures, no money has been received. One entry per claim id.
+currency: USD
+rate_per_hour: 12
+funds:
+  pd-program-beats-ppo:
+    pledged: 4
+    received: 0
+    source: "example: GitHub Sponsors, one-time, ref EXAMPLE-1"

@@ -284,6 +284,36 @@ class Steering(unittest.TestCase):
         self.assertEqual((e["kind"], e["target"], e["applied"]), ("propose-role", None, True))
         self.assertIsNone(rs.parse_issue(issue(4, "x", "research-action: delete-everything\n")))
 
+    def test_funding_raises_rank_and_marks_ready(self):
+        t = Toy()
+        try:
+            t.draft([claim("table-row", "Ours 83.2", prediction={"p_transfer": 0.5, "reason": "r"},
+                           trial={"plan": "p", "cost_hours": 4}),
+                     claim("abstract", "We cut cost by 50%", prediction={"p_transfer": 0.9, "reason": "r"},
+                           trial={"plan": "p", "cost_hours": 1})])
+            q = rs.rank(t.p)["queue"]
+            self.assertEqual([r["claim"] for r in q], ["abstract", "table-row"])
+            self.assertFalse(q[0]["ready"])
+            (t.root / "research/funding.yaml").write_text(yaml.safe_dump(
+                {"currency": "USD", "rate_per_hour": 10, "funds": {
+                    "table-row": {"pledged": 10, "received": 10, "source": "sponsors, ref 12"},
+                    "no-such-claim": {"received": 5}}}))
+            q = {r["claim"]: r for r in rs.rank(t.p)["queue"]}
+            r = q["table-row"]                                   # 20 of 40: half funded, x2.5
+            self.assertEqual((r["funded_fraction"], r["ready"], r["cost_money"]), (0.5, False, 40.0))
+            self.assertAlmostEqual(r["score"], 1.0 * 2.5 / 4)
+            (t.root / "research/funding.yaml").write_text(yaml.safe_dump(
+                {"rate_per_hour": 10, "funds": {"table-row": {"received": 50}}}))   # over-funded: capped at x4
+            rows = rs.rank(t.p)["queue"]
+            self.assertEqual([r["claim"] for r in rows], ["table-row", "abstract"])   # ready comes first
+            self.assertEqual((rows[0]["ready"], rows[0]["funded_fraction"]), (True, 1.0))
+            self.assertAlmostEqual(rows[0]["score"], 4 / 4)
+            (t.root / "research/funding.yaml").write_text(yaml.safe_dump({"funds": {"table-row": {"received": 5}}}))
+            with self.assertRaises(rs.ResearchError):            # money without a rate is refused
+                rs.rank(t.p)
+        finally:
+            t.close()
+
     def test_steer_applies_once_and_rank_uses_it(self):
         t = Toy()
         try:

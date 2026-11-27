@@ -396,6 +396,25 @@ class Project:
         f = self.dir / "steering.jsonl"
         return [json.loads(x) for x in f.read_text().splitlines() if x.strip()] if f.exists() else []
 
+    def funding(self) -> dict:
+        """research/funding.yaml (optional): {currency, rate_per_hour, funds: {claim-or-direction id: {pledged,
+        received, source}}}. The source is a free-text note (provider and reference); no personal data."""
+        f = self.dir / "funding.yaml"
+        d = load_yaml(f) if f.exists() else None
+        d = d or {}
+        funds = d.get("funds") or {}
+        if not isinstance(funds, dict):
+            raise ResearchError("research/funding.yaml: funds must map an id to {pledged, received, source}")
+        for k, v in funds.items():
+            for n in ("pledged", "received"):
+                x = (v or {}).get(n, 0)
+                if isinstance(x, bool) or not isinstance(x, (int, float)) or x < 0:
+                    raise ResearchError(f"research/funding.yaml: {k}.{n} must be a number, 0 or more")
+        rate = d.get("rate_per_hour")
+        if funds and (isinstance(rate, bool) or not isinstance(rate, (int, float)) or rate <= 0):
+            raise ResearchError("research/funding.yaml: rate_per_hour (money per trial hour) must be above 0")
+        return {"currency": d.get("currency", "USD"), "rate_per_hour": rate, "funds": funds}
+
     def claims(self) -> dict[str, tuple[Path, dict]]:
         out = {}
         for f in sorted((self.root / "claims").rglob("*.yaml")):
@@ -768,6 +787,14 @@ def entropy(p: float) -> float:
     return -(p * math.log2(p) + (1 - p) * math.log2(1 - p))
 
 
+FUNDING_GAIN = 3.0   # a fully funded claim's score is multiplied by 1 + FUNDING_GAIN; the factor is capped there
+
+
+def funding_factor(fraction: float) -> float:
+    """1 + 3 x the fraction funded, the fraction capped at 1: unfunded x1, half funded x2.5, fully funded x4."""
+    return 1 + FUNDING_GAIN * min(1.0, max(0.0, fraction))
+
+
 def rank(p: Project) -> dict:
     """research/queue.json: the claims predicted for this system and not yet tested, ranked by what a trial would
     teach (the entropy of its prediction) for its cost, with steering applied; research/index.json: every claim, for
@@ -785,6 +812,7 @@ def rank(p: Project) -> dict:
                 or (t["kind"] == "role" and backstage.parse_ref(t["name"], "component") == s["role"])
                 or (t["kind"] == "option" and backstage.parse_ref(t["name"], "component") ==
                     backstage.parse_ref(s["about"], "component")))
+    fund = p.funding()
     rows, index = [], []
     for name, (f, doc) in sorted(p.claims().items()):
         s = doc["spec"]
@@ -803,15 +831,24 @@ def rank(p: Project) -> dict:
         trial = a.get("trial") or {}
         cost = float(trial.get("cost_hours") or 0) or None
         info = entropy(pt)
-        score = None if rej or cost is None else round(info * (2 if pri else 1) / cost, 4)
+        fd = fund["funds"].get(name) or {}
+        pledged, received = float(fd.get("pledged") or 0), float(fd.get("received") or 0)
+        price = cost * fund["rate_per_hour"] if cost and fund["funds"] else None
+        fraction = round(min(1.0, (pledged + received) / price), 4) if price and (pledged or received) else 0.0
+        ready = bool(price and received >= price and not rej)
+        score = None if rej or cost is None else round(info * (2 if pri else 1) * funding_factor(fraction) / cost, 4)
         rows.append({"claim": name, "file": rel, "role": s["role"], "about": s["about"], "p_transfer": pt,
                      "information_bits": round(info, 3), "cost_hours": cost, "plan": trial.get("plan"),
                      "prioritised_by": pri, "rejected_by": rej, "disputed_by": dis, "score": score,
+                     "currency": fund["currency"], "cost_money": price, "pledged": pledged, "received": received,
+                     "funded_fraction": fraction, "funding_source": fd.get("source"), "ready": ready,
                      "reason": a["prediction"]["reason"]})
-    rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0), -r["p_transfer"], r["claim"]))
+    rows.sort(key=lambda r: (not r["ready"], r["score"] is None, -(r["score"] or 0), -r["p_transfer"], r["claim"]))
     queue = {"system": w["system"], "date": today(),
              "how": "score = bits of information in the outcome, H(p_transfer), times 2 if prioritised by "
-                    "steering, divided by the trial's cost in hours; rejected or uncosted claims have no score",
+                    "steering, times 1 + 3 x the fraction funded (research/funding.yaml: pledged plus received over the "
+                    "trial's cost at rate_per_hour, at most 1), divided by the trial's cost in hours; rejected or "
+                    "uncosted claims have no score. ready: received covers the whole cost; those come first",
              "queue": rows}
     p.dir.mkdir(exist_ok=True)
     (p.dir / "queue.json").write_text(json.dumps(queue, indent=1, ensure_ascii=False) + "\n")
