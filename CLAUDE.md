@@ -19,6 +19,8 @@ docs/restart/LESSONS.md.
 - `tests/`: the core's tests and red team; fixture projects in `tests/fixture*.py`, the timed
   sample's files in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
+- `site/`: the research site, static HTML built by `site/build.py` from the evidence claims, the map and the
+  options (`site/README.md`); `.github/workflows/site.yml` deploys it to Pages when started by hand.
 
 ## Rules
 - Look it up before relying on it: read a tool's or library's current docs before designing
