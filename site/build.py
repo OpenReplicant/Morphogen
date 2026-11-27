@@ -300,6 +300,16 @@ class Site:
     labels: dict
     claims: list[Claim]
     catalog: Catalog
+    research: dict = field(default_factory=dict)  # the agent's queue.json, watch.yaml, seen.jsonl (load_research)
+
+    def queue(self) -> list[dict]:
+        return list((self.research.get("queue") or {}).get("queue") or [])
+
+    def queue_rank(self, name: str) -> tuple[int, dict] | None:
+        for i, item in enumerate(self.queue(), 1):
+            if item.get("claim") == name:
+                return i, item
+        return None
 
     def by_name(self) -> dict[str, Claim]:
         return {c.name: c for c in self.claims}
@@ -311,7 +321,7 @@ class Site:
         return issue_url(self.repo, title, body, list(self.labels.get(action, [])))
 
 
-NAV = [("index.html", "Claims"), ("predictions.html", "Predictions"), ("roles.html", "Roles"), ("how.html", "How it works")]
+NAV = [("index.html", "Claims"), ("queue.html", "Next to test"), ("predictions.html", "Predictions"), ("roles.html", "Roles"), ("how.html", "How it works")]
 
 
 def page(site: Site, title: str, body: str, current: str, depth: int = 0, description: str = "") -> str:
@@ -549,6 +559,16 @@ def assessment_html(site: Site, c: Claim, a: dict) -> str:
 <p class="pred-p">{meter(pr["p_transfer"])}</p>
 <p>{e(pr.get("reason", ""))}</p>
 <p class="small muted">By {e(pr.get("by", ""))}, {e(pr.get("date", ""))}. {"Written before any outcome, so it counts towards calibration." if pr.get("before_outcome") else "Written after an outcome was seen, so it does not count towards calibration."}</p></div>""")
+    plan = a.get("trial")
+    if plan:
+        needs = "".join(f"<li>{e(n)}</li>" for n in plan.get("needs") or [])
+        code = f"<dt>Code</dt><dd>{link(plan.get('code'), plan.get('code', ''))}</dd>" if plan.get("code") else ""
+        ranked = site.queue_rank(c.name)
+        rank = (f'<p class="small">Number {ranked[0]} of {len(site.queue())} in the <a href="../queue.html">queue</a>.</p>'
+                if ranked else "")
+        parts.append(f"""<div class="pred"><h3>The cheapest trial that would settle it</h3>
+<p>{e(plan.get("plan", ""))}</p>
+<dl class="kv"><dt>Cost</dt><dd>about {e(plan.get("cost_hours"))} hours, setting up included</dd>{f'<dt>Needs</dt><dd><ul class="plain">{needs}</ul></dd>' if needs else ""}{code}</dl>{rank}</div>""")
     out = a.get("outcome")
     if out:
         t = out.get("trial") or {}
@@ -702,7 +722,7 @@ def render_roles(site: Site) -> str:
             rows.append(f"""<li class="opt" id="{e(oname)}"><h4 class="mono">{e(oname)}</h4><p>{e(o["metadata"].get("description", ""))}</p>
 <p class="small">{badges or "<span class='muted'>No claims from papers yet</span>"}</p>{f'<p class="small"><span class="f-lab">Result so far</span> {e(result)}</p>' if result else ""}
 {f'<details><summary>{len(cs)} claim{"s" if len(cs) != 1 else ""}</summary><ul class="plain">{links}</ul></details>' if cs else ""}</li>""")
-        propose = site.issue("question", f"Option to watch for {name}: ", issue_body("question", site, None, extra=[
+        propose = site.issue("propose-option", f"Option to watch for {name}: ", issue_body("propose-option", site, None, extra=[
             f"An option, paper or method the research agent should look at for the role `{name}`.", "",
             "Option or paper:", "", "Why it might help here:", "", f"role: {name}"]))
         blocks.append(f"""<section class="role panel" id="{e(name)}" aria-labelledby="r-{e(name)}">
@@ -719,7 +739,7 @@ def render_roles(site: Site) -> str:
         conds.append(f'<li id="{e(n)}"><span class="mono">{e(n)}</span> <span class="tag">{e((res.get("spec") or {}).get("type", ""))}</span><br><span class="small">{e(res["metadata"].get("description", ""))}</span></li>')
     system = cat.system
     sysdesc = e(system["metadata"].get("description", "")) if system else ""
-    new_role = site.issue("question", "Role to watch: ", issue_body("question", site, None, extra=[
+    new_role = site.issue("propose-role", "Role to watch: ", issue_body("propose-role", site, None, extra=[
         "A part of the system the research agent should read papers for.", "", "The part, and what it does:", "",
         "What a better option would improve:", ""]))
     body = f"""
@@ -729,6 +749,7 @@ def render_roles(site: Site) -> str:
   <p class="lede">The agent does not read a general feed. It looks for papers about the roles in the system's map, and every option it catalogues is a candidate for one of them. {sysdesc}</p>
   <p class="actions"><a class="btn" href="{e(new_role)}" rel="noopener noreferrer">Propose a role to watch</a></p>
 </section>
+{watch_html(site)}
 {"".join(blocks)}
 <section class="panel" aria-labelledby="cond-h"><h2 id="cond-h">This system's conditions</h2>
 <p>Every claim's conditions are compared with these when its transfer is predicted.</p>
@@ -861,10 +882,15 @@ def render_how(site: Site) -> str:
     ]
     ol = "".join(f'<li><span class="step-n mono">{i:02d}</span><div><h3>{e(t)}</h3><p>{e(d)}</p></div></li>'
                  for i, (t, d) in enumerate(steps, 1))
-    labs = "".join(f"<li><span class='mono tag'>{e(', '.join(v))}</span> {e(t)}</li>" for k, t in (
-        ("prioritise", "test this claim sooner"), ("reject", "drop it from the queue"),
-        ("dispute", "the transfer prediction is wrong"), ("question", "a question, role or option to watch"))
-                   for v in [site.labels.get(k, [])] if v)
+    def label_note(k):
+        return f' <span class="muted small">(label {e(", ".join(site.labels[k]))})</span>' if site.labels.get(k) else ""
+
+    labs = "".join(f"<li><span class='mono tag'>research-action: {e(k)}</span> {e(t)}{label_note(k)}</li>"
+                   for k, t in (
+        ("prioritise", "test this claim sooner; it counts double in the queue"), ("reject", "drop it from the queue"),
+        ("dispute", "the transfer prediction is wrong; the next session reassesses it"),
+        ("question", "a question to watch"), ("propose-role", "a role to read papers for"),
+        ("propose-option", "an option or paper for a role")))
     statuses = "".join(f"<li>{status_badge(s)} {e(STATUS_HELP[s])}</li>" for s in STATUSES + [OBSERVATION])
     body = f"""
 <section class="hero small-hero">
@@ -877,14 +903,127 @@ def render_how(site: Site) -> str:
 <section class="panel" aria-labelledby="st-h"><h2 id="st-h">What a status means</h2><ul class="plain statuses">{statuses}</ul>
 <p class="small">"Replicated" means the finding held on this system's setup. It is a transfer test of the method, not a reproduction of the paper, and "did not transfer" is not a refutation of it.</p></section>
 <section class="panel" aria-labelledby="sg-h"><h2 id="sg-h">Steering it</h2>
-<p>The agent takes direction from GitHub issues. The buttons on this site open one, filled in, for you to edit and submit; nothing is sent until you do. Labels:</p>
+<p>The agent takes direction from GitHub issues. The buttons on this site open one, filled in, for you to edit and submit; nothing is sent until you do. Each ends with a <span class="mono">research-action:</span> line, which the agent reads first:</p>
 <ul class="plain">{labs}</ul>
-<p class="small muted">GitHub applies labels from a link only for people who can triage the repository. For anyone else, the <span class="mono">research-action:</span> line in the issue says what is asked.</p></section>
+<p class="small muted">GitHub applies labels from a link only for people who can triage the repository, which is why the body line comes first. The agent records every issue but acts only on those from the repository's owner, members and collaborators.</p></section>
 </div>
 <section class="panel" aria-labelledby="f-h"><h2 id="f-h">Files, not a service</h2>
 <p>Every claim is a YAML file in the repository ({link(site.file_url("schemas/evidence-claim.v1.json"), "schemas/evidence-claim.v1.json")}), and the roles and options are Backstage entity files. This site is built from them by <span class="mono">site/build.py</span>; <a href="data/claims.json">data/claims.json</a> holds the same records for other tools. The judge never reads the claims: what decides a change is only what it measures.</p></section>
 """
     return page(site, "How it works", body, "how.html")
+
+
+# ---------------------------------------------------------------- the agent's own files
+
+
+def load_research(d: Path | None) -> dict:
+    """queue.json, watch.yaml, seen.jsonl and index.json from the research agent's directory (morphogen.research;
+    demos/research-loop/README.md, "Files a website reads"). Each is optional."""
+    out: dict = {}
+    if d is None or not d.is_dir():
+        return out
+    for name, key in (("queue.json", "queue"), ("index.json", "index")):
+        if (d / name).is_file():
+            out[key] = json.loads((d / name).read_text(encoding="utf-8"))
+    if (d / "watch.yaml").is_file():
+        out["watch"] = yaml.safe_load((d / "watch.yaml").read_text(encoding="utf-8")) or {}
+    if (d / "seen.jsonl").is_file():
+        out["seen"] = [json.loads(line) for line in (d / "seen.jsonl").read_text(encoding="utf-8").splitlines()
+                       if line.strip()]
+    return out
+
+
+def check_index(site: Site) -> list[str]:
+    """Where index.json and the claim files disagree (the agent rewrites the index from the files, so they should not)."""
+    index = site.research.get("index")
+    if not index:
+        return []
+    listed = {c.get("name") for c in index.get("claims") or []}
+    found = {c.name for c in site.claims}
+    return ([f"index.json lists {n}, which no claim file holds" for n in sorted(listed - found)]
+            + [f"{n} is not in index.json" for n in sorted(found - listed)])
+
+
+def render_queue(site: Site) -> str:
+    q = site.research.get("queue") or {}
+    items = site.queue()
+    by_name = site.by_name()
+    cards = []
+    for i, it in enumerate(items, 1):
+        name = it.get("claim", "")
+        c = by_name.get(name)
+        title = c.doc["metadata"].get("description", name) if c else name
+        head = (f'<a href="claims/{e(name)}.html">{e(title)}</a>' if c else e(title))
+        steer = []
+        for key, text in (("prioritised_by", "prioritised"), ("rejected_by", "rejected"), ("disputed_by", "disputed")):
+            who = it.get(key) or []
+            if who:
+                steer.append(f'<span class="tag">{e(text)} by {e(", ".join(str(w) for w in who))}</span>')
+        score = it.get("score")
+        nums = [("score", f"{score:.3f}" if isinstance(score, (int, float)) else "none"),
+                ("bits", it.get("information_bits")), ("hours", it.get("cost_hours"))]
+        num_html = "".join(f'<span class="qnum"><span class="f-lab">{e(k)}</span> <span class="mono">{e(v)}</span></span>'
+                           for k, v in nums if v is not None)
+        p = it.get("p_transfer")
+        acts = ""
+        if c is not None:
+            pri = site.issue("prioritise", f"Prioritise: {name}", issue_body("prioritise", site, c, [
+                "Please test this claim sooner.", "", "Why it is worth a trial now:", ""]))
+            rej = site.issue("reject", f"Reject: {name}", issue_body("reject", site, c, [
+                "Please drop this claim from the queue.", "", "Why:", ""]))
+            acts = (f'<p class="actions"><a class="btn ghost small-btn" href="{e(pri)}" rel="noopener noreferrer">Test sooner</a>'
+                    f' <a class="btn ghost small-btn" href="{e(rej)}" rel="noopener noreferrer">Reject</a></p>')
+        cards.append(f"""<li class="qitem"><span class="qrank mono" aria-label="Rank {i}">{i:02d}</span><article class="card">
+<div class="card-top"><span class="mono muted small">{e(ref_name(it.get("role")))} · option {e(ref_name(it.get("about")))}</span>{meter(p) if isinstance(p, (int, float)) else ""}</div>
+<h3>{head}</h3>
+<p class="qnums">{num_html}{"".join(steer)}</p>
+{f'<p><span class="f-lab">Plan</span><br>{e(it["plan"])}</p>' if it.get("plan") else ""}
+{f'<details><summary>Why this probability</summary><p class="small">{e(it["reason"])}</p></details>' if it.get("reason") else ""}
+{acts}</article></li>""")
+    how = q.get("how", "")
+    when = f" Ranked on {e(q['date'])}." if q.get("date") else ""
+    listing = (f'<ol class="queue">{"".join(cards)}</ol>' if cards else
+               '<p class="panel muted">No queue yet: the research agent writes one (research/queue.json) when it ranks its claims.</p>')
+    body = f"""
+<section class="hero small-hero">
+  <p class="eyebrow">The research agent's queue</p>
+  <h1>Next to test</h1>
+  <p class="lede">Claims ranked by what a trial would teach for its cost: a prediction near 0.5 teaches the most, a cheap trial costs the least.{when}</p>
+  {f'<p class="small muted">{e(how)}</p>' if how else ""}
+</section>
+{listing}
+"""
+    return page(site, "Next to test", body, "queue.html")
+
+
+def watch_html(site: Site) -> str:
+    """What the agent watches (watch.yaml) and what became of the papers it saw (seen.jsonl)."""
+    w = site.research.get("watch") or {}
+    seen = site.research.get("seen") or []
+    if not w and not seen:
+        return ""
+    topics = []
+    for t in w.get("topics") or []:
+        roles = " ".join(f'<a class="mono" href="#{e(r)}">{e(r)}</a>' for r in t.get("roles") or [])
+        terms = " ".join(f'<span class="tag">{e(x)}</span>' for x in t.get("terms") or []) or \
+            '<span class="muted small">terms still to be filled in by the next session</span>'
+        cats = ", ".join(str(x) for x in t.get("categories") or [])
+        topics.append(f"""<li class="opt"><h4 class="mono">{e(t.get("name", ""))}</h4><p>{e(t.get("question", ""))}</p>
+<p class="small">{roles}{f' <span class="muted">· {e(cats)}</span>' if cats else ""}</p><p class="terms">{terms}</p></li>""")
+    counts: dict = {}
+    for paper in seen:
+        counts[paper.get("status", "")] = counts.get(paper.get("status", ""), 0) + 1
+    count_html = ", ".join(f"{n} {e(k)}" for k, n in sorted(counts.items(), key=lambda x: -x[1]))
+    cataloged = [x for x in seen if x.get("status") == "cataloged"]
+    cat_html = "".join(
+        f'<li>{link("https://arxiv.org/abs/" + str(x.get("id", "")), x.get("title", ""))} <span class="mono muted small">{e(x.get("id", ""))}</span></li>'
+        for x in cataloged)
+    return f"""<section class="panel" id="watching" aria-labelledby="w-h"><h2 id="w-h">Watching</h2>
+{f'<p>{e(w["conditions"])}</p>' if w.get("conditions") else ""}
+{f'<ul class="opts">{"".join(topics)}</ul>' if topics else ""}
+{f'<p class="small"><span class="f-lab">Papers seen</span> {len(seen)}: {count_html}.</p>' if seen else ""}
+{f'<details><summary>{len(cataloged)} papers catalogued</summary><ul class="plain">{cat_html}</ul></details>' if cataloged else ""}
+</section>"""
 
 
 # ---------------------------------------------------------------- build
@@ -897,9 +1036,17 @@ def build(config_path: Path, out: Path, root: Path = ROOT) -> Site:
     schema_path = srcs.get("schema")
     schema = json.loads((root / schema_path).read_text(encoding="utf-8")) if schema_path else None
     claims = load_claims([root / d for d in srcs.get("claims", [])], root.resolve(), schema)
-    catalog = Catalog([d for p in srcs.get("catalog", []) for d in load_yaml_docs(root / p)])
+    docs = []
+    for p in srcs.get("catalog", []):
+        if (root / p).is_file():
+            docs += load_yaml_docs(root / p)
+        else:
+            print(f"build: {p} does not exist; skipped", file=sys.stderr)
+    research = load_research(root / srcs["research"] if srcs.get("research") else None)
     site = Site(cfg.get("title", "Morphogen research"), cfg["repo"], cfg.get("branch", "main"), cfg["system"],
-                cfg.get("labels", {}), claims, catalog)
+                cfg.get("labels", {}), claims, Catalog(docs), research)
+    for problem in check_index(site):
+        print(f"build: {problem}", file=sys.stderr)
 
     if out.exists():
         shutil.rmtree(out)
@@ -909,6 +1056,7 @@ def build(config_path: Path, out: Path, root: Path = ROOT) -> Site:
     write = lambda rel, text: (out / rel).write_text(text, encoding="utf-8")  # noqa: E731
     write("index.html", render_index(site))
     write("roles.html", render_roles(site))
+    write("queue.html", render_queue(site))
     write("predictions.html", render_predictions(site))
     write("how.html", render_how(site))
     for c in claims:
@@ -924,8 +1072,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--config", type=Path, default=HERE / "config.toml")
     ap.add_argument("--out", type=Path, default=HERE / "_build")
+    ap.add_argument("--root", type=Path, default=ROOT, help="the repository the config's paths are relative to")
     args = ap.parse_args(argv)
-    site = build(args.config, args.out)
+    site = build(args.config, args.out, root=args.root.resolve())
     print(f"build: {len(site.claims)} claims, {len(site.catalog.roles)} roles, {len(site.catalog.options)} options -> {args.out}")
     return 0
 

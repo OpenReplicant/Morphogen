@@ -273,3 +273,14 @@ details ul { margin-top: 8px; font-size: 0.88rem; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 @media (forced-colors: active) { .badge, .btn, .card, .panel { border: 1px solid CanvasText; } .meter-fill { fill: Highlight; } }
+
+/* Queue */
+.queue { list-style: none; padding: 0; margin: 0 0 40px; display: grid; gap: 10px; }
+.qitem { display: grid; grid-template-columns: 2.6rem 1fr; gap: 8px; align-items: start; }
+.qrank { color: var(--accent); font-size: 1.3rem; font-weight: 700; padding-top: 14px; }
+.qitem .card h3 a::after { content: none; }
+.qnums { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 0.9rem; }
+.qnum { white-space: nowrap; }
+.small-btn { padding: 5px 10px; font-size: 0.82rem; }
+.terms { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+@media (max-width: 520px) { .qitem { grid-template-columns: 1fr; } .qrank { padding-top: 0; } }

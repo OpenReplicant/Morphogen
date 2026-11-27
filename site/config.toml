@@ -14,14 +14,21 @@ catalog = [
   "demos/research-loop/catalog-info.yaml",
   "demos/research-loop/catalog/map.yaml",
   "demos/research-loop/catalog/options.yaml",
+  "demos/research-loop/catalog/found.yaml",
 ]
+# The research agent's own files (morphogen.research): queue.json (next to test), watch.yaml (what it watches),
+# seen.jsonl (papers seen) and index.json (every claim's path). Each is optional; a missing file leaves its view empty.
+research = "demos/research-loop/research"
 schema = "schemas/evidence-claim.v1.json"
 
 # The labels the research agent reads its steering from. A label is applied only when the person opening the issue
 # can triage the repository; for anyone else GitHub drops it, and the `research-action:` line in the body still says
-# what is asked.
+# what is asked (`research-action:` prioritise, reject, dispute, question, propose-role, propose-option; the agent
+# reads that line first: morphogen/research.py, parse_issue).
 [labels]
 prioritise = ["research:prioritise"]
 reject = ["research:reject"]
 dispute = ["research:question"]
 question = ["research:question"]
+propose-role = ["research:question"]
+propose-option = ["research:question"]

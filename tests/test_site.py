@@ -190,6 +190,60 @@ class UntrustedText(unittest.TestCase):
         self.assertIn("not a valid EvidenceClaim", str(ctx.exception))
 
 
+class AgentFiles(unittest.TestCase):
+    """The research agent's own files (#110): the optional trial plan, queue.json, watch.yaml and seen.jsonl."""
+
+    @unittest.skipUnless("TrialPlan" in (ROOT / "schemas" / "evidence-claim.v1.json").read_text(encoding="utf-8"),
+                         "the schema has no assessments[].trial before #110")
+    def test_queue_watch_and_trial_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            claim = copy.deepcopy(CLAIM)
+            claim["spec"]["assessments"][0]["trial"] = {"plan": "Run it " + HOSTILE, "cost_hours": 2.5,
+                                                         "needs": ["data " + HOSTILE]}
+            cfg = make_project(root, [claim])
+            cfg.write_text(cfg.read_text(encoding="utf-8").replace('schema =', 'research = "research"\nschema ='),
+                           encoding="utf-8")
+            (root / "research").mkdir()
+            (root / "research" / "queue.json").write_text(json.dumps({"date": "2026-11-27", "how": "bits / hours", "queue": [
+                {"claim": "hostile-claim", "role": "component:default/role-x", "about": "component:default/opt-x",
+                 "p_transfer": 0.4, "information_bits": 0.971, "cost_hours": 2.5, "score": 0.388,
+                 "plan": "Run it " + HOSTILE, "reason": "R " + HOSTILE, "prioritised_by": ["someone"],
+                 "rejected_by": [], "disputed_by": []}]}), encoding="utf-8")
+            (root / "research" / "watch.yaml").write_text(yaml.safe_dump({"topics": [
+                {"name": "topic-x", "question": "Q " + HOSTILE, "roles": ["role-x"], "terms": ["t1"]}]}), encoding="utf-8")
+            (root / "research" / "seen.jsonl").write_text(json.dumps(
+                {"id": "2611.00001", "title": "P " + HOSTILE, "status": "cataloged"}) + "\n", encoding="utf-8")
+            out = root / "out"
+            build.build(cfg, out, root=root)
+            text = all_html(out)
+            self.assertNotIn("<script>alert", text)
+            queue = (out / "queue.html").read_text(encoding="utf-8")
+            self.assertIn('href="claims/hostile-claim.html"', queue)
+            self.assertIn("prioritised by someone", queue)
+            self.assertIn("0.388", queue)
+            claim_page = (out / "claims" / "hostile-claim.html").read_text(encoding="utf-8")
+            self.assertIn("The cheapest trial that would settle it", claim_page)
+            self.assertIn("about 2.5 hours", claim_page)
+            self.assertIn("Number 1 of 1 in the", claim_page)
+            roles = (out / "roles.html").read_text(encoding="utf-8")
+            self.assertIn("topic-x", roles)
+            self.assertIn("Papers seen", roles)
+
+    def test_actions_the_agent_reads(self):
+        """Every button's body names one of the agent's actions (morphogen/research.py, ACTIONS)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = make_project(root, [CLAIM])
+            out = root / "out"
+            build.build(cfg, out, root=root)
+            actions = set()
+            for href in re.findall(r'href="(https://github\.com/[^"]+/issues/new\?[^"]+)"', all_html(out)):
+                body = parse_qs(urlsplit(html.unescape(href)).query)["body"][0]
+                actions |= set(re.findall(r"^research-action: (\S+)$", body, re.M))
+            self.assertEqual(actions, {"prioritise", "reject", "dispute", "question", "propose-role", "propose-option"})
+
+
 class Calibration(unittest.TestCase):
     def test_scored_prediction_shows_on_the_chart(self):
         with tempfile.TemporaryDirectory() as tmp:
