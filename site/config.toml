@@ -1,0 +1,27 @@
+# What site/build.py reads. Paths are relative to the repository root.
+title = "Morphogen research"
+# Where steering issues go, and where claim files are linked on GitHub.
+repo = "OpenReplicant/Morphogen"
+branch = "main"
+# The System whose status each claim is shown with (an assessment's `system`).
+system = "system:default/metasoar"
+
+[sources]
+# Directories searched recursively for EvidenceClaim files (*.yaml, *.yml).
+claims = ["demos/research-loop/claims"]
+# Backstage entity files: the map (roles, this system's conditions) and the options.
+catalog = [
+  "demos/research-loop/catalog-info.yaml",
+  "demos/research-loop/catalog/map.yaml",
+  "demos/research-loop/catalog/options.yaml",
+]
+schema = "schemas/evidence-claim.v1.json"
+
+# The labels the research agent reads its steering from. A label is applied only when the person opening the issue
+# can triage the repository; for anyone else GitHub drops it, and the `research-action:` line in the body still says
+# what is asked.
+[labels]
+prioritise = ["research:prioritise"]
+reject = ["research:reject"]
+dispute = ["research:question"]
+question = ["research:question"]
