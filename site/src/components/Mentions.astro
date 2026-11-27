@@ -1,0 +1,7 @@
+---
+// The Markdown pages (notes, announcements) that name this entity in their `refs:`.
+import { up } from "../lib/text.mjs";
+const { site, ent, depth = 0 } = Astro.props;
+const pages = site.ins(ent, "mentions");
+---
+{pages.length > 0 && <section class="panel" aria-labelledby="men-h"><h2 id="men-h">Notes about it</h2><ul class="plain">{pages.map((p) => <li><a href={`${up(depth)}${p.url}`}>{p.title}</a>{p.date && <span class="muted small"> {p.date}</span>}{p.summary && <span class="muted small"> · {p.summary}</span>}</li>)}</ul></section>}

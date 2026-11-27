@@ -1,0 +1,25 @@
+---
+// A claim's conditions; a model, engine, dataset or GPU with a `ref` links to its page.
+import { asText, up } from "../lib/text.mjs";
+const { site, cond, depth = 1 } = Astro.props;
+const u = up(depth);
+const known = new Set(["models", "engine", "dataset", "hardware", "method", "thinking", "labels", "unstated"]);
+const res = (ref) => (ref ? site.catalogRef(ref) : null);
+const things = [["engine", "Engine"], ["dataset", "Dataset"], ["hardware", "Hardware"]]
+  .filter(([k]) => cond[k] && typeof cond[k] === "object")
+  .map(([k, label]) => [label, ["name", "version", "split", "size", "memory"].filter((x) => cond[k][x]).map((x) => String(cond[k][x])).join(", "), res(cond[k].ref)]);
+const texts = [["method", "Method"], ["thinking", "Thinking"], ["labels", "Labels"]].filter(([k]) => cond[k]).map(([k, l]) => [l, asText(cond[k])]);
+const rest = Object.entries(cond).filter(([k, v]) => !known.has(k) && v !== null && v !== "" && !(Array.isArray(v) && !v.length) && !(typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length))
+  .map(([k, v]) => [k.replaceAll("_", " ").replace(/^./, (s) => s.toUpperCase()), asText(v)]);
+---
+<dl class="kv">
+  {(cond.models || []).length > 0 && <><dt>Models</dt><dd><ul class="plain">{cond.models.map((m) => {
+    const r = res(m.ref);
+    const bits = ["size", "precision", "tuned"].filter((k) => m[k]).map((k) => m[k]).join(", ");
+    return <li><strong>{r ? <a href={`${u}${r.url}`}>{m.name || r.title}</a> : m.name || ""}</strong>{bits && <> <span class="muted">{bits}</span></>}{m.capability && <><br><span class="muted small">{m.capability}</span></>}</li>;
+  })}</ul></dd></>}
+  {things.map(([label, text, r]) => <><dt>{label}</dt><dd>{r ? <a href={`${u}${r.url}`}>{text}</a> : text}</dd></>)}
+  {texts.map(([l, t]) => <><dt>{l}</dt><dd>{t}</dd></>)}
+  {rest.map(([l, t]) => <><dt>{l}</dt><dd>{t}</dd></>)}
+  {(cond.unstated || []).length > 0 && <><dt>Not stated</dt><dd><ul class="plain unstated">{cond.unstated.map((x) => <li>{x}</li>)}</ul></dd></>}
+</dl>

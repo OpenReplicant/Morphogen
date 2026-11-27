@@ -266,7 +266,7 @@ class Steering(unittest.TestCase):
         self.assertEqual(rs.parse_issue(issue(7, "x", "paper: not-an-id", ["research:reject"]))["target"], None)
 
     def test_the_claim_sites_body_lines_come_first(self):
-        # the body site/build.py (PR #108) writes: the person's text, then `---` and its lines
+        # the body the site (site/src/lib/steer.mjs; PR #108 first) writes: the person's text, then `---` and its lines
         body = ("Please test this claim sooner.\n\nWhy: it is cheap.\n\n---\nresearch-action: prioritise\n"
                 "system: system:default/metasoar\nresearch-claim: cost-fell\n"
                 "claim-file: https://github.com/o/r/blob/main/demos/x/claims/a/cost-fell.yaml\nstatus: predicted\n"

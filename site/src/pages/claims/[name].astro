@@ -1,0 +1,92 @@
+---
+// One claim: the source and quote, the measure and conditions, a "tested on" table (model by result), every
+// assessment, the option and role, steering, and every reference to and from it.
+import Base from "../../layouts/Base.astro";
+import Assessment from "../../components/Assessment.astro";
+import ClaimRef from "../../components/ClaimRef.astro";
+import Conditions from "../../components/Conditions.astro";
+import ExtLink from "../../components/ExtLink.astro";
+import MeasureRows from "../../components/MeasureRows.astro";
+import Mentions from "../../components/Mentions.astro";
+import Quote from "../../components/Quote.astro";
+import References from "../../components/References.astro";
+import ResultsTable from "../../components/ResultsTable.astro";
+import StatusBadges from "../../components/StatusBadges.astro";
+import Steer from "../../components/Steer.astro";
+import { fmtNumber, refName, truncate } from "../../lib/text.mjs";
+import { getSite } from "../../lib/site.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.claims.map((c) => ({ params: { name: c.slug }, props: { id: c.id } }));
+}
+const site = await getSite();
+const c = site.entities.get(Astro.props.id);
+const md = c.doc.metadata, src = c.source, cl = c.spec.claim || {}, cond = c.spec.conditions || {};
+const option = site.catalogRef(c.spec.about);
+const role = site.catalogRef(c.spec.role);
+const from = site.outs(c, "from")[0];
+const reporting = { self: "the source measures its own method", independent: "the source measures methods it did not make",
+  ours: "this system's own trial", unknown: "not stated who measured it" }[cl.reporting] || "";
+const effect = cl.effect_size;
+const srcBits = [src.id, src.version && `version ${src.version}`].filter(Boolean).join(" · ");
+const rows = site.assessments(c).map((a) => ({ claim: c, a }));
+const bearsOn = site.ins(c, "observed").concat(site.ins(c, "see-also").filter((x) => !site.ins(c, "observed").includes(x)));
+const ev = option?.spec?.morphogen?.evaluation || {};
+---
+<Base site={site} title={md.description || c.name} description={truncate(cl.statement || "", 160)} depth={1}>
+<p class="crumbs"><a href="../index.html">Claims</a> <span aria-hidden="true">/</span> <span class="mono">{c.name}</span></p>
+<article class="claim">
+  <header class="claim-head">
+    <div class="card-top"><StatusBadges site={site} c={c} /><span class="mono muted">{role ? <a href={`../${role.url}`}>{refName(c.spec.role)}</a> : refName(c.spec.role)} · option {option ? <a href={`../${option.url}`}>{refName(c.spec.about)}</a> : refName(c.spec.about)}</span></div>
+    <h1>{md.description || c.name}</h1>
+    <p class="statement">{cl.statement || ""}</p>
+  </header>
+
+  {rows.length > 0 && <section class="panel" aria-labelledby="t-h"><h2 id="t-h">Tested on</h2><ResultsTable site={site} rows={rows} depth={1} /></section>}
+
+  <section aria-labelledby="src-h" class="panel">
+    <h2 id="src-h">Source</h2>
+    <p><strong><ExtLink url={src.url} text={src.title || ""} /></strong>{from && <> · <a href={`../${from.url}`}>{from.type === "trial" ? "every claim from this trial" : "every claim from this paper"}</a></>}<br><span class="mono small">{srcBits}</span> <span class="muted small">({src.kind})</span></p>
+    <dl class="kv"><dt>Where</dt><dd>{src.location || ""}</dd><dt>Read</dt><dd>{src.read || ""}</dd></dl>
+    <Quote src={src} />
+  </section>
+
+  <div class="cols">
+    <section aria-labelledby="m-h" class="panel">
+      <h2 id="m-h">Measure and effect</h2>
+      <dl class="kv"><MeasureRows m={cl} />
+        <dt>Finding</dt><dd><strong>{cl.finding}</strong> against the baseline</dd>
+        {effect ? <><dt>Effect</dt><dd>{fmtNumber(effect.value)} ({effect.kind}){effect.note && <> · {effect.note}</>}</dd></> : <><dt>Effect</dt><dd class="muted">No effect size stated (a difference of two stated numbers is not one)</dd></>}
+        {cl.significance && <><dt>Significance</dt><dd>{cl.significance}</dd></>}
+        <dt>Runs · cases</dt><dd>{cl.runs ?? "not stated"} · {cl.cases ?? "not stated"}</dd>
+        <dt>Reported by</dt><dd>{cl.reporting}: {reporting}</dd>
+      </dl>
+      {(cl.also || []).length > 0 && <><h3>Also measured</h3>{cl.also.map((m) => <dl class="kv also"><MeasureRows m={m} /></dl>)}</>}
+      {cl.note && <p class="muted small">{cl.note}</p>}
+    </section>
+    <section aria-labelledby="c-h" class="panel">
+      <h2 id="c-h">Conditions</h2>
+      <Conditions site={site} cond={cond} depth={1} />
+    </section>
+  </div>
+
+  <section aria-labelledby="a-h" class="panel">
+    <h2 id="a-h">{c.ours ? "Where it is used" : "Status here"}</h2>
+    {(c.spec.assessments || []).length ? c.spec.assessments.map((a) => <Assessment site={site} c={c} a={a} />)
+      : c.ours ? (bearsOn.length ? <><p>This is a measurement this system ran. Claims from papers that it bears on:</p><ul class="plain">{bearsOn.map((o) => <li><ClaimRef site={site} name={o.name} depth={1} /></li>)}</ul></>
+        : <p>This is a measurement this system ran. No paper's claim links to it yet.</p>)
+      : <p class="muted">Not assessed for this system yet.</p>}
+  </section>
+
+  {option && <section class="panel" aria-labelledby="o-h"><h2 id="o-h">The option</h2>
+    <p><a class="mono" href={`../${option.url}`}>{option.name}</a>, a candidate for the role {role ? <a class="mono" href={`../${role.url}`}>{role.name}</a> : <span class="mono">{refName(c.spec.role)}</span>}.</p>
+    <p>{option.summary}</p>
+    {(ev.need || ev.method || ev.result) && <dl class="kv">{ev.need && <><dt>What would count</dt><dd>{ev.need}</dd></>}{ev.method && <><dt>How it is measured</dt><dd>{ev.method}</dd></>}{ev.result && <><dt>Result so far</dt><dd>{ev.result}</dd></>}</dl>}
+  </section>}
+  <Steer site={site} c={c} />
+  <Mentions site={site} ent={c} depth={1} />
+  <References ent={c} depth={1} />
+  <p class="small muted">The record: <ExtLink url={site.fileUrl(c.path)} text={c.path} cls="mono" /></p>
+</article>
+</Base>

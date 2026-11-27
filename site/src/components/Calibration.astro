@@ -1,0 +1,32 @@
+---
+// A reliability diagram: predicted probability against the share that held, in five bins, with the diagonal of
+// perfect calibration; predictions still waiting are small dots under the axis. Attributes only (no inline style),
+// so the content security policy holds.
+const { pairs, waiting } = Astro.props;
+const w = 360, m = 44;
+let h = 300;
+const pw = w - m - 16, ph = h - m - 30;
+const x = (p) => (m + p * pw).toFixed(1);
+const y = (v) => (16 + (1 - v) * ph).toFixed(1);
+const ticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0];
+const bins = [];
+for (let i = 0; i < 5; i++) {
+  const lo = i / 5, hi = (i + 1) / 5;
+  const inside = pairs.filter((q) => (lo <= q.p && q.p < hi) || (i === 4 && q.p === 1));
+  if (inside.length) bins.push([inside.reduce((s, q) => s + q.p, 0) / inside.length, inside.reduce((s, q) => s + q.held, 0) / inside.length, inside.length]);
+}
+const seen = new Map();
+const stacked = [...waiting].sort((a, b) => a - b).map((p) => { const k = p.toFixed(2); const n = seen.get(k) || 0; seen.set(k, n + 1); return [p, n]; });
+const y0 = 16 + ph;
+h += 7 * Math.max(1, ...seen.values());
+---
+<svg class="calib" viewBox={`0 0 ${w} ${h + 10}`} role="img" aria-labelledby="calib-t calib-d">
+<title id="calib-t">Predicted probability against the share that held</title>
+<desc id="calib-d">{pairs.length} predictions with outcomes in {bins.length} bins; {waiting.length} waiting. The diagonal is perfect calibration.</desc>
+{ticks.map((t) => <><line class="grid" x1={x(t)} y1={y(0)} x2={x(t)} y2={y(1)}/><line class="grid" x1={x(0)} y1={y(t)} x2={x(1)} y2={y(t)}/><text class="tick" x={x(t)} y={(y0 + 16).toFixed(1)} text-anchor="middle">{t.toFixed(1)}</text><text class="tick" x={(m - 8).toFixed(1)} y={(Number(y(t)) + 4).toFixed(1)} text-anchor="end">{t.toFixed(1)}</text></>)}
+<line class="diag" x1={x(0)} y1={y(0)} x2={x(1)} y2={y(1)}/>
+{bins.map(([mp, r, n]) => <g class="dot"><circle cx={x(mp)} cy={y(r)} r={String(5 + Math.min(n, 10))}/><title>Predicted {mp.toFixed(2)} on average, {r.toFixed(2)} held ({n} prediction{n !== 1 ? "s" : ""})</title></g>)}
+{stacked.map(([p, i]) => <circle class="wait" cx={x(p)} cy={(y0 + 24 + 7 * i).toFixed(1)} r="3"><title>Waiting: p {p.toFixed(2)}</title></circle>)}
+<text class="axis" x={x(0.5)} y={String(h + 4)} text-anchor="middle">predicted probability it holds here</text>
+<text class="axis" transform={`translate(12 ${y(0.5)}) rotate(-90)`} text-anchor="middle">share that held</text>
+</svg>

@@ -1,1 +1,5 @@
+node_modules/
 _build/
+.astro/
+# copied from node_modules/@alpinejs/csp by astro.config.mjs on every build and dev start
+public/assets/vendor/

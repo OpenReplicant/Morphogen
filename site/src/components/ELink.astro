@@ -1,0 +1,6 @@
+---
+// A link to an entity's page, or its name as text when it has none.
+import { up } from "../lib/text.mjs";
+const { ent, depth = 0, text, cls = "" } = Astro.props;
+---
+{ent ? <a href={`${up(depth)}${ent.url}`} class={cls || undefined}>{text ?? ent.title}</a> : <span class={cls || undefined}>{text}</span>}

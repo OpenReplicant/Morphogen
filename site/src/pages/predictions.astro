@@ -1,0 +1,39 @@
+---
+// Predictions against outcomes: the calibration chart and Brier score, what is waiting, and what does not count.
+import Base from "../layouts/Base.astro";
+import Calibration from "../components/Calibration.astro";
+import Meter from "../components/Meter.astro";
+import StatusBadge from "../components/StatusBadge.astro";
+import { brier } from "../lib/data.mjs";
+import { getSite } from "../lib/site.mjs";
+import { truncate } from "../lib/text.mjs";
+const site = await getSite();
+const pairs = site.calibrationPairs();
+const waiting = [], unscored = [];
+for (const c of site.sorted()) for (const a of site.assessments(c)) {
+  if (a.status === "predicted" && a.prediction) waiting.push({ c, a });
+  else if ((a.status === "replicated" || a.status === "did-not-transfer") && !a.prediction?.before_outcome) unscored.push({ c, a });
+}
+waiting.sort((p, q) => q.a.prediction.p_transfer - p.a.prediction.p_transfer);
+const b = brier(pairs);
+const cfg = (a) => site.configLabel(a);
+---
+<Base site={site} title="Predictions" current="predictions.html">
+<section class="hero small-hero">
+  <p class="eyebrow">Scoring the agent</p>
+  <h1>Predictions against outcomes</h1>
+  <p class="lede">Before a claim is tried, the agent writes the probability that its finding holds on this system. When the trial reports, the prediction is scored. Over time this shows which kinds of claims carry over, and how far to trust the agent's guesses.</p>
+</section>
+<div class="cols">
+  <section class="panel" aria-labelledby="cal-h"><h2 id="cal-h">Calibration</h2>
+    {pairs.length ? <p><strong>{pairs.length}</strong> predictions written before their outcome now have one. Brier score <strong class="mono">{b.toFixed(3)}</strong> (0 is perfect; always saying 0.5 scores 0.250).</p>
+      : <p>No prediction has an outcome yet, so there is nothing to score. The chart fills in as trials report: each dot is a group of predictions, placed at their average probability and at the share that held. The small dots under the axis are predictions still waiting. A claim tried on two configurations counts twice.</p>}
+    <Calibration pairs={pairs} waiting={waiting.map((x) => x.a.prediction.p_transfer)} />
+  </section>
+  <section class="panel" aria-labelledby="w-h"><h2 id="w-h">Waiting for a trial ({waiting.length})</h2>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Claim</th><th scope="col">Prediction</th></tr></thead><tbody>{waiting.length ? waiting.map(({ c, a }) => <tr><td><a href={c.url}>{truncate(c.title, 90)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</td><td><Meter p={a.prediction.p_transfer} /></td></tr>) : <tr><td colspan="2" class="muted">None.</td></tr>}</tbody></table></div>
+  <p class="small muted">Who wrote each one is on its page. To argue with one, open the claim and use "Dispute the prediction".</p></section>
+</div>
+{pairs.length > 0 && <section class="panel" aria-labelledby="s-h"><h2 id="s-h">Scored</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Claim</th><th scope="col">Prediction</th><th scope="col">Outcome</th></tr></thead><tbody>{pairs.map(({ p, claim, a }) => <tr><td><a href={claim.url}>{truncate(claim.title, 90)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</td><td><Meter p={p} /></td><td><StatusBadge status={a.status} /></td></tr>)}</tbody></table></div></section>}
+{unscored.length > 0 && <section class="panel" aria-labelledby="u-h"><h2 id="u-h">Outcomes that do not count</h2><p>These were tried before anyone wrote a probability, so they say nothing about the agent's calibration.</p><ul class="plain">{unscored.map(({ c, a }) => <li><StatusBadge status={a.status} /> <a href={c.url}>{truncate(c.title, 110)}</a>{cfg(a) && <> <span class="muted small">on {cfg(a)}</span></>}</li>)}</ul></section>}
+</Base>

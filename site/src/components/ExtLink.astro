@@ -1,0 +1,7 @@
+---
+// An outside link only when the URL is http or https; plain text otherwise (a file must not write a javascript: link).
+import { safeUrl } from "../lib/text.mjs";
+const { url, text, cls = "" } = Astro.props;
+const good = safeUrl(url);
+---
+{good ? <a href={good} class={cls || undefined} rel="noopener noreferrer">{text}</a> : <span class={cls || undefined}>{text}</span>}

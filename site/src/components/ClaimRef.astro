@@ -1,0 +1,7 @@
+---
+// A claim by name, linked, with its description.
+import { truncate, up } from "../lib/text.mjs";
+const { site, name, depth = 0 } = Astro.props;
+const c = site.claim(name);
+---
+{c ? <><a href={`${up(depth)}${c.url}`} class="mono">{name}</a> <span class="muted small">{truncate(c.doc.metadata.description || "", 110)}</span></> : <span class="mono">{name}</span>}

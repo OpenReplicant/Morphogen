@@ -1,0 +1,51 @@
+---
+// The frame of every page: the content security policy, the header and its navigation, the footer. Links are
+// relative (`depth` directories below the site root), so the site works under any path.
+import { safeUrl, up } from "../lib/text.mjs";
+const { site, title, description = "", depth = 0, current = "" } = Astro.props;
+const u = up(depth);
+const fixed = [["index.html", "Claims"], ["queue.html", "Next to test"], ["predictions.html", "Predictions"],
+  ["roles.html", "Roles"], ["map.html", "Map"]];
+const listed = site.pages.filter((p) => p.kind !== "page");
+const extra = site.pages.filter((p) => typeof p.nav === "number").sort((a, b) => a.nav - b.nav).map((p) => [`${p.slug}.html`, p.title]);
+const nav = [...fixed, ...(listed.length ? [["notes.html", "Notes"]] : []), ...extra];
+const fullTitle = title && title !== site.title ? `${title} · ${site.title}` : site.title;
+const desc = description || "Claims from papers about options for the system's roles, with conditions, transfer predictions and outcomes.";
+const repoUrl = safeUrl(`https://github.com/${site.repo}`);
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content={desc}>
+<meta name="color-scheme" content="light dark">
+<title>{fullTitle}</title>
+<link rel="icon" href={`${u}assets/icon.svg`} type="image/svg+xml">
+<link rel="stylesheet" href={`${u}assets/style.css`}>
+<script is:inline src={`${u}assets/theme.js`}></script>
+<script is:inline defer src={`${u}assets/site.js`}></script>
+<script is:inline defer src={`${u}assets/vendor/alpine-csp.min.js`}></script>
+</head>
+<body data-root={u || "./"}>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href={`${u}index.html`}><span class="brand-mark" aria-hidden="true">◇</span> Morphogen <span class="brand-sub">research</span></a>
+    <nav aria-label="Site"><ul>{nav.map(([href, text]) => <li><a href={`${u}${href}`} aria-current={href === current ? "page" : undefined}>{text}</a></li>)}</ul></nav>
+    <form class="top-search" role="search" action={`${u}search.html`} method="get">
+      <label><span class="sr">Search the site</span><input type="search" name="q" placeholder="Search" autocomplete="off"></label>
+    </form>
+    <button class="theme" type="button" x-data="theme" x-on:click="next" x-text="label" x-bind:aria-label="aria" x-bind:title="aria" aria-label="Colour theme: system">Auto</button>
+  </div>
+</header>
+<main id="main" class="wrap">
+<slot />
+</main>
+<footer class="foot wrap">
+  <p>Built from the claim, role and option files in {repoUrl ? <a href={repoUrl} rel="noopener noreferrer">{site.repo}</a> : site.repo}. Static files only: no tracking, no cookies, nothing loaded from elsewhere. Steering happens in GitHub issues. <a href={`${u}search.html`}>Everything on the site</a> · <a href={`${u}data/graph.json`}>the graph as JSON</a></p>
+</footer>
+</body>
+</html>

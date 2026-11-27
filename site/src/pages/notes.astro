@@ -1,0 +1,12 @@
+---
+// Notes and announcements: the Markdown files in site/content with kind note or announcement, newest first.
+import Base from "../layouts/Base.astro";
+import { getSite } from "../lib/site.mjs";
+const site = await getSite();
+const listed = site.of("page").filter((p) => p.kind !== "page").sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+---
+<Base site={site} title="Notes" current="notes.html">
+<section class="hero small-hero"><p class="eyebrow">From the people running it</p><h1>Notes and announcements</h1></section>
+{listed.length ? <ol class="feed">{listed.map((p) => <li class="item"><article class="card"><div class="card-top"><span class="tag">{p.kind}</span>{p.date && <time class="small muted" datetime={p.date}>{p.date}</time>}</div><h3><a href={p.url}>{p.title}</a></h3>{p.summary && <p class="meta">{p.summary}</p>}</article></li>)}</ol>
+  : <p class="panel muted">None yet. A Markdown file in site/content/notes becomes one (site/README.md).</p>}
+</Base>

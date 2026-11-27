@@ -1,0 +1,43 @@
+---
+// One resource (a model, an engine, a GPU, a dataset): every claim assessed with it and each result, our own
+// measurements on it, the trials it was used in, and every reference to and from it.
+import Base from "../../layouts/Base.astro";
+import ClaimList from "../../components/ClaimList.astro";
+import EntityHead from "../../components/EntityHead.astro";
+import Evidence from "../../components/Evidence.astro";
+import Mentions from "../../components/Mentions.astro";
+import References from "../../components/References.astro";
+import ResultsTable from "../../components/ResultsTable.astro";
+import { getSite } from "../../lib/site.mjs";
+import { truncate } from "../../lib/text.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("resource").map((x) => ({ params: { name: x.slug }, props: { id: x.id } }));
+}
+const site = await getSite();
+const res = site.entities.get(Astro.props.id);
+const assessed = site.ins(res, "assessed-on");
+const rows = site.results(assessed).filter((x) => (x.a.against || []).some((r) => site.catalogRef(r) === res));
+const results = rows.filter((x) => x.a.outcome || ["replicated", "did-not-transfer", "not-testable"].includes(x.a.status));
+const pending = rows.filter((x) => !results.includes(x));
+const measured = site.ins(res, "measured-on");
+const trials = [...new Set([...measured.flatMap((c) => site.outs(c, "from")), ...assessed.flatMap((c) => site.outs(c, "tested-in"))
+  .filter((t) => rows.some((x) => x.a.outcome?.trial?.id === t.key))])].filter((t) => t.type === "trial");
+const kindText = { model: "Model", engine: "Engine", hardware: "Hardware", dataset: "Dataset" }[res.kind] || "Resource";
+---
+<Base site={site} title={res.title} description={truncate(res.summary, 160)} depth={1}>
+<EntityHead ent={res} eyebrow={`${kindText} · one of this system's conditions`} crumbs={[["../roles.html#conditions", "Conditions"]]}>
+  <p class="small mono muted">{res.name}{site.outs(res, "in-system").map((s) => <> · in <a href={`../${s.url}`}>{s.name}</a></>)}</p>
+  <p class="small">{results.length} result{results.length === 1 ? "" : "s"} from papers' claims tested with it · {pending.length} predicted or untested · {measured.length} of our own measurements on it · {trials.length} trial{trials.length === 1 ? "" : "s"}</p>
+</EntityHead>
+<Evidence ent={res} />
+<section class="panel" aria-labelledby="r-h"><h2 id="r-h">Papers' claims tested with it ({results.length})</h2>
+  {results.length ? <ResultsTable site={site} rows={results} depth={1} showClaim /> : <p class="muted">No claim from a paper has been tested with it yet.</p>}
+</section>
+{trials.length > 0 && <section class="panel" aria-labelledby="tr-h"><h2 id="tr-h">Trials it was used in</h2><ul class="plain">{trials.map((t) => <li><a class="mono" href={`../${t.url}`}>{t.key}</a> <span class="muted small">{t.summary}</span></li>)}</ul></section>}
+{measured.length > 0 && <section class="panel" aria-labelledby="m-h"><h2 id="m-h">Measurements on it ({measured.length})</h2><ClaimList site={site} claims={measured} depth={1} /></section>}
+{pending.length > 0 && <section class="panel" aria-labelledby="p-h"><h2 id="p-h">Predicted or not yet tried with it ({pending.length})</h2><ResultsTable site={site} rows={pending} depth={1} showClaim /></section>}
+<Mentions site={site} ent={res} depth={1} />
+<References ent={res} depth={1} />
+</Base>

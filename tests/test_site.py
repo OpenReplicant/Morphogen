@@ -1,13 +1,17 @@
-"""The research site's build (site/build.py): real input renders, issue links are well formed, and text from papers
-is escaped."""
+"""The research site (site/, Astro): real input renders with its cross-references, issue links are well formed, text
+from papers is escaped, an invalid claim stops the build, and a claim tried on two configurations shows both.
+
+Each test runs the real build (`npm run build` in site/) on a project of its own and checks the files it writes. It
+needs Node and `npm ci` in site/; without them it is skipped, unless MORPHOGEN_SITE_TESTS=1 (as in
+.github/workflows/site.yml), when a missing toolchain is a failure."""
 
 import copy
 import html
-import importlib.util
 import json
+import os
 import re
 import shutil
-import sys
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,10 +20,9 @@ from urllib.parse import parse_qs, urlsplit
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("site_build", ROOT / "site" / "build.py")
-build = importlib.util.module_from_spec(_spec)
-sys.modules["site_build"] = build  # dataclasses look their module up here
-_spec.loader.exec_module(build)
+SITE = ROOT / "site"
+REQUIRED = os.environ.get("MORPHOGEN_SITE_TESTS") == "1"
+READY = shutil.which("npm") is not None and (SITE / "node_modules" / "astro").is_dir()
 
 HOSTILE = '<script>alert("x")</script><img src=x onerror=alert(1)>'
 
@@ -42,6 +45,7 @@ CLAIM = {
             "system": "system:default/sys", "status": "predicted", "date": "2026-11-27",
             "prediction": {"p_transfer": 0.4, "reason": "Different model " + HOSTILE, "by": "test " + HOSTILE,
                            "date": "2026-11-27", "before_outcome": True},
+            "trial": {"plan": "Run it " + HOSTILE, "cost_hours": 2.5, "needs": ["data " + HOSTILE]},
         }],
     },
 }
@@ -56,281 +60,331 @@ CATALOG = [
      "metadata": {"name": "opt-x", "description": "Option " + HOSTILE},
      "spec": {"type": "method", "lifecycle": "candidate", "owner": "group:default/g",
               "morphogen": {"fills": "component:default/role-x", "evaluation": {"result": "R " + HOSTILE}}}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Resource",
+     "metadata": {"name": "small-model", "description": "Small Model 1B, Q6_K, on the GPU"}, "spec": {"type": "model"}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Resource",
+     "metadata": {"name": "big-model", "description": "Big Model 26B, Q4_K"}, "spec": {"type": "model"}},
 ]
 
 
-def make_project(root: Path, claims: list[dict]) -> Path:
+def two_setups() -> dict:
+    """A claim tried on two configurations of one system, with different results (#111)."""
+    claim = copy.deepcopy(CLAIM)
+    claim["metadata"]["name"] = "two-setups"
+    claim["spec"]["source"]["url"] = "https://arxiv.org/abs/2611.00001"
+    outcome = {"trial": {"id": "T-1"}, "observed": ["hostile-claim"], "comparison": "our-setup",
+               "verdict": {"by": "falsifier", "decision": "met"}}
+    pred = {"by": "test", "date": "2026-11-27", "before_outcome": True, "reason": "r"}
+    claim["spec"]["assessments"] = [
+        {"system": "system:default/sys", "against": ["resource:default/small-model"], "status": "did-not-transfer",
+         "date": "2026-11-25", "prediction": {**pred, "p_transfer": 0.3},
+         "outcome": {**outcome, "summary": "Small model: far below."}},
+        {"system": "system:default/sys", "against": ["resource:default/big-model"], "status": "replicated",
+         "date": "2026-11-27", "prediction": {**pred, "p_transfer": 0.7},
+         "outcome": {**outcome, "summary": "Big model: matched."}},
+    ]
+    return claim
+
+
+def scored() -> dict:
+    claim = copy.deepcopy(CLAIM)
+    claim["metadata"]["name"] = "scored-claim"
+    claim["spec"]["source"]["url"] = "https://arxiv.org/abs/2611.00001"
+    a = claim["spec"]["assessments"][0]
+    a["status"] = "did-not-transfer"
+    a["outcome"] = {"trial": {"id": "T-2"}, "observed": ["hostile-claim"], "summary": "Lower.",
+                    "comparison": "our-setup", "verdict": {"by": "morphogen", "decision": "refuse"}}
+    return claim
+
+
+def make_project(root: Path, claims: list[dict]) -> None:
     (root / "claims").mkdir(parents=True)
     (root / "schemas").mkdir()
     shutil.copy(ROOT / "schemas" / "evidence-claim.v1.json", root / "schemas")
     for c in claims:
         (root / "claims" / f"{c['metadata']['name']}.yaml").write_text(yaml.safe_dump(c), encoding="utf-8")
     (root / "catalog.yaml").write_text(yaml.safe_dump_all(CATALOG), encoding="utf-8")
-    cfg = root / "config.toml"
-    cfg.write_text('repo = "Owner/Repo"\nsystem = "system:default/sys"\n[sources]\nclaims = ["claims"]\n'
-                   'catalog = ["catalog.yaml"]\nschema = "schemas/evidence-claim.v1.json"\n'
-                   '[labels]\nprioritise = ["research:prioritise"]\nreject = ["research:reject"]\n'
-                   'dispute = ["research:question"]\nquestion = ["research:question"]\n', encoding="utf-8")
-    return cfg
+    (root / "config.toml").write_text(
+        'repo = "Owner/Repo"\nsystem = "system:default/sys"\n[sources]\nclaims = ["claims"]\n'
+        'catalog = ["catalog.yaml"]\nresearch = "research"\nschema = "schemas/evidence-claim.v1.json"\n'
+        '[labels]\nprioritise = ["research:prioritise"]\nreject = ["research:reject"]\n'
+        'dispute = ["research:question"]\nquestion = ["research:question"]\n', encoding="utf-8")
+    research = root / "research"
+    research.mkdir()
+    (research / "queue.json").write_text(json.dumps({"date": "2026-11-27", "how": "bits / hours", "queue": [
+        {"claim": "hostile-claim", "role": "component:default/role-x", "about": "component:default/opt-x",
+         "p_transfer": 0.4, "information_bits": 0.971, "cost_hours": 2.5, "score": 0.388,
+         "plan": "Run it " + HOSTILE, "reason": "R " + HOSTILE, "prioritised_by": ["someone"],
+         "rejected_by": [], "disputed_by": []}]}), encoding="utf-8")
+    (research / "watch.yaml").write_text(yaml.safe_dump({"topics": [
+        {"name": "topic-x", "question": "Q " + HOSTILE, "roles": ["role-x"], "terms": ["t1"]}]}), encoding="utf-8")
+    (research / "seen.jsonl").write_text(json.dumps(
+        {"id": "2611.00001", "title": "P " + HOSTILE, "status": "cataloged", "abstract": "A " + HOSTILE}) + "\n",
+        encoding="utf-8")
+    content = root / "content"
+    (content / "notes").mkdir(parents=True)
+    (content / "notes" / "hostile.md").write_text(
+        "---\ntitle: A note\nkind: note\ndate: 2026-11-27\nrefs: [claim:two-setups, resource:big-model, trial:T-1]\n---\n"
+        "Some *text*.\n", encoding="utf-8")
+
+
+def run_build(out: Path, root: Path | None = None, content: Path | None = None) -> subprocess.CompletedProcess:
+    env = dict(os.environ, SITE_OUT=str(out), ASTRO_TELEMETRY_DISABLED="1")
+    if root is not None:
+        env.update(SITE_ROOT=str(root), SITE_CONFIG=str(root / "config.toml"))
+    if content is not None:
+        env["SITE_CONTENT"] = str(content)
+    return subprocess.run(["npm", "run", "--silent", "build", "--", "--force"], cwd=SITE, env=env,
+                          capture_output=True, text=True, timeout=600)
+
+
+def built(out: Path, **kw) -> None:
+    r = run_build(out, **kw)
+    if r.returncode != 0:
+        raise AssertionError(f"site build failed:\n{r.stdout[-3000:]}\n{r.stderr[-3000:]}")
 
 
 def all_html(out: Path) -> str:
     return "\n".join(p.read_text(encoding="utf-8") for p in sorted(out.rglob("*.html")))
 
 
-class RealInput(unittest.TestCase):
-    """The phase-0 claims in demos/research-loop, through site/config.toml."""
+def read(out: Path, rel: str) -> str:
+    return (out / rel).read_text(encoding="utf-8")
+
+
+def issue_links(page: str) -> list[str]:
+    return [html.unescape(h) for h in re.findall(r'href="(https://github\.com/[^"]+/issues/new\?[^"]+)"', page)]
+
+
+class _Toolchain(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not READY:
+            if REQUIRED:
+                raise AssertionError("MORPHOGEN_SITE_TESTS=1 but site/node_modules is missing: run `npm ci` in site/")
+            raise unittest.SkipTest("the site's build needs Node and `npm ci` in site/ (site/README.md)")
+
+
+class Unit(_Toolchain):
+    def test_node_unit_tests(self):
+        r = subprocess.run(["npm", "test", "--silent"], cwd=SITE, capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
+class RealInput(_Toolchain):
+    """The claims in demos/research-loop, through site/config.toml and site/content."""
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls.tmp.name) / "out"
-        cls.site = build.build(ROOT / "site" / "config.toml", cls.out)
+        built(cls.out)
+        cls.graph = json.loads(read(cls.out, "data/graph.json"))
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
     def test_every_claim_has_a_page_and_a_feed_entry(self):
-        names = {c.name for c in self.site.claims}
+        names = set(self.graph["claims"])
         files = list((ROOT / "demos" / "research-loop" / "claims").rglob("*.yaml"))
-        self.assertGreaterEqual(len(names), 25)  # phase 0's records, and whatever the agent has added
+        self.assertGreaterEqual(len(names), 25)
         self.assertEqual(len(names), len(files))
-        self.assertEqual(build.check_index(self.site), [])  # research/index.json, when there is one, agrees
+        self.assertEqual(self.graph["index_problems"], [])  # research/index.json agrees with the files
+        self.assertEqual(self.graph["unresolved"], [])
         self.assertEqual({p.stem for p in (self.out / "claims").glob("*.html")}, names)
-        index = (self.out / "index.html").read_text(encoding="utf-8")
+        index = read(self.out, "index.html")
         self.assertEqual(set(re.findall(r'<li class="item" data-name="([^"]+)"', index)), names)
-        for page in ("roles.html", "predictions.html", "how.html", "assets/style.css", "assets/app.js", ".nojekyll"):
+        for page in ("roles.html", "predictions.html", "queue.html", "how.html", "map.html", "search.html",
+                     "notes.html", "assets/style.css", "assets/site.js", "assets/vendor/alpine-csp.min.js",
+                     "data/search.json", ".nojekyll"):
             self.assertTrue((self.out / page).exists(), page)
-        data = json.loads((self.out / "data" / "claims.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(data["claims"]), len(names))
+        self.assertEqual(len(json.loads(read(self.out, "data/claims.json"))["claims"]), len(names))
+
+    def test_every_entity_has_a_page(self):
+        for node in self.graph["nodes"]:
+            self.assertTrue((self.out / node["url"]).is_file(), node["id"])
+        types = {n["type"] for n in self.graph["nodes"]}
+        self.assertLessEqual({"claim", "role", "option", "resource", "trial", "paper", "system", "page"}, types)
 
     def test_statuses_come_from_the_assessments(self):
-        status = {c.name: c.status(self.site.system) for c in self.site.claims}
-        # E-04a: LFM3 1.7B did not transfer, Inkling 2 Mini replicated; both must show
-        gates = self.site.by_name()["gates-likelihood-readout-27-31b-matches-jev"]
-        self.assertEqual(status[gates.name], "mixed")
-        self.assertEqual(set(gates.statuses(self.site.system)), {"did-not-transfer", "replicated"})
-        self.assertEqual(status["gates-embedding-logreg-labelled"], "predicted")
-        self.assertEqual(status["e04a-lfm3-pooled-accuracy"], "observation")
-        roles = (self.out / "roles.html").read_text(encoding="utf-8")
+        claims = self.graph["claims"]
+        gates = claims["gates-likelihood-readout-27-31b-matches-jev"]
+        self.assertEqual(gates["status"], "mixed")
+        self.assertEqual(set(gates["statuses"]), {"did-not-transfer", "replicated"})
+        self.assertEqual(claims["gates-embedding-logreg-labelled"]["status"], "predicted")
+        self.assertEqual(claims["e04a-lfm3-pooled-accuracy"]["status"], "observation")
+        roles = read(self.out, "roles.html")
         for role in ("decision-backend", "readout-calibration", "think-router"):
             self.assertIn(f'id="{role}"', roles)
 
-    def test_no_outside_resources(self):
+    def test_a_model_lists_the_claims_tested_with_it(self):
+        """The question that started this: was Inkling tested against the 27B+ finding, or only LFM3?"""
+        page = read(self.out, "resources/inkling-2-mini-q4-k.html")
+        row = re.search(r'<tr>(?:(?!</tr>).)*gates-likelihood-readout-27-31b-matches-jev\.html.*?</tr>', page, re.S).group(0)
+        self.assertIn("Replicated", row)
+        self.assertIn('href="../trials/e-04a.html"', row)
+        self.assertIn("../claims/e04a-inkling-pooled-accuracy.html", page)  # our own measurement on it
+        self.assertIn("../notes/2026-11-27-inkling-and-the-27b-finding.html", page)  # a note that names it
+
+    def test_a_trial_lists_its_outcomes_and_models(self):
+        page = read(self.out, "trials/e-04a.html")
+        self.assertIn("../claims/gates-likelihood-readout-27-31b-matches-jev.html", page)
+        self.assertIn("../resources/inkling-2-mini-q4-k.html", page)
+        self.assertIn("../resources/lfm3-1.7b-q6-k.html", page)
+        self.assertIn("../claims/e04a-lfm3-pooled-accuracy.html", page)
+
+    def test_claim_page_has_a_tested_on_table_and_backlinks(self):
+        page = read(self.out, "claims/gates-likelihood-readout-27-31b-matches-jev.html")
+        table = re.search(r'<table class="tbl results">.*?</table>', page, re.S).group(0)
+        self.assertIn("<strong>Inkling 2 Mini</strong>", table)
+        self.assertIn("<strong>LFM3 1.7B</strong>", table)
+        self.assertIn("../papers/arxiv-2610.00346.html", page)
+        self.assertIn("Linked from", page)
+
+    def test_paper_and_role_pages(self):
+        paper = read(self.out, "papers/arxiv-2610.00346.html")
+        self.assertIn("../claims/gates-embedding-logreg-labelled.html", paper)
+        role = read(self.out, "roles/table-qa.html")
+        self.assertIn("Open questions the agent watches", role)
+        self.assertIn("../options/capability-aware-table-routing.html", role)
+
+    def test_no_outside_resources_and_no_inline_script(self):
         text = all_html(self.out)
         self.assertNotRegex(text, r'<(script|link)[^>]+(src|href)="https?://')
-        self.assertNotIn("<script>", text, "inline scripts would break the content security policy")
+        self.assertNotRegex(text, r"<script(?![^>]*\ssrc=)[^>]*>", "inline scripts would break the content security policy")
         self.assertNotIn(" style=", text)
+        self.assertNotIn("unsafe-eval", text)
+        self.assertNotIn("unsafe-inline", text)
 
     def test_issue_links_in_the_pages_are_well_formed(self):
-        page = (self.out / "claims" / "gates-embedding-logreg-labelled.html").read_text(encoding="utf-8")
-        links = [html.unescape(h) for h in re.findall(r'href="(https://github\.com/[^"]+/issues/new\?[^"]+)"', page)]
+        links = issue_links(read(self.out, "claims/gates-embedding-logreg-labelled.html"))
         self.assertEqual(len(links), 3)  # prioritise, reject, dispute (it has a prediction)
         for url in links:
             parts = urlsplit(url)
             self.assertEqual((parts.scheme, parts.netloc, parts.path), ("https", "github.com", "/OpenReplicant/Morphogen/issues/new"))
             q = parse_qs(parts.query, strict_parsing=True)
             self.assertEqual(set(q), {"title", "body", "labels"})
-            self.assertIn("research-claim: gates-embedding-logreg-labelled", q["body"][0])
+            body = q["body"][0]
+            self.assertIn("research-claim: gates-embedding-logreg-labelled", body)
+            self.assertIn("\nresearch-action: ", body)
+            self.assertIn("\nclaim-file: https://github.com/OpenReplicant/Morphogen/blob/main/demos/research-loop/claims/", body)
             self.assertTrue(q["labels"][0].startswith("research:"))
             self.assertLess(len(url), 8000)
 
 
-class IssueUrl(unittest.TestCase):
-    def test_round_trip(self):
-        title, body = 'Prioritise: a & b? #1 "x"', "line one\nresearch-action: prioritise\n100% + more & <tags>"
-        url = build.issue_url("OpenReplicant/Morphogen", title, body, ["research:prioritise", "two words"])
-        parts = urlsplit(url)
-        self.assertEqual(parts.netloc, "github.com")
-        self.assertEqual(parts.path, "/OpenReplicant/Morphogen/issues/new")
-        self.assertNotIn(" ", url)
-        self.assertNotIn("\n", url)
-        q = parse_qs(parts.query, strict_parsing=True)
-        self.assertEqual(q["title"], [title])
-        self.assertEqual(q["body"], [body])
-        self.assertEqual(q["labels"], ["research:prioritise,two words"])
+class Fixture(_Toolchain):
+    """A project of its own: a hostile claim, a claim tried on two configurations, a scored one, and the agent's files."""
 
-    def test_no_labels(self):
-        q = parse_qs(urlsplit(build.issue_url("o/r", "t", "b", [])).query)
-        self.assertNotIn("labels", q)
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.tmp.name)
+        make_project(cls.root, [CLAIM, two_setups(), scored()])
+        cls.out = cls.root / "out"
+        built(cls.out, root=cls.root, content=cls.root / "content")
+        cls.graph = json.loads(read(cls.out, "data/graph.json"))
 
-
-class UntrustedText(unittest.TestCase):
-    """A claim's text comes from a paper: it must never become markup, and its links must never run script."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
-
-    def tearDown(self):
-        self.tmp.cleanup()
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
 
     def test_text_from_files_is_escaped(self):
-        cfg = make_project(self.root, [CLAIM])
-        out = self.root / "out"
-        build.build(cfg, out, root=self.root)
-        text = all_html(out)
+        raw = all_html(self.out)
+        # Astro escapes & and " inside a quoted attribute value (where < cannot open a tag) and &, < and > in text:
+        # with every quoted value taken out, no markup from a file may remain.
+        text = re.sub(r'="[^"]*"', '=""', raw)
         self.assertNotIn("<script>alert", text)
         self.assertNotIn("<img src=x", text)
         self.assertNotIn("<b>beats</b>", text)
-        self.assertIn("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;", text)
-        self.assertNotRegex(text, r'href="\s*javascript:', "a javascript: URL from a file was written as a link")
-        page = (out / "claims" / "hostile-claim.html").read_text(encoding="utf-8")
+        self.assertIn("&lt;script&gt;alert(", text)
+        self.assertIn('content="X beats Y <script>alert(&quot;x&quot;)', raw)  # the quote is escaped in the attribute
+        self.assertNotRegex(raw, r'href="\s*javascript:', "a javascript: URL from a file was written as a link")
+        page = read(self.out, "claims/hostile-claim.html")
         self.assertIn("A paper &lt;script&gt;", page)  # the title is still shown, as text
-        # and paper text stays out of issue bodies (they render as Markdown)
-        for href in re.findall(r'href="(https://github\.com/[^"]+)"', page):
-            self.assertNotIn("alert", html.unescape(href))
-
-    def test_safe_url(self):
-        self.assertEqual(build.safe_url("https://arxiv.org/abs/1"), "https://arxiv.org/abs/1")
-        for bad in ("javascript:alert(1)", " JaVaScRiPt:alert(1)", "data:text/html,x", "//evil", "", None, 3):
-            self.assertIsNone(build.safe_url(bad), bad)
-
-    def test_invalid_claim_stops_the_build(self):
-        bad = copy.deepcopy(CLAIM)
-        bad["spec"]["assessments"][0]["status"] = "probably-fine"
-        cfg = make_project(self.root, [bad])
-        with self.assertRaises(SystemExit) as ctx:
-            build.build(cfg, self.root / "out", root=self.root)
-        self.assertIn("not a valid EvidenceClaim", str(ctx.exception))
-
-
-class AgentFiles(unittest.TestCase):
-    """The research agent's own files (#110): the optional trial plan, queue.json, watch.yaml and seen.jsonl."""
-
-    @unittest.skipUnless("TrialPlan" in (ROOT / "schemas" / "evidence-claim.v1.json").read_text(encoding="utf-8"),
-                         "the schema has no assessments[].trial before #110")
-    def test_queue_watch_and_trial_plan(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            claim = copy.deepcopy(CLAIM)
-            claim["spec"]["assessments"][0]["trial"] = {"plan": "Run it " + HOSTILE, "cost_hours": 2.5,
-                                                         "needs": ["data " + HOSTILE]}
-            cfg = make_project(root, [claim])
-            cfg.write_text(cfg.read_text(encoding="utf-8").replace('schema =', 'research = "research"\nschema ='),
-                           encoding="utf-8")
-            (root / "research").mkdir()
-            (root / "research" / "queue.json").write_text(json.dumps({"date": "2026-11-27", "how": "bits / hours", "queue": [
-                {"claim": "hostile-claim", "role": "component:default/role-x", "about": "component:default/opt-x",
-                 "p_transfer": 0.4, "information_bits": 0.971, "cost_hours": 2.5, "score": 0.388,
-                 "plan": "Run it " + HOSTILE, "reason": "R " + HOSTILE, "prioritised_by": ["someone"],
-                 "rejected_by": [], "disputed_by": []}]}), encoding="utf-8")
-            (root / "research" / "watch.yaml").write_text(yaml.safe_dump({"topics": [
-                {"name": "topic-x", "question": "Q " + HOSTILE, "roles": ["role-x"], "terms": ["t1"]}]}), encoding="utf-8")
-            (root / "research" / "seen.jsonl").write_text(json.dumps(
-                {"id": "2611.00001", "title": "P " + HOSTILE, "status": "cataloged"}) + "\n", encoding="utf-8")
-            out = root / "out"
-            build.build(cfg, out, root=root)
-            text = all_html(out)
-            self.assertNotIn("<script>alert", text)
-            queue = (out / "queue.html").read_text(encoding="utf-8")
-            self.assertIn('href="claims/hostile-claim.html"', queue)
-            self.assertIn("prioritised by someone", queue)
-            self.assertIn("0.388", queue)
-            claim_page = (out / "claims" / "hostile-claim.html").read_text(encoding="utf-8")
-            self.assertIn("The cheapest trial that would settle it", claim_page)
-            self.assertIn("about 2.5 hours", claim_page)
-            self.assertIn("Number 1 of 1 in the", claim_page)
-            roles = (out / "roles.html").read_text(encoding="utf-8")
-            self.assertIn("topic-x", roles)
-            self.assertIn("Papers seen", roles)
+        for url in issue_links(page):  # and paper text stays out of issue bodies (they render as Markdown)
+            self.assertNotIn("alert", url)
 
     def test_actions_the_agent_reads(self):
         """Every button's body names one of the agent's actions (morphogen/research.py, ACTIONS)."""
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            cfg = make_project(root, [CLAIM])
-            out = root / "out"
-            build.build(cfg, out, root=root)
-            actions = set()
-            for href in re.findall(r'href="(https://github\.com/[^"]+/issues/new\?[^"]+)"', all_html(out)):
-                body = parse_qs(urlsplit(html.unescape(href)).query)["body"][0]
-                actions |= set(re.findall(r"^research-action: (\S+)$", body, re.M))
-            self.assertEqual(actions, {"prioritise", "reject", "dispute", "question", "propose-role", "propose-option"})
+        actions = set()
+        for url in issue_links(all_html(self.out)):
+            body = parse_qs(urlsplit(url).query)["body"][0]
+            actions |= set(re.findall(r"^research-action: (\S+)$", body, re.M))
+        self.assertEqual(actions, {"prioritise", "reject", "dispute", "question", "propose-role", "propose-option"})
 
+    def test_queue_watch_and_trial_plan(self):
+        queue = read(self.out, "queue.html")
+        self.assertIn('href="claims/hostile-claim.html"', queue)
+        self.assertIn("prioritised by someone", queue)
+        self.assertIn("0.388", queue)
+        page = read(self.out, "claims/hostile-claim.html")
+        self.assertIn("The cheapest trial that would settle it", page)
+        self.assertIn("about 2.5 hours", page)
+        self.assertIn("Number 1 of 1 in the", page)
+        roles = read(self.out, "roles.html")
+        self.assertIn("topic-x", roles)
+        self.assertIn("Papers seen", roles)
+        self.assertIn("topic-x", read(self.out, "roles/role-x.html"))
 
-class SeveralAssessments(unittest.TestCase):
-    """A claim tried on two configurations of one system, with different results: every assessment shows, the feed
-    matches it under either status, and each prediction is scored on its own (the site once showed only the first)."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        root = Path(self.tmp.name)
-        claim = copy.deepcopy(CLAIM)
-        claim["metadata"]["name"] = "two-setups"
-        claim["spec"]["source"]["url"] = "https://arxiv.org/abs/2611.00001"
-        outcome = {"trial": {"id": "T-1"}, "observed": ["hostile-claim"], "comparison": "our-setup",
-                   "verdict": {"by": "falsifier", "decision": "met"}}
-        pred = {"by": "test", "date": "2026-11-27", "before_outcome": True, "reason": "r"}
-        claim["spec"]["assessments"] = [
-            {"system": "system:default/sys", "against": ["resource:default/small-model"], "status": "did-not-transfer",
-             "date": "2026-11-25", "prediction": {**pred, "p_transfer": 0.3},
-             "outcome": {**outcome, "summary": "Small model: far below."}},
-            {"system": "system:default/sys", "against": ["resource:default/big-model"], "status": "replicated",
-             "date": "2026-11-27", "prediction": {**pred, "p_transfer": 0.7},
-             "outcome": {**outcome, "summary": "Big model: matched."}},
-        ]
-        cfg = make_project(root, [CLAIM, claim])
-        with (root / "catalog.yaml").open("a", encoding="utf-8") as f:
-            f.write("---\n" + yaml.safe_dump_all([
-                {"apiVersion": "backstage.io/v1alpha1", "kind": "Resource",
-                 "metadata": {"name": "small-model", "description": "Small Model 1B, Q6_K, on the GPU"},
-                 "spec": {"type": "model"}},
-                {"apiVersion": "backstage.io/v1alpha1", "kind": "Resource",
-                 "metadata": {"name": "big-model", "description": "Big Model 26B, Q4_K"}, "spec": {"type": "model"}}]))
-        self.out = root / "out"
-        self.site = build.build(cfg, self.out, root=root)
-        self.claim = self.site.by_name()["two-setups"]
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def test_status_is_mixed_with_both_results(self):
-        self.assertEqual(self.claim.status("system:default/sys"), "mixed")
-        self.assertEqual(self.claim.statuses("system:default/sys"), ["did-not-transfer", "replicated"])
-        self.assertEqual(self.site.status_text(self.claim),
-                         "did-not-transfer (Small Model 1B); replicated (Big Model 26B)")
-
-    def test_feed_matches_either_status(self):
-        index = (self.out / "index.html").read_text(encoding="utf-8")
+    def test_mixed_status_with_both_results(self):
+        c = self.graph["claims"]["two-setups"]
+        self.assertEqual(c["status"], "mixed")
+        self.assertEqual(c["statuses"], ["did-not-transfer", "replicated"])
+        self.assertEqual(c["status_text"], "did-not-transfer (Small Model 1B); replicated (Big Model 26B)")
+        index = read(self.out, "index.html")
         item = re.search(r'<li class="item" data-name="two-setups"[^>]*>.*?</li>', index, re.S).group(0)
         self.assertIn('data-status="did-not-transfer replicated"', item)
         for text in ("Mixed", "Did not transfer", "Replicated", "Small Model 1B", "Big Model 26B"):
             self.assertIn(text, item)
-
-    def test_claim_page_shows_every_assessment(self):
-        page = (self.out / "claims" / "two-setups.html").read_text(encoding="utf-8")
+        page = read(self.out, "claims/two-setups.html")
         self.assertEqual(page.count('<div class="assess">'), 2)
         for text in ("Small model: far below.", "Big model: matched.", "on <strong>Small Model 1B</strong>",
                      "on <strong>Big Model 26B</strong>"):
             self.assertIn(text, page)
+        body = parse_qs(urlsplit(issue_links(page)[0]).query)["body"][0]
+        self.assertIn("status: did-not-transfer (Small Model 1B); replicated (Big Model 26B)", body)
 
     def test_each_prediction_is_scored(self):
-        pairs = sorted((p, o) for p, o, c, _ in build.calibration_pairs(self.site) if c.name == "two-setups")
-        self.assertEqual(pairs, [(0.3, 0), (0.7, 1)])
-        page = (self.out / "predictions.html").read_text(encoding="utf-8")
-        self.assertIn("<strong>2</strong> predictions", page)
+        pairs = sorted((x["claim"], x["p"], x["held"]) for x in self.graph["calibration"]["pairs"])
+        self.assertEqual(pairs, [("scored-claim", 0.4, 0), ("two-setups", 0.3, 0), ("two-setups", 0.7, 1)])
+        self.assertAlmostEqual(self.graph["calibration"]["brier"], (0.16 + 0.09 + 0.09) / 3)
+        page = read(self.out, "predictions.html")
+        self.assertIn("<strong>3</strong> predictions", page)
+        self.assertIn('Brier score <strong class="mono">0.113</strong>', page)
+        self.assertIn('<g class="dot">', page)
+
+    def test_models_trials_and_notes_link_back(self):
+        big = read(self.out, "resources/big-model.html")
+        self.assertIn("../claims/two-setups.html", big)
+        self.assertIn("../notes/hostile.html", big)
+        trial = read(self.out, "trials/t-1.html")
+        self.assertIn("../resources/small-model.html", trial)
+        self.assertIn("../resources/big-model.html", trial)
+        self.assertIn("../claims/two-setups.html", read(self.out, "notes/hostile.html"))
 
 
-class Calibration(unittest.TestCase):
-    def test_scored_prediction_shows_on_the_chart(self):
+class BrokenInput(_Toolchain):
+    def test_invalid_claim_stops_the_build(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            scored = copy.deepcopy(CLAIM)
-            scored["metadata"]["name"] = "scored-claim"
-            scored["spec"]["source"]["url"] = "https://arxiv.org/abs/2611.00001"
-            a = scored["spec"]["assessments"][0]
-            a["status"] = "did-not-transfer"
-            a["outcome"] = {"trial": {"id": "T-1"}, "observed": ["hostile-claim"], "summary": "Lower.",
-                            "comparison": "our-setup", "verdict": {"by": "morphogen", "decision": "refuse"}}
-            cfg = make_project(root, [CLAIM, scored])
-            site = build.build(cfg, root / "out", root=root)
-            self.assertEqual([(p, o) for p, o, *_ in build.calibration_pairs(site)], [(0.4, 0)])
-            self.assertAlmostEqual(build.brier(build.calibration_pairs(site)), 0.16)
-            page = (root / "out" / "predictions.html").read_text(encoding="utf-8")
-            self.assertIn("Brier score <strong class='mono'>0.160</strong>", page)
-            self.assertIn('<g class="dot">', page)
+            bad = copy.deepcopy(CLAIM)
+            bad["spec"]["assessments"][0]["status"] = "probably-fine"
+            make_project(root, [bad])
+            r = run_build(root / "out", root=root, content=root / "content")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("not a valid EvidenceClaim", r.stdout + r.stderr)
+
+    def test_a_page_naming_a_missing_entity_stops_the_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root, [CLAIM])
+            (root / "content" / "bad.md").write_text("---\ntitle: Bad\nrefs: [resource:nowhere]\n---\nx\n", encoding="utf-8")
+            r = run_build(root / "out", root=root, content=root / "content")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("refers to resource:nowhere", r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

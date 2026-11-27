@@ -1,0 +1,29 @@
+---
+// "Tested on": one row per assessment of a claim for this system, model by result. With `showClaim` the claim is
+// the first column (for a model's, a trial's or an option's page).
+import Meter from "./Meter.astro";
+import StatusBadge from "./StatusBadge.astro";
+import { refName, truncate, up } from "../lib/text.mjs";
+const { site, rows, depth = 0, showClaim = false, caption = "" } = Astro.props;
+const u = up(depth);
+const cells = rows.map(({ claim, a }) => {
+  const models = site.configModels(a);
+  const others = (a.against || []).map((r) => site.catalogRef(r)).filter((r) => r && !models.includes(r));
+  const unknown = (a.against || []).filter((r) => !site.catalogRef(r)).map(refName);
+  const trialId = a.outcome?.trial?.id;
+  const trial = trialId ? site.entities.get(`trial:${trialId}`) : null;
+  return { claim, a, models, others, unknown, trialId, trial };
+});
+---
+{cells.length > 0 && <div class="tbl-wrap"><table class="tbl results">
+  {caption && <caption>{caption}</caption>}
+  <thead><tr>{showClaim && <th scope="col">Claim</th>}<th scope="col">Tested on</th><th scope="col">Result</th><th scope="col">Trial</th><th scope="col">Prediction</th></tr></thead>
+  <tbody>{cells.map((x) => <tr>
+    {showClaim && <td><a href={`${u}${x.claim.url}`}>{truncate(x.claim.title, 100)}</a></td>}
+    <td>{x.models.length ? x.models.map((m, i) => <>{i > 0 && ", "}<a href={`${u}${m.url}`}><strong>{m.title}</strong></a></>) : <span class="muted">no model named</span>}
+      {(x.others.length > 0 || x.unknown.length > 0) && <span class="small muted cfg-rest"> with {x.others.map((r, i) => <>{i > 0 && ", "}<a href={`${u}${r.url}`}>{r.title}</a></>)}{x.unknown.length > 0 && <>{x.others.length > 0 && ", "}{x.unknown.join(", ")}</>}</span>}</td>
+    <td><StatusBadge status={x.a.status} />{x.a.outcome?.verdict?.decision && <span class="small muted"> falsifier {x.a.outcome.verdict.decision}</span>}{x.a.outcome?.summary && <span class="small muted res-sum">{truncate(x.a.outcome.summary, 180)}</span>}</td>
+    <td>{x.trial ? <a class="mono" href={`${u}${x.trial.url}`}>{x.trialId}</a> : <span class="muted">none yet</span>}</td>
+    <td>{x.a.prediction ? <Meter p={x.a.prediction.p_transfer} /> : <span class="muted">none written</span>}</td>
+  </tr>)}</tbody>
+</table></div>}

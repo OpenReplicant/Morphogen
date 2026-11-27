@@ -1,0 +1,20 @@
+---
+// What the agent watches (watch.yaml) and what became of the papers it saw (seen.jsonl).
+import ExtLink from "./ExtLink.astro";
+const { site, depth = 0 } = Astro.props;
+const w = site.research.watch || {};
+const seen = site.research.seen || [];
+const counts = new Map();
+for (const p of seen) counts.set(p.status || "", (counts.get(p.status || "") || 0) + 1);
+const countText = [...counts].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(", ");
+const cataloged = seen.filter((x) => x.status === "cataloged");
+const paperFor = (id) => site.of("paper").find((p) => String(p.source?.id || "").replace(/^arxiv:/i, "") === String(id));
+---
+{(Object.keys(w).length > 0 || seen.length > 0) && <section class="panel" id="watching" aria-labelledby="w-h"><h2 id="w-h">Watching</h2>
+{w.conditions && <p>{w.conditions}</p>}
+{(w.topics || []).length > 0 && <ul class="opts">{w.topics.map((t) => <li class="opt"><h4 class="mono">{t.name || ""}</h4><p>{t.question || ""}</p>
+<p class="small">{(t.roles || []).map((r) => { const e = site.catalogRef(r); return <>{e ? <a class="mono" href={`${"../".repeat(depth)}${e.url}`}>{r}</a> : <span class="mono">{r}</span>} </>; })}{(t.categories || []).length > 0 && <span class="muted">· {t.categories.join(", ")}</span>}</p>
+<p class="terms">{(t.terms || []).length ? t.terms.map((x) => <span class="tag">{x}</span>) : <span class="muted small">terms still to be filled in by the next session</span>}</p></li>)}</ul>}
+{seen.length > 0 && <p class="small"><span class="f-lab">Papers seen</span> {seen.length}: {countText}.</p>}
+{cataloged.length > 0 && <details><summary>{cataloged.length} papers catalogued</summary><ul class="plain">{cataloged.map((x) => { const p = paperFor(x.id); return <li>{p ? <a href={`${"../".repeat(depth)}${p.url}`}>{x.title || ""}</a> : <ExtLink url={`https://arxiv.org/abs/${x.id || ""}`} text={x.title || ""} />} <span class="mono muted small">{x.id || ""}</span></li>; })}</ul></details>}
+</section>}

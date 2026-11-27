@@ -1,0 +1,12 @@
+---
+import ExtLink from "./ExtLink.astro";
+import { QUOTE_TEXT } from "../lib/text.mjs";
+const { src } = Astro.props;
+const status = src.quote_status || "none";
+const via = src.via;
+---
+<p class="qhead"><span class={`qs q-${status}`}>{QUOTE_TEXT[status] || status}</span>{src.quote_location && <> <span class="muted">{src.quote_location}</span></>}</p>
+{src.quote && <blockquote class="verbatim"><p>{src.quote}</p></blockquote>}
+{src.quote_note && <p class="muted small">{src.quote_note}</p>}
+{via && <><p class="qhead"><span class="qs q-via">Via a secondary source</span> <ExtLink url={via.url} text={via.title || ""} /><span class="muted">{via.location ? `, ${via.location}` : ""}</span></p>
+<blockquote class="verbatim via"><p>{via.quote || ""}</p></blockquote></>}

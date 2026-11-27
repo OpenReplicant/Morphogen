@@ -1,0 +1,12 @@
+---
+// The top of an entity page: where it sits, what kind of thing it is, its name and description.
+import { TYPES } from "../lib/data.mjs";
+const { ent, eyebrow = "", crumbs = [] } = Astro.props;
+---
+<p class="crumbs">{crumbs.map(([href, text]) => <><a href={href}>{text}</a> <span aria-hidden="true">/</span> </>)}<span class="mono">{ent.key}</span></p>
+<header class="claim-head">
+  <p class="eyebrow">{eyebrow || TYPES[ent.type].one}</p>
+  <h1>{ent.title}</h1>
+  {ent.summary && <p class="statement">{ent.summary}</p>}
+  <slot />
+</header>

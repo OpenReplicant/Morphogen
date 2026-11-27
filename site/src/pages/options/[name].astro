@@ -1,0 +1,41 @@
+---
+// One option: the method, the roles it could fill, what would count and the result so far, a "tested on" table
+// for its claims, and every reference to and from it.
+import Base from "../../layouts/Base.astro";
+import ClaimList from "../../components/ClaimList.astro";
+import EntityHead from "../../components/EntityHead.astro";
+import Evidence from "../../components/Evidence.astro";
+import ExtLink from "../../components/ExtLink.astro";
+import Mentions from "../../components/Mentions.astro";
+import References from "../../components/References.astro";
+import ResultsTable from "../../components/ResultsTable.astro";
+import StatusCounts from "../../components/StatusCounts.astro";
+import { getSite } from "../../lib/site.mjs";
+import { truncate } from "../../lib/text.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("option").map((o) => ({ params: { name: o.slug }, props: { id: o.id } }));
+}
+const site = await getSite();
+const o = site.entities.get(Astro.props.id);
+const roles = site.outs(o, "fills");
+const claims = site.ins(o, "about");
+const ev = o.spec?.morphogen?.evaluation || {};
+const docs = o.spec?.morphogen?.docs;
+const tested = site.results(claims).filter((x) => x.a.outcome);
+---
+<Base site={site} title={o.name} description={truncate(o.summary, 160)} depth={1}>
+<EntityHead ent={o} eyebrow="Option" crumbs={[["../roles.html", "Roles"]]}>
+  <p class="small">A candidate for {roles.length ? roles.map((r, i) => <>{i > 0 && ", "}the role <a class="mono" href={`../${r.url}`}>{r.name}</a></>) : "no role named"}.{docs?.url && <> Described at <ExtLink url={docs.url} text={docs.url} />.</>}</p>
+  <p><StatusCounts site={site} claims={claims} /></p>
+</EntityHead>
+<Evidence ent={o} />
+{(ev.need || ev.method || ev.result) && <section class="panel" aria-labelledby="e-h"><h2 id="e-h">Evaluation</h2><dl class="kv">{ev.need && <><dt>What would count</dt><dd>{ev.need}</dd></>}{ev.method && <><dt>How it is measured</dt><dd>{ev.method}</dd></>}{ev.result && <><dt>Result so far</dt><dd>{ev.result}</dd></>}</dl></section>}
+<section class="panel" aria-labelledby="t-h"><h2 id="t-h">Tested on</h2>
+  {tested.length ? <ResultsTable site={site} rows={tested} depth={1} showClaim /> : <p class="muted">No claim about this option has an outcome on this system yet.</p>}
+</section>
+<section class="panel" aria-labelledby="c-h"><h2 id="c-h">Claims about it ({claims.length})</h2><ClaimList site={site} claims={claims} depth={1} /></section>
+<Mentions site={site} ent={o} depth={1} />
+<References ent={o} depth={1} />
+</Base>

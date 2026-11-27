@@ -1,0 +1,29 @@
+---
+// The system: its roles, its conditions (the models, engine, GPU and datasets every prediction is made against).
+import Base from "../../layouts/Base.astro";
+import EntityHead from "../../components/EntityHead.astro";
+import ExtLink from "../../components/ExtLink.astro";
+import Mentions from "../../components/Mentions.astro";
+import References from "../../components/References.astro";
+import { getSite } from "../../lib/site.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("system").map((x) => ({ params: { name: x.slug }, props: { id: x.id } }));
+}
+const site = await getSite();
+const s = site.entities.get(Astro.props.id);
+const members = site.ins(s, "in-system");
+const links = s.doc?.metadata?.links || [];
+---
+<Base site={site} title={s.name} depth={1}>
+<EntityHead ent={s} eyebrow="System" crumbs={[["../roles.html", "Roles"]]}>
+  {links.length > 0 && <p class="small">{links.map((l) => <ExtLink url={l.url} text={l.title || l.url} />)}</p>}
+</EntityHead>
+<div class="cols">
+<section class="panel" aria-labelledby="r-h"><h2 id="r-h">Roles</h2><ul class="plain">{members.filter((m) => m.type === "role").map((m) => <li><a class="mono" href={`../${m.url}`}>{m.name}</a> <span class="muted small">{m.summary}</span></li>)}</ul></section>
+<section class="panel" aria-labelledby="c-h"><h2 id="c-h">Conditions</h2><ul class="plain">{members.filter((m) => m.type === "resource").map((m) => <li><span class="tag">{m.kind}</span> <a href={`../${m.url}`}>{m.title}</a></li>)}</ul></section>
+</div>
+<Mentions site={site} ent={s} depth={1} />
+<References ent={s} depth={1} />
+</Base>

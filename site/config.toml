@@ -1,4 +1,4 @@
-# What site/build.py reads. Paths are relative to the repository root.
+# What the site reads (site/src/lib/data.mjs). Paths are relative to the repository root.
 title = "Morphogen research"
 # Where steering issues go, and where claim files are linked on GitHub.
 repo = "OpenReplicant/Morphogen"

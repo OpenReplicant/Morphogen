@@ -1,0 +1,11 @@
+---
+import { claimButtons } from "../lib/steer.mjs";
+const { site, c } = Astro.props;
+const btns = claimButtons(site, c);
+const labels = [...new Set(["prioritise", "reject", "dispute"].flatMap((k) => site.labels[k] || []))].sort().join(", ");
+---
+{btns.length > 0 && <section class="steer" aria-labelledby="steer-h">
+  <h2 id="steer-h">Steer the agent</h2>
+  <p>Each button opens a new GitHub issue, filled in, for you to edit and submit. The agent reads issues labelled {labels}.</p>
+  <p class="actions">{btns.map(([action, url, text]) => <a class={action === "prioritise" ? "btn" : "btn ghost"} href={url} rel="noopener noreferrer">{text}</a>)}</p>
+</section>}

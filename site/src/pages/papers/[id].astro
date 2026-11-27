@@ -1,0 +1,43 @@
+---
+// One paper (or other outside source): its claims with their status here, the options and roles they bear on,
+// what the agent saw of it, and every reference to and from it.
+import Base from "../../layouts/Base.astro";
+import ClaimList from "../../components/ClaimList.astro";
+import EntityHead from "../../components/EntityHead.astro";
+import ExtLink from "../../components/ExtLink.astro";
+import Mentions from "../../components/Mentions.astro";
+import References from "../../components/References.astro";
+import ResultsTable from "../../components/ResultsTable.astro";
+import StatusCounts from "../../components/StatusCounts.astro";
+import { getSite } from "../../lib/site.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("paper").map((x) => ({ params: { id: x.slug }, props: { id: x.id } }));
+}
+const site = await getSite();
+const p = site.entities.get(Astro.props.id);
+const claims = site.ins(p, "from");
+const options = [...new Set(claims.flatMap((c) => site.outs(c, "about")))];
+const roles = [...new Set(claims.flatMap((c) => site.outs(c, "role")))];
+const rows = site.results(claims);
+const src = p.source || {};
+const seen = p.seen;
+---
+<Base site={site} title={p.title} depth={1}>
+<EntityHead ent={p} eyebrow={`Paper · ${src.kind || "source"}`} crumbs={[["../search.html#paper", "Papers"]]}>
+  <p class="small"><span class="mono">{[src.id, src.version && `version ${src.version}`].filter(Boolean).join(" · ")}</span> · <ExtLink url={src.url} text="read it" />{seen?.published && <> · published {seen.published}</>}{seen?.category && <> · {seen.category}</>}{seen?.seen && <> · seen by the agent {seen.seen}</>}</p>
+  <p><StatusCounts site={site} claims={claims} /></p>
+</EntityHead>
+<div class="cols">
+<section class="panel" aria-labelledby="o-h"><h2 id="o-h">Options and roles</h2>
+  <p class="f-lab">Options</p><ul class="plain">{options.map((o) => <li><a class="mono" href={`../${o.url}`}>{o.name}</a></li>)}</ul>
+  <p class="f-lab">Roles</p><ul class="plain">{roles.map((r) => <li><a class="mono" href={`../${r.url}`}>{r.name}</a></li>)}</ul>
+</section>
+{seen?.abstract && <section class="panel" aria-labelledby="ab-h"><h2 id="ab-h">Abstract</h2><p class="small">{seen.abstract}</p></section>}
+</div>
+<section class="panel" aria-labelledby="c-h"><h2 id="c-h">Its claims ({claims.length})</h2><ClaimList site={site} claims={claims} depth={1} /></section>
+{rows.length > 0 && <section class="panel" aria-labelledby="t-h"><h2 id="t-h">Tested on</h2><ResultsTable site={site} rows={rows} depth={1} showClaim /></section>}
+<Mentions site={site} ent={p} depth={1} />
+<References ent={p} depth={1} />
+</Base>

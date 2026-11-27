@@ -1,0 +1,10 @@
+---
+// One badge when a claim's assessments agree; when they disagree, a Mixed badge and one per configuration.
+import StatusBadge from "./StatusBadge.astro";
+const { site, c } = Astro.props;
+const many = !c.ours && site.statuses(c).length > 1;
+---
+{many ? <><StatusBadge status="mixed" />{site.assessments(c).map((a) => {
+  const label = site.configLabel(a);
+  return <span class="cfg"><StatusBadge status={a.status} />{label && <> <span class="small">{label}</span></>}</span>;
+})}</> : <StatusBadge status={site.status(c)} />}

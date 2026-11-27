@@ -648,7 +648,7 @@ def catalog(p: Project, draft_path: Path, cache: Path, by: str, http: Http | Non
 
 LABELS = {"research:prioritise": "prioritise", "research:prioritize": "prioritise", "research:reject": "reject",
           "research:question": "question"}
-# The `research-action:` line the claim site (site/build.py, PR #108) writes into every issue body: the primary signal,
+# The `research-action:` line the claim site (site/src/lib/steer.mjs; PR #108 first) writes into every issue body: the primary signal,
 # since GitHub drops a prefilled link's labels for anyone without triage access.
 ACTIONS = {"prioritise", "reject", "dispute", "question", "propose-role", "propose-option"}
 TOPICAL = {"question", "propose-role", "propose-option"}   # these become a watch topic waiting for terms

@@ -1,0 +1,22 @@
+---
+// A Component that is neither a role nor an option.
+import Base from "../../layouts/Base.astro";
+import EntityHead from "../../components/EntityHead.astro";
+import Evidence from "../../components/Evidence.astro";
+import Mentions from "../../components/Mentions.astro";
+import References from "../../components/References.astro";
+import { getSite } from "../../lib/site.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("component").map((x) => ({ params: { name: x.slug }, props: { id: x.id } }));
+}
+const site = await getSite();
+const x = site.entities.get(Astro.props.id);
+---
+<Base site={site} title={x.name} depth={1}>
+<EntityHead ent={x} eyebrow={`Component · ${x.spec?.type || ""}`} crumbs={[["../search.html", "Everything"]]} />
+<Evidence ent={x} />
+<Mentions site={site} ent={x} depth={1} />
+<References ent={x} depth={1} />
+</Base>

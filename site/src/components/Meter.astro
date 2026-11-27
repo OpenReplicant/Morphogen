@@ -1,0 +1,7 @@
+---
+// The transfer probability as a bar, with the number beside it (never the bar alone).
+const { p, label = true } = Astro.props;
+const v = Number(p);
+const pct = (Math.max(0, Math.min(1, v)) * 100).toFixed(1);
+---
+<span class="meter-wrap" title="Predicted probability the finding holds here"><svg class="meter" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true" focusable="false"><rect class="meter-track" x="0" y="0" width="100" height="8" rx="4"/><rect class="meter-fill" x="0" y="0" width={pct} height="8" rx="4"/></svg>{label && <span class="meter-num">p&nbsp;{v.toFixed(2)}</span>}</span>
