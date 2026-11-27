@@ -1,0 +1,76 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e17b-ladder-fresh-cases
+  description: >-
+    On 150 fresh TabMWP cases (301 to 450), E-17's ladder answered 74.0% cheaply but accuracy fell to 94.0% against Inkling alone's 99.3%, -5.3 points [-9.3, -2.0].
+spec:
+  about: component:default/handler-ladder
+  role: component:default/intent-handler
+  source:
+    kind: trial
+    title: "E-17b: what E-17's runner learned, on cases it has never seen"
+    id: E-17b
+    url: https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/docs/experiments.md
+    version: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    repository: OpenReplicant/MetaSoar
+    commit: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    path: docs/experiments.md
+    location: docs/experiments.md, row E-17b
+    read: the row in full, and trials/handler-ladder/README.md
+    quote: >-
+      templates and handlers answered 74.0% of cases 301 to 450 (chunks of 50: 68%, 70%, 84%), Inkling calls 0.28 a case in the last chunk and Inkling seconds 6.7 a case (17.6 in E-17's last chunk); but accuracy fell to 94.0% against Inkling alone's 99.3%, -5.3 points [-9.3, -2.0].
+    quote_location: docs/experiments.md, row E-17b, the outcome
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      Frozen at the end of E-17 and run on the stream's next 150 cases, never seen while it was tuned, the ladder
+      answered 74.0% of them with templates and handlers, but at 94.0% accuracy against the large model alone's
+      99.3%: -5.3 points [-9.3, -2.0]. The interval's upper end is -2.0 exactly, so by the registered rule the
+      falsifier is not met; the loss is real by every other reading.
+    metric: accuracy
+    better: higher
+    unit: percent
+    value: 94.0
+    where: cases 301 to 450 of the stream
+    baseline: {name: Inkling alone on the same cases, value: 99.3}
+    finding: worse
+    effect_size: {value: -5.3, kind: absolute, note: "percentage points, paired; 95% interval [-9.3, -2.0]"}
+    significance: the interval's upper end is -2.0 exactly, not below it (the row's words)
+    runs: 1
+    cases: 150
+    reporting: ours
+    also:
+      - {metric: share of cases answered by templates and handlers, better: higher, unit: percent, value: 74.0, where: "chunks of 50: 68%, 70%, 84%"}
+      - {metric: Inkling calls a case, better: lower, value: 0.28, where: the last chunk}
+    note: >-
+      Of 9 errors, 8 were promoted handlers and 1 a template: a handler promoted on 3 of 3 examples met table shapes
+      no example showed (stem-and-leaf), and the answer check let non-answers through ("None", a prompt placeholder).
+      Thin promotion evidence and a weak check, by the row's reading.
+  conditions:
+    models:
+      - name: Inkling 2 Mini
+        ref: resource:default/inkling-2-mini-q4-k
+        size: about 26B in all (a mixture of experts)
+        precision: Q4_K
+        tuned: untuned
+        capability: the large model; it solves what no cheaper rung holds, and its answers are the only labels
+      - name: LFM3 1.7B
+        ref: resource:default/lfm3-1.7b-q6-k
+        size: 1.7B
+        precision: Q6_K
+        tuned: untuned
+        capability: the small model; names intents (E-17 to E-17c) and follows plan templates
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: TabMWP
+      version: 5a1a522
+      split: test1k, positions 301 to 450 of the same fixed order, in chunks of 50; never seen while the runner was tuned
+      ref: resource:default/tabmwp-5a1a522
+    method: >-
+      An intent elaborator names each case's intent (an exact key); each case goes to the cheapest rung that holds for its intent (a Python handler over the table, a plan template the small model follows, the large model); after enough of one intent's cases the large model writes a template and a handler, each promoted only on agreement with the large model's earlier answers on that intent, and falling back to the large model when it raises or its answer fails a check. The runner frozen at MetaSoar commit 98eee4e, continuing from E-17's state and still learning online.
+    thinking: off (Inkling reasoning_effort none; LFM3 enable_thinking false)
+    hardware: {name: NVIDIA GTX 1070, memory: 8 GB, ref: resource:default/gtx-1070}
+    labels: none; promotion is on agreement with the large model's own answers, and only the summary reads gold
+    unstated: [TabMWP is generated from templates, so intents recur by construction; the result is for the mechanism, not real work]

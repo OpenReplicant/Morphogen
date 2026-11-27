@@ -1,0 +1,79 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e04a-inkling-pooled-accuracy
+  description: >-
+    Inkling 2 Mini read untuned, debiased and scaled: pooled accuracy 0.810 against Jev 1.13's 0.843 on the same 779
+    JevBench cases, 3.3 points below (paired interval [-6.5, -0.3]); E-04a's falsifier not met.
+spec:
+  about: component:default/likelihood-readout
+  role: component:default/decision-backend
+  source:
+    kind: trial
+    title: "E-04a: local models read as decision models, against Jev"
+    id: E-04a
+    url: https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/trials/decision-readout/README.md
+    version: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    repository: OpenReplicant/MetaSoar
+    commit: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    path: trials/decision-readout/README.md
+    location: Results so far, the Inkling 2 Mini table and the bullets after it
+    read: in full
+    quote: >-
+      **E-04a's falsifier is not met for Inkling.** It is 3.3 points below Jev (paired, families resampled: 95% interval
+      [-6.5, -0.3] points), so the gap is real but small. Its coverage at 5% risk is 0.51 against Jev's 0.64.
+    quote_location: Results so far, the first bullet after the Inkling 2 Mini table
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      Inkling 2 Mini (a mixture of experts of about 26B parameters), read by its first token, debiased over both option
+      orders and scaled with one temperature per slice, is 3.3 points below Jev 1.13 in pooled accuracy on the same
+      cases: a real gap, but within E-04a's registered 10 points. Its coverage at 5% risk is 0.51 against Jev's 0.64,
+      above half of Jev's.
+    metric: accuracy
+    better: higher
+    value: 0.810
+    interval: {low: 0.775, high: 0.843, level: 0.95, method: resampling families}
+    where: all ten slices pooled, 100 families per slice, the eval half
+    baseline: {name: Jev 1.13, value: 0.843, interval: {low: 0.813, high: 0.873, level: 0.95, method: resampling families}}
+    finding: worse
+    effect_size: {value: -3.3, kind: absolute, note: "percentage points, paired, families resampled; 95% interval [-6.5, -0.3]"}
+    significance: "the gap is real but small (the trial's words)"
+    runs: 1
+    cases: 779
+    reporting: ours
+    also:
+      - {metric: accuracy, better: higher, value: 0.787, interval: {low: 0.752, high: 0.820, level: 0.95, method: resampling families}, where: Inkling raw (the case's order)}
+      - {metric: coverage at 5% risk, better: higher, value: 0.51, where: Inkling debiased and scaled, baseline: {name: Jev 1.13, value: 0.64}}
+      - {metric: calibration error, better: lower, value: 0.051, where: Inkling debiased and scaled, baseline: {name: Jev 1.13, value: 0.032}}
+      - {metric: accuracy, better: higher, value: 0.633, where: "d1-2B debiased, on the same 779 cases"}
+      - {metric: accuracy, better: higher, value: 0.561, where: "LFM3 1.7B debiased, on the same 779 cases"}
+    note: >-
+      From the same README: the table row "| Inkling, debiased and scaled | 0.810 [0.775, 0.843] | 0.283 | 0.051 | 0.51
+      (0.043) |", and the table "On the same 779 held-out cases as Inkling's sample" (d1-2B 0.633, LFM3 0.561, Jev
+      0.843). The order-flip rate is 0.15 against LFM3's 0.33; a read takes 2.3 s (median) against LFM3's 0.11 s.
+      The sample is 100 families per slice, half of them held out.
+  conditions:
+    models:
+      - name: Inkling 2 Mini
+        ref: resource:default/inkling-2-mini-q4-k
+        size: about 26B in all (a mixture of experts)
+        precision: Q4_K
+        tuned: untuned
+        capability: the owner notes it is strong for its size
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: JevBench (Leanmcp)
+      version: ed50fe0
+      split: the eval half of families, by a hash; each temperature and 5%-risk threshold chosen on the fit half
+      size: 1,400 cases (100 families per slice), 779 of them in the eval half; ten slices
+      ref: resource:default/jevbench-ed50fe0
+    method: >-
+      As for LFM3 (e04a-lfm3-pooled-accuracy): the options labelled A, B, C..., `Answer:` prefilled, one token and its
+      top 50 log-probabilities, the option letters renormalised, two reads per case (options in order and reversed);
+      debiased is the mean of both orders, scaled adds one temperature per slice.
+    thinking: off (reasoning_effort none)
+    hardware: {name: NVIDIA GTX 1070, memory: 8 GB, ref: resource:default/gtx-1070}
+    reference: Jev 1.13, djev 0.1 and Laya 421M, their own probabilities as shipped with the cases
+    runs_note: one read per case and order; the intervals are 95% from resampling families

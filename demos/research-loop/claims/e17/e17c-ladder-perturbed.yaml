@@ -1,0 +1,77 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e17c-ladder-perturbed
+  description: >-
+    On E-17b's cheaply answered cases, shuffling rows, permuting labels or rewording the question did not change the ladder's accuracy (+0.0 points each).
+spec:
+  about: component:default/handler-ladder
+  role: component:default/intent-handler
+  source:
+    kind: trial
+    title: "E-17c: the ladder's cheap answers under changes that keep the answer"
+    id: E-17c
+    url: https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/docs/experiments.md
+    version: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    repository: OpenReplicant/MetaSoar
+    commit: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    path: docs/experiments.md
+    location: docs/experiments.md, row E-17c
+    read: the row in full, and trials/handler-ladder/README.md
+    quote: >-
+      Rows shuffled: 111 variants, 91.9% against 91.9% on the originals, +0.0 [-3.6, +3.6], the intent unchanged on 96%, still a template or handler on 96%; labels permuted: 37 variants, +0.0 [+0.0, +0.0], intent unchanged on 97%; reworded: 72 variants, +0.0 [+0.0, +0.0], intent unchanged on 89%, still cheap on 93%.
+    quote_location: docs/experiments.md, row E-17c, the outcome
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      Read-only (nothing learned), the ladder as it stood after E-17b kept its accuracy on variants of the cases a
+      template or handler had answered: rows shuffled, 91.9% against 91.9% on the originals, +0.0 points [-3.6,
+      +3.6]; labels permuted and the question reworded, +0.0 [+0.0, +0.0] each. The handlers did not learn their
+      examples' surface; E-17b's errors came from shapes and non-answers a perturbation of seen shapes cannot find.
+    metric: accuracy
+    better: higher
+    unit: percent
+    value: 91.9
+    where: the rows-shuffled variants
+    baseline: {name: the same cases unperturbed, value: 91.9}
+    finding: matches
+    effect_size: {value: 0.0, kind: absolute, note: "percentage points, paired; 95% bootstrap interval [-3.6, +3.6]"}
+    runs: 1
+    cases: 111
+    reporting: ours
+    also:
+      - {metric: accuracy change, unit: percentage points, value: 0.0, where: "labels permuted, 37 variants; interval [+0.0, +0.0]"}
+      - {metric: accuracy change, unit: percentage points, value: 0.0, where: "question reworded by LFM3, 72 variants; interval [+0.0, +0.0]"}
+      - {metric: intent unchanged, unit: percent, value: 96, where: rows shuffled}
+      - {metric: intent unchanged, unit: percent, value: 89, where: reworded}
+    note: >-
+      The label perturbation was fixed after its first run and run again: the first run (-8.6 [-15.7, -1.4] on 70
+      variants) had 8 errors, all the perturbation's own (it changed what the question meant). The rerun's 37
+      variants are the result; the first run is kept in MetaSoar's results-e17b/perturb-v1.jsonl.
+  conditions:
+    models:
+      - name: Inkling 2 Mini
+        ref: resource:default/inkling-2-mini-q4-k
+        size: about 26B in all (a mixture of experts)
+        precision: Q4_K
+        tuned: untuned
+        capability: the large model; it solves what no cheaper rung holds, and its answers are the only labels
+      - name: LFM3 1.7B
+        ref: resource:default/lfm3-1.7b-q6-k
+        size: 1.7B
+        precision: Q6_K
+        tuned: untuned
+        capability: the small model; names intents (E-17 to E-17c) and follows plan templates
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: TabMWP
+      version: 5a1a522
+      split: the cases among E-17b's 150 that a template or handler answered, three variants each
+      ref: resource:default/tabmwp-5a1a522
+    method: >-
+      An intent elaborator names each case's intent (an exact key); each case goes to the cheapest rung that holds for its intent (a Python handler over the table, a plan template the small model follows, the large model); after enough of one intent's cases the large model writes a template and a handler, each promoted only on agreement with the large model's earlier answers on that intent, and falling back to the large model when it raises or its answer fails a check. Here read-only, from E-17b's final state (trials/handler-ladder/perturb.py).
+    thinking: off (Inkling reasoning_effort none; LFM3 enable_thinking false)
+    hardware: {name: NVIDIA GTX 1070, memory: 8 GB, ref: resource:default/gtx-1070}
+    labels: none; promotion is on agreement with the large model's own answers, and only the summary reads gold
+    unstated: [TabMWP is generated from templates, so intents recur by construction; the result is for the mechanism, not real work]

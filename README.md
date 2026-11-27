@@ -361,9 +361,9 @@ directory, so it can only answer. The cell's `description` is its objective.
 | Evidence | `evidence.py` | an append-only, hash-chained log of measured and stated claims, in git's own directory |
 | Observers | `observers.py` | `command` (a command after each run) and `otel` (an OpenTelemetry receiver in the judge that adds up each run's telemetry, such as Claude Code's cost, tokens and tool results) |
 | Optimizers | `optimize.py` | a catalog behind one contract: grid, random, hill-climb (with `restarts`) and simulated annealing (`anneal`), built in; Optuna and GEPA adapters (optional extras); and the `selector`, whose bandit policy (primed by earlier verdicts, with a stagnation signal) chooses which proposes next. A model-based policy is planned; packages add more through the `morphogen.optimizers` entry point. `tune` checks, writes and probes each proposal and judges the best |
-| Interfaces | `cli.py`, `mcp_server.py`, `ui.py` | the command line, an MCP server with 11 tools, and a local read-only web UI |
+| Interfaces | `cli.py`, `mcp_server.py`, `ui.py` | the command line, an MCP server with 13 tools, and a local read-only web UI |
 | Plugin | `.claude-plugin/`, `skills/`, `agents/` | the Claude Code plugin around the MCP server; the skills (`map`, `catalog`, `research`, `morphogen`) are plain Agent Skills any harness can load |
-| Schemas | `schemas/` | the evidence record (v1); the `spec.morphogen` fields of the catalog entities (draft, phase 1; not read yet) |
+| Schemas | `schemas/` | the evidence record (v1); the `spec.morphogen` fields of the catalog entities the code loads (v1; a test keeps them equal); the research loop's evidence claim (v1, draft) |
 
 ### The system guard
 
@@ -471,6 +471,14 @@ description; without one, the change is judged as one that claims no improvement
 job signs the verdict (Sigstore, keyless by default), posts `morphogen/verdict` on the head commit and keeps the
 verdict and the run's evidence records as artifacts; a judge that fails is posted as a stop, never a pass.
 
+**On GitHub, only the container keeps the answers from the candidate.** The `judge` job clones the private material
+into the runner's temporary directory, on the same virtual machine where the candidate's commands run. A candidate
+cannot read it because its container mounts only the candidate's tree, read-only, with no network. Nothing else
+stands between them: the containers run as the image's user (root, for `python:3.12-slim`) under the runner's Docker
+daemon, with Docker's default capabilities, so a container escape would reach the answers and anything else on the
+runner. The rebuild-8 judge that the dogfood caller still pins (`b921c9b`) ran candidates in a job that never had
+the answers on disk. The trade-off is open (see "Limits").
+
 ## What the judge guarantees
 
 - **The rules are the base's.** The catalog files and everything a cell's `change` does not name come
@@ -543,6 +551,10 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
   insist with `requires: [network_isolated, private_paths_hidden, ...]`. Containers use
   `sandbox_image` (default `python:3.12-slim`), so a cell's dependencies must be in that image.
 - **The scorer runs without a container**: it is the judge's code from the base commit.
+- **On GitHub, the held-out answers share the runner with candidate code.** Container isolation (no network, only
+  the candidate's tree mounted) is the only thing between them; the containers are not hardened further (no
+  `--cap-drop`, no `no-new-privileges`, root inside). Keep cases the candidate must never see on a judge it cannot
+  reach ("A judge the author cannot reach"), or accept that a container escape on the runner would expose them.
 - **Settings are read statically.** Code that changes a setting at run time is the reviewer's to
   catch. TOML keys can be read but not yet written by `tune`.
 - **Default deny is as narrow as `change`.** `change: "**"` would open everything but the project
@@ -566,6 +578,6 @@ Details are from each project's own docs or source, read on 2026-11-04 and 2026-
     tests/           its tests and red team; fixture projects in tests/fixture*.py
     .claude-plugin/  the plugin and marketplace manifests
     skills/, agents/ the skills (Agent Skills format) and Claude Code agents
-    schemas/         published JSON Schemas (evidence record; spec.morphogen, a draft)
+    schemas/         published JSON Schemas (evidence record, spec.morphogen, evidence claim)
     demos/           projects Morphogen can build and drive (the core never imports from them)
     BRIEF.md         the design;  PLAN.md  the way there

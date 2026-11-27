@@ -1,0 +1,80 @@
+apiVersion: morphogen.dev/v1alpha1
+kind: EvidenceClaim
+metadata:
+  name: e17d-ladder-strict-promotion
+  description: >-
+    With stricter promotion, a shape gate and a stronger check, the ladder made no errors on cases 451 to 600 but answered only 8.7% cheaply, all by templates; E-17d's falsifier met on coverage.
+spec:
+  about: component:default/handler-ladder
+  role: component:default/intent-handler
+  source:
+    kind: trial
+    title: "E-17d: E-17b's three fixes, on fresh cases"
+    id: E-17d
+    url: https://github.com/OpenReplicant/MetaSoar/blob/22feddc6fa29682e94c2f62fe25da93b559980ab/docs/experiments.md
+    version: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    repository: OpenReplicant/MetaSoar
+    commit: 22feddc6fa29682e94c2f62fe25da93b559980ab
+    path: docs/experiments.md
+    location: docs/experiments.md, row E-17d
+    read: the row in full, and trials/handler-ladder/README.md
+    quote: >-
+      templates and handlers answered 8.7% of cases 451 to 600 (chunks of 50: 6%, 10%, 10%), all templates; no handler answered a case. Accuracy was 100.0% against Inkling alone's 100.0% (0 errors; E-17b had 9), so the fixes removed the errors and with them nearly all the cheap answers.
+    quote_location: docs/experiments.md, row E-17d, the outcome
+    quote_status: checked
+    quote_note: Matched against the file at the commit by check.py --metasoar (whitespace collapsed).
+  claim:
+    statement: >-
+      With promotion at a 95% Wilson lower bound of 0.70 (9 of 9 at the least), a promoted candidate answering only
+      table shapes it has agreed on, a check that refuses non-answers, and intents matched by d1-2B among the nearest
+      known ones, the ladder made no errors on cases 451 to 600 (100.0% against the large model alone's 100.0%), but
+      templates and handlers answered only 8.7% of them, all templates. The fixes removed the errors and nearly all
+      the cheap answers; E-17d's falsifier is met on coverage.
+    metric: share of cases answered by templates and handlers
+    better: higher
+    unit: percent
+    value: 8.7
+    where: "cases 451 to 600; chunks of 50: 6%, 10%, 10%"
+    baseline: {name: "the falsifier's floor", value: 30}
+    finding: worse
+    runs: 1
+    cases: 150
+    reporting: ours
+    also:
+      - {metric: accuracy, better: higher, unit: percent, value: 100.0, baseline: {name: Inkling alone on the same cases, value: 100.0}}
+      - {metric: Inkling calls a case, better: lower, value: 1.08, where: "more than Inkling alone"}
+    note: >-
+      Why, by the row: re-judging set every handler back to shadow, and 9 of 9 is slow to reach when 150 cases spread
+      over 86 intents; and intents fragmented (58 of the 150 cases fell in newly split intents, each starting with no
+      labels). Next in MetaSoar: keep the check and the shape gate, promote sooner or pool labels over coarse intents
+      (E-18), merge rather than split on disagreement.
+  conditions:
+    models:
+      - name: Inkling 2 Mini
+        ref: resource:default/inkling-2-mini-q4-k
+        size: about 26B in all (a mixture of experts)
+        precision: Q4_K
+        tuned: untuned
+        capability: the large model; it solves what no cheaper rung holds, and its answers are the only labels
+      - name: LFM3 1.7B
+        ref: resource:default/lfm3-1.7b-q6-k
+        size: 1.7B
+        precision: Q6_K
+        tuned: untuned
+        capability: the small model; names intents (E-17 to E-17c) and follows plan templates
+      - name: d1-2B
+        size: 2B
+        tuned: Liquid's decision model, as shipped
+        capability: chooses among the 6 nearest known intents (by Qwen3-Embedding-0.6B), on the CPU
+    engine: {name: llama.cpp server, version: "b12627 (Substrate image server-cuda12-b12627)", ref: resource:default/llama-cpp-b12627}
+    dataset:
+      name: TabMWP
+      version: 5a1a522
+      split: test1k, positions 451 to 600 of the same fixed order, in chunks of 50; never seen
+      ref: resource:default/tabmwp-5a1a522
+    method: >-
+      An intent elaborator names each case's intent (an exact key); each case goes to the cheapest rung that holds for its intent (a Python handler over the table, a plan template the small model follows, the large model); after enough of one intent's cases the large model writes a template and a handler, each promoted only on agreement with the large model's earlier answers on that intent, and falling back to the large model when it raises or its answer fails a check. With trials/handler-ladder/stream_v2.py's rules, continuing from E-17b's state, re-judged at the start.
+    thinking: off (Inkling reasoning_effort none; LFM3 enable_thinking false)
+    hardware: {name: NVIDIA GTX 1070 (d1-2B and the embedder on the CPU), memory: 8 GB, ref: resource:default/gtx-1070}
+    labels: none; promotion is on agreement with the large model's own answers, and only the summary reads gold
+    unstated: [TabMWP is generated from templates, so intents recur by construction; the result is for the mechanism, not real work]
