@@ -1,0 +1,6 @@
+---
+// Entities as a comma-separated run of links, or the words `empty` when there are none.
+import { link } from "../lib/text.mjs";
+const { items, empty = "none named" } = Astro.props;
+---
+{items.length ? items.map((x, i) => <>{i > 0 && ", "}<a class="mono" href={link(x.url)}>{x.title}</a></>) : <span class="muted">{empty}</span>}

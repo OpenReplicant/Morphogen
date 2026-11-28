@@ -19,8 +19,8 @@ docs/restart/LESSONS.md.
 - `tests/`: the core's tests and red team; fixture projects in `tests/fixture*.py`, the timed
   sample's files in `tests/fixtures`.
 - `demos/`: projects Morphogen can build and drive. The core never imports from them.
-- `site/`: the research site, static HTML built with Astro (`site/src/`) from the evidence claims, the map and the
-  options named in a config file (`site/README.md`): `site/config.toml` for the demo, anyone's own through
+- `site/`: the Morphogen site (map, catalog, research, optimise), static HTML built with Astro (`site/src/`) from the evidence claims, the map, the
+  options and the judge's verdict log named in a config file (`site/README.md`): `site/config.toml` for the demo, anyone's own through
   `morphogen site build`. `.github/workflows/site.yml` deploys the demo to Pages when started by hand.
 
 ## Rules

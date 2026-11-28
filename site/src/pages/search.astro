@@ -6,7 +6,7 @@ import { TYPES } from "../lib/data.mjs";
 import { getSite } from "../lib/site.mjs";
 import { truncate, up, link } from "../lib/text.mjs";
 const site = await getSite();
-const order = ["claim", "paper", "trial", "resource", "option", "role", "component", "system", "page"];
+const order = ["claim", "paper", "trial", "resource", "option", "role", "component", "api", "group", "system", "page"];
 const groups = order.map((t) => [t, [...site.of(t)].sort((a, b) => a.title.localeCompare(b.title))]).filter(([, l]) => l.length);
 ---
 <Base site={site} title="Search" current="search.html" description="Search every claim, paper, trial, model, option, role and note.">

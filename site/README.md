@@ -1,9 +1,12 @@
-# The research site
+# The Morphogen site
 
-A static site for the research loop ([docs/research-loop.md](../docs/research-loop.md)), for any system running
-Morphogen: the claims the research agent has catalogued, their status for that system, its transfer predictions
-against outcomes, and the roles it watches for, with a page for every claim, paper, trial, model, option and role and
-the links between them. Built with [Astro](https://astro.build) 7 into plain HTML; the interactive parts use
+A static site for any system running Morphogen, covering the kit's four verbs: **map** (the system's parts, the
+interfaces they provide and consume, their owners and dependencies), **catalog** (the options for each role, side by
+side), **research** (the claims the research agent has catalogued from papers, their status for that system, its
+transfer predictions against outcomes: [docs/research-loop.md](../docs/research-loop.md)) and **optimise** (the cells
+that may change, and the judge's verdict on each change). Every page is built from files; a page whose files are
+absent leaves the header, so a research-only site is still a research-only site. There is a page for every claim,
+paper, trial, model, option, role, component, interface and owner, and the links between them. Built with [Astro](https://astro.build) 7 into plain HTML; the interactive parts use
 [Alpine.js](https://alpinejs.dev)'s CSP build, served from the site itself. No server, no database, no tracking,
 nothing loaded from another host. Everything specific to one system (its sources, name, owner, repository, labels,
 theme and navigation) comes from a config file; this folder holds only the templates.
@@ -48,6 +51,9 @@ system = "system:default/orchard"    # the System each claim's status is shown f
 [sources]
 claims = ["claims"]                          # searched recursively for EvidenceClaim files
 catalog = ["catalog-info.yaml", "catalog"]   # Backstage entity files or folders of them; a missing one is skipped
+# map = ["catalog/map.yaml"]                 # entity files for the map and for the options: the same kind of file as
+# options = ["catalog/options.yaml"]         #   `catalog`, read with it, named apart so a config says which is which
+# verdicts = "verdicts.json"                 # the judge's log (below); optional
 research = "research"                        # queue.json, watch.yaml, seen.jsonl, index.json (each optional)
 content = "site"                             # Markdown pages (optional)
 # schema = "evidence-claim.v1.json"          # default: Morphogen's schemas/evidence-claim.v1.json
@@ -65,10 +71,10 @@ css = "brand/theme.css"     # served as assets/user/theme.css, after style.css: 
 logo = "brand/logo.svg"     # .svg, .png, .webp or .jpg; in the header and as the icon
 
 [nav]
-# The header's pages, in order, from: claims, queue, predictions, roles, map, notes (shown once a note exists),
-# search; `{ page = "search", text = "Find" }` renames one. Markdown pages with `nav: N` follow. Every page is
+# The header's pages, in order, from: claims, queue, predictions, roles, map, catalog (once a role or option exists),
+# optimise (once there is a cell or a verdict), notes (once a note exists), search; `{ page = "search", text = "Find" }` renames one. Markdown pages with `nav: N` follow. Every page is
 # built either way.
-pages = ["claims", "queue", "predictions", "roles", "map", "notes"]
+pages = ["claims", "queue", "predictions", "roles", "map", "catalog", "optimise", "notes"]
 # Other links go in the same list as `{ text, href }`. An absolute http(s) URL or a path starting with `/` is written
 # as it is (a URL gets rel="noopener"); anything else is relative to the site and gets the base path from `--base`.
 # pages = ["claims", "queue", { text = "Lab", href = "https://example.org/lab" }, { text = "Home", href = "/" }]
@@ -81,7 +87,40 @@ label = "Fund this"                          # the link's text (default "Fund th
 The funding figures themselves (a bar, price, share funded, a "ready" badge and the source) come from `queue.json`
 (`research/funding.yaml`, `morphogen.research rank`): a claim whose row has no `cost_money` shows none of it.
 
-Morphogen's own demo builds from [config.toml](config.toml), which points at [demos/research-loop](../demos/research-loop).
+### The entity files
+
+The map is Backstage `catalog-info.yaml` files (and the files a `Location` in them names, read relative to the file
+that names them). The site reads `System`, `Component`, `API`, `Resource`, `Group` and `User`. A Component with
+`spec.type: role` is a role, one with `spec.lifecycle: candidate` an option for the role in its
+`spec.morphogen.fills`, any other a component; `providesApis`, `consumesApis`, `dependsOn`, `owner` and `subcomponentOf`
+become references, each shown both ways. An owner with no `Group` or `User` file still gets a page. A **cell** is a
+component (or the System) with `spec.morphogen.run` (or `tests`), read with the System's `defaults` under it; the
+System's `spec.morphogen.autonomy` says whether a pass on its lifecycle may be merged by an agent (default: a person
+reviews). An option's `spec.morphogen` fields `parameters` (a JSON Schema), `licence`, `docs.url` and `evaluation`
+fill the catalog.
+
+### The verdict log
+
+`[sources] verdicts` names a file made from the judge's evidence log, which lives in git's own directory and is not
+committed:
+
+```sh
+morphogen evidence --limit 100000 > verdicts.json     # a JSON array; JSON lines work too
+```
+
+The page shows each record with `kind: verdict`: the change proposed (commits, settings moved, files), passed or
+refused, the measures (base, candidate, gain, interval, sign test) and the reasons rebuilt from the record's outcome
+the way the judge words them, and the gate (who may merge). A verdict is listed under the cell it names (`cell`,
+`cells` or `subject.system`), and one for a cell the map lacks is listed apart. The evidence chain checks each
+record's `prev` and `hash` (SHA-256 of its canonical JSON, over the numbers as the file wrote them); an edited record
+is named. The judge's own records carry no signature or transparency-log entry; if a record has a `signature`,
+`attestation`, `transparency`, `rekor`, `log_index` or `inclusion_proof` field, it is shown as recorded and not
+checked. A file that does not exist is skipped with a warning; one that is not JSON stops the build.
+
+Morphogen's own demo builds from [config.toml](config.toml), which points at [demos/research-loop](../demos/research-loop);
+[demos/fernhill/site.toml](../demos/fernhill/site.toml) builds the made-up firm: its map, the options catalogued for
+job scheduling, and its one cell. Fernhill has no verdict log (its evidence log was never committed), so Optimise
+says so and shows none.
 
 ## Working on the templates
 
@@ -148,6 +187,9 @@ used twice stops the build), and joins them into one graph: entities, typed refe
 | option | `options/<name>.html` | a Component with `lifecycle: candidate` |
 | role | `roles/<name>.html` | a Component with `type: role` |
 | system | `systems/<name>.html` | the System |
+| component | `components/<name>.html` | any other Component |
+| api | `apis/<name>.html` | an API: who provides and consumes it, its tests |
+| group | `owners/<name>.html` | a Group or User, or a name given as an owner |
 | page | `<path>.html` | a Markdown file in `content/` |
 
 References: a claim's `about` (option), `role`, `source` (paper or trial), `conditions.*.ref` (measured on),
@@ -166,7 +208,9 @@ questions (`watch.yaml`), what has been tested and what is next in the queue.
 | `queue.html` | next to test: `queue.json`, best first, with plan, cost, score, funding (when there is a `funding.yaml`), steering, and buttons to prioritise or reject |
 | `predictions.html` | predictions waiting for a trial, and a calibration chart with the Brier score once predictions written before an outcome have one |
 | `roles.html` | what the agent watches (`watch.yaml`, `seen.jsonl`), the roles, the options for each, and this system's conditions |
-| `map.html` | the relations graph, laid out at build time (`src/lib/layout.mjs`); a static SVG of links, with highlighting and filters in Alpine |
+| `map.html` | the system's graph (parts, interfaces, dependencies; only when the map has any), a table of every part with its owner, interfaces, dependencies and dependents, and the research's relations graph; static SVGs laid out at build time (`src/lib/layout.mjs`), with highlighting and filters in Alpine |
+| `catalog.html` | per role: a table comparing its options (interfaces, parameters, licence, docs, measurements, claims), then each option's parameters, measurements and the trade-offs its claims report |
+| `optimise.html` | the cells (what may change, the score, what the judge last measured, autonomy), the verdicts on each, and the evidence chain |
 | `search.html` | everything by kind; with JavaScript, a search over `data/search.json` (the header's box lands here) |
 | `notes.html` | notes and announcements from `content/` |
 | `data/claims.json`, `data/graph.json`, `data/search.json` | the records, the whole graph (with the calibration pairs and Brier score), the search index |

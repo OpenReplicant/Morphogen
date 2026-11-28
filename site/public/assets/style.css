@@ -351,3 +351,29 @@ details ul { margin-top: 8px; font-size: 0.88rem; }
 .funding { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 0.9rem; margin: 6px 0; }
 .fund-bar { width: 120px; }
 .tag-ready { background: var(--good-bg); color: var(--good); border-color: currentColor; font-weight: 650; }
+
+/* The system's map, the catalog and the Optimise page */
+.sec { font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.85rem; color: var(--accent-2); margin: 24px 0 6px; }
+.tbl.wrap td, .tbl.wrap td:last-child { white-space: normal; }
+.tbl.wrap th[scope=row] { text-align: left; font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 0.92rem; color: var(--text); padding: 8px 8px 8px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.graph .t-api rect { stroke: var(--pred); stroke-dasharray: 4 2; }
+.graph .t-group rect { stroke: var(--muted); }
+.graph .t-component rect, .graph .t-option rect { stroke: var(--text); stroke-opacity: 0.5; }
+.graph .node.cell rect { stroke: var(--good); stroke-width: 2; fill: var(--good-bg); }
+.graph .edge.r-provides { stroke: var(--pred); stroke-opacity: 0.55; }
+.graph .edge.r-consumes { stroke: var(--accent-2); stroke-opacity: 0.45; stroke-dasharray: 5 3; }
+.graph .edge.r-depends-on { stroke: var(--warn); stroke-opacity: 0.5; }
+.optdetail { display: grid; gap: 10px; }
+.optdetail .opt { list-style: none; }
+.optdetail code, .cell-card code, .verdict code { font-family: var(--mono); font-size: 0.88em; background: var(--panel-2); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
+.res-sum { display: block; margin-top: 4px; }
+.finding-better { color: var(--good); } .finding-worse { color: var(--bad); }
+.verdicts { display: grid; gap: 12px; }
+.verdict { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; background: var(--bg); list-style: none; }
+.verdict:target { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vhead { margin: 0 0 6px; }
+.statement-small { margin: 0 0 8px; color: var(--muted); font-size: 0.92rem; }
+.breaks { overflow-wrap: anywhere; word-break: break-all; }
+.verbs { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); margin: 16px 0 0; padding: 0; list-style: none; }
+.verbs .card { padding: 12px 14px; }
+.verbs h3 { margin: 0 0 4px; }

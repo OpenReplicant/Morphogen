@@ -1,37 +1,62 @@
 ---
 import { link } from "../lib/text.mjs";
-// The relations graph: every claim between the papers and trials it comes from (and the models it was tested on)
-// and the options and roles it bears on. A static SVG of links, laid out at build time (src/lib/layout.mjs);
+// The map: the system as its files describe it (its parts, the interfaces between them, who owns what, what each
+// depends on), and the relations graph of the research (every claim between the papers and trials it comes from and
+// the options and roles it bears on). Both are static SVGs of links, laid out at build time (src/lib/layout.mjs);
 // Alpine's `graph` component (assets/site.js) highlights a node's neighbours and filters by kind.
 import Base from "../layouts/Base.astro";
 import { TYPES } from "../lib/data.mjs";
-import { layout } from "../lib/layout.mjs";
+import { SYSTEM_COLUMNS, layout, systemEdges } from "../lib/layout.mjs";
 import { getSite } from "../lib/site.mjs";
 const site = await getSite();
-const g = layout(site);
-const types = [...new Set(g.nodes.map((n) => n.ent.type))];
-const cls = (n) => `node t-${n.ent.type}${n.ent.type === "claim" ? ` s-${site.status(n.ent)}` : ""}`;
+const research = site.claims.length > 0;
+const sys = site.hasSystemMap ? layout(site, { columns: SYSTEM_COLUMNS, edgesOf: systemEdges, connectedOnly: true }) : null;
+const graphs = [
+  sys && { id: "system", g: sys, title: "The system", heading: "Parts, interfaces and dependencies",
+    note: "Each part sits between the interfaces it consumes and those it provides, with what it depends on to the right. Point at a node to see its neighbours; open it for its page." },
+  research && { id: "research", g: layout(site), title: "The research", heading: "How the research links",
+    note: "Each claim sits between where it came from (a paper or one of our trials, and the models it was tested on) and what it bears on (an option, and the role that option could fill). Models link only to claims with a result on them; every page lists the rest." },
+].filter(Boolean);
+const cls = (n) => `node t-${n.ent.type}${n.ent.type === "claim" ? ` s-${site.status(n.ent)}` : ""}${n.ent.type === "component" && site.cells.some((c) => c.ent === n.ent) ? " cell" : ""}`;
+const kinds = ["system", "role", "component", "option", "api", "resource"];
+const rows = kinds.flatMap((t) => site.of(t)).filter((e) => e.type !== "resource" || site.hasSystemMap);
+const names = (ent, rel, end) => (end === "in" ? site.ins(ent, rel) : site.outs(ent, rel));
+const cellNames = new Set(site.cells.map((c) => c.ent.id));
 ---
-<Base site={site} title="Map" current="map.html" description="Every claim, paper, trial, model, option and role on the site, and how they link.">
+<Base site={site} title="Map" current="map.html" description="The system's parts, the interfaces between them, who owns what, and how the research links to them.">
 <section class="hero small-hero">
-  <p class="eyebrow">How it all links</p>
+  <p class="eyebrow">What it is made of</p>
   <h1>The map</h1>
-  <p class="lede">Each claim sits between where it came from (a paper or one of our trials, and the models it was tested on) and what it bears on (an option, and the role that option could fill). Point at a node to see its neighbours; open it for its page. Models link only to claims with a result on them; every page lists the rest.</p>
+  <p class="lede">{site.hasSystemMap
+    ? "The system's parts, the interfaces they provide and consume, who owns each and what it depends on, then the research that bears on them. Every entity has a page with its interfaces, owner, dependencies and dependents."
+    : "Each claim sits between where it came from and what it bears on. Point at a node to see its neighbours; open it for its page."}</p>
+  <p class="small">{site.hasCatalog && <><a href={link("catalog.html")}>The catalog</a>: the options for each role. </>}{site.hasOptimise && <><a href={link("optimise.html")}>Optimise</a>: the cells and the judge's verdicts. </>}<a href={link("index.html")}>Research</a>: the claims.</p>
 </section>
+{graphs.map((x) => <section aria-labelledby={`${x.id}-h`}>
+<h2 class="sec" id={`${x.id}-h`}>{x.heading}</h2>
+<p class="small">{x.note}</p>
 <div x-data="graph">
-<form class="filters" hidden x-bind:hidden="off" aria-label="Show kinds of entity" x-on:change="filter">
-  <fieldset class="f-row"><legend class="f-lab">Show</legend>{types.map((t) => <label class="chk"><input type="checkbox" name="type" value={t} checked> {TYPES[t].many} <span class="n">{g.nodes.filter((n) => n.ent.type === t).length}</span></label>)}</fieldset>
+<form class="filters" hidden x-bind:hidden="off" aria-label={`Show kinds of entity: ${x.title}`} x-on:change="filter">
+  <fieldset class="f-row"><legend class="f-lab">Show</legend>{[...new Set(x.g.nodes.map((n) => n.ent.type))].map((t) => <label class="chk"><input type="checkbox" name="type" value={t} checked> {TYPES[t].many} <span class="n">{x.g.nodes.filter((n) => n.ent.type === t).length}</span></label>)}</fieldset>
 </form>
 <div class="graph-wrap">
-<svg class="graph" id="graph" viewBox={`0 0 ${g.width} ${g.height}`} width={String(g.width)} height={String(g.height)} role="img" aria-labelledby="g-t" x-on:mouseover="hover" x-on:focusin="hover" x-on:mouseleave="clear" x-on:focusout="clear">
-<title id="g-t">The map: {g.nodes.length} entities and {g.paths.length} links</title>
-{g.cols.map((c) => <text class="col-h" x={String(c.x)} y="20">{c.label}</text>)}
-<g class="edges">{g.paths.map((p) => <path class={`edge r-${p.rel}${p.status ? ` e-${p.status}` : ""}`} d={p.d} data-from={p.from} data-to={p.to} />)}</g>
-<g class="nodes">{g.nodes.map((n) => <a href={link(n.ent.url)} class={cls(n)} data-id={n.ent.id} data-type={n.ent.type}><rect x={String(n.x)} y={n.y.toFixed(1)} width={String(n.w)} height={String(n.h)} rx="4" /><text x={String(n.x + 6)} y={(n.y + n.h / 2 + 4).toFixed(1)}>{n.label}</text><title>{TYPES[n.ent.type].one}: {n.ent.title}</title></a>)}</g>
+<svg class="graph" id={`graph-${x.id}`} viewBox={`0 0 ${x.g.width} ${x.g.height}`} width={String(x.g.width)} height={String(x.g.height)} role="img" aria-labelledby={`g-${x.id}-t`} x-on:mouseover="hover" x-on:focusin="hover" x-on:mouseleave="clear" x-on:focusout="clear">
+<title id={`g-${x.id}-t`}>{x.title}: {x.g.nodes.length} entities and {x.g.paths.length} links</title>
+{x.g.cols.map((c) => <text class="col-h" x={String(c.x)} y="20">{c.label}</text>)}
+<g class="edges">{x.g.paths.map((p) => <path class={`edge r-${p.rel}${p.status ? ` e-${p.status}` : ""}`} d={p.d} data-from={p.from} data-to={p.to} />)}</g>
+<g class="nodes">{x.g.nodes.map((n) => <a href={link(n.ent.url)} class={cls(n)} data-id={n.ent.id} data-type={n.ent.type}><rect x={String(n.x)} y={n.y.toFixed(1)} width={String(n.w)} height={String(n.h)} rx="4" /><text x={String(n.x + 6)} y={(n.y + n.h / 2 + 4).toFixed(1)}>{n.label}</text><title>{TYPES[n.ent.type].one}: {n.ent.title}</title></a>)}</g>
 </svg>
 </div>
 </div>
+</section>)}
+{site.hasSystemMap && <section class="panel" aria-labelledby="t-h"><h2 id="t-h">Every part, with its interfaces ({rows.length})</h2>
+<div class="tbl-wrap"><table class="tbl">
+<thead><tr><th scope="col">Entity</th><th scope="col">Owner</th><th scope="col">Provides</th><th scope="col">Consumes</th><th scope="col">Depends on</th><th scope="col">Dependents</th></tr></thead>
+<tbody>{rows.map((e) => <tr id={`${e.type}-${e.slug}`}>
+<th scope="row"><a class="mono" href={link(e.url)}>{e.title}</a> <span class="tag">{TYPES[e.type].one}</span>{cellNames.has(e.id) && <> <a class="tag tag-ready" href={link("optimise.html")}>cell</a></>}</th>
+{[names(e, "owned-by"), names(e, "provides"), names(e, "consumes"), names(e, "depends-on"), names(e, "depends-on", "in")].map((l) => <td>{l.length ? l.map((x, i) => <>{i > 0 && ", "}<a href={link(x.url)}>{x.title}</a></>) : <span class="muted">–</span>}</td>)}
+</tr>)}</tbody></table></div></section>}
 <section class="panel" aria-labelledby="l-h"><h2 id="l-h">Reading it</h2>
-<p class="small">Claims are coloured by their status here: green replicated, red did not transfer, amber mixed, blue predicted, grey untested, purple our own observation. A link from a claim to a model means the claim was measured on it, or tested on it with a result. <a href={link("data/graph.json")}>data/graph.json</a> has every entity and reference, for other tools; <a href={link("search.html")}>search</a> lists everything by kind.</p>
+<p class="small">{research && <>Claims are coloured by their status in the research graph: green replicated, red did not transfer, amber mixed, blue predicted, grey untested, purple our own observation. </>}<a href={link("data/graph.json")}>data/graph.json</a> has every entity and reference, for other tools; <a href={link("search.html")}>search</a> lists everything by kind.</p>
 </section>
 </Base>

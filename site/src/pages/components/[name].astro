@@ -2,6 +2,7 @@
 // A Component that is neither a role nor an option.
 import Base from "../../layouts/Base.astro";
 import EntityHead from "../../components/EntityHead.astro";
+import Interfaces from "../../components/Interfaces.astro";
 import Evidence from "../../components/Evidence.astro";
 import Mentions from "../../components/Mentions.astro";
 import References from "../../components/References.astro";
@@ -18,6 +19,7 @@ const x = site.entities.get(Astro.props.id);
 <Base site={site} title={x.name} depth={1}>
 <EntityHead ent={x} eyebrow={`Component · ${x.spec?.type || ""}`} crumbs={[[`${up(1)}search.html`, "Everything"]]} />
 <Evidence ent={x} />
+<Interfaces site={site} ent={x} depth={1} />
 <Mentions site={site} ent={x} depth={1} />
 <References ent={x} depth={1} />
 </Base>

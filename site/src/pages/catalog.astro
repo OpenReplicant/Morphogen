@@ -1,0 +1,74 @@
+---
+// The catalog: for each role, the options catalogued for it (interfaces, adjustable parameters, licence, docs,
+// measurements, trade-offs), the research claims about each, and a table to compare them.
+import Base from "../layouts/Base.astro";
+import EvidenceQuotes from "../components/Evidence.astro";
+import EntityList from "../components/EntityList.astro";
+import ExtLink from "../components/ExtLink.astro";
+import StatusCounts from "../components/StatusCounts.astro";
+import { getSite } from "../lib/site.mjs";
+import { parameterRows, tradeoffs } from "../lib/catalog.mjs";
+import { proposeOptionUrl } from "../lib/steer.mjs";
+import { link, truncate } from "../lib/text.mjs";
+const site = await getSite();
+const roles = site.of("role");
+const orphans = site.of("option").filter((o) => !site.outs(o, "fills").length);
+const view = (o) => {
+  const m = o.spec?.morphogen || {};
+  const claims = site.ins(o, "about");
+  return { o, m, claims, provides: site.outs(o, "provides"), consumes: site.outs(o, "consumes"), deps: site.outs(o, "depends-on"),
+    params: parameterRows(m.parameters), ev: m.evaluation || {}, trade: tradeoffs(site, claims), results: site.results(claims).filter((x) => x.a.outcome) };
+};
+const sections = [...roles.map((r) => ({ role: r, opts: site.ins(r, "fills").map(view) })),
+  ...(orphans.length ? [{ role: null, opts: orphans.map(view) }] : [])];
+---
+<Base site={site} title="Catalog" current="catalog.html" description="The options catalogued for each role, with their interfaces, parameters, licences, measurements and the research about them.">
+<section class="hero small-hero">
+  <p class="eyebrow">Options for each role</p>
+  <h1>The catalog</h1>
+  <p class="lede">For each role in the map, the parts that could play it: what each provides and consumes, the settings a tuner may move, its licence and documentation, what has been measured, and the claims from papers about it. Open a role's table to compare its options side by side. <a href={link("map.html")}>The map</a> shows how the roles sit among the parts; <a href={link("roles.html")}>Roles</a> shows what the research agent watches for each.</p>
+  <p class="small">{sections.map(({ role }, i) => <>{i > 0 && " · "}{role ? <a class="mono" href={`#role-${role.slug}`}>{role.name}</a> : <a href="#other">options with no role</a>}</>)}</p>
+</section>
+{sections.map(({ role, opts }) => <section class="role panel" id={role ? `role-${role.slug}` : "other"} aria-labelledby={`h-${role ? role.slug : "other"}`}>
+  <p class="eyebrow">{role ? "Role" : "No role named"}</p>
+  <h2 id={`h-${role ? role.slug : "other"}`} class="mono">{role ? <a href={link(role.url)}>{role.name}</a> : "Options not yet tied to a role"}</h2>
+  {role && <p>{role.summary}</p>}
+  {role && <EvidenceQuotes ent={role} />}
+  {role && (site.outs(role, "provides").length > 0 || site.outs(role, "consumes").length > 0) && <p class="small"><span class="f-lab">The role's interfaces</span> provides <EntityList items={site.outs(role, "provides")} />; consumes <EntityList items={site.outs(role, "consumes")} />. An option fits when it keeps these.</p>}
+
+  <h3>Compare options for this role ({opts.length})</h3>
+  {opts.length > 0 ? <div class="tbl-wrap"><table class="tbl wrap">
+    <caption>{role ? role.name : "Options"}: one row per option, from its catalog entry and the claims about it</caption>
+    <thead><tr><th scope="col">Option</th><th scope="col">Provides</th><th scope="col">Consumes</th><th scope="col">Parameters</th><th scope="col">Licence</th><th scope="col">Docs</th><th scope="col">Measured</th><th scope="col">Claims</th></tr></thead>
+    <tbody>{opts.map((v) => <tr>
+      <th scope="row"><a class="mono" href={link(v.o.url)}>{v.o.name}</a></th>
+      <td><EntityList items={v.provides} /></td><td><EntityList items={v.consumes} /></td>
+      <td>{v.params.length ? v.params.map((p) => p.name).join(", ") : <span class="muted">none declared</span>}</td>
+      <td>{v.m.licence || <span class="muted">not stated</span>}</td>
+      <td>{v.m.docs?.url ? <ExtLink url={v.m.docs.url} text="docs" /> : <span class="muted">none</span>}</td>
+      <td>{v.ev.result ? truncate(String(v.ev.result), 90) : <span class="muted">not measured</span>}</td>
+      <td><StatusCounts site={site} claims={v.claims.filter((c) => !c.ours)} /></td>
+    </tr>)}</tbody></table></div> : <p class="muted">No option has been catalogued for this role yet.</p>}
+
+  <h3>The options ({opts.length})</h3>
+  <ul class="plain optdetail">{opts.map((v) => <li class="opt" id={`opt-${v.o.slug}`}>
+    <h4 class="mono"><a href={link(v.o.url)}>{v.o.name}</a></h4>
+    <p>{v.o.summary}</p>
+    <dl class="kv">
+      <dt>Provides</dt><dd><EntityList items={v.provides} /></dd>
+      <dt>Consumes</dt><dd><EntityList items={v.consumes} /></dd>
+      {v.deps.length > 0 && <><dt>Depends on</dt><dd><EntityList items={v.deps} /></dd></>}
+      <dt>Licence</dt><dd>{v.m.licence || <span class="muted">not stated</span>}</dd>
+      <dt>Docs</dt><dd>{v.m.docs?.url ? <ExtLink url={v.m.docs.url} text={v.m.docs.url} /> : <span class="muted">none linked</span>}</dd>
+      <dt>Measurements</dt><dd>{v.ev.result ? <>{v.ev.result}{v.ev.method && <span class="small muted res-sum">How: {truncate(String(v.ev.method), 300)}</span>}</> : <span class="muted">not measured</span>}{v.results.length > 0 && <span class="small res-sum">{v.results.length} paper claim{v.results.length === 1 ? "" : "s"} with an outcome on this system: see <a href={link(v.o.url)}>its page</a>.</span>}</dd>
+    </dl>
+    {v.params.length > 0 && <><p class="f-lab">Adjustable parameters</p><div class="tbl-wrap"><table class="tbl wrap"><thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Range or choices</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>{v.params.map((p) => <tr><td class="mono">{p.name}</td><td>{p.type}</td><td>{p.bounds}</td><td class="mono">{p.default}</td><td>{p.about}</td></tr>)}</tbody></table></div></>}
+    <p class="f-lab">Trade-offs the research reports ({v.trade.length})</p>
+    {v.trade.length ? <ul class="plain clist">{v.trade.map((t) => <li><span class={`tag finding-${t.finding}`}>{t.finding}</span> {t.metric && <span class="mono small">{t.metric}</span>} <a href={link(t.claim.url)}>{truncate(t.statement, 160)}</a></li>)}</ul> : <p class="muted small">No claim from a paper yet.</p>}
+    <p class="f-lab">Status of those claims here</p><p class="small"><StatusCounts site={site} claims={v.claims.filter((c) => !c.ours)} /></p>
+  </li>)}</ul>
+  {role && <p class="actions"><a class="btn ghost" href={proposeOptionUrl(site, role.name)} rel="noopener noreferrer">Suggest an option for this role</a> <a class="btn ghost" href={link(role.url)}>The role's page: questions, tests, claims</a></p>}
+</section>)}
+{sections.length === 0 && <p class="muted">No role or option in the map.</p>}
+</Base>

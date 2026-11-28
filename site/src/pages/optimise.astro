@@ -1,0 +1,80 @@
+---
+// Optimise: the cells in the map (what may change, how each is scored, what the judge last observed, who may merge a
+// pass), the judge's verdict log for each (every change proposed, kept or refused, with the measures and the reasons),
+// and the log's evidence chain. Built from the map's `spec.morphogen` and the verdict log in [sources] verdicts
+// (src/lib/optimise.mjs); a site with neither has nothing here and no link to it.
+import Base from "../layouts/Base.astro";
+import { getSite } from "../lib/site.mjs";
+import { lastMeasured, verdictsByCell } from "../lib/optimise.mjs";
+import { link } from "../lib/text.mjs";
+const site = await getSite();
+const cells = site.cells;
+const log = site.verdicts;
+const { by, strays } = verdictsByCell(site, cells);
+const empty = !site.hasOptimise;
+const num = (x) => (x == null ? "" : Number.isInteger(x) ? String(x) : String(Math.round(x * 10000) / 10000));
+const pct = (x) => (x == null ? "" : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`);
+const val = (v) => (typeof v === "string" ? v : JSON.stringify(v));
+const chain = log.chain;
+const proofs = log.records.filter((v) => v.proofs.length);
+---
+<Base site={site} title="Optimise" current="optimise.html" description="The cells that may be changed and judged, and the judge's verdict on each change.">
+<section class="hero small-hero">
+  <p class="eyebrow">What may change, and what the judge said</p>
+  <h1>Optimise</h1>
+  {empty ? <p class="lede">Nothing here: this site's map has no cell (a part with `spec.morphogen.run`) and no verdict log is set in `[sources] verdicts`.</p>
+  : <p class="lede">A cell is a part that can be changed and judged on its own. The judge scores each proposed change against the base by rules written before the change, and refuses anything outside what the cell may change. It never merges: a pass says who may. <a href={link("map.html")}>The map</a> shows where each cell sits; <a href={link("catalog.html")}>the catalog</a> lists the options for the roles around it.</p>}
+</section>
+
+{cells.length > 0 && <section aria-labelledby="cells-h"><h2 class="sec" id="cells-h">Cells ({cells.length})</h2>
+{cells.map((c) => {
+  const vs = by.get(c.name) || [];
+  const seen = lastMeasured(vs);
+  return <article class="panel cell-card" id={`cell-${c.ent.slug}`} aria-labelledby={`c-${c.ent.slug}`}>
+    <p class="eyebrow">Cell{c.lifecycle && <> · {c.lifecycle}</>}{c.owner && <> · owned by <a class="mono" href={link(c.owner.url)}>{c.owner.name}</a></>}</p>
+    <h3 id={`c-${c.ent.slug}`} class="mono"><a href={link(c.ent.url)}>{c.name}</a></h3>
+    {(c.description || c.ent.summary) && <p>{c.description || c.ent.summary}</p>}
+    <dl class="kv">
+      <dt>May change</dt><dd>{c.change.length ? <ul class="plain">{c.change.map((x) => <li><code>{x.target}</code>{x.bounds && <> <span class="small muted">within {x.bounds}</span></>}</li>)}</ul> : <span class="muted">nothing is opened: no candidate can be accepted</span>}{c.keep.length > 0 && <span class="small res-sum">Held fixed: {c.keep.map((k, i) => <>{i > 0 && ", "}<code>{k}</code></>)}</span>}</dd>
+      <dt>Score</dt><dd>{c.better ? <><strong class="mono">{c.better}</strong></> : <span class="muted">no metric named</span>}{c.score && <span class="small res-sum">scored outside the candidate by <code>{c.score}</code></span>}{c.run ? <span class="small res-sum">workload <code>{c.run}</code></span> : <span class="small res-sum muted">no workload: it has tests, so it is structure, not a judged cell</span>}</dd>
+      <dt>Observed</dt><dd>{seen ? <>{seen.measures.map((m) => <span class="res-sum"><span class="mono">{m.name}</span> {num(m.base)} to {num(m.candidate)}{m.gain != null && <> ({pct(m.gain)})</>} <span class="small muted">in verdict #{seen.seq} ({seen.verdict === "pass" ? "passed" : "refused"}), {seen.at}</span></span>)}</>
+        : <span class="muted">{log.file ? "the log holds no measured verdict on this cell" : "no verdict log: nothing measured is on record here"}</span>}{c.observe && <span class="small res-sum">declared to be observed in operation by <code>{c.observe}</code></span>}</dd>
+      <dt>Autonomy</dt><dd><span class={`badge ${c.autonomy === "merge" ? "s-replicated" : "s-predicted"}`}>{c.autonomy === "merge" ? "an agent may merge" : "a person reviews"}</span> <span class="small muted">{c.autonomyNote}</span></dd>
+      {c.tests.length > 0 && <><dt>Must still pass</dt><dd>{c.tests.map((t) => <code class="res-sum">{t}</code>)}</dd></>}
+      <dt>Verdicts</dt><dd>{vs.length ? <a href={`#log-${c.ent.slug}`}>{vs.length} in the log: {vs.filter((v) => v.verdict === "pass").length} passed, {vs.filter((v) => v.verdict === "fail").length} refused</a> : <span class="muted">none yet</span>}</dd>
+    </dl>
+  </article>;
+})}</section>}
+
+{cells.length > 0 && !log.records.length && <section class="panel" aria-labelledby="nov-h"><h2 id="nov-h">No verdicts to show</h2>
+  <p>{log.file ? "The verdict log has no record of a judged change." : "No verdict log is set for this site."} The judge writes each verdict to its evidence log, which lives in git's own directory and is not committed; export it with <code>morphogen evidence --limit 100000 &gt; verdicts.json</code> and name the file in <code>[sources] verdicts</code> of the site's config.</p></section>}
+
+{[...cells.map((c) => [c.name, c.ent.slug, by.get(c.name)]), ...[...strays].map(([n, v]) => [n, null, v])].filter(([, , vs]) => vs?.length).map(([name, slug, vs]) => <section class="panel" id={slug ? `log-${slug}` : undefined} aria-labelledby={`v-${slug || name}`}>
+  <h2 id={`v-${slug || name}`}>Verdicts on <span class="mono">{name}</span> ({vs.length}){!slug && <span class="small muted"> · not a cell in this site's map</span>}</h2>
+  <ol class="verdicts plain">{vs.map((v) => <li class="verdict" id={`verdict-${v.seq}`}>
+    <p class="vhead"><span class={`badge ${v.verdict === "pass" ? "s-replicated" : "s-did-not-transfer"}`}>{v.verdict === "pass" ? "Passed" : "Refused"}</span> <span class="mono">#{v.seq}</span> <span class="small muted">{v.at}{v.trust && <> · trust {v.trust}</>}{v.by && <> · by {v.by}</>}</span></p>
+    {v.claim && <p class="statement-small">{v.claim}</p>}
+    <dl class="kv">
+      <dt>Proposed</dt><dd>{v.baseShort || v.candidateShort ? <>commit <span class="mono">{v.candidateShort || "?"}</span> against base <span class="mono">{v.baseShort || "?"}</span></> : <span class="muted">no commits recorded</span>}
+        {v.changed.length > 0 && <span class="res-sum">Settings moved: {v.changed.map((p, i) => <>{i > 0 && "; "}<code>{p.name}</code> {val(p.base)} to {val(p.candidate)}</>)}</span>}
+        {v.files.length > 0 && <span class="res-sum small">Files: {v.files.map((f, i) => <>{i > 0 && ", "}<code>{f}</code></>)}</span>}</dd>
+      {v.measures.length > 0 && <><dt>Measures</dt><dd><div class="tbl-wrap"><table class="tbl wrap"><thead><tr><th scope="col">Measure</th><th scope="col">Base</th><th scope="col">Candidate</th><th scope="col">Gain</th><th scope="col">95% interval</th><th scope="col">Sign test p</th><th scope="col">Bar</th></tr></thead>
+        <tbody>{v.measures.map((m) => <tr><td class="mono">{m.name}</td><td>{num(m.base)}</td><td>{num(m.candidate)}</td><td>{pct(m.gain)}</td><td>{m.ci95 ? `${pct(m.ci95[0])} to ${pct(m.ci95[1])}` : ""}</td><td>{num(m.p)}</td><td>{m.ok === true ? "met" : m.ok === false ? "not met" : ""}</td></tr>)}</tbody></table></div>{v.generated != null && <span class="small muted">checked on {v.generated} generated inputs</span>}</dd></>}
+      <dt>Why</dt><dd><ul class="plain">{v.reasons.map((r) => <li>{r}</li>)}</ul></dd>
+      <dt>Gate</dt><dd>{v.gate === "merge" ? "an agent may merge" : v.gate === "review" ? "a person reviews" : v.gate === "none" ? "no pass, so nothing to merge" : <span class="muted">not recorded</span>}{v.sandbox && <span class="small muted"> · run in {v.sandbox}</span>}</dd>
+    </dl>
+  </li>)}</ol>
+</section>)}
+
+{chain && <section class="panel" id="chain" aria-labelledby="chain-h"><h2 id="chain-h">The evidence chain</h2>
+  <p>Each record in the log carries the hash of the one before it, so an edit shows. The records read here: {chain.records}, numbered {chain.from} to {chain.to}{chain.complete ? ", from the first record of the log" : ", not from the log's first record, so what came before cannot be checked"}.</p>
+  <dl class="kv">
+    <dt>Links</dt><dd>{chain.links ? <span class="badge s-replicated">intact</span> : <span class="badge s-did-not-transfer">broken at #{chain.brokenAt}</span>} <span class="small muted">each record's <code>prev</code> is the hash before it and the numbers count up by one</span></dd>
+    <dt>Hashes</dt><dd>{chain.edited.length === 0 ? <span class="badge s-replicated">all recomputed</span> : <span class="badge s-did-not-transfer">{chain.edited.length} do not match: #{chain.edited.slice(0, 8).join(", #")}{chain.edited.length > 8 && ", …"}</span>} <span class="small muted">SHA-256 of each record's canonical JSON without its hash{chain.edited.length > 0 && "; a record that does not match its hash was edited after it was written"}</span></dd>
+    <dt>Signatures</dt><dd>{proofs.length ? <>{proofs.length} verdict{proofs.length === 1 ? "" : "s"} carry a signature or a transparency-log entry, shown as recorded: the page does not check them.</> : <span class="muted">none: the judge's records carry no signature or transparency-log entry, so the hash chain is the only link between them</span>}</dd>
+  </dl>
+  {proofs.length > 0 && <div class="tbl-wrap"><table class="tbl wrap"><thead><tr><th scope="col">Verdict</th><th scope="col">Field</th><th scope="col">Value</th></tr></thead><tbody>{proofs.flatMap((v) => v.proofs.map(([k, t]) => <tr><td><a class="mono" href={`#verdict-${v.seq}`}>#{v.seq}</a></td><td class="mono">{k}</td><td class="mono small breaks">{t}</td></tr>))}</tbody></table></div>}
+  {log.problems.length > 0 && <p class="small muted">{log.problems.join("; ")}</p>}
+  <p class="small">The first and last hash, for comparing with another copy of the log: <span class="mono breaks">{log.all[0].hash}</span> and <span class="mono breaks">{log.all.at(-1).hash}</span></p>
+</section>}
+</Base>
