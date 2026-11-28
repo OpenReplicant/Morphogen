@@ -26,8 +26,22 @@ function item(c) {
     ...(c.spec.conditions?.models || []).map((m) => m.name || ""), ...(c.spec.assessments || []).map((a) => site.configLabel(a))].join(" ").toLowerCase();
   return { c, src, role, option, search, qs: src.quote_status || "none", from: c.out.find((e) => e.rel === "from")?.to };
 }
+const verbs = [
+  { id: "map", name: "Map", href: "map.html", text: `${site.of("system").length + site.of("component").length + site.of("role").length} systems, components and roles, ${site.of("api").length} interfaces, ${site.of("resource").length} resources: what provides, consumes and depends on what.`, show: site.hasSystemMap || claims.length === 0 },
+  { id: "catalog", name: "Catalog", href: "catalog.html", text: `${site.of("option").length} option${site.of("option").length === 1 ? "" : "s"} for ${site.of("role").length} role${site.of("role").length === 1 ? "" : "s"}: interfaces, parameters, licence, measurements and trade-offs, side by side.`, show: site.hasCatalog },
+  { id: "research", name: "Research", href: claims.length ? "#claims" : "roles.html", text: `${paperN} claims from papers about the options, with the conditions they were measured under and whether they hold here.`, show: claims.length > 0 },
+  { id: "optimise", name: "Optimise", href: "optimise.html", text: `${site.cells.length} cell${site.cells.length === 1 ? "" : "s"} that may change and ${site.verdicts.records.length} verdict${site.verdicts.records.length === 1 ? "" : "s"} from the judge.`, show: site.hasOptimise },
+].filter((v) => v.show);
+const landing = site.hasSystemMap || site.hasCatalog || site.hasOptimise;
 ---
 <Base site={site} title={site.title} current="index.html">
+{landing && <section class="hero">
+  <p class="eyebrow">Map, catalog, research, optimise</p>
+  <h1>{site.title}</h1>
+  <p class="lede">{site.description}</p>
+  <ul class="verbs plain">{verbs.map((v) => <li class="card"><h3><a href={v.href.startsWith("#") ? v.href : link(v.href)}>{v.name}</a></h3><p class="meta">{v.text}</p></li>)}</ul>
+</section>}
+{claims.length > 0 && <>
 <section class="hero">
   <p class="eyebrow">The research agent's catalog</p>
   <h1>Claims from papers, checked against this system</h1>
@@ -57,4 +71,5 @@ function item(c) {
 </ol>
 <p class="empty" id="empty" hidden x-bind:hidden="!none">No claim matches these filters.</p>
 </div>
+</>}
 </Base>

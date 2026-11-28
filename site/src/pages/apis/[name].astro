@@ -1,0 +1,35 @@
+---
+// One API: an interface that components provide and consume, who does each, its tests and where it is defined.
+import Base from "../../layouts/Base.astro";
+import EntityHead from "../../components/EntityHead.astro";
+import Evidence from "../../components/Evidence.astro";
+import Interfaces from "../../components/Interfaces.astro";
+import Mentions from "../../components/Mentions.astro";
+import References from "../../components/References.astro";
+import { getSite } from "../../lib/site.mjs";
+import { truncate, up } from "../../lib/text.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("api").map((x) => ({ params: { name: x.slug }, props: { id: x.id } }));
+}
+const site = await getSite();
+const a = site.entities.get(Astro.props.id);
+const spec = a.spec || {};
+const m = spec.morphogen || {};
+const tests = [m.tests].flat().filter(Boolean);
+const external = { consumes: "the system offers it to the world", provides: "the system relies on it and does not own it" }[m.external];
+---
+<Base site={site} title={a.name} description={truncate(a.summary, 160)} depth={1}>
+<EntityHead ent={a} eyebrow={`API${spec.type ? ` · ${spec.type}` : ""}`} crumbs={[[`${up(1)}map.html`, "Map"]]} />
+<Evidence ent={a} />
+<Interfaces site={site} ent={a} depth={1} />
+{(spec.definition || tests.length > 0 || external || spec.lifecycle) && <section class="panel" aria-labelledby="d-h"><h2 id="d-h">The promise</h2><dl class="kv">
+{spec.definition && <><dt>Defined in</dt><dd>{String(spec.definition)}</dd></>}
+{spec.lifecycle && <><dt>Lifecycle</dt><dd>{spec.lifecycle}</dd></>}
+{external && <><dt>Open to the world</dt><dd>{external}</dd></>}
+{tests.length > 0 && <><dt>Its tests</dt><dd>{tests.map((t) => <code>{String(t)}</code>)}</dd></>}
+</dl></section>}
+<Mentions site={site} ent={a} depth={1} />
+<References ent={a} depth={1} />
+</Base>

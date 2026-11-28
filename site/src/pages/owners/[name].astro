@@ -1,0 +1,26 @@
+---
+// An owner: a Group or User, or a name a spec gives as its owner. What it owns, and what that provides and consumes.
+import Base from "../../layouts/Base.astro";
+import EntityHead from "../../components/EntityHead.astro";
+import Interfaces from "../../components/Interfaces.astro";
+import Mentions from "../../components/Mentions.astro";
+import References from "../../components/References.astro";
+import { getSite } from "../../lib/site.mjs";
+import { TYPES } from "../../lib/data.mjs";
+import { up } from "../../lib/text.mjs";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.of("group").map((x) => ({ params: { name: x.slug }, props: { id: x.id } }));
+}
+const site = await getSite();
+const g = site.entities.get(Astro.props.id);
+---
+<Base site={site} title={g.title} depth={1}>
+<EntityHead ent={g} eyebrow={g.kind === "user" ? "Owner · person" : "Owner · group"} crumbs={[[`${up(1)}map.html`, "Map"]]}>
+  {g.implied && <p class="small muted">Named as an owner in the map; the map has no Group or User file for it.</p>}
+</EntityHead>
+<Interfaces site={site} ent={g} depth={1} />
+<Mentions site={site} ent={g} depth={1} />
+<References ent={g} depth={1} />
+</Base>

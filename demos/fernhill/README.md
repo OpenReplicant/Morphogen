@@ -13,6 +13,16 @@ options catalogued for one role, cells drafted for one opportunity) and a demo o
 | `prompt.md`, `run.sh`, `check.py` | the engagement unattended: a fresh project from `material/`, Claude Code with only the plugin, then the checks of its result |
 | [runs/](runs/) | unattended runs: each one's report and `check.py` output |
 
+## As a site
+
+    uv run morphogen site build --config demos/fernhill/site.toml --out _site
+
+builds the map (the firm's parts, the interfaces between them, owners), the catalog (four options for job
+scheduling, none measured) and Optimise (the quote calculator as a cell). The judge's verdicts from the first run are
+not on it: the evidence log lives in git's own directory and was not committed, so Optimise says that and shows no
+verdict. To show them, rerun the judge and export its log with `morphogen evidence --limit 100000 > verdicts.json`,
+then set `verdicts` in `site.toml`.
+
 ## The first run (2026-11-24)
 
 - **Mapped:** the firm as a System, 5 teams, 6 process steps, its tools and 2 roles; 40 evidence quotes, all found

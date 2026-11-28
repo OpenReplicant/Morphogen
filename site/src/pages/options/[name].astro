@@ -4,6 +4,7 @@
 import Base from "../../layouts/Base.astro";
 import ClaimList from "../../components/ClaimList.astro";
 import EntityHead from "../../components/EntityHead.astro";
+import Interfaces from "../../components/Interfaces.astro";
 import Evidence from "../../components/Evidence.astro";
 import ExtLink from "../../components/ExtLink.astro";
 import Mentions from "../../components/Mentions.astro";
@@ -31,6 +32,7 @@ const tested = site.results(claims).filter((x) => x.a.outcome);
   <p><StatusCounts site={site} claims={claims} /></p>
 </EntityHead>
 <Evidence ent={o} />
+<Interfaces site={site} ent={o} depth={1} />
 {(ev.need || ev.method || ev.result) && <section class="panel" aria-labelledby="e-h"><h2 id="e-h">Evaluation</h2><dl class="kv">{ev.need && <><dt>What would count</dt><dd>{ev.need}</dd></>}{ev.method && <><dt>How it is measured</dt><dd>{ev.method}</dd></>}{ev.result && <><dt>Result so far</dt><dd>{ev.result}</dd></>}</dl></section>}
 <section class="panel" aria-labelledby="t-h"><h2 id="t-h">Tested on</h2>
   {tested.length ? <ResultsTable site={site} rows={tested} depth={1} showClaim /> : <p class="muted">No claim about this option has an outcome on this system yet.</p>}

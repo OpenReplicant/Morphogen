@@ -23,9 +23,25 @@ export function mapEdges(site) {
   });
 }
 
-export function layout(site, { colWidth = 230, rowHeight = 22, top = 40, nodeWidth = 180 } = {}) {
-  const edges = mapEdges(site);
-  const cols = COLUMNS.map((c) => ({ ...c, nodes: [] }));
+/** The system's own map: who owns what, the roles and systems, the components, the interfaces between them and what
+ *  they depend on. */
+export const SYSTEM_COLUMNS = [
+  { key: "owners", label: "Owners", types: ["group"] },
+  { key: "systems", label: "Systems and roles", types: ["system", "role"] },
+  { key: "components", label: "Components and options", types: ["component", "option"] },
+  { key: "apis", label: "Interfaces", types: ["api"] },
+  { key: "resources", label: "Resources", types: ["resource"] },
+];
+
+/** The references the system's map draws: what provides and consumes an interface, what depends on what, how parts
+ *  nest and which role an option fills. Ownership and membership are on each entity's page, not drawn. */
+export function systemEdges(site) {
+  return site.edges.filter((e) => ["provides", "consumes", "depends-on", "part-of", "fills"].includes(e.rel));
+}
+
+export function layout(site, { colWidth = 230, rowHeight = 22, top = 40, nodeWidth = 180, columns = COLUMNS, edgesOf = mapEdges, connectedOnly = false } = {}) {
+  const edges = edgesOf(site);
+  const cols = columns.map((c) => ({ ...c, nodes: [] }));
   const colOf = new Map();
   for (const ent of site.entities.values()) {
     const i = cols.findIndex((c) => c.types.includes(ent.type));
@@ -41,12 +57,15 @@ export function layout(site, { colWidth = 230, rowHeight = 22, top = 40, nodeWid
       nbrs.get(a).add(b);
     }
   }
-  // start: claims by role then option, others by type then name
+  if (connectedOnly) for (const c of cols) c.nodes = c.nodes.filter((n) => nbrs.has(n.id));
+  // start: claims by role then option, others by type then name (a system's map: by type then name)
   for (const c of cols) c.nodes.sort((a, b) => (a.type + (a.spec?.role || "") + (a.spec?.about || "") + a.key).localeCompare(b.type + (b.spec?.role || "") + (b.spec?.about || "") + b.key));
   const pos = new Map();
   const index = () => cols.forEach((c) => c.nodes.forEach((n, i) => pos.set(n.id, i / Math.max(1, c.nodes.length - 1))));
   index();
-  const order = [2, 1, 3, 0, 4, 2, 1, 3, 0, 4, 2];
+  const n = cols.length;
+  const order = n === 5 && columns === COLUMNS ? [2, 1, 3, 0, 4, 2, 1, 3, 0, 4, 2]
+    : [...Array(n).keys(), ...[...Array(n).keys()].reverse(), ...Array(n).keys()];
   for (const ci of order) {
     const c = cols[ci];
     const bary = (n) => {
@@ -58,7 +77,7 @@ export function layout(site, { colWidth = 230, rowHeight = 22, top = 40, nodeWid
     c.nodes = keyed.map((x) => x[1]);
     index();
   }
-  const height = top + Math.max(...cols.map((c) => c.nodes.length)) * rowHeight + 20;
+  const height = top + Math.max(1, ...cols.map((c) => c.nodes.length)) * rowHeight + 20;
   const nodes = [];
   const at = new Map();
   cols.forEach((c, ci) => {

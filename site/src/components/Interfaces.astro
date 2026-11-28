@@ -1,0 +1,24 @@
+---
+// What an entity offers and needs, as the map says: the interfaces it provides and consumes, its owner, what it
+// depends on and what depends on it. Shown only for what it has. An API shows who provides and who consumes it.
+import { up } from "../lib/text.mjs";
+const { site, ent, depth = 0 } = Astro.props;
+const u = up(depth);
+const consumers = site.ins(ent, "consumes");
+const all = [
+  ["Provides", site.outs(ent, "provides")],
+  ["Consumes", site.outs(ent, "consumes")],
+  ["Provided by", site.ins(ent, "provides")],
+  ["Consumed by", consumers],
+  ["Depends on", site.outs(ent, "depends-on")],
+  ["Dependents", site.ins(ent, "depends-on")],
+].filter(([, l]) => l.length);
+const owners = site.outs(ent, "owned-by");
+const owned = ent.type === "group" ? site.ins(ent, "owned-by") : [];
+---
+{(all.length > 0 || owners.length > 0 || owned.length > 0) && <section class="panel" aria-labelledby="if-h"><h2 id="if-h">Interfaces and ownership</h2>
+<dl class="kv">
+{owners.length > 0 && <><dt>Owner</dt><dd>{owners.map((o, i) => <>{i > 0 && ", "}<a class="mono" href={`${u}${o.url}`}>{o.name}</a></>)}</dd></>}
+{all.map(([label, items]) => <><dt>{label}</dt><dd>{items.map((x, i) => <>{i > 0 && ", "}<a class="mono" href={`${u}${x.url}`}>{x.title}</a></>)}</dd></>)}
+{owned.length > 0 && <><dt>Owns</dt><dd>{owned.map((x, i) => <>{i > 0 && ", "}<a class="mono" href={`${u}${x.url}`}>{x.name}</a></>)}</dd></>}
+</dl></section>}

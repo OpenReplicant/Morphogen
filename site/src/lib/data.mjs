@@ -9,6 +9,8 @@
 //   component components/<name>.html any other Component
 //   resource  resources/<name>.html  a Resource: a model, engine, GPU or dataset (spec.type)
 //   system    systems/<name>.html    a System
+//   api       apis/<name>.html       an API: an interface that components provide and consume
+//   group     owners/<name>.html     a Group or User, or an owner a spec names that has no file of its own
 //   trial     trials/<id>.html       derived: a claim's source when it is our trial or probe, and every outcome's trial
 //   paper     papers/<id>.html       derived: a claim's source when it is a paper (or any other outside source)
 //   page      <slug>.html            a Markdown file in the content folder (attached by the Astro side, site.mjs)
@@ -20,6 +22,7 @@ import addFormats from "ajv-formats";
 import YAML from "yaml";
 import { loadConfig } from "./config.mjs";
 import { MIXED, OBSERVATION, refKind, refName, slugify, truncate } from "./text.mjs";
+import { cellsOf, loadVerdicts } from "./optimise.mjs";
 
 
 export const TYPES = {
@@ -31,6 +34,8 @@ export const TYPES = {
   resource: { dir: "resources", one: "Resource", many: "Resources" },
   component: { dir: "components", one: "Component", many: "Components" },
   system: { dir: "systems", one: "System", many: "Systems" },
+  api: { dir: "apis", one: "API", many: "APIs" },
+  group: { dir: "owners", one: "Owner", many: "Owners" },
   page: { dir: "", one: "Page", many: "Pages" },
 };
 
@@ -47,6 +52,10 @@ export const RELS = {
   fills: ["Fills the role", "Options for it"],
   "part-of": ["Part of", "Parts"],
   "in-system": ["System", "In this system"],
+  provides: ["Provides", "Provided by"],
+  consumes: ["Consumes", "Consumed by"],
+  "depends-on": ["Depends on", "Dependents"],
+  "owned-by": ["Owner", "Owns"],
   mentions: ["Mentions", "Notes and pages"],
   "uses-trial": ["Trial", "Claims from it"],
 };
@@ -156,6 +165,7 @@ export class Site {
     this.edges = [];
     this.unresolved = [];
     this.research = {};
+    this.verdicts = { file: null, records: [], all: [], chain: null, problems: [] };
     this.pages = [];
   }
 
@@ -200,8 +210,8 @@ export class Site {
     if (!ref) return null;
     const kind = refKind(ref);
     const name = refName(ref);
-    const types = { component: ["role", "option", "component"], resource: ["resource"], system: ["system"] }[kind]
-      || (kind ? [] : ["role", "option", "component", "resource", "system"]);
+    const types = { component: ["role", "option", "component"], resource: ["resource"], system: ["system"], api: ["api"],
+      group: ["group"], user: ["group"] }[kind] || (kind ? [] : ["role", "option", "component", "resource", "system", "api", "group"]);
     for (const t of types) {
       const e = this.entities.get(`${t}:${name}`);
       if (e) return e;
@@ -348,6 +358,25 @@ export class Site {
     return out;
   }
 
+  // ---- what the pages have to show: a page whose data is absent leaves the header
+
+  /** The map has interfaces, dependencies or owners to draw as well as the research's links. */
+  get hasSystemMap() {
+    return this.edges.some((e) => ["provides", "consumes", "depends-on"].includes(e.rel));
+  }
+
+  get hasCatalog() {
+    return this.of("role").length > 0 || this.of("option").length > 0;
+  }
+
+  get cells() {
+    return (this._cells ||= cellsOf(this));
+  }
+
+  get hasOptimise() {
+    return this.cells.length > 0 || this.verdicts.records.length > 0;
+  }
+
   fileUrl(p) {
     return `https://github.com/${this.repo}/blob/${this.branch}/${p}`;
   }
@@ -365,6 +394,40 @@ function uniq(list) {
 function shortTitle(desc, name) {
   const head = String(desc || "").split(/[,;:]/)[0].trim();
   return head && head.length <= 50 ? head : name;
+}
+
+const asList = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]).filter((x) => typeof x === "string" && x);
+
+/** An API named by a bare name in providesApis/consumesApis is `api:default/name`. */
+const apiRef = (r) => (refKind(r) ? r : `api:default/${r}`);
+
+/** Entity documents from the catalog sources: files, folders of files, and the targets of each `Location` (read
+ *  relative to the file that names it, once each; a target that is missing is a warning, not a failure). */
+function loadCatalog(sources, config, warnings) {
+  const docs = [], seen = new Set();
+  const here = path.dirname(config);
+  const file = (f, named) => {
+    const abs = path.resolve(f);
+    if (seen.has(abs)) return;
+    seen.add(abs);
+    if (!fs.existsSync(abs)) {
+      warnings.push(`${path.relative(here, abs)} does not exist; skipped`);
+      return;
+    }
+    if (fs.statSync(abs).isDirectory()) {
+      for (const g of walk(abs).sort()) file(g, true);
+      return;
+    }
+    for (const d of loadYamlDocs(abs)) {
+      docs.push(d);
+      if (d.kind === "Location") {
+        const targets = [...asList(d.spec?.targets), ...asList(d.spec?.target)];
+        for (const t of targets) if (!/^[a-z][a-z0-9+.-]*:/i.test(t)) file(path.resolve(path.dirname(abs), t), false);
+      }
+    }
+  };
+  for (const f of sources) file(f, false);
+  return docs;
 }
 
 function fills(option) {
@@ -387,16 +450,15 @@ export function loadSite(cfg = loadConfig()) {
   const root = cfg.root;
   const schema = JSON.parse(fs.readFileSync(srcs.schema, "utf8"));
   const raw = loadClaims(srcs.claims, root, schema);
-  const docs = [];
   const warnings = [];
-  for (const f of srcs.catalog) {
-    if (fs.existsSync(f) && fs.statSync(f).isDirectory()) for (const g of walk(f).sort()) docs.push(...loadYamlDocs(g));
-    else if (fs.existsSync(f)) docs.push(...loadYamlDocs(f));
-    else warnings.push(`${path.relative(path.dirname(cfg.config), f)} does not exist; skipped`);
-  }
+  const docs = loadCatalog(srcs.catalog, cfg.config, warnings);
   const site = new Site(cfg);
   site.research = loadResearch(srcs.research);
   site.warnings = warnings;
+  if (srcs.verdicts) {
+    site.verdicts = loadVerdicts(srcs.verdicts);
+    if (!site.verdicts.file) warnings.push(`${path.relative(path.dirname(cfg.config), srcs.verdicts)} does not exist; no verdicts`);
+  }
 
   // catalog entities
   for (const d of docs) {
@@ -405,11 +467,22 @@ export function loadSite(cfg = loadConfig()) {
     if (!md.name) continue;
     const base = { doc: d, name: md.name, title: md.name, summary: md.description || "", spec };
     if (d.kind === "System") site.add("system", md.name, base);
+    else if (d.kind === "API") site.add("api", md.name, base);
+    else if (d.kind === "Group" || d.kind === "User") site.add("group", md.name, { ...base, kind: d.kind.toLowerCase(), title: md.title || md.name });
     else if (d.kind === "Resource") {
       site.add("resource", md.name, { ...base, kind: spec.type || "resource", title: shortTitle(md.description, md.name) });
     } else if (d.kind === "Component") {
       const type = spec.type === "role" ? "role" : spec.lifecycle === "candidate" ? "option" : "component";
       site.add(type, md.name, base);
+    }
+  }
+  // an owner a spec names that has no Group or User file is still somebody: a page listing what it owns
+  for (const ent of [...site.entities.values()]) {
+    const owner = ent.spec?.owner;
+    if (typeof owner !== "string" || !owner || ent.type === "group") continue;
+    if (!site.catalogRef(owner)) {
+      const kind = refKind(owner) === "user" ? "user" : "group";
+      site.add("group", refName(owner), { doc: null, name: refName(owner), title: refName(owner), summary: "", spec: {}, kind, implied: true });
     }
   }
   // catalog references
@@ -418,6 +491,11 @@ export function loadSite(cfg = loadConfig()) {
     if (ent.type === "option") for (const r of fills(ent)) refEdge(site, ent, r, "fills");
     if (spec.subcomponentOf) refEdge(site, ent, spec.subcomponentOf, "part-of");
     if (spec.system && ent.type !== "system") refEdge(site, ent, `system:${refName(spec.system)}`, "in-system");
+    if (ent.type === "group") continue;
+    if (typeof spec.owner === "string" && spec.owner) refEdge(site, ent, spec.owner, "owned-by");
+    for (const r of asList(spec.providesApis)) refEdge(site, ent, apiRef(r), "provides");
+    for (const r of asList(spec.consumesApis)) refEdge(site, ent, apiRef(r), "consumes");
+    for (const r of asList(spec.dependsOn)) refEdge(site, ent, r, "depends-on");
   }
 
   // claims, and the papers and trials they come from

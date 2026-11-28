@@ -1,0 +1,26 @@
+# Fernhill's site: the made-up firm mapped from its documents to opportunities (site/README.md, "The config file").
+# Build it with `uv run morphogen site build --config demos/fernhill/site.toml --out _site`. Paths are relative to
+# this file. Fernhill has no research claims, so the research pages are empty and leave the header; the map, the
+# catalog (four options for job scheduling) and Optimise (one cell, the quote calculator) show.
+
+[site]
+title = "Fernhill Kitchens"
+description = "A made-up kitchen firm, mapped from its documents: teams, process, tools, the quote calculator as a cell, and options for job scheduling."
+owner = "OpenReplicant"
+repo = "OpenReplicant/Morphogen"
+branch = "main"
+system = "system:default/fernhill"
+
+[sources]
+# The map: the System, its teams, the process steps, the tools and the cell. The Location in catalog-info.yaml names
+# the files under catalog/, and they are read through it.
+map = ["engagement/catalog-info.yaml"]
+# The options catalogued for the job-scheduling role.
+options = ["engagement/catalog/scheduling.yaml"]
+# The judge's verdict log, exported with `morphogen evidence --limit 100000 > verdicts.json`: none is kept here, since
+# the evidence log lives in git's own directory, not in the repository. Optimise says so rather than inventing one.
+# verdicts = "engagement/verdicts.json"
+claims = []
+
+[nav]
+pages = ["map", "catalog", "optimise", "search"]

@@ -484,7 +484,7 @@ class AnotherSystem(_Toolchain):
         text = cfg.read_text(encoding="utf-8")
         for old, new in (('"research:prioritise"', '"grove:boost"'), ('"research:reject"', '"grove:drop"'),
                          ('# css = "site-theme.css"', 'css = "brand/theme.css"'), ('# logo = "logo.svg"', 'logo = "brand/logo.svg"'),
-                         ('pages = ["claims", "queue", "predictions", "roles", "map", "notes"]', 'pages = ["claims", "roles", {page = "search", text = "Find"}]')):
+                         ('pages = ["claims", "queue", "predictions", "roles", "map", "catalog", "optimise", "notes"]', 'pages = ["claims", "roles", {page = "search", text = "Find"}]')):
             assert old in text, old
             text = text.replace(old, new)
         cfg.write_text(text, encoding="utf-8")
@@ -578,6 +578,298 @@ class Init(unittest.TestCase):
                 site.init(tmp, repo="A/b", system="mine")
             with self.assertRaisesRegex(site.SiteError, "OWNER/NAME"):
                 site.init(tmp, repo="not a repo", system="mine", force=True)
+
+
+def project_config(root: Path, extra_sources: str = "", pages: str = '["map", "catalog", "optimise", "search"]') -> Path:
+    cfg = root / "site.toml"
+    cfg.write_text('[site]\nrepo = "Owner/Repo"\nsystem = "system:default/shop"\n[sources]\n'
+                   f'catalog = ["catalog-info.yaml"]\n{extra_sources}\n[nav]\npages = {pages}\n', encoding="utf-8")
+    return cfg
+
+
+SHOP = [
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "System", "metadata": {"name": "shop", "description": "A shop " + HOSTILE},
+     "spec": {"owner": "group:default/team", "morphogen": {"autonomy": {"experimental": "merge"}}}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Group", "metadata": {"name": "team", "title": "The team"}, "spec": {"type": "team"}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Component", "metadata": {"name": "pricing", "description": "Prices " + HOSTILE},
+     "spec": {"type": "library", "lifecycle": "production", "owner": "group:default/team", "system": "shop",
+              "providesApis": ["price-list"], "consumesApis": ["catalog-feed"], "dependsOn": ["resource:default/db"],
+              "morphogen": {"description": "Quote closer to cost " + HOSTILE, "dir": "pricing", "run": "python bench.py",
+                            "change": ["pricing/p.py#MARKUP in 0.1..0.6", "prompts/"], "keep": ["pricing/p.py#RATE"],
+                            "better": {"mape": {"lower": True}}, "score": "python score.py", "tests": "python -m unittest -q",
+                            "observe": "otel"}}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Component", "metadata": {"name": "checkout", "description": "Takes the order"},
+     "spec": {"type": "service", "lifecycle": "production", "owner": "user:default/ann", "system": "shop",
+              "consumesApis": ["price-list"], "dependsOn": ["resource:default/db"]}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "API", "metadata": {"name": "price-list", "description": "Price per item"},
+     "spec": {"type": "openapi", "lifecycle": "production", "owner": "group:default/team", "definition": "contracts/prices.md",
+              "morphogen": {"tests": "python -m unittest -q contracts", "external": "consumes"}}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "API", "metadata": {"name": "catalog-feed"}, "spec": {"type": "grpc"}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Resource", "metadata": {"name": "db", "description": "The orders database"},
+     "spec": {"type": "database", "owner": "group:default/team"}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Component", "metadata": {"name": "payments", "description": "Take payment"},
+     "spec": {"type": "role", "lifecycle": "production", "owner": "group:default/team", "system": "shop", "consumesApis": ["price-list"]}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Component", "metadata": {"name": "stripe", "description": "Stripe " + HOSTILE},
+     "spec": {"type": "service", "lifecycle": "candidate", "owner": "group:default/team", "system": "shop", "providesApis": ["catalog-feed"],
+              "morphogen": {"fills": "component:default/payments", "licence": "proprietary " + HOSTILE,
+                            "docs": {"url": "javascript:alert(1)"},
+                            "parameters": {"type": "object", "properties": {"retries": {"type": "integer", "minimum": 0, "maximum": 5, "default": 2,
+                                                                                    "description": "Attempts " + HOSTILE}}},
+                            "evaluation": {"result": "p95 120 ms " + HOSTILE}}}},
+    {"apiVersion": "backstage.io/v1alpha1", "kind": "Component", "metadata": {"name": "paypal", "description": "PayPal"},
+     "spec": {"type": "service", "lifecycle": "candidate", "owner": "group:default/team", "system": "shop",
+              "morphogen": {"fills": "component:default/payments", "licence": "MIT", "docs": {"url": "https://example.org/paypal"}}}},
+]
+
+
+def judge_log(path: Path, tamper: bool = False) -> None:
+    """A verdict log as `morphogen evidence` prints it: records through the real hash-chained log, in the shapes
+    morphogen/judge.py writes them (a pass with measures, a refusal with its reasons, a probe, a change check)."""
+    from morphogen.evidence import Evidence
+    ev = Evidence(path.with_suffix(".db"))
+    base, cand = "a" * 40, "b" * 40
+    common = {"kind": "verdict", "trust": "measured", "by": "judge", "refs": {"base": base, "candidate": cand}, "sandbox": "podman"}
+    ev.append({**common, "claim": "pricing: bbbbbbbbbbbb is better than aaaaaaaaaaaa " + HOSTILE, "verdict": "pass",
+               "subject": {"system": "pricing", "path": "cell:pricing"}, "cell": "pricing", "gate": {"decision": "review"},
+               "parameters": {"p.py#MARKUP": {"owner": "agent", "base": 0.2, "candidate": 0.35}},
+               "outcome": {"check": True, "generated_inputs": 40, "wrong": 0, "failed": 0, "timed_output_mismatches": 0,
+                           "metrics": {"mape": {"base": 0.124, "candidate": 0.034, "gain": 0.72, "ci95": [0.5, 0.8],
+                                                "sign_test_p": 0.008, "ok": True}}}})
+    ev.append({**common, "claim": "pricing: cccc is not better", "verdict": "fail", "refs": {"base": base, "candidate": "c" * 40},
+               "subject": {"system": "pricing", "path": "cell:pricing"}, "cell": "pricing", "gate": {"decision": "none"},
+               "parameters": {"p.py#MARKUP": {"owner": "agent", "base": 0.35, "candidate": 0.9}},
+               "outcome": {"check": True, "denied": ["tests/t.py: outside what the cell may change " + HOSTILE],
+                           "parameter_violations": ["sets MARKUP to 0.9, outside its range [0.1, 0.6]"],
+                           "metrics": {"mape": {"base": 0.034, "candidate": 0.05, "gain": -0.4, "ci95": [-0.6, -0.1],
+                                                "sign_test_p": 0.5, "ok": False}}}})
+    ev.append({"kind": "probe", "claim": "probe of bbbb (practice; not a verdict)", "trust": "measured", "by": "judge",
+               "subject": {"system": "pricing"}, "outcome": {}})
+    ev.append({**common, "claim": "change dddd keeps what checkout promises", "verdict": "pass", "cells": ["checkout"],
+               "subject": {"system": "checkout", "path": "change"}, "gate": {"decision": "merge"},
+               "outcome": {"files": {"checkout/a.py": ["checkout"]}, "denied": [], "tests": [{"cell": "checkout", "test": "t", "passed": True}]},
+               "signature": "sig:" + HOSTILE, "transparency": {"log_index": 7, "log": "rekor.example"}})
+    ev.append({**common, "claim": "elsewhere: a verdict on a cell not in the map", "verdict": "fail", "cell": "ghost",
+               "subject": {"system": "ghost"}, "gate": {"decision": "none"}, "outcome": {"check": False}})
+    rows = ev.query(limit=100)  # newest first, as the command prints it
+    if tamper:
+        rows[1]["claim"] = "edited afterwards"
+    path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+
+
+class Optimise(_Toolchain):
+    """The Optimise page: the cells, the judge's verdict log for each, and the evidence chain."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.tmp.name)
+        (cls.root / "catalog-info.yaml").write_text(yaml.safe_dump_all(SHOP), encoding="utf-8")
+        judge_log(cls.root / "verdicts.json")
+        cfg = project_config(cls.root, 'verdicts = "verdicts.json"')
+        cls.out = cls.root / "out"
+        built(cls.out, config=cfg)
+        cls.page = read(cls.out, "optimise.html")
+        cls.text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", cls.page.split("<main", 1)[1])))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_the_cell_says_what_may_change_how_it_is_scored_and_who_merges(self):
+        t = self.text
+        self.assertIn("Cells (1)", t)  # pricing only: checkout has no `run`, the role and options are never cells
+        self.assertIn("pricing/p.py#MARKUP within 0.1..0.6", t)
+        self.assertIn("prompts/", t)
+        self.assertIn("Held fixed: pricing/p.py#RATE", t)
+        self.assertIn("mape lower", t)
+        self.assertIn("python score.py", t)
+        self.assertIn("a person reviews", t)  # production is not in the System's autonomy list for merge
+        self.assertIn("otel", t)
+        self.assertIn("owned by team", t)
+
+    def test_each_verdict_is_listed_under_its_cell_with_measures_and_reasons(self):
+        t = self.text
+        self.assertIn("Verdicts on pricing (2)", t)
+        self.assertEqual(self.page.count('class="verdict"'), 4)  # pricing 2, checkout 1 and ghost 1; the probe is no verdict
+        self.assertRegex(t, r"Refused #2 .*Passed #1")  # newest first
+        self.assertIn("commit bbbbbbbbbbbb against base aaaaaaaaaaaa", t)
+        self.assertIn("Settings moved: p.py#MARKUP 0.2 to 0.35", t)
+        self.assertIn("0.124 0.034 +72.0%", t)  # measures: base, candidate, gain
+        self.assertIn("every measure met its bar", t)
+        self.assertIn("sets MARKUP to 0.9, outside its range [0.1, 0.6]", t)
+        self.assertIn("mape: gain -40.0% (95% interval -60.0% to -10.0%, sign test p=0.5) does not meet the bar", t)
+        self.assertIn("changes what the cell may not change: tests/t.py: outside what the cell may change", t)
+        self.assertIn("Verdicts on ghost (1)", t)
+        self.assertIn("not a cell in this site's map", t)
+
+    def test_observed_comes_from_the_judges_last_measure(self):
+        self.assertRegex(self.text, r"Observed mape 0\.034 to 0\.05 \(-40\.0%\) in verdict #2 \(refused\)")
+
+    def test_the_evidence_chain_and_a_signature(self):
+        t = self.text
+        self.assertIn("The evidence chain", t)
+        self.assertIn("The records read here: 5, numbered 1 to 5, from the first record of the log", t)
+        self.assertRegex(t, r"Links intact")
+        self.assertIn("sig:", t)  # a signature a record carries is shown, as text
+        self.assertIn("log_index", t)
+        self.assertNotIn("<script>alert", re.sub(r'="[^"]*"', '=""', all_html(self.out)))
+
+    def test_the_header_lists_optimise_and_the_map_marks_the_cell(self):
+        index = read(self.out, "index.html")
+        nav = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', index).group(1)
+        self.assertEqual(re.findall(r">([^<]+)</a>", nav), ["Map", "Catalog", "Optimise", "Search"])
+        self.assertIn('class="tag tag-ready" href="optimise.html">cell', read(self.out, "map.html"))
+
+    def test_a_log_edited_afterwards_shows_a_break(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "catalog-info.yaml").write_text(yaml.safe_dump_all(SHOP), encoding="utf-8")
+            judge_log(root / "verdicts.json", tamper=True)
+            built(root / "out", config=project_config(root, 'verdicts = "verdicts.json"'))
+            page = read(root / "out", "optimise.html")
+            self.assertRegex(page, r"1 do not match: #4")
+            self.assertNotIn("all recomputed", page)
+
+    def test_cells_without_a_log_say_what_is_missing_and_show_no_verdict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "catalog-info.yaml").write_text(yaml.safe_dump_all(SHOP), encoding="utf-8")
+            built(root / "out", config=project_config(root))
+            page = read(root / "out", "optimise.html")
+            self.assertIn("No verdicts to show", page)
+            self.assertIn("morphogen evidence --limit 100000", page)
+            self.assertNotIn('class="verdict"', page)
+            self.assertNotIn("The evidence chain", page)
+
+
+class SystemMap(_Toolchain):
+    """Entities with interfaces: the map's graph and table, each entity's page, the catalog's compare table."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.tmp.name)
+        (cls.root / "catalog-info.yaml").write_text(yaml.safe_dump_all(SHOP), encoding="utf-8")
+        cls.out = cls.root / "out"
+        built(cls.out, config=project_config(cls.root), base="/ui")
+        cls.graph = json.loads(read(cls.out, "data/graph.json"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_interfaces_owners_and_dependencies_become_references(self):
+        rels = {(e["from"], e["to"], e["rel"]) for e in self.graph["edges"]}
+        for edge in (("component:pricing", "api:price-list", "provides"), ("component:checkout", "api:price-list", "consumes"),
+                     ("component:pricing", "resource:db", "depends-on"), ("component:pricing", "group:team", "owned-by"),
+                     ("component:checkout", "group:ann", "owned-by")):  # `ann` has no file: an owner all the same
+            self.assertIn(edge, rels)
+        self.assertEqual(self.graph["unresolved"], [])
+
+    def test_the_map_page_has_the_system_graph_and_a_row_per_entity(self):
+        page = read(self.out, "map.html")
+        self.assertIn('id="graph-system"', page)
+        self.assertIn('href="/ui/apis/price-list.html"', page)
+        row = re.search(r'<tr id="component-pricing">(.*?)</tr>', page, re.S).group(1)
+        for want in ("/ui/owners/team.html", "price-list", "catalog-feed", "/ui/resources/db.html", ">cell<"):
+            self.assertIn(want, row)
+        dependents = re.search(r'<tr id="resource-db">(.*?)</tr>', page, re.S).group(1)
+        self.assertIn("pricing", dependents)
+        self.assertIn("checkout", dependents)
+
+    def test_an_entity_page_shows_provides_consumes_owner_dependencies_and_dependents(self):
+        page = read(self.out, "components/pricing.html")
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", page))
+        for want in ("Interfaces and ownership", "Owner team", "Provides price-list", "Consumes catalog-feed", "Depends on The orders database"):
+            self.assertIn(want, text)
+        api = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", read(self.out, "apis/price-list.html")))
+        self.assertIn("Provided by pricing", api)
+        self.assertRegex(api, r"Consumed by .*checkout")
+        self.assertIn("contracts/prices.md", api)
+        self.assertIn("python -m unittest -q contracts", api)
+        owner = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", read(self.out, "owners/ann.html")))
+        self.assertIn("no Group or User file", owner)
+        self.assertIn("checkout", owner)
+        res = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", read(self.out, "resources/db.html")))
+        self.assertIn("Dependents", res)
+
+    def test_catalog_compares_the_options_for_a_role(self):
+        page = read(self.out, "catalog.html")
+        table = re.search(r"<table.*?</table>", page, re.S).group(0)
+        for want in ("stripe", "paypal", "catalog-feed", "MIT", "proprietary", "retries", "https://example.org/paypal"):
+            self.assertIn(want, table)
+        self.assertNotRegex(page, r'href="\s*javascript:')  # the docs link that was not http(s) is text
+        text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", page)))
+        self.assertIn("Compare options for this role (2)", text)
+        self.assertIn("retries integer 0 to 5 2", text)
+        self.assertIn("The role's interfaces", text)
+        self.assertNotIn("<script>alert", re.sub(r'="[^"]*"', '=""', all_html(self.out)))
+        self.assertIn('href="/ui/', page)  # every link under the base
+
+
+class ResearchOnly(Fixture):
+    """A research-only site (claims, roles and options, no cell, no interface, no verdict log) still builds, and the
+    pages that have nothing to show leave the header."""
+
+    def test_no_optimise_and_no_system_map(self):
+        optimise = read(self.out, "optimise.html")
+        self.assertIn("Nothing here", optimise)
+        self.assertNotIn("The evidence chain", optimise)
+        self.assertNotIn('class="verdict"', optimise)
+        page = read(self.out, "map.html")
+        self.assertNotIn('id="graph-system"', page)
+        self.assertIn('id="graph-research"', page)
+        self.assertNotIn("Every part, with its interfaces", page)
+        option = read(self.out, "options/opt-x.html")  # an owner, but no interface to show
+        self.assertNotIn("<dt>Provides</dt>", option)
+        self.assertNotIn("<dt>Consumes</dt>", option)
+
+    def test_a_header_that_names_optimise_leaves_it_out(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_project(root, [CLAIM])
+            cfg = root / "config.toml"
+            text = cfg.read_text(encoding="utf-8")
+            cfg.write_text(text[:text.index("[nav]")] + '[nav]\npages = ["claims", "catalog", "optimise"]\n', encoding="utf-8")
+            shutil.rmtree(root / "content")  # the fixture's note names claims this project does not have
+            built(root / "out", config=cfg)
+            nav = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', read(root / "out", "index.html")).group(1)
+            self.assertEqual(re.findall(r">([^<]+)</a>", nav), ["Claims", "Catalog"])  # the catalog has a role and an option
+
+
+class Fernhill(_Toolchain):
+    """demos/fernhill: a firm with no claims, one cell and no verdict log. It says what is missing and invents nothing."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.out = Path(cls.tmp.name) / "out"
+        built(cls.out, config=ROOT / "demos" / "fernhill" / "site.toml")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_the_map_the_catalog_and_the_cell(self):
+        self.assertIn("quote-calculator", read(self.out, "optimise.html"))
+        self.assertIn("No verdicts to show", read(self.out, "optimise.html"))
+        self.assertNotIn('class="verdict"', read(self.out, "optimise.html"))
+        self.assertTrue((self.out / "components" / "quote-calculator.html").is_file())
+        self.assertTrue((self.out / "apis" / "job-spec.html").is_file())
+        catalog = read(self.out, "catalog.html")
+        for option in ("fergus", "tradify", "servicem8", "shared-calendar"):
+            self.assertTrue((self.out / "options" / f"{option}.html").is_file(), option)
+            self.assertIn(option, catalog)
+        self.assertIn("Compare options for this role (4)", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", catalog)))
+        self.assertIn('id="graph-system"', read(self.out, "map.html"))
+
+    def test_the_header_has_no_research_pages(self):
+        nav = re.search(r'<nav aria-label="Site"><ul>(.*?)</ul></nav>', read(self.out, "index.html")).group(1)
+        self.assertEqual(re.findall(r">([^<]+)</a>", nav), ["Map", "Catalog", "Optimise", "Search"])
+        self.assertNotIn('class="feed"', read(self.out, "index.html"))  # no claims: the home page is the four verbs
 
 
 if __name__ == "__main__":

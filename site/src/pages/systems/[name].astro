@@ -3,6 +3,7 @@ import { up } from "../../lib/text.mjs";
 // The system: its roles, its conditions (the models, engine, GPU and datasets every prediction is made against).
 import Base from "../../layouts/Base.astro";
 import EntityHead from "../../components/EntityHead.astro";
+import Interfaces from "../../components/Interfaces.astro";
 import ExtLink from "../../components/ExtLink.astro";
 import Mentions from "../../components/Mentions.astro";
 import References from "../../components/References.astro";
@@ -25,6 +26,7 @@ const links = s.doc?.metadata?.links || [];
 <section class="panel" aria-labelledby="r-h"><h2 id="r-h">Roles</h2><ul class="plain">{members.filter((m) => m.type === "role").map((m) => <li><a class="mono" href={`${up(1)}${m.url}`}>{m.name}</a> <span class="muted small">{m.summary}</span></li>)}</ul></section>
 <section class="panel" aria-labelledby="c-h"><h2 id="c-h">Conditions</h2><ul class="plain">{members.filter((m) => m.type === "resource").map((m) => <li><span class="tag">{m.kind}</span> <a href={`${up(1)}${m.url}`}>{m.title}</a></li>)}</ul></section>
 </div>
+<Interfaces site={site} ent={s} depth={1} />
 <Mentions site={site} ent={s} depth={1} />
 <References ent={s} depth={1} />
 </Base>

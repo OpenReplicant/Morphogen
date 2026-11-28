@@ -104,6 +104,9 @@ claims = ["claims"]                          # searched recursively for Evidence
 catalog = ["catalog-info.yaml", "catalog"]   # Backstage entity files, or folders of them; a missing one is skipped
 research = "research"                        # queue.json, watch.yaml, seen.jsonl, index.json (each optional)
 content = {content}                          # Markdown pages
+# map = ["catalog/map.yaml"]                 # more entity files for the map (read with `catalog`)
+# options = ["catalog/options.yaml"]         # more entity files for the options catalogued for roles
+# verdicts = "verdicts.json"                 # the judge's log: morphogen evidence --limit 100000 > verdicts.json
 
 # The labels on each steering link (the agent reads the `research-action:` line in the body first).
 [labels]
@@ -114,8 +117,9 @@ content = {content}                          # Markdown pages
 # logo = "logo.svg"        # in the header, and the icon
 
 [nav]
-# Any of: claims, queue, predictions, roles, map, notes, search. Pages with `nav: N` in front matter come after.
-pages = ["claims", "queue", "predictions", "roles", "map", "notes"]
+# Any of: claims, queue, predictions, roles, map, catalog, optimise, notes, search. catalog and optimise leave the
+# header when there is nothing to show. Pages with `nav: N` in front matter come after.
+pages = ["claims", "queue", "predictions", "roles", "map", "catalog", "optimise", "notes"]
 """
 
 ABOUT = """\

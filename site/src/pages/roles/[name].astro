@@ -4,6 +4,7 @@
 import Base from "../../layouts/Base.astro";
 import ClaimList from "../../components/ClaimList.astro";
 import EntityHead from "../../components/EntityHead.astro";
+import Interfaces from "../../components/Interfaces.astro";
 import Evidence from "../../components/Evidence.astro";
 import Meter from "../../components/Meter.astro";
 import Mentions from "../../components/Mentions.astro";
@@ -35,6 +36,7 @@ const queue = site.queue().map((q, i) => ({ ...q, rank: i + 1 })).filter((q) => 
   <p><StatusCounts site={site} claims={claims} /></p>
 </EntityHead>
 <Evidence ent={r} />
+<Interfaces site={site} ent={r} depth={1} />
 
 <div class="cols">
 <section class="panel" aria-labelledby="q-h"><h2 id="q-h">Open questions the agent watches</h2>

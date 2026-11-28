@@ -4,7 +4,7 @@
 import { getCollection } from "astro:content";
 import { attachPages, loadSite } from "./data.mjs";
 
-const RESERVED = new Set(["index", "queue", "predictions", "roles", "map", "search", "notes", "404"]);
+const RESERVED = new Set(["index", "queue", "predictions", "roles", "map", "catalog", "optimise", "search", "notes", "404"]);
 let cached = null;
 let warned = false;
 

@@ -23,10 +23,12 @@ export const NAV_PAGES = {
   predictions: ["predictions.html", "Predictions"],
   roles: ["roles.html", "Roles"],
   map: ["map.html", "Map"],
+  catalog: ["catalog.html", "Catalog"],
+  optimise: ["optimise.html", "Optimise"],
   notes: ["notes.html", "Notes"],
   search: ["search.html", "Search"],
 };
-const DEFAULT_NAV = ["claims", "queue", "predictions", "roles", "map", "notes"];
+const DEFAULT_NAV = ["claims", "queue", "predictions", "roles", "map", "catalog", "optimise", "notes"];
 const ACTIONS = ["prioritise", "reject", "dispute", "question", "propose-role", "propose-option"];
 
 /** One `[nav] pages` entry: a page id (or `{page, text}`), or `{text, href}` for any other link. A link is external
@@ -114,7 +116,12 @@ export function loadConfig(file = process.env.MORPHOGEN_SITE_CONFIG || path.join
     labels,
     sources: {
       claims: list(src.claims).map(at),
-      catalog: list(src.catalog).map(at),
+      // `catalog` is every entity file; `map` and `options` name the map's and the catalogued options' files apart
+      // (the same kind of file, read together): see site/README.md
+      catalog: [...new Set([...list(src.catalog), ...list(src.map), ...list(src.options)].map(at))],
+      map: list(src.map).map(at),
+      options: list(src.options).map(at),
+      verdicts: at(src.verdicts),
       research: at(src.research),
       content: at(src.content),
       schema: at(src.schema) || path.resolve(SITE_DIR, "..", "schemas", "evidence-claim.v1.json"),

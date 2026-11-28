@@ -8,7 +8,8 @@ import { safeUrl, up } from "../lib/text.mjs";
 const { site, title, description = "", depth = 0, current = "" } = Astro.props;
 const u = up(depth);
 const listed = site.pages.filter((p) => p.kind !== "page");
-const fixed = site.nav.filter((n) => n.id !== "notes" || listed.length).map((n) => [n.asIs ? n.href : `${u}${n.href}`, n.text, n.offsite, n.asIs ? null : n.href]);
+const hidden = { notes: !listed.length, catalog: !site.hasCatalog, optimise: !site.hasOptimise };
+const fixed = site.nav.filter((n) => !hidden[n.id]).map((n) => [n.asIs ? n.href : `${u}${n.href}`, n.text, n.offsite, n.asIs ? null : n.href]);
 const extra = site.pages.filter((p) => typeof p.nav === "number").sort((a, b) => a.nav - b.nav).map((p) => [`${u}${p.slug}.html`, p.title, false, `${p.slug}.html`]);
 const nav = [...fixed, ...extra];
 const fullTitle = title && title !== site.title ? `${title} · ${site.title}` : site.title;
@@ -52,7 +53,7 @@ const iconType = { ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image
 <slot />
 </main>
 <footer class="foot wrap">
-  <p>{site.owner}'s research, built by Morphogen from the claim, role and option files in {repoUrl ? <a href={repoUrl} rel="noopener noreferrer">{site.repo}</a> : site.repo}. Static files only: no tracking, no cookies, nothing loaded from elsewhere. Steering happens in GitHub issues. <a href={`${u}search.html`}>Everything on the site</a> · <a href={`${u}data/graph.json`}>the graph as JSON</a></p>
+  <p>{site.owner}'s research, built by Morphogen from the map, catalog, claim and verdict files in {repoUrl ? <a href={repoUrl} rel="noopener noreferrer">{site.repo}</a> : site.repo}. Static files only: no tracking, no cookies, nothing loaded from elsewhere. Steering happens in GitHub issues. <a href={`${u}search.html`}>Everything on the site</a> · <a href={`${u}data/graph.json`}>the graph as JSON</a></p>
 </footer>
 </body>
 </html>

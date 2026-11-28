@@ -78,7 +78,7 @@ document.addEventListener("alpine:init", function () {
 
   // Search over data/search.json (fetched from this site only). ?q= from the header's search box fills it in.
   var KIND = { claim: "Claim", paper: "Paper", trial: "Trial", option: "Option", role: "Role", resource: "Resource",
-    component: "Component", system: "System", page: "Page" };
+    component: "Component", api: "API", group: "Owner", system: "System", page: "Page" };
   Alpine.data("search", function () {
     return {
       off: true, q: "", rows: [], results: [], countText: "",

@@ -30,3 +30,30 @@ test("refs, slugs and trial families", () => {
   assert.equal(slugify("../../etc/passwd"), "etc-passwd");
   assert.equal(trialFamily("E-17b"), "E-17");
 });
+
+test("the verdict log: reasons, the chain, and an edit", async () => {
+  const { parseLog, reasonsOf, shapeVerdict, verifyChain, recordHash, primaryMetric } = await import("../src/lib/optimise.mjs");
+  const a = { seq: 1, prev: "0".repeat(64), kind: "verdict", verdict: "fail", cell: "c", outcome: { denied: ["x.py: outside"], metrics: { m: { base: 1, candidate: 2, gain: -0.5, ci95: [-0.6, -0.4], sign_test_p: 0.3, ok: false } } } };
+  a.hash = recordHash(a);
+  const b = { seq: 2, prev: a.hash, kind: "verdict", verdict: "pass", cell: "c", outcome: { metrics: {} } };
+  b.hash = recordHash(b);
+  assert.deepEqual(reasonsOf(a), ["changes what the cell may not change: x.py: outside", "m: gain -50.0% (95% interval -60.0% to -40.0%, sign test p=0.3) does not meet the bar"]);
+  assert.deepEqual(shapeVerdict(b).reasons, ["the checks passed"]);
+  assert.equal(verifyChain([a, b]).links, true);
+  assert.deepEqual(verifyChain([a, b]).edited, []);
+  assert.deepEqual(verifyChain([a, { ...b, claim: "edited" }]).edited, [2]);
+  assert.equal(verifyChain([a, { ...b, prev: "f".repeat(64) }]).brokenAt, 2);
+  assert.equal(parseLog(`${JSON.stringify(a)}\n${JSON.stringify(b)}\n`).length, 2); // JSON lines
+  assert.equal(parseLog(JSON.stringify({ records: [a] })).length, 1);
+  assert.throws(() => parseLog("{not json"), /not valid JSON/);
+  assert.deepEqual(primaryMetric({ mape: { lower: true } }), { name: "mape", direction: "lower" });
+  assert.deepEqual(primaryMetric("accuracy higher, wall_seconds lower"), { name: "accuracy", direction: "higher" });
+});
+
+test("a number is hashed as the file wrote it", async () => {
+  const { parseLog, recordHash } = await import("../src/lib/optimise.mjs");
+  const text = '[{"seq": 1, "x": 1.0, "prev": "p"}]';
+  const [{ raw }] = parseLog(text);
+  const plainHash = recordHash(JSON.parse(text));
+  assert.notEqual(recordHash(raw), plainHash, "1.0 and 1 hash differently, as in Python's canonical JSON");
+});
